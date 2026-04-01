@@ -1,0 +1,17 @@
+{
+  "clientId": 100124,
+  "companyName": "Indian Army Kamrup 6789",
+  "address": "Red Horn Sappers, Opposite to Kalati Hotel, Near FCI, godown, Kamrup, 781101",
+  "city": "",
+  "state": "Assam",
+  "pincode": "781101",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.922Z",
+  "updatedAt": "2026-03-14T09:54:55.922Z"
+}

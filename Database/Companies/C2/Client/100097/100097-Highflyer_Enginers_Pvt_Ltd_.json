@@ -1,0 +1,25 @@
+{
+  "clientId": 100097,
+  "companyName": "Highflyer Enginers Pvt Ltd.",
+  "address": "93/7749, Alasua, Station Road, Station, Road, Dhenkanal, Dhenkanal,-759013",
+  "city": "",
+  "state": "Odisha",
+  "pincode": "759013",
+  "gstin": "21AADCH1638M1ZP",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Highflyer Enginers Pvt Ltd.",
+      "mobileNumber": "78094 93854",
+      "email": "helpdeskhepl@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.867Z",
+  "updatedAt": "2026-03-14T09:54:55.867Z"
+}

@@ -1,0 +1,25 @@
+{
+  "clientId": 100021,
+  "companyName": "AVEESHA PRECESSION ENGINEERRING (I) PVT LTD",
+  "address": "FLAT NO-201, BHAVANA RESIDENCY,, HANSPAL, BHUBANESWAR, Khordha,",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "752101",
+  "gstin": "21AAVCA7910R1Z1",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "AVEESHA PRECESSION ENGINEERRING (I) PVT LTD",
+      "mobileNumber": "9337100290",
+      "email": "mail@aveeshagroup.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.689Z",
+  "updatedAt": "2026-03-14T09:54:55.689Z"
+}

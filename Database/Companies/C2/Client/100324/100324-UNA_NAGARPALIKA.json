@@ -1,0 +1,17 @@
+{
+  "clientId": 100324,
+  "companyName": "UNA NAGARPALIKA",
+  "address": "UNA, DI. GIR SOMNATH",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "362560",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.338Z",
+  "updatedAt": "2026-03-14T09:54:56.338Z"
+}

@@ -1,0 +1,17 @@
+{
+  "clientId": 100061,
+  "companyName": "Central Project Coordinator eCommittee",
+  "address": "Jharkhand High Court, Dhurwa,, Ranchi-834004",
+  "city": "",
+  "state": "Jharkhand",
+  "pincode": "834004",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.789Z",
+  "updatedAt": "2026-03-14T09:54:55.789Z"
+}

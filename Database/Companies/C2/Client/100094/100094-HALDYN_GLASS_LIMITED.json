@@ -1,0 +1,25 @@
+{
+  "clientId": 100094,
+  "companyName": "HALDYN GLASS LIMITED",
+  "address": "VILLAGE GAVASAD, TALUKA PADRA, VADODARA,",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "391430",
+  "gstin": "24AAACH9738F1ZK",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "HALDYN GLASS LIMITED",
+      "mobileNumber": "9594609860",
+      "email": "sshikhare@haldyn.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.860Z",
+  "updatedAt": "2026-03-14T09:54:55.860Z"
+}

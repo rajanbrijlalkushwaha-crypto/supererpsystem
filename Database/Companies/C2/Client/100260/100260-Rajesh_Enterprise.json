@@ -1,0 +1,17 @@
+{
+  "clientId": 100260,
+  "companyName": "Rajesh Enterprise",
+  "address": "1, Samir Appartment, Nr.Amarkunj Society, Ambawadi, Ahmedabad",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380015",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.189Z",
+  "updatedAt": "2026-03-14T09:54:56.189Z"
+}

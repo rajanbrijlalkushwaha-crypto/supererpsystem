@@ -1,0 +1,25 @@
+{
+  "clientId": 100130,
+  "companyName": "Indian Navy Kochi",
+  "address": "Material Organization Kochi, Indian Navy, NAVAL BASE,ERNAKULAM CITY-682004",
+  "city": "",
+  "state": "Kerala",
+  "pincode": "682004",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Indian Navy Kochi",
+      "mobileNumber": "8138922280",
+      "email": "ritikamishra.1997@navy.gov.in",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.932Z",
+  "updatedAt": "2026-03-14T09:54:55.932Z"
+}

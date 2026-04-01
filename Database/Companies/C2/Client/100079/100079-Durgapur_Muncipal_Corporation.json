@@ -1,0 +1,17 @@
+{
+  "clientId": 100079,
+  "companyName": "Durgapur Muncipal Corporation",
+  "address": "City Centre Durgapur, Bardhaman-713216",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "713216",
+  "gstin": "19AAALD0686R1ZI",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.829Z",
+  "updatedAt": "2026-03-14T09:54:55.829Z"
+}

@@ -1,0 +1,25 @@
+{
+  "vendorId": 200169,
+  "vendorName": "CLIP INFRA PVT. LTD.",
+  "address": "9, Vartali Appartment,, Opp. Navrangpura Police-Station,, Navrangpura, Ahmedabad-380009.",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380009",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "CLIP INFRA PVT. LTD.",
+      "mobileNumber": "98250 10668",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:31.644Z",
+  "updatedAt": "2026-03-14T09:56:31.644Z"
+}

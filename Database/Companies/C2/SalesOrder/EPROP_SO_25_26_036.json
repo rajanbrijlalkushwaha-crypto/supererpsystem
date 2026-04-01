@@ -1,0 +1,33 @@
+{
+  "id": "e9f2a684-a71a-411e-98c5-7a7d46e5585e",
+  "voucherNumber": "EPROP/SO/25-26/036",
+  "date": "2026-02-09",
+  "party": "Indian Army Guwahati",
+  "amount": 1204883,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687758559211",
+  "orderRef": "EE2526036",
+  "shippedBy": "By Road",
+  "destination": "Guwahati",
+  "paymentTerms": "Online",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "Assam",
+  "items": [
+    {
+      "itemName": "Porta Cabin",
+      "description": "40x12x8.5 ft",
+      "quantity": 1,
+      "unit": "PCS",
+      "rate": 1021087.29,
+      "amount": 1021087.29,
+      "hsnCode": "9406",
+      "dueDate": "21-Mar-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.407Z"
+}

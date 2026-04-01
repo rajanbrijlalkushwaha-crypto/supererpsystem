@@ -1,0 +1,17 @@
+{
+  "clientId": 100135,
+  "companyName": "INDIAN OIL CORPORATION LIMITED",
+  "address": "IOCL-GSO, 205, INDIAN OIL BHAVAN,, NEAR SOLA FLYOVER, SOLA,, SG HIGHWAY, AHMEDABAD,",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380060",
+  "gstin": "24AAACI1681G1ZV",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.941Z",
+  "updatedAt": "2026-03-14T09:54:55.941Z"
+}

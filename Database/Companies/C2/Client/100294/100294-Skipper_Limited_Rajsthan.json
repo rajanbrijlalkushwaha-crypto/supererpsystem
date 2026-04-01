@@ -1,0 +1,17 @@
+{
+  "clientId": 100294,
+  "companyName": "Skipper Limited_Rajsthan",
+  "address": "Ward No.33,263/260, Sector-29,Pratap Nagar, Jaipur-302033",
+  "city": "",
+  "state": "Rajasthan",
+  "pincode": "302033",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.274Z",
+  "updatedAt": "2026-03-14T09:54:56.274Z"
+}

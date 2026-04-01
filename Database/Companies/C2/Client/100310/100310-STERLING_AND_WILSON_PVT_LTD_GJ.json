@@ -1,0 +1,25 @@
+{
+  "clientId": 100310,
+  "companyName": "STERLING AND WILSON PVT LTD-GJ",
+  "address": "3rd Floor, Camps Corner-II,, Opp.Prahaladnagar Garden, Prahaladnagar, Satelite,, AHMEDABAd-380015",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380015",
+  "gstin": "24AAACS9939D1ZA",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "STERLING AND WILSON PVT LTD-GJ",
+      "mobileNumber": "9082738447,7894150878",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.309Z",
+  "updatedAt": "2026-03-14T09:54:56.309Z"
+}

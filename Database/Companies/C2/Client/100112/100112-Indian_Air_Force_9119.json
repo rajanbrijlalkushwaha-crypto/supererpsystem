@@ -1,0 +1,17 @@
+{
+  "clientId": 100112,
+  "companyName": "Indian Air Force-9119",
+  "address": "AIR FORCE STATION SURYALANAKA, APATLA,&#13;&#10;Guntur,, 522101",
+  "city": "",
+  "state": "Andhra Pradesh",
+  "pincode": "522101",
+  "gstin": "37AAAGA0774J1DQ",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.899Z",
+  "updatedAt": "2026-03-14T09:54:55.899Z"
+}

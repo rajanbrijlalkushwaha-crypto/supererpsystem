@@ -1,0 +1,17 @@
+{
+  "clientId": 100042,
+  "companyName": "Bokaro Steel Plant",
+  "address": "Mjunction Enclosure, Administrative Building,, Bokaro Steel Plant, Bokaro Steel City, Bokaro",
+  "city": "",
+  "state": "Jharkhand",
+  "pincode": "827001",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.738Z",
+  "updatedAt": "2026-03-14T09:54:55.738Z"
+}

@@ -1,0 +1,17 @@
+{
+  "vendorId": 200245,
+  "vendorName": "Evergreen Enterprise",
+  "address": "",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "421302",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:31.810Z",
+  "updatedAt": "2026-03-14T09:56:31.810Z"
+}

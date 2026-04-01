@@ -1,0 +1,17 @@
+{
+  "clientId": 100056,
+  "companyName": "Bureau of Indian Standards-MH",
+  "address": "Western Regional Laboraory, Manakalaya Building, Plot No. E-9, Road no. -8, MIDC,&#13;&#10;Andheri East,, Mumbai - City, MAHARASHTRA-400093",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "400093",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.778Z",
+  "updatedAt": "2026-03-14T09:54:55.778Z"
+}

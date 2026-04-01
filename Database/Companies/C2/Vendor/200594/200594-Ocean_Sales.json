@@ -1,0 +1,25 @@
+{
+  "vendorId": 200594,
+  "vendorName": "Ocean Sales",
+  "address": "Plot No. 595, Phase-IX, Sector 66,, Opp.Bestech Bissiness Tower,, Industrial Area, SAS Nagar Haweli,, Mohali",
+  "city": "",
+  "state": "Chandigarh",
+  "pincode": "",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Ocean Sales",
+      "mobileNumber": "9914112020",
+      "email": "ocean.sales66@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:32.899Z",
+  "updatedAt": "2026-03-14T09:56:32.899Z"
+}

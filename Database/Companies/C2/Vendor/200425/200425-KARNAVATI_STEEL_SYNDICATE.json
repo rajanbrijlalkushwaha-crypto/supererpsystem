@@ -1,0 +1,25 @@
+{
+  "vendorId": 200425,
+  "vendorName": "KARNAVATI STEEL SYNDICATE",
+  "address": "GROUND FLOOR 437, SAKET INDUSTRIAL ESTATE, PLOT NO.2, OPP.SWATI SWITCH GEAR,, CHANGODAR-MORAIYA,, AHMEDABAD : 382213",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382213",
+  "gstin": "24AAPPR5355J1Z6",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "KARNAVATI STEEL SYNDICATE",
+      "mobileNumber": "9725138142",
+      "email": "karnavatisteel2929@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:32.238Z",
+  "updatedAt": "2026-03-14T09:56:32.238Z"
+}

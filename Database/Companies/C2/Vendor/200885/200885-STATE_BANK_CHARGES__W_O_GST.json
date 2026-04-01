@@ -1,0 +1,17 @@
+{
+  "vendorId": 200885,
+  "vendorName": "STATE BANK CHARGES  W/O GST",
+  "address": "",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "",
+  "gstin": "24AAACS8577K1ZV",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:33.861Z",
+  "updatedAt": "2026-03-14T09:56:33.861Z"
+}

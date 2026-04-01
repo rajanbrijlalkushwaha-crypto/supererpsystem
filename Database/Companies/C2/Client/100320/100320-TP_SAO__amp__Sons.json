@@ -1,0 +1,17 @@
+{
+  "clientId": 100320,
+  "companyName": "TP SAO &amp; Sons",
+  "address": "",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.330Z",
+  "updatedAt": "2026-03-14T09:54:56.330Z"
+}

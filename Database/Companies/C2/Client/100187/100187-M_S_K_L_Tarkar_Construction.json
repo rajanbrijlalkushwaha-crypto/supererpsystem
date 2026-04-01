@@ -1,0 +1,17 @@
+{
+  "clientId": 100187,
+  "companyName": "M/S K L Tarkar Construction",
+  "address": "",
+  "city": "",
+  "state": "Madhya Pradesh",
+  "pincode": "",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.042Z",
+  "updatedAt": "2026-03-14T09:54:56.042Z"
+}

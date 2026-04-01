@@ -1,0 +1,25 @@
+{
+  "vendorId": 200932,
+  "vendorName": "Teja Marine Services Pbvt Ltd",
+  "address": "Shankha Deep Bhawanarabhag Daulot Pur, Hoogly Ward No.15, 712601",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "712601",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Teja Marine Services Pbvt Ltd",
+      "mobileNumber": "8145600467",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:34.026Z",
+  "updatedAt": "2026-03-14T09:56:34.026Z"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "97e442c1-8349-4b78-a567-c97c936f7f64",
+  "voucherNumber": "EPROP/SO/25-26/031",
+  "date": "2026-01-05",
+  "party": "",
+  "amount": 0,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687793198080",
+  "orderRef": "",
+  "shippedBy": "",
+  "destination": "",
+  "paymentTerms": "",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "",
+  "items": [],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.399Z"
+}

@@ -1,0 +1,17 @@
+{
+  "clientId": 100297,
+  "companyName": "Skipper Ltd_West Bengal",
+  "address": "3a, Mayur Apartment, Loudon Street, Shakespear Sarani, Kolkata",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "700017",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.280Z",
+  "updatedAt": "2026-03-14T09:54:56.280Z"
+}

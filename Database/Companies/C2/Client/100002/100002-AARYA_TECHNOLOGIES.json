@@ -1,0 +1,17 @@
+{
+  "clientId": 100002,
+  "companyName": "AARYA TECHNOLOGIES",
+  "address": "FLAT NO. 4, WING A, SAYALI DARSHAN,, RADHA NAGAR, BEHIND SAWAMI SAMARTH, KENDRA, MAKHMALABAD, PANCHAVATI,, Nashik,",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "422003",
+  "gstin": "27AIYPJ2538A1Z6",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.597Z",
+  "updatedAt": "2026-03-14T09:54:55.597Z"
+}

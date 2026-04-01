@@ -1,0 +1,25 @@
+{
+  "clientId": 100133,
+  "companyName": "Indian Navy-Uttara Kanada",
+  "address": "Base Logistics Office, Naval Base Karwar,, Uttara Kanada-581308",
+  "city": "",
+  "state": "Karnataka",
+  "pincode": "581308",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Indian Navy-Uttara Kanada",
+      "mobileNumber": "08382263633",
+      "email": "ashutosh.tiwari8295@navy.gov.in",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.938Z",
+  "updatedAt": "2026-03-14T09:54:55.938Z"
+}

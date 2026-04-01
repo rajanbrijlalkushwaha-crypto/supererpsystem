@@ -1,0 +1,17 @@
+{
+  "clientId": 100303,
+  "companyName": "South Eastern Coalfields Limited",
+  "address": "Depot Officer, Regional Store Korea, SECL Chirimiri  Area, PO :Korea Colliery, Conatct No.9425533306, 497449",
+  "city": "",
+  "state": "Chhattisgarh",
+  "pincode": "497449",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.295Z",
+  "updatedAt": "2026-03-14T09:54:56.295Z"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "666f0372-5b41-4c49-9b07-4adf433bcee9",
+  "voucherNumber": "EPROP/SO/25-26/006",
+  "date": "2025-06-19",
+  "party": "Adani Green Energy Twenty Six B Limited",
+  "amount": 10620000,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "4510018983",
+  "orderRef": "EE2526006",
+  "shippedBy": "By Road",
+  "destination": "Khavda",
+  "paymentTerms": "Online",
+  "partyGstin": "24AATCA7063P1ZX",
+  "placeOfSupply": "",
+  "stateName": "Gujarat",
+  "items": [
+    {
+      "itemName": "Mobile Toilet Van 10 Seater",
+      "description": "",
+      "quantity": 20,
+      "unit": "NOS",
+      "rate": 450000,
+      "amount": 9000000,
+      "hsnCode": "9406",
+      "dueDate": "15-Jul-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.330Z"
+}

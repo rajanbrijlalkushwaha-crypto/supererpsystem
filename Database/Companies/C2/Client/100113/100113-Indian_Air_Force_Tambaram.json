@@ -1,0 +1,17 @@
+{
+  "clientId": 100113,
+  "companyName": "Indian Air Force Tambaram",
+  "address": "Air Force Station, Tambaram Chennai, Kanchipuram-600046",
+  "city": "",
+  "state": "Tamil Nadu",
+  "pincode": "600046",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.901Z",
+  "updatedAt": "2026-03-14T09:54:55.901Z"
+}

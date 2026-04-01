@@ -1,0 +1,53 @@
+{
+  "id": "e0cac261-7ff7-4e95-bbcb-71faaa59613c",
+  "voucherNumber": "EPROP/SO/25-26/004",
+  "date": "2025-06-09",
+  "party": "Blue Star  Ltd.-Gujarat",
+  "amount": 106200,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "2000271371",
+  "orderRef": "EPS252600",
+  "shippedBy": "BY ROAD",
+  "destination": "GIFT CITY",
+  "paymentTerms": "Online",
+  "partyGstin": "24AAACB4487D1ZY",
+  "placeOfSupply": "",
+  "stateName": "Gujarat",
+  "items": [
+    {
+      "itemName": "Mobilet IWC Toilet",
+      "description": "150 Ltr Water Tank and Stand Provision of Ventilation And Light Provided",
+      "quantity": 1,
+      "unit": "PCS",
+      "rate": 30250,
+      "amount": 30250,
+      "hsnCode": "94060099",
+      "dueDate": "6-Jun-25"
+    },
+    {
+      "itemName": "Mobilet Urinal",
+      "description": "150 Ltr Water Tank and Stand Provision of Vantilation Light Provided",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 29500,
+      "amount": 29500,
+      "hsnCode": "94060099",
+      "dueDate": "6-Jun-25"
+    },
+    {
+      "itemName": "BIO DIGESTER TANK",
+      "description": "1200 Ltr",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 30250,
+      "amount": 30250,
+      "hsnCode": "94060099",
+      "dueDate": "6-Jun-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.324Z"
+}

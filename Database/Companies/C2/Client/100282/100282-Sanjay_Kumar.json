@@ -1,0 +1,25 @@
+{
+  "clientId": 100282,
+  "companyName": "Sanjay Kumar",
+  "address": "25, PADMINI MARG,, RAVINDRA NAGAR, Udaipur,, 313003",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "313003",
+  "gstin": "08AEGPK4139L1Z8",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Sanjay Kumar",
+      "mobileNumber": "98280 35859",
+      "email": "sanjay.gyana@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.241Z",
+  "updatedAt": "2026-03-14T09:54:56.241Z"
+}

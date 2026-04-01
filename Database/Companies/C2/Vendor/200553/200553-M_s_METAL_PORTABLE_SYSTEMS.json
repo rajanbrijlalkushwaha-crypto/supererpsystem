@@ -1,0 +1,25 @@
+{
+  "vendorId": 200553,
+  "vendorName": "M/s METAL PORTABLE SYSTEMS",
+  "address": "1ST FLOOR, M/S GOURI ENGINEERING,, NEW KOLORAH NEAR POLICE FARI,, NEW KOLORA, Howrah-711302",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "711302",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "M/s METAL PORTABLE SYSTEMS",
+      "mobileNumber": "74392 14715",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:32.778Z",
+  "updatedAt": "2026-03-14T09:56:32.778Z"
+}

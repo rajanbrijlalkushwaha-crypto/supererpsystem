@@ -1,0 +1,17 @@
+{
+  "clientId": 100009,
+  "companyName": "ADISA KLEIDER",
+  "address": "3/B, LP-1/3/B,, COLLEGE ROAD,, HOWRAH, WEST BENGAL",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "711103",
+  "gstin": "19ABQFA1954L1ZV",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.630Z",
+  "updatedAt": "2026-03-14T09:54:55.630Z"
+}

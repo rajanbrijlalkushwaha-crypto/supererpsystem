@@ -1,0 +1,17 @@
+{
+  "clientId": 100284,
+  "companyName": "Santosh Unviversity",
+  "address": "No.01 Santosh Nagar, Gaziabad, 201009",
+  "city": "",
+  "state": "Delhi",
+  "pincode": "",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.245Z",
+  "updatedAt": "2026-03-14T09:54:56.245Z"
+}

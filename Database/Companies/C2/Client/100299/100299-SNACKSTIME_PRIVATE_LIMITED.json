@@ -1,0 +1,25 @@
+{
+  "clientId": 100299,
+  "companyName": "SNACKSTIME PRIVATE LIMITED",
+  "address": "Killa No. 17/7/2 5-2, 10/13-11, 7/13-0, 9 7-11, Village Hasamabad, Sub Tehsil Rai,, Sonipat -131021",
+  "city": "",
+  "state": "Haryana",
+  "pincode": "131021",
+  "gstin": "06ABECS8112K1Z8",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "SNACKSTIME PRIVATE LIMITED",
+      "mobileNumber": "7496911406",
+      "email": "manish.raheja@chandigarhsweets.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.284Z",
+  "updatedAt": "2026-03-14T09:54:56.284Z"
+}

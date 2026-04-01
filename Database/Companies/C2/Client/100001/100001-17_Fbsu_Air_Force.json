@@ -1,0 +1,17 @@
+{
+  "clientId": 100001,
+  "companyName": "17 Fbsu Air Force",
+  "address": "1 Air Force Station, Shanghumugham, Beach Po, Thiruvananthapuram",
+  "city": "",
+  "state": "Kerala",
+  "pincode": "695007",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:50.174Z",
+  "updatedAt": "2026-03-14T09:54:50.174Z"
+}

@@ -1,0 +1,25 @@
+{
+  "clientId": 100136,
+  "companyName": "INDIAN OIL CORPORATION LIMITED-BARAUNI",
+  "address": "Barauni Refinery,, Begusarai-851114",
+  "city": "",
+  "state": "Bihar",
+  "pincode": "851114",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "INDIAN OIL CORPORATION LIMITED-BARAUNI",
+      "mobileNumber": "06243-275388",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.942Z",
+  "updatedAt": "2026-03-14T09:54:55.942Z"
+}

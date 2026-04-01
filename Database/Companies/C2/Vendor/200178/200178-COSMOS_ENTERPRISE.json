@@ -1,0 +1,25 @@
+{
+  "vendorId": 200178,
+  "vendorName": "COSMOS ENTERPRISE",
+  "address": "G/F, A/5, GIRIRAJ COMPLEX,, NR. JIVAN TWIN BUNGLOW, NIKOL GAM ROAD,, Ahmedabad,  382350",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382350",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "COSMOS ENTERPRISE",
+      "mobileNumber": "7984979700",
+      "email": "vipulpatel1533@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:31.662Z",
+  "updatedAt": "2026-03-14T09:56:31.662Z"
+}

@@ -1,0 +1,25 @@
+{
+  "clientId": 100209,
+  "companyName": "Municipal Corporation Chandigarh",
+  "address": "Municipal Corporation, New Delux Building,, Sector-17, Chandigarh, 160017",
+  "city": "",
+  "state": "Haryana",
+  "pincode": "160017",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Municipal Corporation Chandigarh",
+      "mobileNumber": "0172-5002617",
+      "email": "xenr2mcc-chd@nic.in",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.091Z",
+  "updatedAt": "2026-03-14T09:54:56.091Z"
+}

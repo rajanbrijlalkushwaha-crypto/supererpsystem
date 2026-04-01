@@ -1,0 +1,25 @@
+{
+  "clientId": 100052,
+  "companyName": "Brigadier Station Commander-JABALPUR",
+  "address": "Station Cell, Denning Road, Jabalpur",
+  "city": "",
+  "state": "Madhya Pradesh",
+  "pincode": "482001",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Brigadier Station Commander-JABALPUR",
+      "mobileNumber": "96971 62418,8859511565",
+      "email": "ashish_injun@yahoo.co.in",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.761Z",
+  "updatedAt": "2026-03-14T09:54:55.761Z"
+}

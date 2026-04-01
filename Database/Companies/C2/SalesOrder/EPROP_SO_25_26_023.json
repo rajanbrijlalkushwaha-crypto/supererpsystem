@@ -1,0 +1,33 @@
+{
+  "id": "4aeb12ce-971b-480c-aab3-01f9433e5b8c",
+  "voucherNumber": "EPROP/SO/25-26/023",
+  "date": "2025-11-24",
+  "party": "BLUE STAR LIMITED",
+  "amount": 74340,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "2000279068",
+  "orderRef": "EE2526023",
+  "shippedBy": "BY ROAD",
+  "destination": "MUMBAI",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "27AAACB4487D1ZS",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "FRP COMBO EWC+URINAL",
+      "description": "6X3.5X7.5FT",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 63000,
+      "amount": 63000,
+      "hsnCode": "94060099",
+      "dueDate": "31-Dec-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.383Z"
+}

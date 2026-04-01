@@ -1,0 +1,17 @@
+{
+  "clientId": 100265,
+  "companyName": "Regional Meteorological Centre",
+  "address": "Rmc Guwahati, Lgbi Airport, Kamrup Metropolitan, Guwahati-781015",
+  "city": "",
+  "state": "Assam",
+  "pincode": "781015",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.198Z",
+  "updatedAt": "2026-03-14T09:54:56.198Z"
+}

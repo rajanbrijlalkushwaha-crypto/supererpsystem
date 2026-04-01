@@ -1,0 +1,17 @@
+{
+  "clientId": 100090,
+  "companyName": "George W Pitta",
+  "address": "5 Beach roads&#10;Perupalem, Narsapur mandal&#10;West godavari district, 534275",
+  "city": "",
+  "state": "Andhra Pradesh",
+  "pincode": "534275",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.851Z",
+  "updatedAt": "2026-03-14T09:54:55.851Z"
+}

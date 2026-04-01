@@ -1,0 +1,33 @@
+{
+  "id": "91e2d529-9630-4b3b-9b83-763b4cd62793",
+  "voucherNumber": "EPROP/SO/25-26/011",
+  "date": "2025-09-15",
+  "party": "SIGNUM FIRE PROTECTION INDIA PVT LTD",
+  "amount": 70800,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "PO/SM/25-26/15092025",
+  "orderRef": "EE2526011",
+  "shippedBy": "BY ROAD",
+  "destination": "NAGPUR",
+  "paymentTerms": "Online",
+  "partyGstin": "27AABCS1451P1Z3",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "FRP TOILET IWC",
+      "description": "Type:Executive Size:3x3x7 FT Colour:Green As Per Specs",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 25000,
+      "amount": 50000,
+      "hsnCode": "9406",
+      "dueDate": "25-Sep-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.354Z"
+}

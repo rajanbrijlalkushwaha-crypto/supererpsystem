@@ -1,0 +1,33 @@
+{
+  "id": "fc642298-9d8e-4752-9abb-f2c1fb9b1422",
+  "voucherNumber": "EPROP/SO/25-26/003",
+  "date": "2025-05-23",
+  "party": "Kalpataru Projects International Limited",
+  "amount": 1799500,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "2400319510",
+  "orderRef": "EE2526003",
+  "shippedBy": "By Road",
+  "destination": "Ludhiana",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "03AAACK8387R2ZS",
+  "placeOfSupply": "",
+  "stateName": "Punjab",
+  "items": [
+    {
+      "itemName": "FRP TOILET IWC",
+      "description": "SIZE- 3.5FT. X 7FT. X 7FT FRP Seat :- Indian with Flush Tank Electric LED Switch :- Yes, Washbasin with Tap :- Yes, Door :- PVC O EXHAUST 12&quot; for ventilation Inside Water Fitting :- Yes",
+      "quantity": 25,
+      "unit": "NOS",
+      "rate": 61000,
+      "amount": 1525000,
+      "hsnCode": "9406",
+      "dueDate": "30-May-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.321Z"
+}

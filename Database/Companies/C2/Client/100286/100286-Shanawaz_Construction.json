@@ -1,0 +1,25 @@
+{
+  "clientId": 100286,
+  "companyName": "Shanawaz Construction",
+  "address": "Mumbai Central Railways Station East,, 3RD, Shop No.157,Nathani Height, DR DD Marg, Mumbai-400008",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "400008",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Shanawaz Construction",
+      "mobileNumber": "99306 69927",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.249Z",
+  "updatedAt": "2026-03-14T09:54:56.249Z"
+}

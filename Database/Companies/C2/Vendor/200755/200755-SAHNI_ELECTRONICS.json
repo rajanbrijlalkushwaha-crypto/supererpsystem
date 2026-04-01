@@ -1,0 +1,25 @@
+{
+  "vendorId": 200755,
+  "vendorName": "SAHNI ELECTRONICS",
+  "address": "01, RADHABALLABH WARD, KARELI,, KARELI, Narsinghpur,, 487221",
+  "city": "",
+  "state": "Madhya Pradesh",
+  "pincode": "487221",
+  "gstin": "23GWOPS2269K1ZS",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "SAHNI ELECTRONICS",
+      "mobileNumber": "9131711829",
+      "email": "ksahni311@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:33.442Z",
+  "updatedAt": "2026-03-14T09:56:33.442Z"
+}

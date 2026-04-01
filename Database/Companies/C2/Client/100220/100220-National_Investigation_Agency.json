@@ -1,0 +1,17 @@
+{
+  "clientId": 100220,
+  "companyName": "National Investigation Agency",
+  "address": "National Investigation Agency, 8th Floor, Vishweshwaraiah Kendriya Bhawan, Domlur Road, Bengaluru, Bengaluru Urban",
+  "city": "",
+  "state": "Karnataka",
+  "pincode": "560071",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.116Z",
+  "updatedAt": "2026-03-14T09:54:56.116Z"
+}

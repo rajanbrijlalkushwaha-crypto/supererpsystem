@@ -1,0 +1,25 @@
+{
+  "clientId": 100038,
+  "companyName": "BLACK AND VEATCH PRIVATE LIMITED",
+  "address": "PLOT NO 11, BHERAI ROAD, KAKDIYA NAGAR, RAJULA, Amreli,, 365560",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "365560",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "BLACK AND VEATCH PRIVATE LIMITED",
+      "mobileNumber": "+91-9811300252",
+      "email": "varshneyj@bv.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.730Z",
+  "updatedAt": "2026-03-14T09:54:55.730Z"
+}

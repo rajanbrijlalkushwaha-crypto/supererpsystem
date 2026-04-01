@@ -1,0 +1,17 @@
+{
+  "clientId": 100225,
+  "companyName": "NLC INDIA LTD",
+  "address": "MINES SUB STORES, NEW SERVICE UNIT, NEYVELI,Cuddalore,-607807",
+  "city": "",
+  "state": "Tamil Nadu",
+  "pincode": "607807",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.124Z",
+  "updatedAt": "2026-03-14T09:54:56.124Z"
+}

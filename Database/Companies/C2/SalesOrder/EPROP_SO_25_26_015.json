@@ -1,0 +1,33 @@
+{
+  "id": "0d7274ab-443b-425d-9e22-c42029801b08",
+  "voucherNumber": "EPROP/SO/25-26/015",
+  "date": "2025-10-17",
+  "party": "Physical Research Laborty",
+  "amount": 1585600,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687782462802",
+  "orderRef": "EE2526015",
+  "shippedBy": "By Road",
+  "destination": "Abu",
+  "paymentTerms": "Online",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "Gujarat",
+  "items": [
+    {
+      "itemName": "Porta Cabin",
+      "description": "Size-25x15x9 ft As Per Attached Spece and Drawing",
+      "quantity": 1,
+      "unit": "PCS",
+      "rate": 1189139.83,
+      "amount": 1189139.83,
+      "hsnCode": "9406",
+      "dueDate": "17-Nov-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.365Z"
+}

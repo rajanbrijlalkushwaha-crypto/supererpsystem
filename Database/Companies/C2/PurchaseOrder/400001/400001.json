@@ -1,0 +1,78 @@
+{
+  "orderId": 400001,
+  "voucherNumber": "EPROP/PO/25-26/052",
+  "date": "2026-03-16",
+  "party": "Al MISBAH PORTABLE CABIN",
+  "amount": 1793600,
+  "narration": "",
+  "tallyType": "Purchase Order",
+  "reference": "EPROP/PO/25-26/052",
+  "orderRef": "EE2526043",
+  "shippedBy": "By Road",
+  "destination": "Maharashtra",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "27DTJPS5626F1ZA",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "_id": 1774088574948.4326,
+      "itemCode": "",
+      "itemName": "PORTA CABIN 20X10X8.6 FT",
+      "description": "As Per Attach Specs and Drawing",
+      "hsnCode": "9406",
+      "qty": 8,
+      "unit": "NOS",
+      "rate": 190000,
+      "discount": 0,
+      "discountType": "%",
+      "gstPercent": 18,
+      "amount": 1793600,
+      "taxableAmount": 1520000,
+      "gstAmount": 273600
+    }
+  ],
+  "clientName": "Al MISBAH PORTABLE CABIN",
+  "orderDate": "2026-03-16",
+  "documents": [
+    {
+      "name": "HYD SPECS.pdf",
+      "fileName": "1773995607003-HYD SPECS.pdf",
+      "filePath": "docs/1773995607003-HYD SPECS.pdf"
+    }
+  ],
+  "targetType": "purchaseorder",
+  "tallyImported": true,
+  "status": "approved",
+  "createdAt": "2026-03-19T12:46:43.781Z",
+  "updatedAt": "2026-03-21T10:23:08.850Z",
+  "companyId": "C2",
+  "poNo": "EPROP/PO/25-26/052",
+  "poDate": "2026-03-16",
+  "poType": "Standard",
+  "vendorName": "Epics Infra",
+  "vendorGstin": "27DTJPS5626F1ZA",
+  "vendorState": "Maharashtra",
+  "linkedSalesOrderId": "EPROP/SO/25-26/043 — Western Coalfields Ltd",
+  "vendorRef": "EPROP/PO/25-26/052",
+  "quotationRef": "EE2526043",
+  "deliveryDate": "2026-04-05",
+  "shippingAddr": "Maharashtra",
+  "dispatchMode": "Road",
+  "paymentMode": "NEFT",
+  "subTotal": 1520000,
+  "totalGst": 273600,
+  "grandTotal": 1803600,
+  "customFields": [],
+  "attachments": [
+    {
+      "name": "HYD SPECS.pdf",
+      "fileName": "1773995607003-HYD SPECS.pdf",
+      "filePath": "docs/1773995607003-HYD SPECS.pdf"
+    }
+  ],
+  "freightCharges": 10000,
+  "vendorCode": "200237",
+  "deliveryAddr": "R S No 57, Opp Nayara Petrol Pump, Bakrol, Ahmedabad-382210",
+  "vendorAddress": "R S No 57, Opp Nayara Petrol Pump, Bakrol, Ahmedabad-382210"
+}

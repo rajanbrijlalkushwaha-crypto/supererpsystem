@@ -1,0 +1,17 @@
+{
+  "clientId": 100237,
+  "companyName": "NTPC Vidyut Vyapar Nigam Ltd",
+  "address": "NVVN-CORPORATE OFFICE, CORE-3, VILL FLOOR SCOPE COMPLEX,, LODHI ROAD NEW DELHI-110003",
+  "city": "",
+  "state": "Delhi",
+  "pincode": "110003",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.149Z",
+  "updatedAt": "2026-03-14T09:54:56.149Z"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "c02fc54f-95ac-4de9-bc9f-364e3c8d8ee6",
+  "voucherNumber": "EPROP/SO/25-26/043",
+  "date": "2026-02-23",
+  "party": "Western Coalfields Ltd",
+  "amount": 2356480,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687704560824",
+  "orderRef": "EE2526043",
+  "shippedBy": "BY ROAD",
+  "destination": "MAHARASHTRA",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "27AAACW1578L1ZW",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "Porta Cabin",
+      "description": "20X10X8.6FT AS PER ATTACH SPECS AND DRAWING",
+      "quantity": 8,
+      "unit": "PCS",
+      "rate": 249627.12,
+      "amount": 1997016.96,
+      "hsnCode": "9406",
+      "dueDate": "9-Apr-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.414Z"
+}

@@ -1,0 +1,25 @@
+{
+  "vendorId": 200789,
+  "vendorName": "SARAH FLAMEPROOF CONTROL",
+  "address": "PLOT NO.2. OPP. NAIK CHAWL,, MANKIVLI GAON MIDC BADLAPUR, EAST&#13;&#10;THANE, 421503",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "421503",
+  "gstin": "27AQIPM8931A2ZT",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "SARAH FLAMEPROOF CONTROL",
+      "mobileNumber": "9307830993/9923630603",
+      "email": "flameproofcontrol@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:33.547Z",
+  "updatedAt": "2026-03-14T09:56:33.547Z"
+}

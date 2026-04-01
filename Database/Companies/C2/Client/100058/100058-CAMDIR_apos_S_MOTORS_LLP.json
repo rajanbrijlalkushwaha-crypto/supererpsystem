@@ -1,0 +1,25 @@
+{
+  "clientId": 100058,
+  "companyName": "CAMDIR&apos;S MOTORS LLP",
+  "address": "Lekhi Village, Near Nigal Nissan,, NH415, Naharlagun, Papum Pare,",
+  "city": "",
+  "state": "Arunachal Pradesh",
+  "pincode": "791110",
+  "gstin": "12AANFC2058B1Z0",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "CAMDIR&apos;S MOTORS LLP",
+      "mobileNumber": "8415858778",
+      "email": "generalmanageraccounts@niglagroup.co.in",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.782Z",
+  "updatedAt": "2026-03-14T09:54:55.782Z"
+}

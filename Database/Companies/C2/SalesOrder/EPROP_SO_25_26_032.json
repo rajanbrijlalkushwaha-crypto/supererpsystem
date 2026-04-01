@@ -1,0 +1,33 @@
+{
+  "id": "35144694-a1df-48e3-a497-4cd83168bcef",
+  "voucherNumber": "EPROP/SO/25-26/032",
+  "date": "2026-01-06",
+  "party": "Indian Space Research Organization-AP",
+  "amount": 1404200,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687784976512",
+  "orderRef": "EE2526032",
+  "shippedBy": "By Road",
+  "destination": "Andhra Pradesh",
+  "paymentTerms": "Online",
+  "partyGstin": "37AAAGS1366J1Z1",
+  "placeOfSupply": "",
+  "stateName": "Andhra Pradesh",
+  "items": [
+    {
+      "itemName": "CONTAINER",
+      "description": "6100mmX3050mmX2590mm",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 595000,
+      "amount": 1190000,
+      "hsnCode": "9406",
+      "dueDate": "7-Mar-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.400Z"
+}

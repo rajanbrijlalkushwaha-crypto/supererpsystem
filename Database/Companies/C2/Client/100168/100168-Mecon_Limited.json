@@ -1,0 +1,17 @@
+{
+  "clientId": 100168,
+  "companyName": "Mecon Limited",
+  "address": "Finance Centre(4th Floor), (Opposite to Eco Park Gate No 2), Wing A, Action Area - IIB Kolkata, NORTH 24 PARGANAS,-700156",
+  "city": "",
+  "state": "West Bengal",
+  "pincode": "700156",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.005Z",
+  "updatedAt": "2026-03-14T09:54:56.005Z"
+}

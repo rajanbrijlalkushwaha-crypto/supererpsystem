@@ -1,0 +1,43 @@
+{
+  "id": "5b2de18d-bc08-402a-acfb-617fe5a9be2c",
+  "voucherNumber": "EPROP/SO/25-26/029",
+  "date": "2025-12-26",
+  "party": "Malvika Ajila",
+  "amount": 130980,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "EE/QR/25-26/837/R4",
+  "orderRef": "EE2526029",
+  "shippedBy": "By Road",
+  "destination": "Maharashtra",
+  "paymentTerms": "Online",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "FRP TOILET EWC",
+      "description": "With 200 Ltr Water Tank Wash Basin Outside Size:4x3x7 FT",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 34000,
+      "amount": 68000,
+      "hsnCode": "9406",
+      "dueDate": "29-Dec-25"
+    },
+    {
+      "itemName": "FRP BATHROOM",
+      "description": "With 200 Ltr Water Tak Size:4x3x7 FT",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 32000,
+      "amount": 32000,
+      "hsnCode": "9406",
+      "dueDate": "29-Dec-25"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.393Z"
+}

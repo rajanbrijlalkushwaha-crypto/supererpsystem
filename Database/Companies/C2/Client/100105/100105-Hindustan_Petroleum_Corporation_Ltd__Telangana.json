@@ -1,0 +1,17 @@
+{
+  "clientId": 100105,
+  "companyName": "Hindustan Petroleum Corporation Ltd- Telangana",
+  "address": "HPCL LPG Plant, Post Bag No.2, IDA,, Phase-III, Cherlapally,Hydrabad-500051",
+  "city": "",
+  "state": "Telangana",
+  "pincode": "500051",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.883Z",
+  "updatedAt": "2026-03-14T09:54:55.883Z"
+}

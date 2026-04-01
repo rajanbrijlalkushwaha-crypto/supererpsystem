@@ -1,0 +1,17 @@
+{
+  "clientId": 100040,
+  "companyName": "BLUE STAR LTD",
+  "address": "MALOO 01,502, 5TH FLOOR, MALOO 01,, NEAR VELOCITY MULTIPLEX,RING ROAD,, INDORE,",
+  "city": "",
+  "state": "Madhya Pradesh",
+  "pincode": "",
+  "gstin": "23AAACB4487D1Z0",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.734Z",
+  "updatedAt": "2026-03-14T09:54:55.734Z"
+}

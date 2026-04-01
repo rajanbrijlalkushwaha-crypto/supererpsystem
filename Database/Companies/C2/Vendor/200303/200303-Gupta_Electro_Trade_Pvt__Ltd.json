@@ -1,0 +1,25 @@
+{
+  "vendorId": 200303,
+  "vendorName": "Gupta Electro Trade Pvt. Ltd",
+  "address": "478 477, Naharkanta, Hanspal, Khordha",
+  "city": "",
+  "state": "Odisha",
+  "pincode": "752101",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Gupta Electro Trade Pvt. Ltd",
+      "mobileNumber": "73771 03303",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:31.953Z",
+  "updatedAt": "2026-03-14T09:56:31.953Z"
+}

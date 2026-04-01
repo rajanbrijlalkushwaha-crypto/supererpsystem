@@ -1,0 +1,25 @@
+{
+  "clientId": 100296,
+  "companyName": "Skipper Ltd",
+  "address": "Ward No.33, Plot No.33/1-108,C/o.Mamilla Pavan, Kumar, Rythunagaram-1 Revenue Nandyal-518502",
+  "city": "",
+  "state": "Andhra Pradesh",
+  "pincode": "518502",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Skipper Ltd",
+      "mobileNumber": "9051433446",
+      "email": "purchase.ulb@skipperlimited.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.278Z",
+  "updatedAt": "2026-03-14T09:54:56.278Z"
+}

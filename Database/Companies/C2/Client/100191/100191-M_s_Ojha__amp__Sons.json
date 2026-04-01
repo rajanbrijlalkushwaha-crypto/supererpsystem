@@ -1,0 +1,25 @@
+{
+  "clientId": 100191,
+  "companyName": "M/s Ojha &amp; Sons",
+  "address": "Rajpura Mugma, Dhanbad, Dist:Dhanbad, 828204",
+  "city": "",
+  "state": "Jharkhand",
+  "pincode": "828204",
+  "gstin": "20ABJPO9113G1ZW",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "M/s Ojha &amp; Sons",
+      "mobileNumber": "7004928008 / 9693764746",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.050Z",
+  "updatedAt": "2026-03-14T09:54:56.050Z"
+}

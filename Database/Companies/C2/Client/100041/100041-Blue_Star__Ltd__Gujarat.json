@@ -1,0 +1,17 @@
+{
+  "clientId": 100041,
+  "companyName": "Blue Star  Ltd.-Gujarat",
+  "address": "Office No 201 to 205, 2nd Floor, Unicus Shyamal, Shymal Cross Road, Ahmedabad, Satellite, Ahmedabad-380015",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380015",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.736Z",
+  "updatedAt": "2026-03-14T09:54:55.736Z"
+}

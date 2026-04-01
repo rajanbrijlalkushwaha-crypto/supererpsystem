@@ -1,0 +1,33 @@
+{
+  "id": "44b50536-1ac8-4338-b8ab-a08ef3f13345",
+  "voucherNumber": "EPROP/SO/25-26/041",
+  "date": "2026-02-20",
+  "party": "Airports Authority of India (AAI)",
+  "amount": 145000,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687794386858",
+  "orderRef": "EE2526042",
+  "shippedBy": "By Road",
+  "destination": "Sikkim",
+  "paymentTerms": "Online",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "Sikkim",
+  "items": [
+    {
+      "itemName": "FRP TOILET EWC",
+      "description": "Sludge Tank (Capicity200 Ltrs) With 75mm Outlet Facility",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 61440.68,
+      "amount": 122881.36,
+      "hsnCode": "9406",
+      "dueDate": "7-Mar-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.413Z"
+}

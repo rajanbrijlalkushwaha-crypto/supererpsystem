@@ -1,0 +1,33 @@
+{
+  "id": "34c962cd-1382-4d45-b463-4224a75a6a03",
+  "voucherNumber": "EPROP/SO/25-26/044",
+  "date": "2026-02-24",
+  "party": "National Institute of Technology (NIT)-Calicut",
+  "amount": 138000,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687747550380",
+  "orderRef": "EP2526044",
+  "shippedBy": "BY ROAD",
+  "destination": "KERALA",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "32AAAJD0781D2ZU",
+  "placeOfSupply": "",
+  "stateName": "Kerala",
+  "items": [
+    {
+      "itemName": "FRP TOILET EWC",
+      "description": "SLUDGE TANK (CAPICITY 200LTRS) WITH 75 MM OUTLET FACILITY THROUGH BUTTERFLY VALVE AND HOSEPIPE WITH 200 LTR WATER TANK AS PER ATTACH SPECS AND DRAWING",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 58474.58,
+      "amount": 116949.16,
+      "hsnCode": "9406",
+      "dueDate": "11-Mar-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.415Z"
+}

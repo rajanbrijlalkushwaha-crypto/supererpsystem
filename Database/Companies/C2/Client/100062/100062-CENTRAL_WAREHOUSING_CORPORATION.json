@@ -1,0 +1,17 @@
+{
+  "clientId": 100062,
+  "companyName": "CENTRAL WAREHOUSING CORPORATION",
+  "address": "GEMC-511687710759796, CENTRAL WAREHOUSING CORPORATION,, MAHALAXMI CHAR RASTA,, PALDI, AHMEDABAD",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380007",
+  "gstin": "24AAACC1206D1ZM",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.791Z",
+  "updatedAt": "2026-03-14T09:54:55.791Z"
+}

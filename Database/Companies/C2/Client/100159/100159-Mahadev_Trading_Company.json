@@ -1,0 +1,25 @@
+{
+  "clientId": 100159,
+  "companyName": "Mahadev Trading Company",
+  "address": "B-112, , SHREE RAM IND ESTATE, B/H BILLESHWAR IND ESTATE,, S P RING ROAD, ODHAV, Ahmedabad, 382415",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382415",
+  "gstin": "24ADCPL6185E1ZO",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Mahadev Trading Company",
+      "mobileNumber": "98256 67770",
+      "email": "mtc.steels@gmail.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.989Z",
+  "updatedAt": "2026-03-14T09:54:55.989Z"
+}

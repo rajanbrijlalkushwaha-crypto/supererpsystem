@@ -1,0 +1,17 @@
+{
+  "clientId": 100070,
+  "companyName": "Deepak Chem Tech Ltd.",
+  "address": "GIDC Chemical Complex,  Beside Deepak, Nitrite Limited , Nandesari-391340",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "391340",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.807Z",
+  "updatedAt": "2026-03-14T09:54:55.807Z"
+}

@@ -1,0 +1,25 @@
+{
+  "vendorId": 200848,
+  "vendorName": "SHRIJI AIR CONDITIONER SERVICE",
+  "address": "NR NALANDA COMPLEX,40 1st FLOOR,, SHOP NO 140 SAMAAN COMPLEX,, UDGES BUNGLOW ROAD, SATELLITE, Ahmedabad,, 380015",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380015",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "SHRIJI AIR CONDITIONER SERVICE",
+      "mobileNumber": "98246 50302",
+      "email": "shriji_air@yahoo.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:33.737Z",
+  "updatedAt": "2026-03-14T09:56:33.737Z"
+}

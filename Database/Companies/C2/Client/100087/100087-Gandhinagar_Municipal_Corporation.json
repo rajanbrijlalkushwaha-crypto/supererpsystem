@@ -1,0 +1,17 @@
+{
+  "clientId": 100087,
+  "companyName": "Gandhinagar Municipal Corporation",
+  "address": "Pandit Dindayal Upadhyay Bhavan, Gandhinagar, Behind Gandhinagar Fire Service Headquarters, Gandhinagar-382016",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382016",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.845Z",
+  "updatedAt": "2026-03-14T09:54:55.845Z"
+}

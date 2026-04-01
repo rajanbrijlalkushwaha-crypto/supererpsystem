@@ -1,0 +1,33 @@
+{
+  "id": "36434c7c-ab98-405d-bcc0-4ec00cabdf08",
+  "voucherNumber": "EPROP/SO/25-26/030",
+  "date": "2026-01-01",
+  "party": "Hindustan Aeronautics Limited (HAL)",
+  "amount": 248500,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC 511687727867001",
+  "orderRef": "EE2526030",
+  "shippedBy": "ROAD",
+  "destination": "NASHIK",
+  "paymentTerms": "OFFLINE",
+  "partyGstin": "27AAACH3641R1Z7",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "Portable Toilet",
+      "description": "G. I MOBILE PORTABLE TOILET FOR LADIES",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 210593,
+      "amount": 210593,
+      "hsnCode": "9406",
+      "dueDate": "2-Mar-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.394Z"
+}

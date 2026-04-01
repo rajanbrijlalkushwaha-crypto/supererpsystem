@@ -1,0 +1,17 @@
+{
+  "vendorId": 200200,
+  "vendorName": "Deco Point",
+  "address": "A-3/104, Nirman Complex, RC Tech Road, Chanay Puri, Ghatlodia, Ahmedabad-380061",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380061",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:31.711Z",
+  "updatedAt": "2026-03-14T09:56:31.711Z"
+}

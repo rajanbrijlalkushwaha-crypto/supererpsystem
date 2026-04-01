@@ -1,0 +1,17 @@
+{
+  "clientId": 100223,
+  "companyName": "NHPC LIMITED",
+  "address": "CHAMERA POWER STATION, PO-KHAIRI, TEHSIL-DALHOUSE, DIST-CHAMBA, 176325",
+  "city": "",
+  "state": "Himachal Pradesh",
+  "pincode": "176303",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.121Z",
+  "updatedAt": "2026-03-14T09:54:56.121Z"
+}

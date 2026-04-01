@@ -1,0 +1,25 @@
+{
+  "name": "epsilon-enterprise",
+  "version": "1.0.0",
+  "description": "Epsilon Enterprise Client Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "concurrently --kill-others-on-fail --names \"SERVER,CLIENT\" --prefix-colors \"cyan,magenta\" \"node server.js\" \"npm --prefix frontend start\"",
+    "db:init": "node db-init.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.22.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.20.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

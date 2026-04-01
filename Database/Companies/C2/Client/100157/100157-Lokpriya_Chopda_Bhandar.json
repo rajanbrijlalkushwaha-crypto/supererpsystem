@@ -1,0 +1,17 @@
+{
+  "clientId": 100157,
+  "companyName": "Lokpriya Chopda Bhandar",
+  "address": "36, Ramnagar, Nr.Ramji Mndir, Sabarmati, Ahmedabad",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380005",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.986Z",
+  "updatedAt": "2026-03-14T09:54:55.986Z"
+}

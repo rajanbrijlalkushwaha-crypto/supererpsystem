@@ -1,0 +1,24 @@
+{
+  "vendorId": 200009,
+  "vendorName": "Aayushi Roadways",
+  "address": "Ahmedabad",
+  "city": "Ahmedabad",
+  "state": "Gujarat",
+  "pincode": "",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "name": "Aayuhsi",
+      "mobileNumber": "9824181828",
+      "altMobile": "",
+      "email": "",
+      "website": "",
+      "landline": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "createdAt": "2026-03-14T09:56:31.292Z",
+  "updatedAt": "2026-03-17T08:22:34.259Z"
+}

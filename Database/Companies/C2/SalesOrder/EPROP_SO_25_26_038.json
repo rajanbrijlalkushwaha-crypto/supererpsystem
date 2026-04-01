@@ -1,0 +1,33 @@
+{
+  "id": "dd97ee1f-5116-41de-a6dd-a508c6861de2",
+  "voucherNumber": "EPROP/SO/25-26/038",
+  "date": "2026-02-09",
+  "party": "M/s Ntpc Limited-Up",
+  "amount": 916000,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687788314222",
+  "orderRef": "EE2526038",
+  "shippedBy": "BY ROAD",
+  "destination": "AMBEDKAR NAGAR",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "09AAACN0255D9ZO",
+  "placeOfSupply": "",
+  "stateName": "Uttar Pradesh",
+  "items": [
+    {
+      "itemName": "Cabin 30x10X8.5 FT",
+      "description": "",
+      "quantity": 2,
+      "unit": "NOS",
+      "rate": 388135.59,
+      "amount": 776271.18,
+      "hsnCode": "9406",
+      "dueDate": "10-May-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.408Z"
+}

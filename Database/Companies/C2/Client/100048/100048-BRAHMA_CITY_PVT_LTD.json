@@ -1,0 +1,25 @@
+{
+  "clientId": 100048,
+  "companyName": "BRAHMA CITY PVT LTD",
+  "address": "Adani House, Plot No-83, Institutional Area, Sec.-32, GURGAON 122102",
+  "city": "",
+  "state": "Haryana",
+  "pincode": "122102",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "BRAHMA CITY PVT LTD",
+      "mobileNumber": "9909950432",
+      "email": "Ajay.pandey@adani.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.750Z",
+  "updatedAt": "2026-03-14T09:54:55.750Z"
+}

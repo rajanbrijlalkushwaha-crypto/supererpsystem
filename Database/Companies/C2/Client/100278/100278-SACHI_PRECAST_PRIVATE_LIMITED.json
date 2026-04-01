@@ -1,0 +1,25 @@
+{
+  "clientId": 100278,
+  "companyName": "SACHI PRECAST PRIVATE LIMITED",
+  "address": "302,Abhijeet-II, Nr Mahila Police Station,, Mithakhali Six Roads,, Ellisbridge,,, Ahmedabad-380006",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "380006",
+  "gstin": "24ABECS9659R1ZA",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "SACHI PRECAST PRIVATE LIMITED",
+      "mobileNumber": "90998 86788",
+      "email": "info@sachiagency.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.232Z",
+  "updatedAt": "2026-03-14T09:54:56.232Z"
+}

@@ -1,0 +1,17 @@
+{
+  "clientId": 100253,
+  "companyName": "Porter-MH",
+  "address": "501a, 502a, 504b, 505b and 506b, 5th Floor, Wing A and Wing B, Universal Business Park, Chandivali Farm Road, Off. Saki Vihar Road, Andheri East, Mumbai",
+  "city": "",
+  "state": "Maharashtra",
+  "pincode": "400072",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.178Z",
+  "updatedAt": "2026-03-14T09:54:56.178Z"
+}

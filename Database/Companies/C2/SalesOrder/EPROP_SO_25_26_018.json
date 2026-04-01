@@ -1,0 +1,33 @@
+{
+  "id": "c9a17121-7e45-4320-9d7f-e4b7f7b19585",
+  "voucherNumber": "EPROP/SO/25-26/018",
+  "date": "2025-10-21",
+  "party": "Bhabha Atomic Research Centre",
+  "amount": 180000,
+  "narration": "",
+  "tallyType": "Sales Order",
+  "reference": "GEMC-511687775667768",
+  "orderRef": "EE2526018",
+  "shippedBy": "By Road",
+  "destination": "Mumbai",
+  "paymentTerms": "ONLINE",
+  "partyGstin": "",
+  "placeOfSupply": "",
+  "stateName": "Maharashtra",
+  "items": [
+    {
+      "itemName": "MS Toilet",
+      "description": "10X6X8.5 FT As Per Specs and Drawing",
+      "quantity": 1,
+      "unit": "NOS",
+      "rate": 152542.37,
+      "amount": 152542.37,
+      "hsnCode": "9406",
+      "dueDate": "19-Jan-26"
+    }
+  ],
+  "targetType": "salesorder",
+  "tallyImported": true,
+  "status": "approved",
+  "importedAt": "2026-03-14T11:04:04.373Z"
+}

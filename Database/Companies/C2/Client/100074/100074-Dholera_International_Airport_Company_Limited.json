@@ -1,0 +1,17 @@
+{
+  "clientId": 100074,
+  "companyName": "Dholera International Airport Company Limited",
+  "address": "Block No 1, 3 Rd Floor, A Wing, Karmayogi Bhavan, Sector 16, Gandhinagar, 382016",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382016",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.816Z",
+  "updatedAt": "2026-03-14T09:54:55.816Z"
+}

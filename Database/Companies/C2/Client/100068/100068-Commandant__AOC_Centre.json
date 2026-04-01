@@ -1,0 +1,25 @@
+{
+  "clientId": 100068,
+  "companyName": "Commandant, AOC Centre",
+  "address": "Headquater, Secunderabad, 500015",
+  "city": "",
+  "state": "Telangana",
+  "pincode": "500015",
+  "gstin": "",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Commandant, AOC Centre",
+      "mobileNumber": "8790374651",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.803Z",
+  "updatedAt": "2026-03-14T09:54:55.803Z"
+}

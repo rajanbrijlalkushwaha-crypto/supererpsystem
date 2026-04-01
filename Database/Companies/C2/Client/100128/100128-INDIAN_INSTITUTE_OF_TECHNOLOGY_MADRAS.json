@@ -1,0 +1,17 @@
+{
+  "clientId": 100128,
+  "companyName": "INDIAN INSTITUTE OF TECHNOLOGY MADRAS",
+  "address": "CENTRE FOR INDUSTRIAL CONSULTANCY AND SPONSORED RESEARCH,, IIT CAMPUS COMPLEX,, GUNIDY,, CHENNAI",
+  "city": "",
+  "state": "Tamil Nadu",
+  "pincode": "600036",
+  "gstin": "33AAAAI3615G1Z6",
+  "gstType": "Regular",
+  "contactPersons": [],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:55.930Z",
+  "updatedAt": "2026-03-14T09:54:55.930Z"
+}

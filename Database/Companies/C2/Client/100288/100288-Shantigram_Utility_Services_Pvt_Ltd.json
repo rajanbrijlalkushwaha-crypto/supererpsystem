@@ -1,0 +1,25 @@
+{
+  "clientId": 100288,
+  "companyName": "Shantigram Utility Services Pvt Ltd",
+  "address": "ATRECO HOUSE, CBD SHANTIGRAM, NEAR VAISHNODEVI CIRCLE, S.G. HIGHWAY, AHMEDABAD GUJARAT, 382424",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382424",
+  "gstin": "24AAMCS5950N1ZQ",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Shantigram Utility Services Pvt Ltd",
+      "mobileNumber": "+919099055173",
+      "email": "ninad.apshankar@adani.com",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Debtors",
+  "createdAt": "2026-03-14T09:54:56.256Z",
+  "updatedAt": "2026-03-14T09:54:56.256Z"
+}

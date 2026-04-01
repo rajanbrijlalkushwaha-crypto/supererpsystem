@@ -1,0 +1,25 @@
+{
+  "vendorId": 200654,
+  "vendorName": "Quantum Engineers",
+  "address": "Plot No 15, Shiv Bhumi Industrial Estate,, Kubathal, Kathwada, Ahmedabad",
+  "city": "",
+  "state": "Gujarat",
+  "pincode": "382430",
+  "gstin": "24ABFPP3208H1ZX",
+  "gstType": "Regular",
+  "contactPersons": [
+    {
+      "id": 1,
+      "name": "Quantum Engineers",
+      "mobileNumber": "7600346395",
+      "email": "",
+      "designation": ""
+    }
+  ],
+  "documents": [],
+  "status": "approved",
+  "tallyImported": true,
+  "tallyParent": "Sundry Creditors",
+  "createdAt": "2026-03-14T09:56:33.098Z",
+  "updatedAt": "2026-03-14T09:56:33.098Z"
+}
