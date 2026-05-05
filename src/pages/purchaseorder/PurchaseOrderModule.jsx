@@ -300,8 +300,12 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
                       <tr key={i} style={{background:i%2===0?W:'#f5f8fc'}}>
                         <td style={{padding:'3px 7px',border:'1px solid #e0e0e0',color:'#888',width:24}}>{i+1}</td>
                         <td style={{padding:'3px 7px',border:'1px solid #e0e0e0',fontWeight:600,minWidth:120}}>
-                          {it.itemName}
+                          <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                            {it.itemName}
+                            {it.isAddon&&<span style={{fontSize:9,padding:'1px 4px',background:'#fff3e0',color:'#b45309',border:'1px solid #fbbf24',borderRadius:2,fontWeight:700,whiteSpace:'nowrap'}}>Add-on</span>}
+                          </div>
                           {it.itemCode&&<div style={{fontSize:9,color:'#888'}}>{it.itemCode}</div>}
+                          {it.itemType&&!it.isAddon&&<div style={{fontSize:9,color:'#888'}}>{it.itemType}</div>}
                         </td>
                         <td style={{padding:'3px 7px',border:'1px solid #e0e0e0',maxWidth:200,fontSize:10,color:'#444'}}>
                           {it.specs?<span style={{whiteSpace:'pre-wrap'}}>{it.specs}</span>:<span style={{color:'#ccc'}}>—</span>}
