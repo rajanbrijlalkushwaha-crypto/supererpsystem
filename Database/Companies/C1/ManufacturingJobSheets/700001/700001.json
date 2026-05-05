@@ -1,0 +1,49 @@
+{
+  "id": 700001,
+  "companyId": "C1",
+  "jobNo": "JSM700001",
+  "soId": "300001",
+  "soNumber": "EPS/SO/26-27/001",
+  "customerName": "Epp Composites Private Limited",
+  "locationId": 800002,
+  "locationName": "Zak GIDC ",
+  "itemName": "FRP TOILET IWC ",
+  "itemCode": 9000001,
+  "qtyRequired": 2,
+  "qtyProduced": 0,
+  "uom": "NOS",
+  "dueDate": null,
+  "startDate": null,
+  "status": "completed",
+  "bom": [
+    {
+      "material": "200 LTR WATER TANK ",
+      "qty": 2,
+      "uom": "NOS",
+      "hsn": "",
+      "availableQty": ""
+    }
+  ],
+  "outputItems": [
+    {
+      "itemName": "FRP TOILET IWC ",
+      "itemCode": 9000001,
+      "qty": 2,
+      "uom": "NOS",
+      "rate": 35000,
+      "type": "Manufactured",
+      "bom": [
+        {
+          "material": "200 LTR WATER TANK ",
+          "qty": 2,
+          "uom": "NOS",
+          "hsn": "",
+          "availableQty": ""
+        }
+      ]
+    }
+  ],
+  "notes": "",
+  "createdAt": "2026-04-06T12:49:03.943Z",
+  "updatedAt": "2026-04-18T07:06:04.902Z"
+}

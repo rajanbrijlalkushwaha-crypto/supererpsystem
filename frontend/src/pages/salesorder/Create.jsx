@@ -64,36 +64,86 @@ const newItem = () => ({
 });
 
 /* ═══════════════════════════════════════════════════
-   STYLE ATOMS
+   STYLE ATOMS  — Modern SaaS / SAP Fiori theme
 ═══════════════════════════════════════════════════ */
+/* ─── Design Tokens — aligned to App.css v5.0 ─── */
+const P    = '#2F6FED';   /* primary blue        */
+const SEC  = '#EEF4FF';   /* section header band */
+const BG   = '#F5F7FB';   /* page background     */
+const BD   = '#E5EAF2';   /* border colour       */
+const TEAL = '#12B76A';   /* confirm/submit      */
+
+const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const S = {
-  page:    { fontFamily:"'72','Inter',Arial,Helvetica,sans-serif", color:'#32363A', background:'#F5F6F7', minHeight:'100vh' },
-  hdr:     { background:'#354A5E', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100, borderRadius:'6px 6px 0 0' },
-  card:    { background:'#fff', border:'1px solid #E5E5E5', borderRadius:'6px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' },
-  sec:     { fontSize:'10px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #0070F2', paddingBottom:'4px', marginBottom:'12px' },
-  lbl:     { fontSize:'11px', fontWeight:600, color:'#32363A', marginBottom:'3px', display:'block' },
-  req:     { color:'#BB0000', marginLeft:'2px' },
-  err:     { fontSize:'10px', color:'#BB0000', marginTop:'2px', fontWeight:600 },
-  hint:    { fontSize:'10px', color:'#6A6D70', marginTop:'2px' },
-  g2:      { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 18px' },
-  g3:      { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px 18px' },
-  g4:      { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px 18px' },
-  tbl:     { width:'100%', borderCollapse:'collapse', fontSize:'12px' },
-  th:      { background:'#354A5E', color:'#fff', padding:'7px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', whiteSpace:'nowrap', borderRight:'1px solid #4A6075' },
-  td:      { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#fff', verticalAlign:'middle' },
-  tdAlt:   { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#F9FAFB', verticalAlign:'middle' },
+  page:  { fontFamily: F, color:'#111827', background:BG, minHeight:'100vh' },
+
+  /* Top header bar */
+  hdr:   {
+    background: P,
+    padding:'0 24px', height:50, display:'flex', justifyContent:'space-between', alignItems:'center',
+    borderBottom:'2px solid #1A56D6', position:'sticky', top:0, zIndex:100,
+    boxShadow:'0 2px 12px rgba(47,111,237,0.30)',
+  },
+
+  /* White card — soft shadow, rounded */
+  card:  {
+    background:'#fff', border:`1px solid ${BD}`, borderRadius:'12px',
+    padding:0, marginBottom:'16px',
+    boxShadow:'0 1px 3px rgba(16,24,40,0.10), 0 1px 2px rgba(16,24,40,0.06)',
+    overflow:'hidden',
+  },
+
+  /* Section header BAND inside card */
+  sec:   {
+    fontSize:'11.5px', fontWeight:700, color:'#fff',
+    background: P,
+    padding:'8px 16px',
+    borderBottom:`1px solid #1A56D6`,
+    margin:0,
+    letterSpacing:'0.6px',
+    textTransform:'uppercase',
+    display:'flex', alignItems:'center', gap:7,
+  },
+
+  /* Card body padding wrapper */
+  body:  { padding:'16px 18px' },
+
+  lbl:   { fontSize:'12.5px', fontWeight:600, color:'#4B5563', marginBottom:'5px', display:'block', letterSpacing:'0.1px' },
+  req:   { color:'#EF4444', marginLeft:'2px' },
+  err:   { fontSize:'11px', color:'#EF4444', marginTop:'4px', fontWeight:600 },
+  hint:  { fontSize:'11px', color:'#9CA3AF', marginTop:'4px' },
+  g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px 20px' },
+  g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'14px 20px' },
+  g4:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'12px 16px' },
+
+  tbl:   { width:'100%', borderCollapse:'collapse', fontSize:'12.5px' },
+  th:    { background:P, color:'#fff', padding:'9px 12px', textAlign:'left', fontWeight:700, fontSize:'11px', whiteSpace:'nowrap', borderRight:'1px solid rgba(255,255,255,0.10)', textTransform:'uppercase', letterSpacing:'0.4px' },
+  td:    { padding:'8px 11px', border:`1px solid ${BD}`, background:'#fff', verticalAlign:'middle', fontSize:'12.5px' },
+  tdAlt: { padding:'8px 11px', border:`1px solid ${BD}`, background:'#F9FAFB', verticalAlign:'middle', fontSize:'12.5px' },
 };
 
 function inp(err, sm) {
   return {
-    width:'100%', padding: sm ? '5px 7px' : '6px 9px',
-    border:`1px solid ${err?'#BB0000':'#BBBCBD'}`,
-    borderRadius:'4px', fontSize:'12px', fontFamily:'inherit',
-    background:'#FAFAFA', color:'#32363A', outline:'none', boxSizing:'border-box',
+    width:'100%',
+    padding: sm ? '5px 9px' : '7px 11px',
+    border:`1px solid ${err ? '#EF4444' : BD}`,
+    borderRadius: sm ? '6px' : '6px',
+    fontSize: sm ? '12px' : '13px', fontFamily:'inherit',
+    background:'#fff', color:'#111827', outline:'none',
+    boxSizing:'border-box', transition:'border-color 0.15s, box-shadow 0.15s',
+    boxShadow: err ? '0 0 0 3px rgba(239,68,68,0.12)' : 'none',
   };
 }
 function selStyle(sm) {
-  return { width:'100%', padding: sm ? '5px 7px' : '6px 9px', border:'1px solid #BBBCBD', borderRadius:'4px', fontSize:'12px', fontFamily:'inherit', background:'#FAFAFA', color:'#32363A', outline:'none', cursor:'pointer', boxSizing:'border-box' };
+  return {
+    width:'100%',
+    padding: sm ? '5px 9px' : '7px 11px',
+    border:`1px solid ${BD}`,
+    borderRadius: sm ? '6px' : '6px',
+    fontSize: sm ? '12px' : '13px', fontFamily:'inherit',
+    background:'#fff', color:'#111827', outline:'none',
+    cursor:'pointer', boxSizing:'border-box', transition:'border-color 0.15s',
+  };
 }
 
 /* ── Compact field components ── */
@@ -148,16 +198,17 @@ function Toast({ type, msg, onClose }) {
   return (
     <div style={{
       position:'fixed', top:'20px', right:'24px', zIndex:9999,
-      background: ok ? '#E8F5E9' : '#FFEBEB',
-      border:`1px solid ${ok?'#82C98A':'#F5B8B8'}`,
-      borderLeft:`4px solid ${ok?'#188918':'#BB0000'}`,
-      borderRadius:'6px', padding:'13px 18px', minWidth:'300px',
-      display:'flex', alignItems:'center', gap:'10px',
-      boxShadow:'0 4px 20px rgba(0,0,0,0.14)',
+      background: ok ? '#F0FDF4' : '#FEF2F2',
+      border:`1px solid ${ok?'#BBF7D0':'#FECACA'}`,
+      borderLeft:`4px solid ${ok?'#22C55E':'#EF4444'}`,
+      borderRadius:'12px', padding:'14px 18px', minWidth:'320px',
+      display:'flex', alignItems:'center', gap:'12px',
+      boxShadow:'0 8px 32px rgba(0,0,0,0.12)',
+      fontFamily: F,
     }}>
-      <span style={{ fontSize:'17px' }}>{ok ? '✅' : '❌'}</span>
-      <span style={{ fontSize:'12px', color: ok?'#0A6640':'#BB0000', fontWeight:600, flex:1 }}>{msg}</span>
-      <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#6A6D70', fontSize:'17px' }}>×</button>
+      <span style={{ fontSize:'18px' }}>{ok ? '✅' : '❌'}</span>
+      <span style={{ fontSize:'13px', color: ok?'#15803D':'#B91C1C', fontWeight:600, flex:1 }}>{msg}</span>
+      <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9CA3AF', fontSize:'18px', lineHeight:1 }}>×</button>
     </div>
   );
 }
@@ -197,6 +248,11 @@ const CreateSalesOrder = () => {
     orderType:'Domestic', salesPerson:'',
     customerName:'', customerCode:'', customerGstin:'',
     contactPerson:'', mobile:'', email:'', customerState:'',
+    customerAddress:'', customerCity:'', customerPincode:'',
+    sameAsBillTo: true,
+    shipToName:'', shipToAddress:'', shipToCity:'', shipToState:'', shipToPincode:'',
+    clientOrderNo:'', clientOrderDate:'',
+    deliveryDate:'', paymentTerms:'Net 30', internalNotes:'',
   });
 
   /* ── Tab states ── */
@@ -220,6 +276,28 @@ const CreateSalesOrder = () => {
     productSpecs:'', technicalDetails:'', drawingNumber:'', version:'',
     customFields:[],
   });
+
+  /* ── Specification Sheet ── */
+  const uid = () => Date.now() + Math.random();
+  const newSpecRow      = ()       => ({ _id: uid(), description:'', qty:'', remarks:'' });
+  const newSpecSubHead  = ()       => ({ _id: uid(), title:'', rows:[newSpecRow()] });
+  const newSpecHeader   = ()       => ({ _id: uid(), title:'', subHeaders:[newSpecSubHead()] });
+  const newSpecGroup    = (item={})=> ({ _id: uid(), itemId: item._id||'', itemName: item.itemName||item.material||'', headers:[newSpecHeader()] });
+  const [specSheet, setSpecSheet] = useState([]);
+
+  const ssAddGroup  = (item)      => setSpecSheet(s => [...s, newSpecGroup(item)]);
+  const ssDelGroup  = (gid)       => setSpecSheet(s => s.filter(g => g._id !== gid));
+  const ssSetItem   = (gid, item) => setSpecSheet(s => s.map(g => g._id===gid ? {...g, itemId:item._id||'', itemName:item.itemName||item.material||''} : g));
+  const ssAddHdr    = (gid)       => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:[...g.headers, newSpecHeader()]} : g));
+  const ssDelHdr    = (gid,hid)   => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.filter(h=>h._id!==hid)} : g));
+  const ssSetHdrT   = (gid,hid,v) => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,title:v}:h)} : g));
+  const ssAddSub    = (gid,hid)   => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:[...h.subHeaders,newSpecSubHead()]}:h)} : g));
+  const ssDelSub    = (gid,hid,sid)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.filter(sh=>sh._id!==sid)}:h)} : g));
+  const ssSetSubT   = (gid,hid,sid,v)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,title:v}:sh)}:h)} : g));
+  const ssAddRow    = (gid,hid,sid)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:[...sh.rows,newSpecRow()]}:sh)}:h)} : g));
+  const ssDelRow    = (gid,hid,sid,rid)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:sh.rows.filter(r=>r._id!==rid)}:sh)}:h)} : g));
+  const ssUpdRow    = (gid,hid,sid,rid,field,val)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:sh.rows.map(r=>r._id===rid?{...r,[field]:val}:r)}:sh)}:h)} : g));
+
   const [attachments, setAttachments] = useState([]);
   const [notes, setNotes] = useState({
     termsConditions:'', internalNotes:'', customerNotes:'',
@@ -266,13 +344,16 @@ const CreateSalesOrder = () => {
     const cp0  = (c.contactPersons || [])[0] || {};
     setHdr(h => ({
       ...h,
-      customerName:  c.companyName || c.clientName || '',
-      customerCode:  String(c.clientId || ''),
-      customerGstin: c.gstin || c.gst || '',
-      contactPerson: cp0.name || '',
-      mobile:        cp0.mobileNumber || '',
-      email:         cp0.email || '',
-      customerState: c.state || '',
+      customerName:    c.companyName || c.clientName || '',
+      customerCode:    String(c.clientId || ''),
+      customerGstin:   c.gstin || c.gst || '',
+      contactPerson:   cp0.name || '',
+      mobile:          cp0.mobileNumber || '',
+      email:           cp0.email || '',
+      customerState:   c.state || '',
+      customerAddress: c.address || '',
+      customerCity:    c.city || '',
+      customerPincode: c.pincode || '',
     }));
     setDel(d => ({
       ...d,
@@ -419,6 +500,16 @@ const CreateSalesOrder = () => {
       fd.append('attachments', JSON.stringify(attachments.map(a => ({ name: a.name }))));
       attachments.forEach(a => fd.append('attachmentFiles', a.file));
       // project management
+      fd.append('specSheet',  JSON.stringify(specSheet.map(({ _id, ...g }) => ({
+        ...g,
+        headers: (g.headers||[]).map(({ _id:_hid, ...h }) => ({
+          ...h,
+          subHeaders: (h.subHeaders||[]).map(({ _id:_sid, ...sh }) => ({
+            ...sh,
+            rows: (sh.rows||[]).map(({ _id:_rid, ...r }) => r),
+          })),
+        })),
+      }))));
       fd.append('scopeItems', JSON.stringify(scopeItems.map(({ _id, ...s }) => s)));
       fd.append('bomItems',   JSON.stringify(bomItems.map(({ _id, ...b }) => b)));
       fd.append('tasks',      JSON.stringify(tasks.map(({ _id, ...t }) => t)));
@@ -447,118 +538,311 @@ const CreateSalesOrder = () => {
   ════════════════════════════════════════════════ */
   return (
     <div style={S.page}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        input:focus, select:focus, textarea:focus {
+          border-color: #1B64D0 !important;
+          box-shadow: 0 0 0 2px rgba(27,100,208,0.12) !important;
+        }
+        input::placeholder, textarea::placeholder { color: #9CA3AF; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #F1F5F9; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+      `}</style>
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
 
-      {/* ── Sticky Header ── */}
+      {/* ── Top Header Bar ── */}
       <div style={S.hdr}>
-        <div>
-          <div style={{ fontSize:'10px', color:'#A8C4E0', letterSpacing:'0.6px', marginBottom:'1px' }}>SALES ORDER MANAGEMENT — VA01</div>
-          <div style={{ fontSize:'15px', fontWeight:700, color:'#fff' }}>
-            Create Sales Order&nbsp;&nbsp;
-            <span style={{ fontFamily:'monospace', color:'#90CAF9', fontSize:'13px' }}>#{hdr.orderNo}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          {/* breadcrumb */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12.5, color:'rgba(255,255,255,0.65)' }}>
+            <span style={{ cursor:'pointer', color:'rgba(255,255,255,0.75)' }} onClick={() => navigate('/sales-order/view')}>Sales Orders</span>
+            <span style={{ opacity:0.5 }}>›</span>
+            <span style={{ color:'#fff', fontWeight:600 }}>Create New</span>
           </div>
         </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={() => navigate('/sales-order/view')} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', padding:'6px 14px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
-            ← Back
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <button onClick={() => navigate('/sales-order/view')}
+            style={{ height:32, padding:'0 16px', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.22)', color:'rgba(255,255,255,0.85)', borderRadius:6, cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, transition:'all 0.15s' }}>
+            ✕ Cancel
           </button>
-          <button onClick={() => handleSave('draft')} disabled={saving} style={{ background:'#6A6D70', border:'none', color:'#fff', padding:'6px 14px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
-            💾 Save Draft
+          <button onClick={() => handleSave('draft')} disabled={saving}
+            style={{ height:32, padding:'0 18px', background:'rgba(255,255,255,0.14)', border:'1px solid rgba(255,255,255,0.30)', color:'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, opacity:saving?0.6:1 }}>
+            💾 {saving ? 'Saving…' : 'Save Draft'}
           </button>
-          <button onClick={() => handleSave('confirmed')} disabled={saving} style={{ background:'#0070F2', border:'none', color:'#fff', padding:'6px 18px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
-            {saving ? 'Saving…' : '✅ Confirm Order'}
+          <button onClick={() => handleSave('approved')} disabled={saving}
+            style={{ height:32, padding:'0 18px', background:'#fff', border:'1px solid #E5EAF2', color:P, borderRadius:6, cursor:saving?'default':'pointer', fontSize:12.5, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, boxShadow:'0 1px 4px rgba(0,0,0,0.10)', opacity:saving?0.6:1 }}>
+            ✓ {saving ? '…' : 'Save & Approve'}
           </button>
         </div>
       </div>
 
-      <div style={{ padding:'14px 16px' }}>
 
-        {/* ── Order Header Card ── */}
-        <div style={{ ...S.card, marginBottom:'10px' }}>
-          <div style={{ ...S.sec, borderBottomColor:'#354A5E' }}>Order Header</div>
-          <div style={S.g4}>
-            {/* Sales Order No */}
-            <FIn label="Sales Order No" value={hdr.orderNo} readOnly hint="Auto-generated" />
+      <div style={{ padding:'12px 20px 20px' }}>
 
-            {/* Order Date */}
-            <div>
-              <label style={S.lbl}>Order Date <span style={S.req}>*</span></label>
-              <input type="date" value={hdr.orderDate} onChange={e => setH('orderDate', e.target.value)}
-                style={{ ...inp(errs.orderDate), ...(errs.orderDate ? {} : {}) }} />
-              {errs.orderDate && <div style={S.err}>{errs.orderDate}</div>}
+        {/* ── Two-column Header Layout ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'3fr 2fr', gap:'14px', marginBottom:'14px' }}>
+
+          {/* LEFT: Customer Info */}
+          <div>
+            {/* Bill To */}
+            <div style={S.card}>
+              <div style={S.sec}>Bill To — Customer Details</div>
+              <div style={S.body}>
+                {/* Client Name search */}
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>Client Name <span style={S.req}>*</span></label>
+                  <div ref={custRef} style={{ position:'relative', display:'flex', gap:'6px' }}>
+                    <input value={hdr.customerName || custSearch}
+                      onChange={e => { setCustSearch(e.target.value); setH('customerName',''); setShowCustDD(true); }}
+                      onFocus={() => setShowCustDD(true)}
+                      placeholder="Type or click 🔍 search..."
+                      style={{ ...inp(errs.customerName), flex:1 }}
+                    />
+                    <button type="button" onClick={() => setShowCustDD(true)}
+                      style={{ background:P, border:'none', color:'#fff', borderRadius:'5px', padding:'7px 12px', cursor:'pointer', fontSize:'14px' }}>🔍</button>
+                    {showCustDD && filteredClients.length > 0 && (
+                      <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:40, background:'#fff', border:`1px solid ${BD}`, borderRadius:'8px', boxShadow:'0 8px 24px rgba(0,0,0,0.1)', zIndex:200, maxHeight:'200px', overflowY:'auto' }}>
+                        {filteredClients.slice(0,20).map(c => (
+                          <div key={c.clientId} onClick={() => selectCustomer(c)}
+                            style={{ padding:'8px 12px', cursor:'pointer', borderBottom:`1px solid ${BD}`, fontSize:'13px', display:'flex', justifyContent:'space-between', alignItems:'center' }}
+                            onMouseEnter={e => e.currentTarget.style.background=SEC}
+                            onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                            <span style={{ fontWeight:600, color:'#1F2937' }}>{c.companyName||c.clientName}</span>
+                            <span style={{ color:'#9CA3AF', fontSize:'11px', background:'#F3F4F6', padding:'1px 7px', borderRadius:'10px' }}>#{c.clientId}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {errs.customerName && <div style={S.err}>{errs.customerName}</div>}
+                </div>
+                {/* Client ID */}
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>Client ID</label>
+                  <input value={hdr.customerCode} readOnly placeholder="Auto filled"
+                    style={{ ...inp(false), background:'#F3F4F6', color:'#6B7280', cursor:'default' }} />
+                </div>
+                {/* GSTIN */}
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>GSTIN</label>
+                  <input value={hdr.customerGstin} onChange={e => setH('customerGstin', e.target.value)} style={inp(false)} />
+                </div>
+                {/* Address */}
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>Address</label>
+                  <input value={hdr.customerAddress} onChange={e => setH('customerAddress', e.target.value)} style={inp(false)} />
+                </div>
+                {/* City / State */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:'8px', marginBottom:'10px', alignItems:'end' }}>
+                  <div>
+                    <label style={S.lbl}>City</label>
+                    <input value={hdr.customerCity} onChange={e => setH('customerCity', e.target.value)} style={inp(false)} />
+                  </div>
+                  <div>
+                    <label style={S.lbl}>&nbsp;</label>
+                    <select style={{ ...selStyle(), width:'70px' }}>
+                      <option>—</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.lbl}>State</label>
+                    <select value={hdr.customerState} onChange={e => setH('customerState', e.target.value)} style={selStyle()}>
+                      <option value="">State</option>
+                      {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Pincode */}
+                <div>
+                  <label style={S.lbl}>Pincode</label>
+                  <input value={hdr.customerPincode} onChange={e => setH('customerPincode', e.target.value)} style={{ ...inp(false), width:'140px' }} />
+                </div>
+                {/* Same as Bill To toggle */}
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginTop:'12px', padding:'8px 10px', background:SEC, borderRadius:'6px', border:`1px solid ${BD}` }}>
+                  <input type="checkbox" id="sameAsBillTo" checked={hdr.sameAsBillTo}
+                    onChange={e => setH('sameAsBillTo', e.target.checked)}
+                    style={{ width:'15px', height:'15px', accentColor:P, cursor:'pointer' }} />
+                  <label htmlFor="sameAsBillTo" style={{ fontSize:'13px', fontWeight:500, color:'#374151', cursor:'pointer' }}>Same as Bill To</label>
+                </div>
+              </div>
             </div>
 
-            {/* Order Type */}
-            <FSel label="Order Type" value={hdr.orderType} onChange={v => setH('orderType',v)}
-              options={['Domestic','Export','Project','Service']} />
-
-            {/* Sales Person */}
-            <FSel label="Sales Person" value={hdr.salesPerson} onChange={v => setH('salesPerson',v)}
-              options={SALES_PERSONS} placeholder="— Assign —" />
+            {/* Ship To */}
+            <div style={S.card}>
+              <div style={S.sec}>Ship To — Delivery / Site Address</div>
+              <div style={S.body}>
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>Site / Location Name</label>
+                  <input value={hdr.sameAsBillTo ? hdr.customerName : hdr.shipToName}
+                    onChange={e => { if (!hdr.sameAsBillTo) setH('shipToName', e.target.value); }}
+                    placeholder={hdr.sameAsBillTo ? 'Same as Bill To' : ''}
+                    readOnly={hdr.sameAsBillTo}
+                    style={{ ...inp(false), ...(hdr.sameAsBillTo ? { background:'#F3F4F6', color:'#6B7280' } : {}) }} />
+                </div>
+                <div style={{ marginBottom:'10px' }}>
+                  <label style={S.lbl}>Address</label>
+                  <input value={hdr.sameAsBillTo ? hdr.customerAddress : hdr.shipToAddress}
+                    onChange={e => { if (!hdr.sameAsBillTo) setH('shipToAddress', e.target.value); }}
+                    readOnly={hdr.sameAsBillTo}
+                    style={{ ...inp(false), ...(hdr.sameAsBillTo ? { background:'#F3F4F6', color:'#6B7280' } : {}) }} />
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                  <div>
+                    <label style={S.lbl}>City</label>
+                    <input value={hdr.sameAsBillTo ? hdr.customerCity : hdr.shipToCity}
+                      onChange={e => { if (!hdr.sameAsBillTo) setH('shipToCity', e.target.value); }}
+                      readOnly={hdr.sameAsBillTo}
+                      style={{ ...inp(false), ...(hdr.sameAsBillTo ? { background:'#F3F4F6', color:'#6B7280' } : {}) }} />
+                  </div>
+                  <div>
+                    <label style={S.lbl}>State</label>
+                    <select value={hdr.sameAsBillTo ? hdr.customerState : hdr.shipToState}
+                      onChange={e => { if (!hdr.sameAsBillTo) setH('shipToState', e.target.value); }}
+                      disabled={hdr.sameAsBillTo}
+                      style={{ ...selStyle(), ...(hdr.sameAsBillTo ? { background:'#F3F4F6', color:'#6B7280' } : {}) }}>
+                      <option value="">— Select —</option>
+                      {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label style={S.lbl}>Pincode</label>
+                  <input value={hdr.sameAsBillTo ? hdr.customerPincode : hdr.shipToPincode}
+                    onChange={e => { if (!hdr.sameAsBillTo) setH('shipToPincode', e.target.value); }}
+                    readOnly={hdr.sameAsBillTo}
+                    style={{ ...inp(false), width:'140px', ...(hdr.sameAsBillTo ? { background:'#F3F4F6', color:'#6B7280' } : {}) }} />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Customer Selection */}
-          <div style={{ marginTop:'10px', display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:'10px 18px', alignItems:'end' }}>
-            {/* Customer search */}
-            <div ref={custRef} style={{ position:'relative' }}>
-              <label style={S.lbl}>Customer Name <span style={S.req}>*</span></label>
-              <input value={hdr.customerName || custSearch}
-                onChange={e => { setCustSearch(e.target.value); setH('customerName',''); setShowCustDD(true); }}
-                onFocus={() => setShowCustDD(true)}
-                placeholder="Search or type customer…"
-                style={{ ...inp(errs.customerName), width:'100%' }}
-              />
-              {errs.customerName && <div style={S.err}>{errs.customerName}</div>}
-              {showCustDD && filteredClients.length > 0 && (
-                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #D9D9D9', borderRadius:'4px', boxShadow:'0 4px 16px rgba(0,0,0,0.12)', zIndex:200, maxHeight:'180px', overflowY:'auto' }}>
-                  {filteredClients.slice(0,20).map(c => (
-                    <div key={c.clientId} onClick={() => selectCustomer(c)} style={{ padding:'7px 12px', cursor:'pointer', borderBottom:'1px solid #F0F0F0', fontSize:'12px' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#EAF1FB'}
-                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                      <span style={{ fontWeight:600 }}>{c.companyName||c.clientName}</span>
-                      <span style={{ color:'#6A6D70', marginLeft:'8px', fontSize:'11px' }}>#{c.clientId}</span>
-                    </div>
-                  ))}
+          {/* RIGHT: Reference Numbers & Terms */}
+          <div style={{ ...S.card, background:'#F6F8FB', display:'flex', flexDirection:'column' }}>
+            <div style={S.sec}>Reference Numbers &amp; Terms</div>
+            <div style={{ ...S.body, flex:1 }}>
+              {/* ERP Order ID */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>ERP Order ID<span style={S.req}>*</span></label>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ background:'#FFF3B0', border:'1px solid #F0CC3A', borderRadius:'4px', padding:'4px 12px', fontSize:'14px', fontWeight:700, color:'#92400E', fontFamily:'monospace' }}>{hdr.orderNo}</span>
+                  <span style={{ fontSize:'11px', color:'#9CA3AF' }}>(auto-generated)</span>
                 </div>
-              )}
+              </div>
+              {/* Order No */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Order No.</label>
+                <input value={`SO-${hdr.orderNo}`} readOnly style={{ ...inp(false), flex:1, background:'#F3F4F6', color:'#374151', fontFamily:'monospace' }} />
+              </div>
+              {/* Order Date */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Order Date</label>
+                <input type="date" value={hdr.orderDate} onChange={e => setH('orderDate', e.target.value)}
+                  style={{ ...inp(errs.orderDate), flex:1 }} />
+              </div>
+              {/* Client Order No */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Client Order No.</label>
+                <input value={hdr.clientOrderNo} onChange={e => setH('clientOrderNo', e.target.value)}
+                  placeholder="Customer PO/Work Order No."
+                  style={{ ...inp(false), flex:1 }} />
+              </div>
+              {/* Client Order Date */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Client Order Date</label>
+                <input type="date" value={hdr.clientOrderDate} onChange={e => setH('clientOrderDate', e.target.value)}
+                  style={{ ...inp(false), flex:1 }} />
+              </div>
+              {/* Delivery Date */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Delivery Date</label>
+                <input type="date" value={hdr.deliveryDate} onChange={e => setH('deliveryDate', e.target.value)}
+                  style={{ ...inp(false), flex:1 }} />
+              </div>
+              {/* Payment Terms */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Payment Terms</label>
+                <select value={hdr.paymentTerms} onChange={e => setH('paymentTerms', e.target.value)} style={{ ...selStyle(), flex:1 }}>
+                  {['Net 30','Net 45','Net 60','Net 90','Advance','COD','LC'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Sales Person */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Sales Person</label>
+                <select value={hdr.salesPerson} onChange={e => setH('salesPerson', e.target.value)} style={{ ...selStyle(), flex:1 }}>
+                  <option value="">— Select —</option>
+                  {SALES_PERSONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Order Type */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Order Type</label>
+                <select value={hdr.orderType} onChange={e => setH('orderType', e.target.value)} style={{ ...selStyle(), flex:1 }}>
+                  {['Domestic','Export','Project','Service'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              {/* Internal Notes */}
+              <div style={{ display:'flex', gap:'10px', marginBottom:'14px' }}>
+                <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right', paddingTop:'4px' }}>Internal Notes</label>
+                <textarea value={hdr.internalNotes} onChange={e => setH('internalNotes', e.target.value)}
+                  rows={3} placeholder=""
+                  style={{ ...inp(false), flex:1, resize:'vertical' }} />
+              </div>
+              {/* Total Charges */}
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 12px', borderTop:`1px solid ${BD}`, marginTop:'4px' }}>
+                <div style={{ fontSize:'14px', fontWeight:700, color:'#1E293B' }}>
+                  Total Charges <span style={{ color:P, marginLeft:'6px' }}>₹{grandTotal.toFixed(2)}</span>
+                </div>
+                <div style={{ fontSize:'13px', color:'#6B7280' }}>
+                  Charges: <strong style={{ color:'#1E293B' }}>₹{grandTotal.toFixed(2)}</strong>
+                </div>
+              </div>
+              {/* Next buttons */}
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'10px' }}>
+                <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1]?.id || activeTab)}
+                  style={{ background:'#fff', border:`1px solid ${BD}`, color:'#374151', padding:'7px 20px', borderRadius:'6px', cursor:'pointer', fontSize:'13px', fontWeight:500, fontFamily:'inherit' }}>
+                  Next
+                </button>
+                <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1]?.id || activeTab)}
+                  style={{ background:P, border:'none', color:'#fff', padding:'7px 20px', borderRadius:'6px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:'6px' }}>
+                  Next <span>›</span>
+                </button>
+              </div>
             </div>
-            <FIn label="Customer Code" value={hdr.customerCode} onChange={v => setH('customerCode',v)} placeholder="Auto-fill" readOnly={!!hdr.customerCode} />
-            <FIn label="Contact Person" value={hdr.contactPerson} onChange={v => setH('contactPerson',v)} placeholder="Name" />
-            <FIn label="Mobile" value={hdr.mobile} onChange={v => setH('mobile',v)} placeholder="Mobile" />
-            <FIn label="Email" value={hdr.email} onChange={v => setH('email',v)} placeholder="Email" />
           </div>
         </div>
 
         {/* ── Tab Bar ── */}
-        <div style={{ background:'#fff', border:'1px solid #E5E5E5', display:'flex', overflowX:'auto', borderBottom:'2px solid #E5E5E5', borderRadius:'6px 6px 0 0' }}>
-          {TABS.map((t, i) => {
+        <div style={{ background:'#fff', border:`1px solid ${BD}`, display:'flex', overflowX:'auto', borderBottom:`1px solid ${BD}`, borderRadius:'10px 10px 0 0', padding:'0 8px', boxShadow:`0 1px 0 ${BD}` }}>
+          {TABS.map((t) => {
             const active = activeTab === t.id;
             const hasErr = (t.id === 'general' && (errs.customerName || errs.orderDate)) || (t.id === 'items' && errs.items);
             return (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-                display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px',
-                cursor:'pointer', background: active?'#fff':'#F5F6F7',
-                border:'none', borderBottom: active?'3px solid #0070F2':'3px solid transparent',
-                borderRight:'1px solid #E5E5E5',
-                color: hasErr?'#BB0000': active?'#0070F2':'#6A6D70',
+                display:'flex', alignItems:'center', gap:'5px', padding:'11px 14px',
+                cursor:'pointer', background:'transparent',
+                border:'none', borderBottom: active?`2.5px solid ${P}`:'2.5px solid transparent',
+                color: hasErr?'#EF4444': active?P:'#6B7280',
                 fontSize:'12px', fontWeight: active?600:400, fontFamily:'inherit',
-                whiteSpace:'nowrap', marginBottom:'-2px', position:'relative',
+                whiteSpace:'nowrap', position:'relative',
+                transition:'color 0.15s',
               }}>
                 <span style={{ fontSize:'13px' }}>{t.icon}</span>
                 {t.label}
-                {hasErr && <span style={{ width:'5px', height:'5px', borderRadius:'50%', background:'#BB0000', position:'absolute', top:'6px', right:'5px' }} />}
+                {hasErr && <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'#EF4444', position:'absolute', top:'8px', right:'3px' }} />}
               </button>
             );
           })}
         </div>
 
         {/* ── Tab Content ── */}
-        <div style={{ background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px', padding:'14px', minHeight:'400px' }}>
+        <div style={{ background:BG, border:`1px solid ${BD}`, borderTop:'none', borderRadius:'0 0 10px 10px', padding:'16px', minHeight:'420px' }}>
 
           {/* ═══ TAB 1: General Information ═══ */}
           {activeTab === 'general' && (
             <div style={S.card}>
               <div style={S.sec}>Order References & Dates</div>
+              <div style={S.body}>
               <div style={S.g3}>
                 <FIn label="Customer PO Number" value={gen.customerPO} onChange={v => setGen(g=>({...g,customerPO:v}))} placeholder="PO-XXXX" />
                 <div>
@@ -574,16 +858,18 @@ const CreateSalesOrder = () => {
                 <FSel label="Incoterms (Optional)" value={gen.incoterms} onChange={v => setGen(g=>({...g,incoterms:v}))}
                   options={['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DPU','DAP','DDP']} placeholder="— Select —" />
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ═══ TAB 2: Item Details ═══ */}
           {activeTab === 'items' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-                <div style={S.sec}>Item Details</div>
-                <button type="button" onClick={addRow} style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Item Details</span>
+                <button type="button" onClick={addRow} style={{ padding:'4px 14px', background:P, border:'none', color:'#fff', borderRadius:'5px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit', letterSpacing:'0.2px' }}>+ Add Row</button>
               </div>
+              <div style={S.body}>
               {errs.items && <div style={{ ...S.err, marginBottom:'8px' }}>{errs.items}</div>}
 
               <div style={{ overflowX:'auto' }}>
@@ -639,11 +925,11 @@ const CreateSalesOrder = () => {
                               {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                             </select>
                           </td>
-                          <td style={{ ...bg, textAlign:'right', fontWeight:600, color:'#0070F2', paddingRight:'8px' }}>
+                          <td style={{ ...bg, textAlign:'right', fontWeight:700, color:P, paddingRight:'10px' }}>
                             ₹{it.calc.total.toFixed(2)}
                           </td>
                           <td style={{ ...bg, textAlign:'center' }}>
-                            <button type="button" onClick={() => delRow(it._id)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'3px', padding:'3px 7px', cursor:'pointer', fontSize:'11px', fontWeight:700 }}>✕</button>
+                            <button type="button" onClick={() => delRow(it._id)} style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#EF4444', borderRadius:'6px', padding:'3px 8px', cursor:'pointer', fontSize:'11px', fontWeight:700 }}>✕</button>
                           </td>
                         </tr>
                       );
@@ -654,7 +940,7 @@ const CreateSalesOrder = () => {
 
               {/* Item totals */}
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'10px' }}>
-                <div style={{ minWidth:'240px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'10px 14px' }}>
+                <div style={{ minWidth:'260px', background:SEC, border:`1px solid ${BD}`, borderRadius:'8px', padding:'12px 16px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px' }}>
                     <span style={{ color:'#6A6D70' }}>Subtotal (Taxable)</span>
                     <span style={{ fontWeight:600 }}>₹{subTotal.toFixed(2)}</span>
@@ -663,12 +949,13 @@ const CreateSalesOrder = () => {
                     <span>Total GST</span>
                     <span>₹{totalGST.toFixed(2)}</span>
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:700, color:'#0070F2', borderTop:'1px solid #CBE0F5', paddingTop:'6px', marginTop:'4px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:700, color:P, borderTop:`1px solid ${BD}`, paddingTop:'6px', marginTop:'4px' }}>
                     <span>Line Total</span>
                     <span>₹{(subTotal + totalGST).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -676,11 +963,12 @@ const CreateSalesOrder = () => {
           {activeTab === 'pricing' && (
             <div style={S.card}>
               <div style={S.sec}>Pricing & Tax Summary</div>
+              <div style={S.body}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
 
                 {/* Adjustments */}
-                <div style={{ background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'12px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase' }}>Adjustments</div>
+                <div style={{ background:SEC, border:`1px solid ${BD}`, borderRadius:'6px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.4px' }}>Adjustments</div>
                   <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px' }}>
                       <label style={{ ...S.lbl, margin:0, minWidth:'130px' }}>Overall Discount (₹)</label>
@@ -702,8 +990,8 @@ const CreateSalesOrder = () => {
                 </div>
 
                 {/* Tax Summary */}
-                <div style={{ background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'12px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase' }}>
+                <div style={{ background:SEC, border:`1px solid ${BD}`, borderRadius:'6px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.4px' }}>
                     Tax Summary — {isIntra ? 'Intrastate (CGST+SGST)' : 'Interstate (IGST)'}
                   </div>
                   {[
@@ -722,7 +1010,7 @@ const CreateSalesOrder = () => {
                       <span style={{ fontFamily:'monospace' }}>{v}</span>
                     </div>
                   ))}
-                  <div style={{ borderTop:'2px solid #0070F2', paddingTop:'8px', marginTop:'6px', display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:700, color:'#0070F2' }}>
+                  <div style={{ borderTop:`2px solid ${P}`, paddingTop:'8px', marginTop:'6px', display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:700, color:P }}>
                     <span>Grand Total</span>
                     <span>₹{grandTotal.toFixed(2)}</span>
                   </div>
@@ -731,7 +1019,7 @@ const CreateSalesOrder = () => {
 
               {/* GST breakdown per item */}
               <div style={{ marginTop:'12px' }}>
-                <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', marginBottom:'8px' }}>Item-wise GST Breakdown</div>
+                <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', marginBottom:'8px', letterSpacing:'0.4px' }}>Item-wise GST Breakdown</div>
                 <table style={S.tbl}>
                   <thead>
                     <tr>
@@ -763,6 +1051,7 @@ const CreateSalesOrder = () => {
                   </tbody>
                 </table>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -770,12 +1059,13 @@ const CreateSalesOrder = () => {
           {activeTab === 'delivery' && (
             <div style={S.card}>
               <div style={S.sec}>Delivery & Dispatch Details</div>
+              <div style={S.body}>
               <div style={S.g2}>
                 <FTA label="Delivery Address" req value={del.deliveryAddr} onChange={v => setDel(d=>({...d,deliveryAddr:v}))} placeholder="Full delivery address…" rows={3} />
                 <div>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'3px' }}>
                     <label style={S.lbl}>Shipping / Dispatch Address</label>
-                    <button type="button" onClick={() => setDel(d=>({...d,shippingAddr:d.deliveryAddr}))} style={{ fontSize:'10px', color:'#0070F2', background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'3px', padding:'2px 8px', cursor:'pointer' }}>Copy from Delivery</button>
+                    <button type="button" onClick={() => setDel(d=>({...d,shippingAddr:d.deliveryAddr}))} style={{ fontSize:'11px', color:P, background:SEC, border:`1px solid ${BD}`, borderRadius:'6px', padding:'3px 10px', cursor:'pointer', fontWeight:600 }}>⇩ Copy from Delivery</button>
                   </div>
                   <textarea value={del.shippingAddr} rows={3} onChange={e => setDel(d=>({...d,shippingAddr:e.target.value}))}
                     placeholder="Leave blank if same as delivery…"
@@ -791,6 +1081,7 @@ const CreateSalesOrder = () => {
               <div style={{ marginTop:'10px' }}>
                 <FTA label="Delivery Instructions" value={del.deliveryInstructions} onChange={v => setDel(d=>({...d,deliveryInstructions:v}))} placeholder="Special delivery instructions, handling notes…" rows={2} />
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -798,6 +1089,7 @@ const CreateSalesOrder = () => {
           {activeTab === 'payment' && (
             <div style={S.card}>
               <div style={S.sec}>Payment Configuration</div>
+              <div style={S.body}>
               <div style={S.g3}>
                 <FSel label="Payment Terms" value={pay.paymentTerms} onChange={v => setPay(p=>({...p,paymentTerms:v}))}
                   options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery','LC']} />
@@ -812,49 +1104,179 @@ const CreateSalesOrder = () => {
               <div style={{ ...S.g2, marginTop:'10px' }}>
                 <div>
                   <label style={S.lbl}>Credit Limit (₹)</label>
-                  <div style={{ display:'flex', alignItems:'center', border:'1px solid #BBBCBD', borderRadius:'4px', overflow:'hidden', background:'#FAFAFA' }}>
-                    <span style={{ padding:'6px 9px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'12px', color:'#354A5E', fontWeight:600 }}>₹</span>
+                  <div style={{ display:'flex', alignItems:'center', border:`1px solid ${BD}`, borderRadius:'6px', overflow:'hidden', background:'#FAFCFF' }}>
+                    <span style={{ padding:'6px 9px', background:SEC, borderRight:`1px solid ${BD}`, fontSize:'12px', color:'#2F6FED', fontWeight:600 }}>₹</span>
                     <input type="number" value={pay.creditLimit} onChange={e => setPay(p=>({...p,creditLimit:e.target.value}))} placeholder="0" style={{ flex:1, padding:'6px 9px', border:'none', outline:'none', background:'transparent', fontSize:'12px', fontFamily:'inherit' }} />
                   </div>
                 </div>
                 <FTA label="Billing Terms" value={pay.billingTerms} onChange={v => setPay(p=>({...p,billingTerms:v}))} placeholder="Special billing terms or conditions…" rows={3} />
               </div>
               {/* Grand Total reminder */}
-              <div style={{ marginTop:'14px', padding:'10px 14px', background:'#EAF1FB', border:'1px solid #A9CBF4', borderLeft:'4px solid #0070F2', borderRadius:'4px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:'12px', color:'#354A5E', fontWeight:600 }}>Order Grand Total</span>
-                <span style={{ fontSize:'16px', fontWeight:700, color:'#0070F2', fontFamily:'monospace' }}>₹{grandTotal.toFixed(2)}</span>
+              <div style={{ marginTop:'14px', padding:'12px 16px', background:SEC, border:`1px solid ${BD}`, borderLeft:`4px solid ${P}`, borderRadius:'8px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:'12px', color:'#2F6FED', fontWeight:600 }}>Order Grand Total</span>
+                <span style={{ fontSize:'16px', fontWeight:700, color:P, fontFamily:'monospace' }}>₹{grandTotal.toFixed(2)}</span>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ═══ TAB 6: Specifications ═══ */}
           {activeTab === 'specs' && (
-            <div style={S.card}>
-              <div style={S.sec}>Technical Specifications</div>
-              <div style={S.g2}>
-                <FTA label="Product Specifications" value={specs.productSpecs} onChange={v => setSpecs(s=>({...s,productSpecs:v}))} placeholder="Material grade, dimensions, tolerances, finish…" rows={5} />
-                <FTA label="Technical Details" value={specs.technicalDetails} onChange={v => setSpecs(s=>({...s,technicalDetails:v}))} placeholder="Technical parameters, standards, certifications…" rows={5} />
-              </div>
-              <div style={{ ...S.g3, marginTop:'10px' }}>
-                <FIn label="Drawing Number" value={specs.drawingNumber} onChange={v => setSpecs(s=>({...s,drawingNumber:v}))} placeholder="DRG-XXXX" />
-                <FIn label="Version / Revision" value={specs.version} onChange={v => setSpecs(s=>({...s,version:v}))} placeholder="Rev A / v1.2" />
+            <div>
+              {/* Toolbar */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#1a2d4a' }}>Specification Sheet</div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <select
+                    defaultValue=""
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (!val) return;
+                      if (val === '__general__') { ssAddGroup({}); }
+                      else {
+                        const it = items.find(i => (i._id||i.itemCode||i.itemName) === val);
+                        if (it) ssAddGroup(it);
+                      }
+                      e.target.value='';
+                    }}
+                    style={{ ...selStyle(true), width:220 }}
+                  >
+                    <option value="">＋ Add Spec Group (select item)…</option>
+                    {items.filter(it=>it.itemName||it.material).map((it,i)=>(
+                      <option key={i} value={it._id||it.itemCode||it.itemName}>{it.itemName||it.material}</option>
+                    ))}
+                    <option value="__general__">General / No specific item</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Dynamic custom fields */}
-              <div style={{ marginTop:'12px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase' }}>Custom Specification Fields</div>
-                  <button type="button" onClick={addCustomField} style={{ fontSize:'11px', padding:'4px 10px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#0070F2', borderRadius:'3px', cursor:'pointer', fontWeight:600 }}>+ Add Field</button>
+              {specSheet.length === 0 && (
+                <div style={{ textAlign:'center', padding:'40px 20px', color:'#94A3B8', fontSize:13, background:'#fff', border:`1px dashed ${BD}`, borderRadius:8 }}>
+                  No specifications yet. Select an item above to create a spec group.
                 </div>
-                {specs.customFields.length === 0 && <div style={{ fontSize:'12px', color:'#94A3B8' }}>No custom fields. Click "+ Add Field" for project-specific parameters.</div>}
-                {specs.customFields.map((cf, i) => (
-                  <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'center' }}>
-                    <input value={cf.key} onChange={e => updCustomField(i,'key',e.target.value)} placeholder="Field Name" style={{ ...inp(false,true), width:'160px', flex:'0 0 160px' }} />
-                    <input value={cf.value} onChange={e => updCustomField(i,'value',e.target.value)} placeholder="Value" style={{ ...inp(false,true), flex:1 }} />
-                    <button type="button" onClick={() => delCustomField(i)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'3px', padding:'5px 8px', cursor:'pointer', fontSize:'11px', fontWeight:700, flexShrink:0 }}>✕</button>
+              )}
+
+              {specSheet.map((grp) => (
+                <div key={grp._id} style={{ ...S.card, marginBottom:14 }}>
+                  {/* Group header */}
+                  <div style={{ background:'#1a3c6e', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
+                    <span style={{ fontSize:16 }}>📦</span>
+                    <span style={{ flex:1, fontWeight:700, color:'#fff', fontSize:13 }}>{grp.itemName || 'General Specifications'}</span>
+                    <button type="button" onClick={() => ssAddHdr(grp._id)}
+                      style={{ padding:'3px 10px', fontSize:11, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.35)', color:'#fff', borderRadius:4, cursor:'pointer', fontWeight:600 }}>
+                      + Add Header
+                    </button>
+                    <button type="button" onClick={() => ssDelGroup(grp._id)}
+                      style={{ background:'rgba(239,68,68,0.25)', border:'1px solid rgba(239,68,68,0.5)', color:'#fca5a5', borderRadius:4, padding:'3px 8px', cursor:'pointer', fontSize:12 }}>✕</button>
                   </div>
-                ))}
-              </div>
+
+                  <div style={{ padding:'10px 14px' }}>
+                    {grp.headers.map((hdr) => (
+                      <div key={hdr._id} style={{ marginBottom:12, border:`1px solid ${BD}`, borderRadius:6, overflow:'hidden' }}>
+                        {/* Header row */}
+                        <div style={{ background:'#EEF4FF', borderBottom:`1px solid ${BD}`, padding:'6px 10px', display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:P, textTransform:'uppercase', letterSpacing:'0.5px', flexShrink:0 }}>▌ HEADER</span>
+                          <input
+                            value={hdr.title}
+                            onChange={e => ssSetHdrT(grp._id, hdr._id, e.target.value)}
+                            placeholder="e.g. Civil Work, Electrical, Structural…"
+                            style={{ ...inp(false,true), flex:1, fontWeight:700, fontSize:12 }}
+                          />
+                          <button type="button" onClick={() => ssAddSub(grp._id, hdr._id)}
+                            style={{ padding:'3px 10px', fontSize:11, background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:4, cursor:'pointer', fontWeight:600, flexShrink:0 }}>
+                            + Sub Header
+                          </button>
+                          <button type="button" onClick={() => ssDelHdr(grp._id, hdr._id)}
+                            style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:4, padding:'3px 7px', cursor:'pointer', fontSize:12, flexShrink:0 }}>✕</button>
+                        </div>
+
+                        {/* Sub-headers */}
+                        <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:10 }}>
+                          {hdr.subHeaders.map((sub) => {
+                            let srCounter = 0;
+                            return (
+                              <div key={sub._id} style={{ border:`1px solid #dde4f0`, borderRadius:5, overflow:'hidden' }}>
+                                {/* Sub-header title row */}
+                                <div style={{ background:'#F0F6FF', borderBottom:'1px solid #dde4f0', padding:'5px 10px', display:'flex', alignItems:'center', gap:8 }}>
+                                  <span style={{ fontSize:11, fontWeight:600, color:'#3b5ea6', flexShrink:0 }}>▶ SUB HEADER</span>
+                                  <input
+                                    value={sub.title}
+                                    onChange={e => ssSetSubT(grp._id, hdr._id, sub._id, e.target.value)}
+                                    placeholder="e.g. Foundation, Wiring, Painting…"
+                                    style={{ ...inp(false,true), flex:1, fontSize:12 }}
+                                  />
+                                  <button type="button" onClick={() => ssDelSub(grp._id, hdr._id, sub._id)}
+                                    style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:4, padding:'2px 7px', cursor:'pointer', fontSize:12, flexShrink:0 }}>✕</button>
+                                </div>
+
+                                {/* Rows table */}
+                                <div style={{ overflowX:'auto' }}>
+                                  <table style={{ ...S.tbl, minWidth:600 }}>
+                                    <thead>
+                                      <tr>
+                                        <th style={{ ...S.th, width:44, textAlign:'center' }}>Sr No</th>
+                                        <th style={{ ...S.th }}>Description</th>
+                                        <th style={{ ...S.th, width:90, textAlign:'center' }}>Qty</th>
+                                        <th style={{ ...S.th }}>Remarks</th>
+                                        <th style={{ ...S.th, width:36, textAlign:'center' }}></th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sub.rows.map((row, ri) => {
+                                        srCounter++;
+                                        const sr = srCounter;
+                                        return (
+                                          <tr key={row._id} style={{ background: ri%2===0 ? '#fff' : '#F9FAFB' }}>
+                                            <td style={{ ...S.td, textAlign:'center', color:'#6B7280', fontWeight:600, fontSize:11 }}>{sr}</td>
+                                            <td style={S.td}>
+                                              <input
+                                                value={row.description}
+                                                onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'description',e.target.value)}
+                                                placeholder="Description…"
+                                                style={{ ...inp(false,true), width:'100%' }}
+                                              />
+                                            </td>
+                                            <td style={S.td}>
+                                              <input
+                                                value={row.qty}
+                                                onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'qty',e.target.value)}
+                                                placeholder="Qty"
+                                                style={{ ...inp(false,true), width:'100%', textAlign:'center' }}
+                                              />
+                                            </td>
+                                            <td style={S.td}>
+                                              <input
+                                                value={row.remarks}
+                                                onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'remarks',e.target.value)}
+                                                placeholder="Remarks…"
+                                                style={{ ...inp(false,true), width:'100%' }}
+                                              />
+                                            </td>
+                                            <td style={{ ...S.td, textAlign:'center' }}>
+                                              <button type="button" onClick={() => ssDelRow(grp._id,hdr._id,sub._id,row._id)}
+                                                style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:3, padding:'2px 6px', cursor:'pointer', fontSize:11, fontWeight:700 }}>✕</button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div style={{ padding:'6px 10px', background:'#FAFBFC', borderTop:'1px solid #eef1f8' }}>
+                                  <button type="button" onClick={() => ssAddRow(grp._id, hdr._id, sub._id)}
+                                    style={{ padding:'3px 12px', fontSize:11, background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:4, cursor:'pointer', fontWeight:600 }}>
+                                    + Add Row
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -868,7 +1290,7 @@ const CreateSalesOrder = () => {
                 {/* Summary pills */}
                 <div style={{ display:'flex', gap:10, marginBottom:12 }}>
                   {[
-                    { label:'Total Items', val:matPlan.length, color:'#354A5E' },
+                    { label:'Total Items', val:matPlan.length, color:'#2F6FED' },
                     { label:'Purchase',    val:purchaseCount,  color:'#0070F2' },
                     { label:'Manufactured',val:mfgCount,       color:'#188918' },
                     { label:'Units/Cabins',val:groups.length,  color:'#E9730C' },
@@ -880,7 +1302,7 @@ const CreateSalesOrder = () => {
                   ))}
                   <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
                     <button type="button" onClick={() => setMatPlan(p=>[...p,newMatItem()])}
-                      style={{ padding:'6px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
+                      style={{ padding:'6px 16px', background:P, border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
                       + Add Item
                     </button>
                   </div>
@@ -891,15 +1313,14 @@ const CreateSalesOrder = () => {
                   const grpItems = matPlan.filter(m=>(m.unitGroup||'Default')===grp);
                   return (
                     <div key={grp} style={{ ...S.card, marginBottom:12 }}>
-                      {/* Group header */}
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <div style={{ fontSize:13, fontWeight:700, color:'#354A5E' }}>🏗️ {grp}</div>
-                          <span style={{ fontSize:11, color:'#6A6D70' }}>{grpItems.length} item(s)</span>
-                          <span style={{ fontSize:11, color:'#0070F2' }}>{grpItems.filter(i=>i.itemType==='Purchase').length} purchase</span>
-                          <span style={{ fontSize:11, color:'#188918' }}>{grpItems.filter(i=>i.itemType==='Manufactured').length} manufactured</span>
-                        </div>
+                      {/* Group header band */}
+                      <div style={{ ...S.sec, display:'flex', alignItems:'center', gap:12 }}>
+                        <span style={{ fontWeight:700, color:'#1a2d4a' }}>🏗️ {grp}</span>
+                        <span style={{ fontSize:11, color:'#5a6e82' }}>{grpItems.length} item(s)</span>
+                        <span style={{ fontSize:11, color:P }}>{grpItems.filter(i=>i.itemType==='Purchase').length} purchase</span>
+                        <span style={{ fontSize:11, color:'#15803D' }}>{grpItems.filter(i=>i.itemType==='Manufactured').length} manufactured</span>
                       </div>
+                      <div style={{ padding:'10px 14px' }}>
 
                       {grpItems.map((m, idx) => (
                         <div key={m._id} style={{ marginBottom:8, border:'1px solid #E5E5E5', borderRadius:6, overflow:'hidden' }}>
@@ -909,7 +1330,7 @@ const CreateSalesOrder = () => {
                             {/* Unit group editable */}
                             <input value={m.unitGroup} onChange={e=>updMat(m._id,'unitGroup',e.target.value)} placeholder="Cabin / Unit" style={{ ...inp(false,true) }} />
                             <input value={m.itemName} onChange={e=>updMat(m._id,'itemName',e.target.value)} placeholder="Item name (e.g. AC, Steel Sheet)" style={{ ...inp(false,true) }} />
-                            <select value={m.itemType} onChange={e=>updMat(m._id,'itemType',e.target.value)} style={{ ...selStyle(true), fontWeight:600, color:m.itemType==='Manufactured'?'#188918':'#0070F2', background:m.itemType==='Manufactured'?'#F0FFF4':'#EFF6FF' }}>
+                            <select value={m.itemType} onChange={e=>updMat(m._id,'itemType',e.target.value)} style={{ ...selStyle(true), fontWeight:600, color:m.itemType==='Manufactured'?'#16A34A':P, background:m.itemType==='Manufactured'?'#F0FDF4':SEC }}>
                               {MAT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                             </select>
                             <input type="number" value={m.requiredQty} min="0" onChange={e=>updMat(m._id,'requiredQty',e.target.value)} style={{ ...inp(false,true), textAlign:'right' }} />
@@ -927,7 +1348,7 @@ const CreateSalesOrder = () => {
                                 <div style={{ fontSize:10, fontWeight:700, color:'#188918', textTransform:'uppercase', letterSpacing:'0.5px' }}>
                                   📋 Raw Materials BOM for "{m.itemName||'this item'}"
                                 </div>
-                                <button type="button" onClick={()=>addBOMLine(m._id)} style={{ padding:'2px 10px', background:'#188918', border:'none', color:'#fff', borderRadius:3, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit' }}>+ Add Raw Material</button>
+                                <button type="button" onClick={()=>addBOMLine(m._id)} style={{ padding:'3px 10px', background:'#16A34A', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit' }}>+ Add Raw Material</button>
                               </div>
                               {m.bomLines.length===0 ? (
                                 <div style={{ fontSize:11, color:'#94A3B8', padding:'4px 0' }}>No raw materials defined. Click "+ Add Raw Material".</div>
@@ -963,11 +1384,12 @@ const CreateSalesOrder = () => {
                           )}
                         </div>
                       ))}
+                      </div>{/* end group body padding */}
                     </div>
                   );
                 })}
 
-                <div style={{ padding:'8px 12px', background:'#EAF1FB', borderRadius:4, border:'1px solid #A9CBF4', fontSize:11, color:'#354A5E' }}>
+                <div style={{ padding:'10px 14px', background:SEC, borderRadius:8, border:`1px solid ${BD}`, fontSize:11, color:'#1e3a6e' }}>
                   💡 <b>Purchase items</b> go directly to Purchase Order. <b>Manufactured items</b> define BOM raw materials that also need purchasing. Use the PO screen to "Fetch Pending Materials" from this plan.
                 </div>
               </div>
@@ -977,13 +1399,14 @@ const CreateSalesOrder = () => {
           {/* ═══ TAB: Scope of Work ═══ */}
           {activeTab === 'scope' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-                <div style={S.sec}>Scope of Work / Supply</div>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Scope of Work / Supply</span>
                 <button type="button" onClick={() => setScopeItems(p => [...p, newScopeItem()])}
-                  style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
+                  style={{ padding:'4px 14px', background:P, border:'none', color:'#fff', borderRadius:'5px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
                   + Add Scope
                 </button>
               </div>
+              <div style={S.body}>
               <div style={{ overflowX:'auto' }}>
                 <table style={S.tbl}>
                   <thead>
@@ -1025,28 +1448,30 @@ const CreateSalesOrder = () => {
                   </tbody>
                 </table>
               </div>
-              <div style={{ marginTop:12, padding:'8px 12px', background:'#EAF1FB', borderRadius:4, border:'1px solid #A9CBF4', fontSize:11, color:'#354A5E' }}>
+              <div style={{ marginTop:12, padding:'10px 14px', background:SEC, borderRadius:8, border:`1px solid ${BD}`, fontSize:11, color:'#1e3a6e' }}>
                 💡 After defining scope, go to <b>BOM</b> tab to auto-generate materials, and <b>Tasks</b> tab to auto-create project tasks.
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ═══ TAB: BOM — Material Planning ═══ */}
           {activeTab === 'bom' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <div style={S.sec}>BOM — Bill of Materials</div>
-                <div style={{ display:'flex', gap:8 }}>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>BOM — Bill of Materials</span>
+                <div style={{ display:'flex', gap:6 }}>
                   <button type="button" onClick={autoGenBOM}
-                    style={{ padding:'5px 12px', background:'#188918', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
+                    style={{ padding:'4px 12px', background:'#16A34A', border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit' }}>
                     ⚡ Auto-Generate from Scope
                   </button>
                   <button type="button" onClick={() => setBOMItems(p => [...p, newBOMItem()])}
-                    style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
+                    style={{ padding:'4px 14px', background:P, border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
                     + Add Row
                   </button>
                 </div>
               </div>
+              <div style={S.body}>
               {bomItems.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'32px 0', color:'#94A3B8', fontSize:13 }}>
                   <div style={{ fontSize:36, marginBottom:8 }}>🔧</div>
@@ -1100,31 +1525,32 @@ const CreateSalesOrder = () => {
                       })}
                     </tbody>
                   </table>
-                  <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, fontSize:12, color:'#354A5E', fontWeight:600 }}>
+                  <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, fontSize:12, color:'#2F6FED', fontWeight:600 }}>
                     Total: {bomItems.reduce((s,b)=>s+(parseFloat(b.qty)||0),0).toFixed(2)} units across {bomItems.length} material line(s)
                   </div>
                 </div>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ═══ TAB: Tasks / Project Plan ═══ */}
           {activeTab === 'tasks' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <div style={S.sec}>Tasks / Project Plan</div>
-                <div style={{ display:'flex', gap:8 }}>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Tasks / Project Plan</span>
+                <div style={{ display:'flex', gap:6 }}>
                   <button type="button" onClick={autoGenTasks}
-                    style={{ padding:'5px 12px', background:'#188918', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
+                    style={{ padding:'4px 12px', background:'#16A34A', border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit' }}>
                     ⚡ Auto-Create from Scope
                   </button>
                   <button type="button" onClick={() => setTasks(p => [...p, newTask()])}
-                    style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
+                    style={{ padding:'4px 14px', background:P, border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>
                     + Add Task
                   </button>
                 </div>
               </div>
-
+              <div style={S.body}>
               {tasks.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'32px 0', color:'#94A3B8', fontSize:13 }}>
                   <div style={{ fontSize:36, marginBottom:8 }}>📌</div>
@@ -1137,16 +1563,16 @@ const CreateSalesOrder = () => {
                     const done = tasks.filter(t => t.status === 'Completed').length;
                     const pct  = tasks.length ? Math.round(done / tasks.length * 100) : 0;
                     return (
-                      <div style={{ marginBottom:12, padding:'8px 14px', background:'#F0F9FF', border:'1px solid #BAE0FF', borderRadius:6, display:'flex', alignItems:'center', gap:16 }}>
+                      <div style={{ marginBottom:12, padding:'8px 14px', background:SEC, border:`1px solid ${BD}`, borderRadius:6, display:'flex', alignItems:'center', gap:16 }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#354A5E', fontWeight:600 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#2F6FED', fontWeight:600 }}>
                             <span>Project Progress</span><span>{pct}% ({done}/{tasks.length} tasks)</span>
                           </div>
                           <div style={{ height:8, background:'#DBEAFE', borderRadius:4, overflow:'hidden' }}>
-                            <div style={{ height:'100%', width:`${pct}%`, background: pct===100?'#188918':'#0070F2', borderRadius:4, transition:'width 0.3s' }} />
+                            <div style={{ height:'100%', width:`${pct}%`, background: pct===100?'#16A34A':P, borderRadius:4, transition:'width 0.3s' }} />
                           </div>
                         </div>
-                        <div style={{ fontSize:20, fontWeight:700, color: pct===100?'#188918':'#0070F2' }}>{pct}%</div>
+                        <div style={{ fontSize:20, fontWeight:700, color: pct===100?'#16A34A':P }}>{pct}%</div>
                       </div>
                     );
                   })()}
@@ -1185,7 +1611,7 @@ const CreateSalesOrder = () => {
                               <td style={bg}><input type="date" value={tk.startDate} onChange={e => updTask(tk._id,'startDate',e.target.value)} style={inp(false,true)} /></td>
                               <td style={bg}><input type="date" value={tk.endDate} onChange={e => updTask(tk._id,'endDate',e.target.value)} style={inp(false,true)} /></td>
                               <td style={bg}>
-                                <select value={tk.status} onChange={e => updTask(tk._id,'status',e.target.value)} style={{ ...selStyle(true), color: tk.status==='Completed'?'#188918': tk.status==='In Progress'?'#0070F2':'#6A6D70', fontWeight:600 }}>
+                                <select value={tk.status} onChange={e => updTask(tk._id,'status',e.target.value)} style={{ ...selStyle(true), color: tk.status==='Completed'?'#16A34A': tk.status==='In Progress'?P:'#6A6D70', fontWeight:600 }}>
                                   {TASK_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                               </td>
@@ -1206,6 +1632,7 @@ const CreateSalesOrder = () => {
                   </div>
                 </>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -1213,11 +1640,12 @@ const CreateSalesOrder = () => {
           {activeTab === 'attach' && (
             <div style={S.card}>
               <div style={S.sec}>File Attachments</div>
-              <div style={{ border:'2px dashed #CBE0F5', borderRadius:'6px', padding:'20px', textAlign:'center', background:'#F5F8FC', marginBottom:'14px' }}>
+              <div style={S.body}>
+              <div style={{ border:`2px dashed ${BD}`, borderRadius:'6px', padding:'20px', textAlign:'center', background:BG, marginBottom:'14px' }}>
                 <div style={{ fontSize:'28px', marginBottom:'6px' }}>📁</div>
-                <div style={{ fontSize:'13px', color:'#354A5E', fontWeight:600, marginBottom:'4px' }}>Drop files here or click to browse</div>
-                <div style={{ fontSize:'11px', color:'#6A6D70', marginBottom:'10px' }}>PDF, Excel (.xlsx), Images (JPG, PNG), Drawings (DWG)</div>
-                <label style={{ display:'inline-block', padding:'6px 20px', background:'#0070F2', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600 }}>
+                <div style={{ fontSize:'13px', color:'#1a2d4a', fontWeight:700, marginBottom:'4px' }}>Drop files here or click to browse</div>
+                <div style={{ fontSize:'11px', color:'#64748B', marginBottom:'10px' }}>PDF, Excel (.xlsx), Images (JPG, PNG), Drawings (DWG)</div>
+                <label style={{ display:'inline-block', padding:'7px 22px', background:P, color:'#fff', borderRadius:'6px', cursor:'pointer', fontSize:'12px', fontWeight:600, letterSpacing:'0.2px' }}>
                   📎 Choose Files
                   <input type="file" multiple accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png,.dwg,.doc,.docx" onChange={handleFiles} style={{ display:'none' }} />
                 </label>
@@ -1259,6 +1687,7 @@ const CreateSalesOrder = () => {
                   </tbody>
                 </table>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -1266,6 +1695,7 @@ const CreateSalesOrder = () => {
           {activeTab === 'notes' && (
             <div style={S.card}>
               <div style={S.sec}>Notes & Terms</div>
+              <div style={S.body}>
               <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
                 <FTA label="Terms & Conditions" value={notes.termsConditions} onChange={v => setNotes(n=>({...n,termsConditions:v}))}
                   placeholder="1. Goods once sold will not be taken back&#10;2. Payment terms as agreed&#10;3. Disputes subject to Mumbai jurisdiction…"
@@ -1277,8 +1707,8 @@ const CreateSalesOrder = () => {
               </div>
 
               {/* Order Summary */}
-              <div style={{ marginTop:'14px', padding:'12px 14px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'4px solid #0070F2', borderRadius:'4px' }}>
-                <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', marginBottom:'10px' }}>Order Summary</div>
+              <div style={{ marginTop:'14px', padding:'12px 14px', background:SEC, border:`1px solid ${BD}`, borderLeft:`4px solid ${P}`, borderRadius:'6px' }}>
+                <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', marginBottom:'10px', letterSpacing:'0.4px' }}>Order Summary</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'8px' }}>
                   {[
                     ['Order No',    hdr.orderNo],
@@ -1290,41 +1720,59 @@ const CreateSalesOrder = () => {
                     ['Total GST',   '₹'+totalGST.toFixed(2)],
                     ['Grand Total', '₹'+grandTotal.toFixed(2)],
                   ].map(([k,v]) => (
-                    <div key={k} style={{ padding:'6px 8px', background:'#fff', borderRadius:'4px', border:'1px solid #E5E5E5' }}>
-                      <div style={{ fontSize:'10px', fontWeight:700, color:'#6A6D70', textTransform:'uppercase', letterSpacing:'0.3px', marginBottom:'2px' }}>{k}</div>
-                      <div style={{ fontSize:'12px', color:'#32363A', fontWeight:500 }}>{v||'—'}</div>
+                    <div key={k} style={{ padding:'8px 10px', background:'#fff', borderRadius:'6px', border:`1px solid ${BD}` }}>
+                      <div style={{ fontSize:'10px', fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'3px' }}>{k}</div>
+                      <div style={{ fontSize:'13px', color:'#1E293B', fontWeight:600 }}>{v||'—'}</div>
                     </div>
                   ))}
                 </div>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
         </div>{/* end tab content */}
 
-        {/* ── Sticky Footer Navigation ── */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px', position:'sticky', bottom:0 }}>
-          {/* Grand total pill */}
-          <div style={{ display:'flex', gap:'16px', alignItems:'center' }}>
-            <div style={{ background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'20px', padding:'4px 14px', fontSize:'12px', fontWeight:700, color:'#0070F2' }}>
-              Grand Total: ₹{grandTotal.toFixed(2)}
-            </div>
-            <div style={{ display:'flex', gap:'4px' }}>
-              {TABS.map(t => (
-                <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} title={t.label} style={{ width:'22px', height:'4px', borderRadius:'2px', border:'none', cursor:'pointer', background: activeTab===t.id?'#0070F2':'#D9D9D9' }} />
-              ))}
-            </div>
-          </div>
-          <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-            <span style={{ fontSize:'11px', color:'#6A6D70' }}>{tabIdx+1}/{TABS.length} — {TABS[tabIdx]?.label}</span>
+        {/* ── Footer Navigation ── */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 20px', background:'#fff', borderTop:`1px solid ${BD}`, position:'sticky', bottom:0, boxShadow:'0 -4px 16px rgba(16,24,40,0.08)', zIndex:50, gap:8, flexShrink:0 }}>
+          {/* Left: Prev + Save Draft */}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             {tabIdx > 0 && (
-              <button type="button" onClick={() => setActiveTab(TABS[tabIdx-1].id)} style={{ padding:'6px 12px', background:'#fff', border:'1px solid #D9D9D9', color:'#32363A', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Prev</button>
+              <button type="button" onClick={() => setActiveTab(TABS[tabIdx-1].id)}
+                style={{ height:36, padding:'0 16px', background:'#fff', border:`1px solid ${BD}`, color:'#4B5563', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, transition:'all 0.15s', boxShadow:'0 1px 2px rgba(16,24,40,0.05)' }}>
+                ← Prev
+              </button>
             )}
+            <button type="button" onClick={() => handleSave('draft')} disabled={saving}
+              style={{ height:36, padding:'0 18px', background:'#fff', border:`1px solid ${BD}`, color:'#4B5563', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, opacity:saving?0.6:1, boxShadow:'0 1px 2px rgba(16,24,40,0.05)', transition:'all 0.15s' }}>
+              💾 Save Draft
+            </button>
+          </div>
+
+          {/* Centre: step pill */}
+          <div style={{ fontSize:12, color:'#9CA3AF', fontFamily:'inherit', textAlign:'center', whiteSpace:'nowrap', background:'#F5F7FB', border:`1px solid ${BD}`, borderRadius:20, padding:'4px 14px' }}>
+            Step <strong style={{ color:'#4B5563' }}>{tabIdx+1}</strong> / {TABS.length} — <span style={{ color:P, fontWeight:600 }}>{TABS[tabIdx]?.label}</span>
+          </div>
+
+          {/* Right: action buttons + Next */}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <button type="button" onClick={() => handleSave('pending')} disabled={saving}
+              style={{ height:36, padding:'0 20px', background:'#EEF4FF', border:`1px solid #BFD4FB`, color:P, borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, opacity:saving?0.6:1, transition:'all 0.15s' }}>
+              ▶ Submit for Approval
+            </button>
+            <button type="button" onClick={() => handleSave('approved')} disabled={saving}
+              style={{ height:36, padding:'0 20px', background:P, border:`1px solid #1A56D6`, color:'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, opacity:saving?0.6:1, boxShadow:'0 1px 4px rgba(47,111,237,0.35)', transition:'all 0.15s' }}>
+              ✓ Save & Approve
+            </button>
             {tabIdx < TABS.length-1 ? (
-              <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)} style={{ padding:'6px 12px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
+              <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)}
+                style={{ height:36, padding:'0 20px', background:TEAL, border:`1px solid #0A8A4F`, color:'#fff', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, boxShadow:'0 1px 4px rgba(18,183,106,0.30)', transition:'all 0.15s' }}>
+                Next →
+              </button>
             ) : (
-              <button type="button" onClick={() => handleSave('confirmed')} disabled={saving} style={{ padding:'6px 18px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
-                ✅ Confirm Order
+              <button type="button" onClick={() => handleSave('confirmed')} disabled={saving}
+                style={{ height:36, padding:'0 22px', background:TEAL, border:`1px solid #0A8A4F`, color:'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6, opacity:saving?0.6:1, boxShadow:'0 1px 4px rgba(18,183,106,0.30)', transition:'all 0.15s' }}>
+                ✓ Confirm Order
               </button>
             )}
           </div>

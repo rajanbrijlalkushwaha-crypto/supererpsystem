@@ -11,3 +11,6 @@ dist/
 .vscode/
 .idea/
 *.swp
+*.rar
+*.zip
+Database/email-config.json

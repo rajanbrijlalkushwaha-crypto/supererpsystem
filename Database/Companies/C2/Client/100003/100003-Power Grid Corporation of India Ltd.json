@@ -1,0 +1,59 @@
+{
+  "clientId": 100003,
+  "companyName": "Power Grid Corporation of India Ltd",
+  "clientName": "Power Grid Corporation of India Ltd",
+  "status": "approved",
+  "address": "Plot No. B-14, Lokmat Karmchari Griha Nirman\r\nSahakari Sanstha ,Butibor",
+  "billingAddr": "Plot No. B-14, Lokmat Karmchari Griha Nirman\r\nSahakari Sanstha ,Butibor",
+  "shippingAddr": "",
+  "city": "Nagpur",
+  "state": "Maharashtra",
+  "pincode": "441108",
+  "country": "India",
+  "gstin": "27AAACP0252G1ZT",
+  "gst": "27AAACP0252G1ZT",
+  "gstType": "Regular",
+  "gstRegistered": true,
+  "pan": "AAACP0252G",
+  "cin": "",
+  "msme": "",
+  "tdsApplicable": true,
+  "businessType": "Public Limited",
+  "industryType": "Energy & Power",
+  "contactPersons": [
+    {
+      "name": "Ashish Okte ",
+      "mobileNumber": "9000000000",
+      "altMobile": "",
+      "email": "ashish.okte@powergrid.in",
+      "website": "",
+      "landline": ""
+    }
+  ],
+  "bankName": "",
+  "accountHolder": "",
+  "accountNo": "",
+  "ifsc": "",
+  "branch": "",
+  "upi": "",
+  "paymentTerms": "30 Days",
+  "creditLimit": "5000000",
+  "paymentModes": [
+    "NEFT",
+    "RTGS",
+    "Cheque"
+  ],
+  "currency": "INR",
+  "category": "Regular",
+  "salesPerson": "",
+  "remarks": "",
+  "documents": [
+    {
+      "name": "GEM Order GEMC-511687757499660"
+    }
+  ],
+  "createdAt": "2026-04-24T08:25:36.498Z",
+  "updatedAt": "2026-04-24T09:12:19.406Z",
+  "website": "",
+  "landline": ""
+}

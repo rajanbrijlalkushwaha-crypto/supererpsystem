@@ -1,0 +1,137 @@
+{
+  "orderId": 300001,
+  "status": "approved",
+  "orderNo": "EPS/SO/26-27/001",
+  "orderDate": "2026-04-04",
+  "orderType": "Supply",
+  "salesPerson": "",
+  "customerName": "Epp Composites Private Limited",
+  "customerCode": "100001",
+  "customerGstin": "24AABCE2957Q1Z8",
+  "customerState": "Gujarat",
+  "customerCity": "Rajkot",
+  "customerPincode": "360021",
+  "shipToName": "Epp Composites Private Limited",
+  "shipToAddress": "Plot No 2646\r\nGround Floor\r\nKranti Gate Main Road\r\nKalawad Road, Rajkot\r\nLodhika Gidc, Gidc Lodhika",
+  "shipToCity": "Rajkot",
+  "shipToState": "Gujarat",
+  "shipToPincode": "360021",
+  "shipToContact": "Maheshwaran",
+  "shipToMobile": "9099072543",
+  "shipToEmail": "maheshwaranprabakaran@epp.co.in",
+  "address": "Plot No 2646\r\nGround Floor\r\nKranti Gate Main Road\r\nKalawad Road, Rajkot\r\nLodhika Gidc, Gidc Lodhika",
+  "contactPerson": "Maheshwaran",
+  "mobile": "9099072543",
+  "email": "maheshwaranprabakaran@epp.co.in",
+  "customerPO": "EE/QR/25-26/1564",
+  "poDate": "2026-04-04",
+  "enquiryRef": "",
+  "quotationRef": "",
+  "deliveryDate": "2026-04-10",
+  "incoterms": "",
+  "overallDiscount": 0,
+  "freightCharges": 0,
+  "packingCharges": 0,
+  "roundOff": 0,
+  "subTotal": 70000,
+  "totalGST": 12600,
+  "grandTotal": 82600,
+  "cgst": 6300,
+  "sgst": 6300,
+  "igst": 0,
+  "deliveryAddr": "",
+  "shippingAddr": "",
+  "dispatchMode": "Road",
+  "transporterName": "",
+  "vehicleNumber": "",
+  "deliveryInstructions": "",
+  "paymentTerms": "Advance",
+  "paymentMode": "",
+  "billingTerms": "",
+  "creditLimit": "",
+  "dueDate": "",
+  "productSpecs": "",
+  "technicalDetails": "",
+  "drawingNumber": "",
+  "version": "",
+  "customFields": [],
+  "termsConditions": "",
+  "internalNotes": "",
+  "customerNotes": "",
+  "party": "Epp Composites Private Limited",
+  "partyGstin": "24AABCE2957Q1Z8",
+  "reference": "EE/QR/25-26/1564",
+  "orderRef": "",
+  "shippedBy": "Road",
+  "destination": "",
+  "narration": "",
+  "items": [
+    {
+      "type": "Manufactured",
+      "itemCode": 9000001,
+      "description": "FRP TOILET IWC ",
+      "additionalDesc": "With Outside Washbasin Outside And 200 Ltr Water Tank",
+      "hsnCode": "94060099",
+      "qty": "2",
+      "unit": "NOS",
+      "rate": "35000",
+      "gst": 18,
+      "bom": [
+        {
+          "_id": 1775477934235.6626,
+          "itemCode": "",
+          "itemName": "200 LTR WATER TANK ",
+          "qty": "2",
+          "unit": "NOS"
+        }
+      ]
+    }
+  ],
+  "charges": [],
+  "attachments": [
+    {
+      "name": "QUOTATION",
+      "fileName": "1775478040251-1564- Mr. Maheshwaran Epp Composites Pvt Ltd Gujarat with catalogues (1).pdf",
+      "filePath": "docs/1775478040251-1564- Mr. Maheshwaran Epp Composites Pvt Ltd Gujarat with catalogues (1).pdf"
+    },
+    {
+      "name": "EMAIL CONFIRMATION",
+      "fileName": "1775478040270-WhatsApp Image 2026-04-04 at 2.50.44 PM.jpeg",
+      "filePath": "docs/1775478040270-WhatsApp Image 2026-04-04 at 2.50.44 PM.jpeg"
+    }
+  ],
+  "documents": [
+    {
+      "name": "QUOTATION",
+      "fileName": "1775478040251-1564- Mr. Maheshwaran Epp Composites Pvt Ltd Gujarat with catalogues (1).pdf",
+      "filePath": "docs/1775478040251-1564- Mr. Maheshwaran Epp Composites Pvt Ltd Gujarat with catalogues (1).pdf"
+    },
+    {
+      "name": "EMAIL CONFIRMATION",
+      "fileName": "1775478040270-WhatsApp Image 2026-04-04 at 2.50.44 PM.jpeg",
+      "filePath": "docs/1775478040270-WhatsApp Image 2026-04-04 at 2.50.44 PM.jpeg"
+    }
+  ],
+  "scopeItems": [],
+  "bomItems": [],
+  "tasks": [],
+  "materialPlanningItems": [],
+  "bankGuarantee": {
+    "applicable": false,
+    "basis": "basic",
+    "pct": 0
+  },
+  "warranty": {},
+  "addons": [
+    {
+      "description": "WATER TANK 200 LTR ",
+      "category": "Accessory",
+      "qty": "2",
+      "unit": "NOS",
+      "includedInPrice": true,
+      "remarks": ""
+    }
+  ],
+  "createdAt": "2026-04-06T12:20:40.275Z",
+  "updatedAt": "2026-04-06T12:29:45.843Z"
+}

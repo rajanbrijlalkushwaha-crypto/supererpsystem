@@ -1,6 +1,6 @@
 {
   "companyId": "C2",
-  "companyName": "Prop Epsilon Enterprise",
+  "companyName": "Epsilon Enterprise",
   "address": "GUJARAT HOUSING BOARD, 058, CHANDKHEDA\r\nAhmedabad",
   "city": "GANDHINAGAR",
   "state": "Gujarat",
@@ -13,8 +13,7 @@
   "bankName": "STATE BANK OF INDIA",
   "bankAccount": "37877621278",
   "bankIfsc": "SBIN0005743",
-  "isDefault": false,
-  "logoFileName": "",
-  "createdAt": "2026-03-13T10:46:55.804Z",
-  "updatedAt": "2026-03-13T10:46:55.804Z"
+  "isDefault": true,
+  "logoFileName": "Epsilon High Resolution Logo.1.jpg",
+  "updatedAt": "2026-04-24T08:20:29.918Z"
 }

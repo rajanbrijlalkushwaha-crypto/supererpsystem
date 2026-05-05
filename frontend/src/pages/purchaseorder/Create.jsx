@@ -18,14 +18,14 @@ const STATES = [
 ];
 
 const TABS = [
-  { id:'general',  label:'General',     icon:'📋' },
-  { id:'items',    label:'Items',       icon:'📦' },
-  { id:'pricing',  label:'Pricing',     icon:'💰' },
-  { id:'delivery', label:'Delivery',    icon:'🚚' },
-  { id:'payment',  label:'Payment',     icon:'💳' },
-  { id:'specs',    label:'Specs',       icon:'📐' },
-  { id:'attach',   label:'Attachments', icon:'📎' },
-  { id:'notes',    label:'Notes',       icon:'📝' },
+  { id:'general',  label:'Order Details',   icon:'📋' },
+  { id:'items',    label:'Item Details',    icon:'📦' },
+  { id:'pricing',  label:'Charges & Pricing', icon:'💰' },
+  { id:'delivery', label:'Delivery Terms',  icon:'🚚' },
+  { id:'payment',  label:'Payment & Terms', icon:'💳' },
+  { id:'specs',    label:'Specs',           icon:'🔧' },
+  { id:'attach',   label:'Attachments',     icon:'📎' },
+  { id:'notes',    label:'Notes',           icon:'📝' },
 ];
 
 const newItem = () => ({
@@ -37,30 +37,52 @@ const newItem = () => ({
 /* ═══════════════════════════════════════════════════
    STYLE ATOMS
 ═══════════════════════════════════════════════════ */
-const ACC = '#0070F2'; // SAP blue accent for PO
+/* Design Tokens — matching Sales Order */
+const P    = '#2563EB';
+const PD   = '#1D4ED8';
+const SEC  = '#EFF6FF';
+const BG   = '#F5F7FA';
+const BD   = '#D1D5DB';
+const TEAL = '#16A34A';
+
+const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const S = {
-  page:  { fontFamily:"'72','Inter',Arial,Helvetica,sans-serif", color:'#32363A', background:'#F5F6F7', minHeight:'100vh' },
-  hdr:   { background:'#354A5E', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100, borderRadius:'6px 6px 0 0' },
-  card:  { background:'#fff', border:'1px solid #E5E5E5', borderRadius:'6px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' },
-  sec:   { fontSize:'10px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:`2px solid ${ACC}`, paddingBottom:'4px', marginBottom:'12px' },
-  lbl:   { fontSize:'11px', fontWeight:600, color:'#32363A', marginBottom:'3px', display:'block' },
-  req:   { color:'#BB0000', marginLeft:'2px' },
-  err:   { fontSize:'10px', color:'#BB0000', marginTop:'2px', fontWeight:600 },
-  hint:  { fontSize:'10px', color:'#6A6D70', marginTop:'2px' },
-  g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 18px' },
-  g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px 18px' },
-  g4:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px 18px' },
-  tbl:   { width:'100%', borderCollapse:'collapse', fontSize:'12px' },
-  th:    { background:'#354A5E', color:'#fff', padding:'7px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', whiteSpace:'nowrap', borderRight:'1px solid #4A6075' },
-  td:    { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#fff', verticalAlign:'middle' },
-  tdAlt: { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#F9FAFB', verticalAlign:'middle' },
+  page:  { fontFamily: FONT, color:'#111827', background:BG, minHeight:'100vh' },
+  hdr:   { background:'#fff', padding:'0 20px', height:44, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100, boxShadow:'0 1px 4px rgba(0,0,0,0.08)', borderBottom:`1px solid ${BD}` },
+  card:  { background:'#fff', border:`1px solid ${BD}`, borderRadius:'8px', padding:0, marginBottom:'12px', boxShadow:'0 1px 2px rgba(0,0,0,0.04)', overflow:'hidden' },
+  sec:   { fontSize:'12px', fontWeight:700, color:'#1E293B', background:'#F1F5F9', padding:'8px 14px', borderBottom:`1px solid ${BD}`, margin:0, letterSpacing:'0.3px', display:'flex', alignItems:'center', gap:7 },
+  body:  { padding:'14px 16px' },
+  lbl:   { fontSize:'12px', fontWeight:600, color:'#64748B', marginBottom:'4px', display:'block', letterSpacing:'0.1px' },
+  req:   { color:'#EF4444', marginLeft:'2px' },
+  err:   { fontSize:'11px', color:'#EF4444', marginTop:'4px', fontWeight:600 },
+  hint:  { fontSize:'11px', color:'#9CA3AF', marginTop:'4px' },
+  g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 16px' },
+  g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px 16px' },
+  g4:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px 14px' },
+  tbl:   { width:'100%', borderCollapse:'collapse', fontSize:'12.5px' },
+  th:    { background:'#F1F5F9', color:'#374151', padding:'8px 10px', textAlign:'left', fontWeight:700, fontSize:'11px', whiteSpace:'nowrap', borderRight:`1px solid ${BD}`, borderBottom:`1px solid ${BD}`, letterSpacing:'0.3px' },
+  td:    { padding:'7px 10px', border:`1px solid ${BD}`, background:'#fff', verticalAlign:'middle', fontSize:'12.5px' },
+  tdAlt: { padding:'7px 10px', border:`1px solid ${BD}`, background:'#FAFBFC', verticalAlign:'middle', fontSize:'12.5px' },
 };
 
 function inp(err, sm) {
-  return { width:'100%', padding: sm ? '5px 7px' : '6px 9px', border:`1px solid ${err?'#BB0000':'#BBBCBD'}`, borderRadius:'4px', fontSize:'12px', fontFamily:'inherit', background:'#FAFAFA', color:'#32363A', outline:'none', boxSizing:'border-box' };
+  return {
+    width:'100%', padding: sm ? '4px 8px' : '6px 10px',
+    border:`1px solid ${err ? '#EF4444' : '#D1D5DB'}`,
+    borderRadius:'5px', fontSize: sm ? '12px' : '12.5px', fontFamily:'inherit',
+    background:'#fff', color:'#111827', outline:'none',
+    boxSizing:'border-box', transition:'border-color 0.15s, box-shadow 0.15s',
+    boxShadow: err ? '0 0 0 3px rgba(239,68,68,0.10)' : 'none',
+  };
 }
 function selStyle(sm) {
-  return { width:'100%', padding: sm ? '5px 7px' : '6px 9px', border:'1px solid #BBBCBD', borderRadius:'4px', fontSize:'12px', fontFamily:'inherit', background:'#FAFAFA', color:'#32363A', outline:'none', cursor:'pointer', boxSizing:'border-box' };
+  return {
+    width:'100%', padding: sm ? '4px 8px' : '6px 10px',
+    border:'1px solid #D1D5DB', borderRadius:'5px',
+    fontSize: sm ? '12px' : '12.5px', fontFamily:'inherit',
+    background:'#fff', color:'#111827', outline:'none',
+    cursor:'pointer', boxSizing:'border-box', transition:'border-color 0.15s',
+  };
 }
 
 function F({ label, req, children, err, hint }) {
@@ -273,10 +295,20 @@ const CreatePurchaseOrder = () => {
     setFetchSelected({});
     try {
       const res = await axios.get(`/api/sales-orders/${soId}/material-balance`);
-      setFetchedBalance(res.data);
+
+      // Subtract qty already added to this unsaved PO so we don't double-count
+      const adjustedItems = (res.data.items || []).map(it => {
+        const alreadyAdded = items
+          .filter(poi => (poi.itemName || '').toLowerCase().trim() === (it.itemName || '').toLowerCase().trim())
+          .reduce((sum, poi) => sum + (parseFloat(poi.qty) || 0), 0);
+        return { ...it, balanceQty: Math.max(0, it.balanceQty - alreadyAdded) };
+      });
+      const adjusted = { ...res.data, items: adjustedItems };
+
+      setFetchedBalance(adjusted);
       // Default: select all balance > 0, pre-fill qty = balanceQty
       const sel = {};
-      (res.data.items || []).forEach(it => {
+      adjustedItems.forEach(it => {
         if (it.balanceQty > 0) sel[it.itemName] = it.balanceQty;
       });
       setFetchSelected(sel);
@@ -448,13 +480,24 @@ const CreatePurchaseOrder = () => {
   ═══════════════════════════════════════════════════ */
   return (
     <div style={S.page}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        input:focus, select:focus, textarea:focus {
+          border-color: #2563EB !important;
+          box-shadow: 0 0 0 2px rgba(37,99,235,0.15) !important;
+        }
+        input::placeholder, textarea::placeholder { color: #9CA3AF; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #F1F5F9; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+      `}</style>
 
       {/* ══ Fetch Pending Materials Modal ══ */}
       {fetchModal && (
         <div onClick={e=>{if(e.target===e.currentTarget)setFetchModal(false)}} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}>
           <div style={{ background:'#fff',borderRadius:10,width:'100%',maxWidth:800,maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 16px 60px rgba(0,0,0,0.3)' }}>
             {/* Header */}
-            <div style={{ background:'#354A5E',color:'#fff',padding:'12px 18px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
+            <div style={{ background:`linear-gradient(135deg, ${P}, ${PD})`,color:'#fff',padding:'12px 18px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
               <div>
                 <div style={{ fontSize:10,color:'#A8C4E0',letterSpacing:'0.8px',textTransform:'uppercase' }}>Material Planning — Balance Qty</div>
                 <div style={{ fontSize:15,fontWeight:700,marginTop:2 }}>
@@ -477,7 +520,7 @@ const CreatePurchaseOrder = () => {
                 </div>
               ) : (
                 <>
-                  <div style={{ fontSize:12,color:'#354A5E',fontWeight:600,marginBottom:10 }}>
+                  <div style={{ fontSize:12,color:'#1a2d4a',fontWeight:600,marginBottom:10 }}>
                     Select items and adjust quantities to add to this PO. Items with Balance = 0 are fully purchased.
                   </div>
                   <table style={{ ...S.tbl,fontSize:12 }}>
@@ -521,7 +564,7 @@ const CreatePurchaseOrder = () => {
                             </td>
                             <td style={{ ...S.td,textAlign:'center' }}>{it.unit||'NOS'}</td>
                             <td style={{ ...S.td,textAlign:'right',fontWeight:600 }}>{it.requiredQty}</td>
-                            <td style={{ ...S.td,textAlign:'right',color:'#0070F2',fontWeight:600 }}>{it.purchasedQty}</td>
+                            <td style={{ ...S.td,textAlign:'right',color:P,fontWeight:600 }}>{it.purchasedQty}</td>
                             <td style={{ ...S.td,textAlign:'right' }}>
                               <span style={{ fontWeight:700,color:isFullyPurchased?'#188918':isOverPurchased?'#BB0000':'#E9730C' }}>
                                 {isFullyPurchased ? '✓ Done' : isOverPurchased ? `⚠ -${Math.abs(it.balanceQty)}` : it.balanceQty}
@@ -550,13 +593,13 @@ const CreatePurchaseOrder = () => {
 
             {/* Footer */}
             {fetchedBalance && fetchedBalance.items.length > 0 && (
-              <div style={{ borderTop:'1px solid #E5E5E5',padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#F8FAFC',flexShrink:0,borderRadius:'0 0 10px 10px' }}>
+              <div style={{ borderTop:`1px solid ${BD}`,padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',background:SEC,flexShrink:0,borderRadius:'0 0 10px 10px' }}>
                 <div style={{ fontSize:12,color:'#6A6D70' }}>
                   {Object.values(fetchSelected).filter(v=>v>0).length} item(s) selected
                 </div>
                 <div style={{ display:'flex',gap:8 }}>
-                  <button onClick={()=>setFetchModal(false)} style={{ padding:'8px 18px',border:'1px solid #D9D9D9',borderRadius:4,background:'#fff',cursor:'pointer',fontSize:12,fontFamily:'inherit' }}>Cancel</button>
-                  <button onClick={applyFetchedItems} style={{ padding:'8px 22px',background:'#0070F2',border:'none',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit' }}>
+                  <button onClick={()=>setFetchModal(false)} style={{ padding:'7px 16px',border:`1px solid ${BD}`,borderRadius:6,background:'#fff',cursor:'pointer',fontSize:12,fontFamily:'inherit',color:'#1E293B' }}>Cancel</button>
+                  <button onClick={applyFetchedItems} style={{ padding:'7px 20px',background:P,border:'none',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit' }}>
                     ✓ Add Selected to PO Items
                   </button>
                 </div>
@@ -569,87 +612,116 @@ const CreatePurchaseOrder = () => {
 
       {/* ── Sticky Header ── */}
       <div style={S.hdr}>
-        <div>
-          <div style={{ fontSize:'10px', color:'#A8C4E0', letterSpacing:'0.8px', marginBottom:'2px', textTransform:'uppercase' }}>PURCHASE ORDER MANAGEMENT — ME21N</div>
-          <div style={{ fontSize:'15px', fontWeight:700, color:'#fff', display:'flex', alignItems:'center', gap:'10px' }}>
-            New Purchase Order
-            {hdr.poNo && <span style={{ fontFamily:'monospace', fontSize:'13px', color:'#FFCC80' }}>#{hdr.poNo}</span>}
-          </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12.5, color:'#64748B' }}>
+          <span style={{ cursor:'pointer', color:'#6B7280', fontWeight:400 }} onClick={() => navigate('/purchase-order/view')}>Procurement Dashboard</span>
+          <span style={{ color:'#9CA3AF' }}>›</span>
+          <span style={{ color:'#111827', fontWeight:600 }}>Create Purchase Order</span>
         </div>
-        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-          <button onClick={() => navigate('/purchase-order/view')} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', padding:'7px 16px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Back</button>
-          <button onClick={() => handleSubmit('draft')} disabled={saving} style={{ background:'#6A6D70', border:'none', color:'#fff', padding:'7px 18px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
-            {saving ? '...' : '💾 Save Draft'}
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <button onClick={() => handleSubmit('draft')} disabled={saving}
+            style={{ height:30, padding:'0 14px', background:saving?'#F9FAFB':'#F59E0B', border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:5, cursor:saving?'default':'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
+            💾 {saving ? 'Saving…' : 'Save Draft'}
           </button>
-          <button onClick={() => handleSubmit('pending')} disabled={saving} style={{ background:ACC, border:'none', color:'#fff', padding:'7px 20px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
-            {saving ? 'Saving…' : '✅ Create PO'}
+          <button onClick={() => handleSubmit('pending')} disabled={saving}
+            style={{ height:30, padding:'0 14px', background:saving?'#F9FAFB':P, border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:5, cursor:saving?'default':'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
+            📤 Submit for Approval
+          </button>
+          <button onClick={() => handleSubmit('approved')} disabled={saving}
+            style={{ height:30, padding:'0 14px', background:saving?'#F9FAFB':TEAL, border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:5, cursor:saving?'default':'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
+            ✓ Approve & Save
           </button>
         </div>
       </div>
 
-      {/* ── Order Header Card ── */}
-      <div style={{ background:'#fff', borderLeft:'1px solid #E5E5E5', borderRight:'1px solid #E5E5E5', borderBottom:'1px solid #E5E5E5', padding:'14px 16px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px 18px', marginBottom:'12px' }}>
-          <FIn label="PO Number" value={hdr.poNo} readOnly hint="Auto-generated" />
-          <FIn label="PO Date" type="date" value={hdr.poDate} onChange={v => setH('poDate',v)} />
-          <FSel label="PO Type" value={hdr.poType} onChange={v => setH('poType',v)}
-            options={['Standard','Blanket','Contract','Subcontract','Emergency']} />
-          <FSel label="Purchase Person" value={hdr.purchasePerson} onChange={v => setH('purchasePerson',v)}
-            options={PURCHASE_PERSONS} />
+      {/* ── Two-panel header row — exactly like screenshot ── */}
+      <div style={{ padding:'12px 16px 0', display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+
+        {/* LEFT — PO Reference Details */}
+        <div style={S.card}>
+          <div style={S.sec}>PO Reference Details</div>
+          <div style={S.body}>
+            <div style={S.g2}>
+              <FIn label="ERP Order ID" value={hdr.poNo} readOnly />
+              <FIn label="PO Number" value={hdr.poNo} readOnly hint="Auto-generated" />
+              <FIn label="PO Date" type="date" value={hdr.poDate} onChange={v => setH('poDate',v)} />
+              <FSel label="PO Type" value={hdr.poType} onChange={v => setH('poType',v)}
+                options={['Standard','Blanket','Contract','Subcontract','Emergency']} />
+              <FIn label="Quote Date" type="date" value={gen.deliveryDate} onChange={v => setGen(g=>({...g,deliveryDate:v}))} />
+              <FIn label="Quote Ref" value={gen.quotationRef} onChange={v => setGen(g=>({...g,quotationRef:v}))} placeholder="Quotation ref no." />
+              <FIn label="Vendor Ref" value={gen.vendorRef} onChange={v => setGen(g=>({...g,vendorRef:v}))} placeholder="Vendor's ref" />
+              <FIn label="Due Date" type="date" value={pay.dueDate} onChange={v => setPay(p=>({...p,dueDate:v}))} />
+            </div>
+            <div style={{ marginTop:12 }}>
+              <FTA label="Notes" value={notes.internalNotes} onChange={v => setNotes(n=>({...n,internalNotes:v}))} rows={2} placeholder="Internal notes…" />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <FSel label="Purchase Person" value={hdr.purchasePerson} onChange={v => setH('purchasePerson',v)} options={PURCHASE_PERSONS} />
+            </div>
+          </div>
         </div>
 
-        {/* Vendor Search */}
-        <div style={{ background:'#F0F9FF', border:`1px solid ${ACC}30`, borderRadius:'6px', padding:'12px 14px' }}>
-          <div style={{ fontSize:'10px', fontWeight:700, color:ACC, textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:'10px' }}>Vendor Information</div>
-          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr 1fr', gap:'10px 14px' }}>
-            {/* Vendor search dropdown */}
-            <div ref={vendorRef} style={{ position:'relative' }}>
+        {/* RIGHT — Vendor & Billing Information */}
+        <div style={S.card}>
+          <div style={S.sec}>Vendor &amp; Billing Information</div>
+          <div style={S.body}>
+            {/* Vendor search */}
+            <div ref={vendorRef} style={{ position:'relative', marginBottom:10 }}>
               <label style={S.lbl}>Vendor Name <span style={S.req}>*</span></label>
               <input value={vendorSearch || hdr.vendorName}
                 onChange={e => { setVendorSearch(e.target.value); setShowVendorDD(true); if (!e.target.value) setHdr(h => ({...h, vendorName:'', vendorCode:'', vendorGstin:'', vendorState:'', contactPerson:'', mobile:'', email:''})); }}
                 onFocus={() => setShowVendorDD(true)}
                 placeholder="Search vendor…"
-                style={{ ...inp(errs.vendorName), paddingRight:'28px' }}
+                style={inp(errs.vendorName)}
               />
               {errs.vendorName && <div style={S.err}>{errs.vendorName}</div>}
               {showVendorDD && filteredVendors.length > 0 && (
-                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #D9D9D9', borderRadius:'4px', boxShadow:'0 6px 20px rgba(0,0,0,0.12)', zIndex:200, maxHeight:'200px', overflowY:'auto' }}>
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:`1px solid ${BD}`, borderRadius:'6px', boxShadow:'0 6px 20px rgba(0,0,0,0.12)', zIndex:200, maxHeight:'200px', overflowY:'auto' }}>
                   {filteredVendors.map(v => (
                     <div key={v.vendorId} onClick={() => selectVendor(v)}
-                      style={{ padding:'8px 12px', cursor:'pointer', borderBottom:'1px solid #F3F4F6', fontSize:'12px' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#EEF6FF'}
+                      style={{ padding:'8px 12px', cursor:'pointer', borderBottom:`1px solid #F1F5F9`, fontSize:'12px' }}
+                      onMouseEnter={e => e.currentTarget.style.background='#F8FAFC'}
                       onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-                      <div style={{ fontWeight:600, color:'#32363A' }}>{v.vendorName}</div>
-                      <div style={{ fontSize:'10px', color:'#6A6D70', fontFamily:'monospace' }}>{v.vendorId} · {v.gstin || v.gstNumber || '—'} · {v.state || ''}</div>
+                      <div style={{ fontWeight:600, color:'#1E293B' }}>{v.vendorName}</div>
+                      <div style={{ fontSize:'10px', color:'#64748B' }}>{v.vendorId} · {v.gstin || v.gstNumber || '—'} · {v.state || ''}</div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-            <FIn label="Vendor Code" value={hdr.vendorCode} readOnly />
-            <FIn label="GSTIN" value={hdr.vendorGstin} readOnly />
-            <FIn label="Contact Person" value={hdr.contactPerson} onChange={v => setH('contactPerson',v)} />
-            <FIn label="Mobile" value={hdr.mobile} onChange={v => setH('mobile',v)} />
-            <FIn label="Email" value={hdr.email} onChange={v => setH('email',v)} />
+            <div style={S.g2}>
+              <FIn label="Vendor Code" value={hdr.vendorCode} readOnly />
+              <FIn label="GSTIN" value={hdr.vendorGstin} readOnly />
+            </div>
+            <div style={{ marginTop:10 }}>
+              <FTA label="Address" value={del.deliveryAddr} onChange={v => setDel(d=>({...d,deliveryAddr:v}))} rows={2} placeholder="Billing address…" />
+            </div>
+            <div style={{ ...S.g3, marginTop:10 }}>
+              <FIn label="City" value="" onChange={()=>{}} placeholder="City" />
+              <FSel label="State" value={hdr.vendorState} onChange={v => setH('vendorState',v)} options={STATES} />
+              <FIn label="Country" value="India" readOnly />
+            </div>
           </div>
         </div>
-      </div>
+      </div>{/* end two-panel row */}
 
-      {/* ── Tab Bar ── */}
-      <div style={{ background:'#fff', borderLeft:'1px solid #E5E5E5', borderRight:'1px solid #E5E5E5', display:'flex', overflowX:'auto', borderBottom:'2px solid #E5E5E5' }}>
-        {TABS.map(t => {
+      <div style={{ padding:'0 20px' }}>
+      {/* ── Tab Bar — same style as Sales Order ── */}
+      <div style={{ background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap' }}>
+        {TABS.map((t) => {
           const active = activeTab === t.id;
           return (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              display:'flex', alignItems:'center', gap:'6px', padding:'9px 16px',
-              cursor:'pointer', background: active?'#fff':'#F5F6F7',
-              border:'none', borderBottom: active?`3px solid ${ACC}`:'3px solid transparent',
-              borderRight:'1px solid #E5E5E5',
-              color: active?ACC:'#6A6D70',
-              fontSize:'12px', fontWeight: active?700:400, fontFamily:'inherit',
-              whiteSpace:'nowrap', marginBottom:'-2px',
-            }}>
-              <span style={{ fontSize:'13px' }}>{t.icon}</span>
+              display:'flex', alignItems:'center', justifyContent:'center', gap:4,
+              flex:1, height:32, padding:'0 6px',
+              cursor:'pointer', background: active ? '#DBEAFE' : 'transparent',
+              border:'none', borderBottom: active ? `2px solid ${P}` : '2px solid transparent',
+              color: active ? P : '#111827',
+              fontSize:11, fontWeight: active ? 700 : 500, fontFamily:'inherit',
+              whiteSpace:'nowrap', transition:'all 0.12s', marginBottom:-2,
+            }}
+            onMouseEnter={e=>{ if(!active){e.currentTarget.style.background='#EFF6FF';e.currentTarget.style.color=PD;} }}
+            onMouseLeave={e=>{ if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#111827';} }}>
+              <span style={{fontSize:12}}>{t.icon}</span>
               {t.label}
             </button>
           );
@@ -657,12 +729,13 @@ const CreatePurchaseOrder = () => {
       </div>
 
       {/* ── Tab Content ── */}
-      <div style={{ background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px', padding:'16px', minHeight:'400px' }}>
+      <div style={{ background:BG, border:`1px solid ${BD}`, borderTop:'none', borderRadius:'0 0 10px 10px', padding:'16px', minHeight:'420px' }}>
 
         {/* ══ TAB 1: General ══ */}
         {activeTab === 'general' && (
           <div style={S.card}>
             <div style={S.sec}>General Details</div>
+            <div style={S.body}>
             <div style={S.g3}>
               <div>
                 <label style={S.lbl}>Link to Sales Order</label>
@@ -691,16 +764,18 @@ const CreatePurchaseOrder = () => {
               <FSel label="Incoterms" value={gen.incoterms} onChange={v => setGen(g => ({...g, incoterms:v}))}
                 options={['EXW','FCA','CPT','CIP','DAP','DPU','DDP','FAS','FOB','CFR','CIF','FOR']} />
             </div>
+            </div>
           </div>
         )}
 
         {/* ══ TAB 2: Items ══ */}
         {activeTab === 'items' && (
           <div style={S.card}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-              <div style={S.sec}>Purchase Items</div>
-              <button onClick={addItem} style={{ background:ACC, color:'#fff', border:'none', borderRadius:'4px', padding:'6px 14px', fontSize:'12px', cursor:'pointer', fontWeight:700, fontFamily:'inherit' }}>+ Add Item</button>
+            <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span>Purchase Items</span>
+              <button onClick={addItem} style={{ padding:'4px 14px', background:P, border:'none', color:'#fff', borderRadius:'5px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
             </div>
+            <div style={S.body}>
             {errs.items && <div style={{ ...S.err, marginBottom:'8px' }}>{errs.items}</div>}
             <div style={{ overflowX:'auto' }}>
               <table style={S.tbl}>
@@ -740,7 +815,7 @@ const CreatePurchaseOrder = () => {
                             {GST_RATES.map(r => <option key={r} value={r}>{r}%</option>)}
                           </select>
                         </td>
-                        <td style={{ ...td, textAlign:'right', fontWeight:700, minWidth:'90px', color:'#0070F2' }}>{fmt(r.total)}</td>
+                        <td style={{ ...td, textAlign:'right', fontWeight:700, minWidth:'90px', color:P }}>{fmt(r.total)}</td>
                         <td style={{ ...td, textAlign:'center', minWidth:'30px' }}>
                           <button onClick={() => removeItem(it._id)} style={{ background:'#FFEBEB', border:'none', borderRadius:'3px', color:'#BB0000', cursor:'pointer', padding:'3px 7px', fontSize:'12px', fontWeight:700 }}>✕</button>
                         </td>
@@ -751,10 +826,11 @@ const CreatePurchaseOrder = () => {
               </table>
             </div>
             {/* Row totals */}
-            <div style={{ marginTop:'12px', display:'flex', justifyContent:'flex-end', gap:'24px', padding:'10px 14px', background:'#F0F9FF', borderRadius:'6px', border:`1px solid ${ACC}20` }}>
-              <div style={{ fontSize:'12px', color:'#6A6D70' }}>Taxable: <strong style={{ color:'#32363A' }}>{fmt(itemTotals.subTotal)}</strong></div>
-              <div style={{ fontSize:'12px', color:'#6A6D70' }}>GST: <strong style={{ color:'#32363A' }}>{fmt(itemTotals.totalGst)}</strong></div>
-              <div style={{ fontSize:'13px', fontWeight:700, color:ACC }}>Total: {fmt(itemTotals.grandTotal)}</div>
+            <div style={{ marginTop:'12px', display:'flex', justifyContent:'flex-end', gap:'24px', padding:'10px 14px', background:SEC, borderRadius:'6px', border:`1px solid ${BD}` }}>
+              <div style={{ fontSize:'12px', color:'#64748B' }}>Taxable: <strong style={{ color:'#1E293B' }}>{fmt(itemTotals.subTotal)}</strong></div>
+              <div style={{ fontSize:'12px', color:'#64748B' }}>GST: <strong style={{ color:'#1E293B' }}>{fmt(itemTotals.totalGst)}</strong></div>
+              <div style={{ fontSize:'13px', fontWeight:700, color:P }}>Total: {fmt(itemTotals.grandTotal)}</div>
+            </div>
             </div>
           </div>
         )}
@@ -764,6 +840,7 @@ const CreatePurchaseOrder = () => {
           <>
             <div style={S.card}>
               <div style={S.sec}>Pricing Adjustments</div>
+              <div style={S.body}>
               <div style={S.g4}>
                 <F label="Overall Discount (%)">
                   <input type="number" value={pricing.overallDiscount} min="0" max="100" onChange={e => setPricing(p => ({...p, overallDiscount:e.target.value}))} style={{ ...inp(false), textAlign:'right' }} />
@@ -778,11 +855,13 @@ const CreatePurchaseOrder = () => {
                   <input type="number" value={pricing.roundOff} onChange={e => setPricing(p => ({...p, roundOff:e.target.value}))} style={{ ...inp(false), textAlign:'right' }} />
                 </F>
               </div>
+              </div>
             </div>
 
             {/* Tax Summary */}
             <div style={S.card}>
               <div style={S.sec}>Tax Summary ({isIntra ? 'Intrastate — CGST + SGST' : 'Interstate — IGST'})</div>
+              <div style={S.body}>
               <table style={{ ...S.tbl, marginBottom:'16px' }}>
                 <thead>
                   <tr>
@@ -827,7 +906,7 @@ const CreatePurchaseOrder = () => {
 
               {/* Grand Total */}
               <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                <div style={{ background:'#F0F9FF', border:`1px solid ${ACC}30`, borderRadius:'8px', padding:'12px 20px', minWidth:'260px' }}>
+                <div style={{ background:SEC, border:`1px solid ${BD}`, borderRadius:'8px', padding:'12px 20px', minWidth:'260px' }}>
                   {[
                     { l:'Subtotal', v: itemTotals.subTotal },
                     { l:'Total GST', v: itemTotals.totalGst },
@@ -836,14 +915,15 @@ const CreatePurchaseOrder = () => {
                     { l:'Packing', v: pc },
                     { l:'Round Off', v: ro },
                   ].map(row => (
-                    <div key={row.l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', color:'#6A6D70' }}>
+                    <div key={row.l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', color:'#64748B' }}>
                       <span>{row.l}</span><span style={{ fontFamily:'monospace' }}>{fmt(row.v)}</span>
                     </div>
                   ))}
-                  <div style={{ borderTop:'2px solid #354A5E', marginTop:'8px', paddingTop:'8px', display:'flex', justifyContent:'space-between', fontWeight:700, fontSize:'15px', color:'#354A5E' }}>
-                    <span>Grand Total</span><span style={{ color:ACC, fontFamily:'monospace' }}>{fmt(finalTotal)}</span>
+                  <div style={{ borderTop:`2px solid ${BD}`, marginTop:'8px', paddingTop:'8px', display:'flex', justifyContent:'space-between', fontWeight:700, fontSize:'15px', color:'#1a2d4a' }}>
+                    <span>Grand Total</span><span style={{ color:P, fontFamily:'monospace' }}>{fmt(finalTotal)}</span>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </>
@@ -853,28 +933,32 @@ const CreatePurchaseOrder = () => {
         {activeTab === 'delivery' && (
           <>
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-                <div style={S.sec}>Delivery Address</div>
+              <div style={S.sec}>Delivery Address</div>
+              <div style={S.body}>
+                <FTA label="Delivery Address (Our Warehouse)" value={del.deliveryAddr} onChange={v => setDel(d => ({...d, deliveryAddr:v}))} placeholder="Delivery address…" rows={3} />
               </div>
-              <FTA label="Delivery Address (Our Warehouse)" value={del.deliveryAddr} onChange={v => setDel(d => ({...d, deliveryAddr:v}))} placeholder="Delivery address…" rows={3} />
             </div>
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-                <div style={S.sec}>Shipping / Consignee Address</div>
-                <button onClick={() => setDel(d => ({...d, shippingAddr:d.deliveryAddr}))} style={{ fontSize:'11px', color:ACC, background:'#E8F3FF', border:`1px solid ${ACC}50`, borderRadius:'4px', padding:'4px 10px', cursor:'pointer', fontWeight:600, fontFamily:'inherit' }}>📋 Copy from Delivery</button>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Shipping / Consignee Address</span>
+                <button onClick={() => setDel(d => ({...d, shippingAddr:d.deliveryAddr}))} style={{ fontSize:'11px', color:P, background:'#fff', border:`1px solid ${BD}`, borderRadius:'5px', padding:'4px 10px', cursor:'pointer', fontWeight:600, fontFamily:'inherit' }}>📋 Copy from Delivery</button>
               </div>
-              <FTA label="Shipping Address" value={del.shippingAddr} onChange={v => setDel(d => ({...d, shippingAddr:v}))} placeholder="Leave blank if same as delivery…" rows={3} />
+              <div style={S.body}>
+                <FTA label="Shipping Address" value={del.shippingAddr} onChange={v => setDel(d => ({...d, shippingAddr:v}))} placeholder="Leave blank if same as delivery…" rows={3} />
+              </div>
             </div>
             <div style={S.card}>
               <div style={S.sec}>Dispatch Details</div>
-              <div style={S.g3}>
-                <FSel label="Dispatch Mode" value={del.dispatchMode} onChange={v => setDel(d => ({...d, dispatchMode:v}))}
-                  options={['Road','Rail','Air','Sea','Courier','Hand Delivery']} />
-                <FIn label="Transporter Name" value={del.transporterName} onChange={v => setDel(d => ({...d, transporterName:v}))} placeholder="Transporter company" />
-                <FIn label="Vehicle / LR Number" value={del.vehicleNumber} onChange={v => setDel(d => ({...d, vehicleNumber:v}))} placeholder="Vehicle no. or LR no." />
-              </div>
-              <div style={{ marginTop:'12px' }}>
-                <FTA label="Delivery Instructions" value={del.deliveryInstructions} onChange={v => setDel(d => ({...d, deliveryInstructions:v}))} placeholder="Special instructions for delivery…" rows={2} />
+              <div style={S.body}>
+                <div style={S.g3}>
+                  <FSel label="Dispatch Mode" value={del.dispatchMode} onChange={v => setDel(d => ({...d, dispatchMode:v}))}
+                    options={['Road','Rail','Air','Sea','Courier','Hand Delivery']} />
+                  <FIn label="Transporter Name" value={del.transporterName} onChange={v => setDel(d => ({...d, transporterName:v}))} placeholder="Transporter company" />
+                  <FIn label="Vehicle / LR Number" value={del.vehicleNumber} onChange={v => setDel(d => ({...d, vehicleNumber:v}))} placeholder="Vehicle no. or LR no." />
+                </div>
+                <div style={{ marginTop:'12px' }}>
+                  <FTA label="Delivery Instructions" value={del.deliveryInstructions} onChange={v => setDel(d => ({...d, deliveryInstructions:v}))} placeholder="Special instructions for delivery…" rows={2} />
+                </div>
               </div>
             </div>
           </>
@@ -884,14 +968,16 @@ const CreatePurchaseOrder = () => {
         {activeTab === 'payment' && (
           <div style={S.card}>
             <div style={S.sec}>Payment Terms</div>
-            <div style={S.g3}>
-              <FSel label="Payment Terms" value={pay.paymentTerms} onChange={v => setPay(p => ({...p, paymentTerms:v}))}
-                options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery','LC (Letter of Credit)']} />
-              <FSel label="Payment Mode" value={pay.paymentMode} onChange={v => setPay(p => ({...p, paymentMode:v}))}
-                options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','LC']} />
-              <FIn label="Credit Limit (₹)" value={pay.creditLimit} onChange={v => setPay(p => ({...p, creditLimit:v}))} placeholder="0" />
-              <FIn label="Billing Terms" value={pay.billingTerms} onChange={v => setPay(p => ({...p, billingTerms:v}))} placeholder="e.g. Net 30" />
-              <FIn label="Due Date" type="date" value={pay.dueDate} onChange={v => setPay(p => ({...p, dueDate:v}))} hint="Auto-calculated from PO date + payment terms" />
+            <div style={S.body}>
+              <div style={S.g3}>
+                <FSel label="Payment Terms" value={pay.paymentTerms} onChange={v => setPay(p => ({...p, paymentTerms:v}))}
+                  options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery','LC (Letter of Credit)']} />
+                <FSel label="Payment Mode" value={pay.paymentMode} onChange={v => setPay(p => ({...p, paymentMode:v}))}
+                  options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','LC']} />
+                <FIn label="Credit Limit (₹)" value={pay.creditLimit} onChange={v => setPay(p => ({...p, creditLimit:v}))} placeholder="0" />
+                <FIn label="Billing Terms" value={pay.billingTerms} onChange={v => setPay(p => ({...p, billingTerms:v}))} placeholder="e.g. Net 30" />
+                <FIn label="Due Date" type="date" value={pay.dueDate} onChange={v => setPay(p => ({...p, dueDate:v}))} hint="Auto-calculated from PO date + payment terms" />
+              </div>
             </div>
           </div>
         )}
@@ -900,31 +986,33 @@ const CreatePurchaseOrder = () => {
         {activeTab === 'specs' && (
           <div style={S.card}>
             <div style={S.sec}>Technical Specifications</div>
-            <div style={S.g2}>
-              <FTA label="Product Specifications" value={specs.productSpecs} onChange={v => setSpecs(s => ({...s, productSpecs:v}))} placeholder="Material, grade, standards…" rows={3} />
-              <FTA label="Technical Details" value={specs.technicalDetails} onChange={v => setSpecs(s => ({...s, technicalDetails:v}))} placeholder="Dimensions, tolerance, finish…" rows={3} />
-              <FIn label="Drawing Number" value={specs.drawingNumber} onChange={v => setSpecs(s => ({...s, drawingNumber:v}))} placeholder="Drawing or document no." />
-              <FIn label="Revision / Version" value={specs.version} onChange={v => setSpecs(s => ({...s, version:v}))} placeholder="e.g. Rev A, v1.2" />
-            </div>
-            {/* Custom key-value fields */}
-            <div style={{ marginTop:'16px' }}>
-              <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>Custom Fields</div>
-              {specs.customFields.map((cf, i) => (
-                <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'flex-end' }}>
-                  <div style={{ flex:1 }}>
-                    <input value={cf.key} onChange={e => setSpecs(s => ({...s, customFields: s.customFields.map((x,j) => j===i ? {...x, key:e.target.value} : x)}))}
-                      placeholder="Field name" style={inp(false,true)} />
+            <div style={S.body}>
+              <div style={S.g2}>
+                <FTA label="Product Specifications" value={specs.productSpecs} onChange={v => setSpecs(s => ({...s, productSpecs:v}))} placeholder="Material, grade, standards…" rows={3} />
+                <FTA label="Technical Details" value={specs.technicalDetails} onChange={v => setSpecs(s => ({...s, technicalDetails:v}))} placeholder="Dimensions, tolerance, finish…" rows={3} />
+                <FIn label="Drawing Number" value={specs.drawingNumber} onChange={v => setSpecs(s => ({...s, drawingNumber:v}))} placeholder="Drawing or document no." />
+                <FIn label="Revision / Version" value={specs.version} onChange={v => setSpecs(s => ({...s, version:v}))} placeholder="e.g. Rev A, v1.2" />
+              </div>
+              {/* Custom key-value fields */}
+              <div style={{ marginTop:'16px' }}>
+                <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>Custom Fields</div>
+                {specs.customFields.map((cf, i) => (
+                  <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'flex-end' }}>
+                    <div style={{ flex:1 }}>
+                      <input value={cf.key} onChange={e => setSpecs(s => ({...s, customFields: s.customFields.map((x,j) => j===i ? {...x, key:e.target.value} : x)}))}
+                        placeholder="Field name" style={inp(false,true)} />
+                    </div>
+                    <div style={{ flex:2 }}>
+                      <input value={cf.value} onChange={e => setSpecs(s => ({...s, customFields: s.customFields.map((x,j) => j===i ? {...x, value:e.target.value} : x)}))}
+                        placeholder="Value" style={inp(false,true)} />
+                    </div>
+                    <button onClick={() => setSpecs(s => ({...s, customFields:s.customFields.filter((_,j)=>j!==i)}))}
+                      style={{ padding:'5px 10px', background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#DC2626', borderRadius:'5px', cursor:'pointer', fontSize:'12px', fontWeight:700 }}>✕</button>
                   </div>
-                  <div style={{ flex:2 }}>
-                    <input value={cf.value} onChange={e => setSpecs(s => ({...s, customFields: s.customFields.map((x,j) => j===i ? {...x, value:e.target.value} : x)}))}
-                      placeholder="Value" style={inp(false,true)} />
-                  </div>
-                  <button onClick={() => setSpecs(s => ({...s, customFields:s.customFields.filter((_,j)=>j!==i)}))}
-                    style={{ padding:'5px 10px', background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700 }}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => setSpecs(s => ({...s, customFields:[...s.customFields, {key:'', value:''}]}))}
-                style={{ padding:'5px 12px', background:'#E8F3FF', border:`1px solid ${ACC}50`, color:ACC, borderRadius:'4px', cursor:'pointer', fontSize:'11px', fontWeight:700, fontFamily:'inherit' }}>+ Add Field</button>
+                ))}
+                <button onClick={() => setSpecs(s => ({...s, customFields:[...s.customFields, {key:'', value:''}]}))}
+                  style={{ padding:'5px 12px', background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:'5px', cursor:'pointer', fontSize:'11px', fontWeight:700, fontFamily:'inherit' }}>+ Add Field</button>
+              </div>
             </div>
           </div>
         )}
@@ -933,41 +1021,43 @@ const CreatePurchaseOrder = () => {
         {activeTab === 'attach' && (
           <div style={S.card}>
             <div style={S.sec}>Attachments</div>
-            <div
-              onDrop={onDrop}
-              onDragOver={e => e.preventDefault()}
-              onClick={() => document.getElementById('poFileInput').click()}
-              style={{ border:'2px dashed #BBBCBD', borderRadius:'8px', padding:'32px', textAlign:'center', cursor:'pointer', background:'#FAFAFA', marginBottom:'16px', transition:'border-color 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor=ACC}
-              onMouseLeave={e => e.currentTarget.style.borderColor='#BBBCBD'}
-            >
-              <div style={{ fontSize:'36px', marginBottom:'8px' }}>📎</div>
-              <div style={{ fontSize:'13px', fontWeight:600, color:'#354A5E' }}>Drag & drop files here, or click to browse</div>
-              <div style={{ fontSize:'11px', color:'#6A6D70', marginTop:'4px' }}>Supports PDF, Word, Excel, Images, ZIP (max 10MB each)</div>
-              <input id="poFileInput" type="file" multiple style={{ display:'none' }} onChange={onDrop} />
-            </div>
-
-            {attachments.length > 0 && (
-              <div>
-                {attachments.map((a, i) => {
-                  const isImg  = a.type?.startsWith('image');
-                  const isPdf  = a.type === 'application/pdf';
-                  const icon   = isImg ? '🖼️' : isPdf ? '📄' : '📎';
-                  const sizeKB = (a.size / 1024).toFixed(1);
-                  return (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', background:'#F8FAFC', border:'1px solid #E2E8F0', borderRadius:'6px', marginBottom:'6px' }}>
-                      <span style={{ fontSize:'20px' }}>{icon}</span>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:'12px', fontWeight:600, color:'#32363A' }}>{a.name}</div>
-                        <div style={{ fontSize:'10px', color:'#6A6D70' }}>{sizeKB} KB</div>
-                      </div>
-                      <button onClick={() => setAttachments(prev => prev.filter((_,j)=>j!==i))}
-                        style={{ background:'#FFEBEB', border:'none', borderRadius:'4px', color:'#BB0000', cursor:'pointer', padding:'4px 8px', fontSize:'12px', fontWeight:700 }}>Remove</button>
-                    </div>
-                  );
-                })}
+            <div style={S.body}>
+              <div
+                onDrop={onDrop}
+                onDragOver={e => e.preventDefault()}
+                onClick={() => document.getElementById('poFileInput').click()}
+                style={{ border:`2px dashed ${BD}`, borderRadius:'8px', padding:'32px', textAlign:'center', cursor:'pointer', background:'#FAFCFF', marginBottom:'16px', transition:'border-color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.borderColor=P}
+                onMouseLeave={e => e.currentTarget.style.borderColor=BD}
+              >
+                <div style={{ fontSize:'36px', marginBottom:'8px' }}>📎</div>
+                <div style={{ fontSize:'13px', fontWeight:600, color:'#1a2d4a' }}>Drag & drop files here, or click to browse</div>
+                <div style={{ fontSize:'11px', color:'#64748B', marginTop:'4px' }}>Supports PDF, Word, Excel, Images, ZIP (max 10MB each)</div>
+                <input id="poFileInput" type="file" multiple style={{ display:'none' }} onChange={onDrop} />
               </div>
-            )}
+
+              {attachments.length > 0 && (
+                <div>
+                  {attachments.map((a, i) => {
+                    const isImg  = a.type?.startsWith('image');
+                    const isPdf  = a.type === 'application/pdf';
+                    const icon   = isImg ? '🖼️' : isPdf ? '📄' : '📎';
+                    const sizeKB = (a.size / 1024).toFixed(1);
+                    return (
+                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', background:'#F8FAFD', border:`1px solid ${BD}`, borderRadius:'6px', marginBottom:'6px' }}>
+                        <span style={{ fontSize:'20px' }}>{icon}</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:'12px', fontWeight:600, color:'#1E293B' }}>{a.name}</div>
+                          <div style={{ fontSize:'10px', color:'#64748B' }}>{sizeKB} KB</div>
+                        </div>
+                        <button onClick={() => setAttachments(prev => prev.filter((_,j)=>j!==i))}
+                          style={{ background:'#FFEBEB', border:'none', borderRadius:'5px', color:'#DC2626', cursor:'pointer', padding:'4px 8px', fontSize:'12px', fontWeight:700 }}>Remove</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -976,61 +1066,65 @@ const CreatePurchaseOrder = () => {
           <>
             <div style={S.card}>
               <div style={S.sec}>Terms & Notes</div>
-              <div style={S.g2}>
-                <FTA label="Terms & Conditions" value={notes.termsConditions} onChange={v => setNotes(n => ({...n, termsConditions:v}))} placeholder="Standard purchase terms…" rows={5} />
-                <FTA label="Internal Notes" value={notes.internalNotes} onChange={v => setNotes(n => ({...n, internalNotes:v}))} placeholder="For internal use only…" rows={5} />
-              </div>
-              <div style={{ marginTop:'12px' }}>
-                <FTA label="Notes to Vendor" value={notes.vendorNotes} onChange={v => setNotes(n => ({...n, vendorNotes:v}))} placeholder="Instructions or messages to vendor…" rows={3} />
+              <div style={S.body}>
+                <div style={S.g2}>
+                  <FTA label="Terms & Conditions" value={notes.termsConditions} onChange={v => setNotes(n => ({...n, termsConditions:v}))} placeholder="Standard purchase terms…" rows={5} />
+                  <FTA label="Internal Notes" value={notes.internalNotes} onChange={v => setNotes(n => ({...n, internalNotes:v}))} placeholder="For internal use only…" rows={5} />
+                </div>
+                <div style={{ marginTop:'12px' }}>
+                  <FTA label="Notes to Vendor" value={notes.vendorNotes} onChange={v => setNotes(n => ({...n, vendorNotes:v}))} placeholder="Instructions or messages to vendor…" rows={3} />
+                </div>
               </div>
             </div>
 
             {/* Order Summary */}
             <div style={S.card}>
               <div style={S.sec}>Order Summary</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-                <div style={{ background:'#F0F9FF', borderRadius:'6px', padding:'12px', border:`1px solid ${ACC}20` }}>
-                  <div style={{ fontSize:'10px', fontWeight:700, color:ACC, textTransform:'uppercase', marginBottom:'8px' }}>Purchase Order</div>
-                  {[
-                    ['PO Number',      hdr.poNo],
-                    ['PO Date',        hdr.poDate],
-                    ['PO Type',        hdr.poType],
-                    ['Purchase Person',hdr.purchasePerson],
-                  ].map(([l, v]) => (
-                    <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', borderBottom:'1px solid #E8F0FF', paddingBottom:'4px' }}>
-                      <span style={{ color:'#6A6D70' }}>{l}</span>
-                      <span style={{ fontWeight:600 }}>{v || '—'}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background:'#F0F9FF', borderRadius:'6px', padding:'12px', border:`1px solid ${ACC}20` }}>
-                  <div style={{ fontSize:'10px', fontWeight:700, color:ACC, textTransform:'uppercase', marginBottom:'8px' }}>Vendor</div>
-                  {[
-                    ['Vendor Name',    hdr.vendorName],
-                    ['Vendor Code',    hdr.vendorCode],
-                    ['GSTIN',          hdr.vendorGstin],
-                    ['State',          hdr.vendorState],
-                  ].map(([l, v]) => (
-                    <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', borderBottom:'1px solid #E8F0FF', paddingBottom:'4px' }}>
-                      <span style={{ color:'#6A6D70' }}>{l}</span>
-                      <span style={{ fontWeight:600 }}>{v || '—'}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background:'#F0F9FF', borderRadius:'6px', padding:'12px', border:`1px solid ${ACC}20`, gridColumn:'1/-1' }}>
-                  <div style={{ fontSize:'10px', fontWeight:700, color:ACC, textTransform:'uppercase', marginBottom:'8px' }}>Financials</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px' }}>
+              <div style={S.body}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                  <div style={{ padding:'8px 10px', background:'#fff', borderRadius:'6px', border:`1px solid ${BD}` }}>
+                    <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>Purchase Order</div>
                     {[
-                      { l:'Items', v: items.length },
-                      { l:'Subtotal', v: fmt(itemTotals.subTotal) },
-                      { l:'Total GST', v: fmt(itemTotals.totalGst) },
-                      { l:'Grand Total', v: fmt(finalTotal), bold:true },
-                    ].map(c => (
-                      <div key={c.l} style={{ textAlign:'center' }}>
-                        <div style={{ fontSize:'18px', fontWeight:700, color: c.bold?ACC:'#354A5E' }}>{c.v}</div>
-                        <div style={{ fontSize:'10px', color:'#6A6D70' }}>{c.l}</div>
+                      ['PO Number',      hdr.poNo],
+                      ['PO Date',        hdr.poDate],
+                      ['PO Type',        hdr.poType],
+                      ['Purchase Person',hdr.purchasePerson],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', borderBottom:`1px solid ${BD}`, paddingBottom:'4px' }}>
+                        <span style={{ color:'#64748B' }}>{l}</span>
+                        <span style={{ fontWeight:600 }}>{v || '—'}</span>
                       </div>
                     ))}
+                  </div>
+                  <div style={{ padding:'8px 10px', background:'#fff', borderRadius:'6px', border:`1px solid ${BD}` }}>
+                    <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>Vendor</div>
+                    {[
+                      ['Vendor Name',    hdr.vendorName],
+                      ['Vendor Code',    hdr.vendorCode],
+                      ['GSTIN',          hdr.vendorGstin],
+                      ['State',          hdr.vendorState],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px', borderBottom:`1px solid ${BD}`, paddingBottom:'4px' }}>
+                        <span style={{ color:'#64748B' }}>{l}</span>
+                        <span style={{ fontWeight:600 }}>{v || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding:'8px 10px', background:'#fff', borderRadius:'6px', border:`1px solid ${BD}`, gridColumn:'1/-1' }}>
+                    <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>Financials</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px' }}>
+                      {[
+                        { l:'Items', v: items.length },
+                        { l:'Subtotal', v: fmt(itemTotals.subTotal) },
+                        { l:'Total GST', v: fmt(itemTotals.totalGst) },
+                        { l:'Grand Total', v: fmt(finalTotal), bold:true },
+                      ].map(c => (
+                        <div key={c.l} style={{ textAlign:'center' }}>
+                          <div style={{ fontSize:'18px', fontWeight:700, color: c.bold?P:'#1a2d4a' }}>{c.v}</div>
+                          <div style={{ fontSize:'10px', color:'#64748B' }}>{c.l}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1040,42 +1134,58 @@ const CreatePurchaseOrder = () => {
       </div>
 
       {/* ── Sticky Footer ── */}
-      <div style={{ position:'sticky', bottom:0, background:'#fff', borderTop:'2px solid #E5E5E5', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:90, boxShadow:'0 -2px 12px rgba(0,0,0,0.07)' }}>
-        {/* Grand Total pill */}
-        <div style={{ background:'#354A5E', color:'#fff', borderRadius:'20px', padding:'6px 18px', fontSize:'13px', fontWeight:700, display:'flex', gap:'10px', alignItems:'center' }}>
-          <span style={{ fontSize:'11px', color:'#A8C4E0' }}>Grand Total</span>
-          <span style={{ color:'#FFCC80', fontFamily:'monospace', fontSize:'14px' }}>{fmt(finalTotal)}</span>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 20px', background:'#fff', borderTop:`1px solid ${BD}`, position:'sticky', bottom:0, boxShadow:'0 -4px 16px rgba(16,24,40,0.08)', zIndex:50, gap:8 }}>
+        {/* Grand Total + Prev */}
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+          <div style={{ background:'#1E293B', color:'#fff', borderRadius:8, padding:'6px 16px', fontSize:13, fontWeight:700, display:'flex', gap:10, alignItems:'center', boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>
+            <span style={{ fontSize:11, color:'rgba(255,255,255,0.7)', fontWeight:500 }}>Grand Total</span>
+            <span style={{ fontFamily:'monospace', fontSize:14, letterSpacing:0.5 }}>{fmt(finalTotal)}</span>
+          </div>
+          {tabIdx > 0 && (
+            <button onClick={() => setActiveTab(TABS[tabIdx-1].id)}
+              style={{ height:36, padding:'0 16px', background:'#fff', border:`1px solid ${BD}`, color:'#4B5563', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:5, boxShadow:'0 1px 2px rgba(16,24,40,0.05)' }}>
+              ← Prev
+            </button>
+          )}
         </div>
 
-        {/* Tab progress dots */}
-        <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+        {/* Step indicator */}
+        <div style={{ display:'flex', gap:5, alignItems:'center' }}>
           {TABS.map((t, i) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              width: i === tabIdx ? '22px' : '8px', height:'8px',
+              width: i === tabIdx ? '24px' : '8px', height:'8px',
               borderRadius:'4px', border:'none', cursor:'pointer',
-              background: i === tabIdx ? ACC : '#D1D5DB',
+              background: i === tabIdx ? P : '#D1D5DB',
               transition:'all 0.2s',
             }} title={t.label} />
           ))}
+          <span style={{ fontSize:12, color:'#9CA3AF', marginLeft:6 }}>{tabIdx+1}/{TABS.length}</span>
         </div>
 
-        {/* Nav + action buttons */}
-        <div style={{ display:'flex', gap:'8px' }}>
-          {tabIdx > 0 && (
-            <button onClick={() => setActiveTab(TABS[tabIdx-1].id)}
-              style={{ background:'#F5F6F7', border:'1px solid #D9D9D9', color:'#32363A', padding:'7px 14px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Prev</button>
-          )}
+        {/* Action buttons */}
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <button onClick={() => handleSubmit('draft')} disabled={saving}
+            style={{ height:36, padding:'0 18px', background:saving?'#F9FAFB':'#F59E0B', border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+            💾 Save Draft
+          </button>
+          <button onClick={() => handleSubmit('pending')} disabled={saving}
+            style={{ height:36, padding:'0 20px', background:saving?'#F9FAFB':P, border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+            📤 Submit for Approval
+          </button>
           {tabIdx < TABS.length - 1 ? (
             <button onClick={() => setActiveTab(TABS[tabIdx+1].id)}
-              style={{ background:ACC, color:'#fff', border:'none', padding:'7px 14px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
+              style={{ height:36, padding:'0 20px', background:TEAL, border:'none', color:'#fff', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+              Next →
+            </button>
           ) : (
-            <button onClick={() => handleSubmit('pending')} disabled={saving}
-              style={{ background:ACC, color:'#fff', border:'none', padding:'7px 20px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
-              {saving ? 'Creating…' : '✅ Create PO'}
+            <button onClick={() => handleSubmit('approved')} disabled={saving}
+              style={{ height:36, padding:'0 22px', background:saving?'#F9FAFB':TEAL, border:'none', color:saving?'#9CA3AF':'#fff', borderRadius:6, cursor:saving?'default':'pointer', fontSize:13, fontWeight:700, fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+              {saving ? 'Creating…' : '✓ Confirm Order'}
             </button>
           )}
         </div>
       </div>
+      </div>{/* end padding wrapper */}
     </div>
   );
 };

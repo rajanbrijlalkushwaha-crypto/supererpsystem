@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 /* ═══════════════════════════════════════════════════
-   INDIAN STATES
+   CONSTANTS
 ═══════════════════════════════════════════════════ */
 const STATES = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
@@ -25,228 +26,149 @@ const INDUSTRY_TYPES = [
 
 const SALES_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
 
-/* ═══════════════════════════════════════════════════
-   ICONS
-═══════════════════════════════════════════════════ */
-const I = {
-  Basic: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>,
-  Contact: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>,
-  Address: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
-  Tax: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  Bank: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
-  Payment: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
-  Extra: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-  Save: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
-  Check: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-  Alert: () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-  Upload: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>,
+const STATE_GST_MAP = {
+  1:'Jammu and Kashmir',2:'Himachal Pradesh',3:'Punjab',4:'Chandigarh',
+  5:'Uttarakhand',6:'Haryana',7:'Delhi',8:'Rajasthan',9:'Uttar Pradesh',
+  10:'Bihar',11:'Sikkim',12:'Arunachal Pradesh',13:'Nagaland',14:'Manipur',
+  15:'Mizoram',16:'Tripura',17:'Meghalaya',18:'Assam',19:'West Bengal',
+  20:'Jharkhand',21:'Odisha',22:'Chhattisgarh',23:'Madhya Pradesh',
+  24:'Gujarat',26:'Dadra and Nagar Haveli and Daman and Diu',27:'Maharashtra',
+  28:'Andhra Pradesh',29:'Karnataka',30:'Goa',31:'Lakshadweep',32:'Kerala',
+  33:'Tamil Nadu',34:'Puducherry',35:'Andaman and Nicobar Islands',36:'Telangana',38:'Ladakh',
 };
 
 const TABS = [
-  { id: 'basic',    label: 'Basic Information',  icon: <I.Basic /> },
-  { id: 'contact',  label: 'Contact Details',    icon: <I.Contact /> },
-  { id: 'address',  label: 'Address Details',    icon: <I.Address /> },
-  { id: 'tax',      label: 'Tax & Compliance',   icon: <I.Tax /> },
-  { id: 'bank',     label: 'Banking Details',    icon: <I.Bank /> },
-  { id: 'payment',  label: 'Payment & Terms',    icon: <I.Payment /> },
-  { id: 'extra',    label: 'Additional Details', icon: <I.Extra /> },
+  { id: 'basic',   label: 'Basic Information',  icon: '👤' },
+  { id: 'contact', label: 'Contact Details',     icon: '📞' },
+  { id: 'address', label: 'Address Details',     icon: '📍' },
+  { id: 'tax',     label: 'Tax & Compliance',    icon: '📋' },
+  { id: 'bank',    label: 'Banking Details',     icon: '🏦' },
+  { id: 'payment', label: 'Payment & Terms',     icon: '💳' },
+  { id: 'extra',   label: 'Additional Details',  icon: '⚙️' },
 ];
 
 /* ═══════════════════════════════════════════════════
-   VALIDATION HELPERS
+   VALIDATORS
 ═══════════════════════════════════════════════════ */
-const validate = {
-  pan:    v => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.toUpperCase()),
-  gst:    v => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v.toUpperCase()),
+const validators = {
+  pan:    v => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v),
+  gst:    v => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v),
   mobile: v => /^[6-9]\d{9}$/.test(v),
   email:  v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
   pin:    v => /^[1-9][0-9]{5}$/.test(v),
-  ifsc:   v => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.toUpperCase()),
+  ifsc:   v => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v),
 };
 
-
 /* ═══════════════════════════════════════════════════
-   REUSABLE UI ATOMS
+   DESIGN TOKENS
 ═══════════════════════════════════════════════════ */
-const s = {
-  card: { background: '#fff', border: '1px solid #E5E5E5', borderRadius: '6px', padding: '20px 22px', marginBottom: '16px' },
-  sectionHead: { fontSize: '11px', fontWeight: 700, color: '#354A5E', textTransform: 'uppercase', letterSpacing: '0.7px', borderBottom: '2px solid #0070F2', paddingBottom: '5px', marginBottom: '16px' },
-  label: { fontSize: '12px', fontWeight: 600, color: '#32363A', marginBottom: '4px', display: 'block' },
-  req: { color: '#BB0000', marginLeft: '2px' },
-  input: (err, focused) => ({
-    width: '100%', padding: '7px 10px', border: `1px solid ${err ? '#BB0000' : focused ? '#0070F2' : '#BBBCBD'}`,
-    borderRadius: '4px', fontSize: '13px', fontFamily: 'inherit', background: focused ? '#fff' : '#FAFAFA',
-    color: '#32363A', outline: 'none',
-    boxShadow: err ? '0 0 0 2px rgba(187,0,0,0.08)' : focused ? '0 0 0 2px rgba(0,112,242,0.12)' : 'none',
-    transition: 'all 0.15s',
-  }),
-  select: (err) => ({
-    width: '100%', padding: '7px 10px', border: `1px solid ${err ? '#BB0000' : '#BBBCBD'}`,
-    borderRadius: '4px', fontSize: '13px', fontFamily: 'inherit', background: '#FAFAFA',
-    color: '#32363A', outline: 'none', cursor: 'pointer',
-  }),
-  err: { fontSize: '11px', color: '#BB0000', marginTop: '3px', fontWeight: 600 },
-  hint: { fontSize: '11px', color: '#6A6D70', marginTop: '3px' },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 22px' },
-  grid3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px 22px' },
-};
-
-function FInput({ label, req, value, onChange, placeholder, err, hint, type = 'text', maxLength, style, upper }) {
-  const [foc, setFoc] = useState(false);
-  return (
-    <div style={style}>
-      <label style={s.label}>{label}{req && <span style={s.req}>*</span>}</label>
-      <input
-        type={type} value={value} maxLength={maxLength}
-        placeholder={placeholder}
-        onChange={e => onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
-        onFocus={() => setFoc(true)} onBlur={() => setFoc(false)}
-        style={s.input(err, foc)}
-      />
-      {err  && <div style={s.err}>{err}</div>}
-      {!err && hint && <div style={s.hint}>{hint}</div>}
-    </div>
-  );
-}
-
-function FSelect({ label, req, value, onChange, options, err, placeholder = '— Select —' }) {
-  return (
-    <div>
-      <label style={s.label}>{label}{req && <span style={s.req}>*</span>}</label>
-      <select value={value} onChange={e => onChange(e.target.value)} style={s.select(err)}>
-        <option value="">{placeholder}</option>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-      {err && <div style={s.err}>{err}</div>}
-    </div>
-  );
-}
-
-function FTextarea({ label, req, value, onChange, placeholder, rows = 4, err }) {
-  const [foc, setFoc] = useState(false);
-  return (
-    <div>
-      <label style={s.label}>{label}{req && <span style={s.req}>*</span>}</label>
-      <textarea
-        value={value} rows={rows} placeholder={placeholder}
-        onChange={e => onChange(e.target.value)}
-        onFocus={() => setFoc(true)} onBlur={() => setFoc(false)}
-        style={{ ...s.input(err, foc), resize: 'vertical', minHeight: rows * 22 + 'px' }}
-      />
-      {err && <div style={s.err}>{err}</div>}
-    </div>
-  );
-}
-
-function Toggle({ id, checked, onChange, label }) {
-  return (
-    <label htmlFor={id} style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-      <div style={{ position: 'relative', width: '42px', height: '22px', background: checked ? '#0070F2' : '#BBBCBD', borderRadius: '11px', transition: 'background 0.2s', flexShrink: 0 }}>
-        <input id={id} type="checkbox" checked={checked} onChange={onChange} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
-        <div style={{ position: 'absolute', top: '3px', left: checked ? '22px' : '3px', width: '16px', height: '16px', background: 'white', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-      </div>
-      {label && <span style={{ fontSize: '13px', color: checked ? '#0070F2' : '#6A6D70', fontWeight: checked ? 600 : 400 }}>{label}</span>}
-    </label>
-  );
-}
-
-function FileUpload({ label, hint }) {
-  const [file, setFile] = useState(null);
-  return (
-    <div>
-      <label style={s.label}>{label}</label>
-      <label style={{
-        display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
-        border: '1px dashed #BBBCBD', borderRadius: '4px', padding: '10px 14px',
-        background: '#FAFAFA', transition: 'border-color 0.15s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.borderColor = '#0070F2'}
-        onMouseLeave={e => e.currentTarget.style.borderColor = '#BBBCBD'}
-      >
-        <span style={{ color: '#0070F2' }}><I.Upload /></span>
-        <div>
-          <div style={{ fontSize: '13px', color: '#32363A', fontWeight: 500 }}>{file ? file.name : 'Click to upload'}</div>
-          {hint && !file && <div style={{ fontSize: '11px', color: '#6A6D70' }}>{hint}</div>}
-        </div>
-        <input type="file" onChange={e => setFile(e.target.files[0])} style={{ display: 'none' }} />
-      </label>
-      {file && <div style={{ fontSize: '11px', color: '#188918', marginTop: '4px', fontWeight: 600 }}>✓ {file.name} attached</div>}
-    </div>
-  );
-}
-
-function MultiCheck({ options, selected, onChange }) {
-  const toggle = (opt) => {
-    const next = selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt];
-    onChange(next);
-  };
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-      {options.map(opt => {
-        const on = selected.includes(opt);
-        return (
-          <button key={opt} type="button" onClick={() => toggle(opt)} style={{
-            padding: '5px 14px', borderRadius: '16px', border: `1px solid ${on ? '#0070F2' : '#D9D9D9'}`,
-            background: on ? '#EAF1FB' : '#FAFAFA', color: on ? '#0070F2' : '#6A6D70',
-            fontSize: '12px', fontWeight: on ? 600 : 400, cursor: 'pointer',
-            fontFamily: 'inherit', transition: 'all 0.12s',
-          }}>{opt}</button>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════
-   TOAST
-═══════════════════════════════════════════════════ */
-function Toast({ type, msg, onClose }) {
-  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, [onClose]);
-  const isOk = type === 'success';
-  return (
-    <div style={{
-      position: 'fixed', top: '20px', right: '24px', zIndex: 9999,
-      background: isOk ? '#E8F5E9' : '#FFEBEB',
-      border: `1px solid ${isOk ? '#82C98A' : '#F5B8B8'}`,
-      borderLeft: `4px solid ${isOk ? '#188918' : '#BB0000'}`,
-      borderRadius: '6px', padding: '12px 18px', minWidth: '300px',
-      display: 'flex', alignItems: 'center', gap: '10px',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.12)', animation: 'slideIn 0.2s ease',
-    }}>
-      <span style={{ color: isOk ? '#188918' : '#BB0000', flexShrink: 0 }}>
-        {isOk ? <I.Check /> : <I.Alert />}
-      </span>
-      <span style={{ fontSize: '13px', color: isOk ? '#0A6640' : '#BB0000', fontWeight: 600, flex: 1 }}>{msg}</span>
-      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6A6D70', fontSize: '16px', lineHeight: 1 }}>×</button>
-    </div>
-  );
-}
+const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const P  = '#2563EB';
+const PD = '#1D4ED8';
+const BD = '#D1D5DB';
+const BG = '#F5F7FA';
 
 /* ═══════════════════════════════════════════════════
    INIT STATE
 ═══════════════════════════════════════════════════ */
 const INIT = {
-  // Basic
   clientName: '', clientCode: '',
   businessType: '', industryType: '', pan: '', gst: '', cin: '', msme: '',
-  // Contact
   contactPerson: '', mobile: '', altMobile: '', email: '', website: '', landline: '',
-  // Address
   billingAddr: '', shippingAddr: '', state: '', city: '', pincode: '', country: 'India',
-  // Tax
   gstRegistered: true, gstType: 'Regular', tdsApplicable: false,
-  // Bank
   bankName: '', accountHolder: '', accountNo: '', ifsc: '', branch: '', upi: '',
-  // Payment
   paymentTerms: '30 Days', creditLimit: '', paymentModes: [], currency: 'INR',
-  // Extra
   category: 'Regular', salesPerson: '', remarks: '',
+  status: 'pending',
 };
 
+/* ── Toast ── */
+function Toast({ type, msg, onClose }) {
+  React.useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
+  const ok = type === 'success';
+  return (
+    <div style={{
+      position: 'fixed', top: 20, right: 24, zIndex: 9999,
+      background: ok ? '#ecfdf5' : '#fef2f2',
+      border: `1px solid ${ok ? '#a7f3d0' : '#fecaca'}`,
+      borderLeft: `4px solid ${ok ? '#10b981' : '#ef4444'}`,
+      borderRadius: 10, padding: '14px 18px', minWidth: 320,
+      display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.12)', fontFamily: F,
+    }}>
+      <span style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</span>
+      <span style={{ fontSize: 13, color: ok ? '#065f46' : '#991b1b', fontWeight: 600, flex: 1 }}>{msg}</span>
+      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8' }}>×</button>
+    </div>
+  );
+}
+
+/* ── Toggle ── */
+function Toggle({ id, checked, onChange }) {
+  return (
+    <label htmlFor={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+      <div style={{ position: 'relative', width: 44, height: 24, background: checked ? P : '#CBD5E1', borderRadius: 12, transition: 'background 0.2s', flexShrink: 0 }}>
+        <input id={id} type="checkbox" checked={checked} onChange={onChange} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
+        <div style={{ position: 'absolute', top: 4, left: checked ? 24 : 4, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+      </div>
+      <span style={{ fontSize: 13, color: checked ? P : '#94a3b8', fontWeight: checked ? 600 : 400, fontFamily: F }}>{checked ? 'Yes' : 'No'}</span>
+    </label>
+  );
+}
+
+/* ── MultiCheck pills ── */
+function MultiCheck({ options, selected, onChange, error }) {
+  const toggle = opt => onChange(selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt]);
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {options.map(opt => {
+          const on = selected.includes(opt);
+          return (
+            <button key={opt} type="button" onClick={() => toggle(opt)} style={{
+              padding: '4px 12px', borderRadius: 20, cursor: 'pointer', fontFamily: F,
+              border: `1.5px solid ${on ? P : '#D1D5DB'}`,
+              background: on ? '#EFF6FF' : '#fff',
+              color: on ? P : '#64748b',
+              fontSize: 12, fontWeight: on ? 700 : 500, transition: 'all 0.12s',
+            }}>{opt}</button>
+          );
+        })}
+      </div>
+      {error && <div style={{ fontSize: 11, color: '#EF4444', fontFamily: F, marginTop: 5, fontWeight: 600 }}>{error}</div>}
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════
-   MAIN DASHBOARD
+   MAIN COMPONENT
 ═══════════════════════════════════════════════════ */
+/* ── Shared layout components — defined at module level so React never remounts them on re-render ── */
+const FR = ({ label, children, req, w=140 }) => (
+  <div style={{display:'flex',alignItems:'center',minHeight:30,borderBottom:'1px solid #CBD5E1',padding:'2px 6px',background:'#fff'}}>
+    <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:w,maxWidth:w,padding:'0 8px 0 0',textAlign:'left',flexShrink:0}}>
+      {label}{req&&<span style={{color:'#DC2626',marginLeft:2}}>*</span>}
+    </label>
+    <div style={{flex:1,display:'flex',gap:4,alignItems:'center'}}>{children}</div>
+  </div>
+);
+const PH = ({ title }) => (
+  <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,padding:'6px 12px',letterSpacing:0.2,borderBottom:'1px solid #D1D5DB'}}>
+    {title}
+  </div>
+);
+const VCard = ({ children }) => (
+  <div style={{border:'1px solid #D1D5DB',borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden',background:'#fff'}}>
+    {children}
+  </div>
+);
+
 export default function ClientMasterDashboard() {
+  const { clientId } = useParams();
+  const navigate      = useNavigate();
+  const isEdit        = !!clientId;
+
   const { selectedCompany } = useCompany();
   const [tab, setTab]         = useState('basic');
   const [form, setForm]       = useState(INIT);
@@ -254,443 +176,708 @@ export default function ClientMasterDashboard() {
   const [toast, setToast]     = useState(null);
   const [gstWarn, setGstWarn] = useState('');
   const [idLoading, setIdLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(isEdit);
+  const [documents, setDocuments] = useState([{ id: 1, name: '', file: null }]);
+  const [importing, setImporting]     = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const xlInputRef = useRef(null);
+
+  const downloadSample = async () => {
+    try {
+      const res = await axios.get('/api/clients/sample-excel', {
+        params: { companyId: selectedCompany?.companyId },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: res.headers['content-type'] }));
+      const a = document.createElement('a'); a.href = url;
+      a.download = 'Client_Import_Template.xlsx';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setToast({ type: 'error', msg: 'Download failed: ' + err.message });
+    }
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (!selectedCompany) { setToast({ type: 'error', msg: 'Select a company first.' }); return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('companyId', selectedCompany.companyId);
+    setImporting(true);
+    try {
+      const res = await axios.post('/api/clients/import-excel', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setImportResult(res.data);
+    } catch (err) {
+      setToast({ type: 'error', msg: 'Import failed: ' + (err.response?.data?.error || err.message) });
+    } finally { setImporting(false); }
+  };
 
   const fetchNextId = useCallback(async () => {
-    if (!selectedCompany) return;
+    if (!selectedCompany || isEdit) return;
     setIdLoading(true);
     try {
       const res = await axios.get(`/api/clients/next-id?companyId=${selectedCompany.companyId}`);
       setForm(f => ({ ...f, clientCode: String(res.data.nextId) }));
     } catch {
       setForm(f => ({ ...f, clientCode: '100001' }));
-    } finally {
-      setIdLoading(false);
-    }
-  }, [selectedCompany]);
+    } finally { setIdLoading(false); }
+  }, [selectedCompany, isEdit]);
 
   useEffect(() => { fetchNextId(); }, [fetchNextId]);
+
+  /* Load existing client data in edit mode */
+  useEffect(() => {
+    if (!isEdit) return;
+    setLoadingData(true);
+    axios.get(`/api/clients/${clientId}?companyId=${selectedCompany?.companyId || ''}`)
+      .then(res => {
+        const c   = res.data;
+        const cp0 = (c.contactPersons || [])[0] || {};
+        setForm(f => ({
+          ...f,
+          clientCode:    String(c.clientId || clientId),
+          clientName:    c.companyName || c.clientName || '',
+          businessType:  c.businessType  || '',
+          industryType:  c.industryType  || '',
+          pan:           c.pan           || '',
+          gst:           c.gstin         || c.gst || '',
+          cin:           c.cin           || '',
+          msme:          c.msme          || '',
+          contactPerson: cp0.name        || c.contactPerson || '',
+          mobile:        cp0.mobileNumber|| c.mobile       || '',
+          altMobile:     cp0.altMobile   || c.altMobile    || '',
+          email:         cp0.email       || c.email        || '',
+          website:       c.website       || '',
+          landline:      c.landline      || '',
+          billingAddr:   c.address       || c.billingAddr  || '',
+          shippingAddr:  c.shippingAddr  || '',
+          state:         c.state         || '',
+          city:          c.city          || '',
+          pincode:       c.pincode       || '',
+          country:       c.country       || 'India',
+          gstRegistered: c.gstRegistered !== undefined ? c.gstRegistered : true,
+          gstType:       c.gstType       || 'Regular',
+          tdsApplicable: c.tdsApplicable || false,
+          bankName:      c.bankName      || '',
+          accountHolder: c.accountHolder || '',
+          accountNo:     c.accountNo     || '',
+          ifsc:          c.ifsc          || '',
+          branch:        c.branch        || '',
+          upi:           c.upi           || '',
+          paymentTerms:  c.paymentTerms  || '30 Days',
+          creditLimit:   c.creditLimit   || '',
+          paymentModes:  c.paymentModes  || [],
+          currency:      c.currency      || 'INR',
+          category:      c.category      || 'Regular',
+          salesPerson:   c.salesPerson   || '',
+          remarks:       c.remarks       || '',
+          status:        c.status        || 'approved',
+        }));
+        setDocuments(
+          (c.documents || []).length > 0
+            ? (c.documents).map(d => ({ id: Math.random(), name: d.name || '', file: null, fileName: d.fileName || null }))
+            : [{ id: 1, name: '', file: null }]
+        );
+      })
+      .catch(err => setToast({ type: 'error', msg: 'Failed to load client: ' + err.message }))
+      .finally(() => setLoadingData(false));
+  }, [clientId, isEdit, selectedCompany]);
 
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
     setErrs(e => ({ ...e, [k]: '' }));
     if (k === 'gst' && v.length === 15) {
-      // autofill state from GST code
       const code = parseInt(v.slice(0, 2), 10);
-      const stateMap = {
-        1:'Jammu and Kashmir',2:'Himachal Pradesh',3:'Punjab',4:'Chandigarh',
-        5:'Uttarakhand',6:'Haryana',7:'Delhi',8:'Rajasthan',9:'Uttar Pradesh',
-        10:'Bihar',11:'Sikkim',12:'Arunachal Pradesh',13:'Nagaland',14:'Manipur',
-        15:'Mizoram',16:'Tripura',17:'Meghalaya',18:'Assam',19:'West Bengal',
-        20:'Jharkhand',21:'Odisha',22:'Chhattisgarh',23:'Madhya Pradesh',
-        24:'Gujarat',26:'Dadra and Nagar Haveli and Daman and Diu',27:'Maharashtra',
-        28:'Andhra Pradesh',29:'Karnataka',30:'Goa',31:'Lakshadweep',32:'Kerala',
-        33:'Tamil Nadu',34:'Puducherry',35:'Andaman and Nicobar Islands',
-        36:'Telangana',37:'Andhra Pradesh (new)',38:'Ladakh',
-      };
-      if (stateMap[code]) {
-        setForm(f => ({ ...f, state: stateMap[code], gst: v }));
-        setGstWarn(`State auto-filled: ${stateMap[code]}`);
-        setTimeout(() => setGstWarn(''), 3000);
+      const pan  = v.slice(2, 12);                      // chars 3-12 of GST = PAN
+      const updates = { gst: v };
+      if (STATE_GST_MAP[code]) updates.state = STATE_GST_MAP[code];
+      if (pan) updates.pan = pan;
+      setForm(f => ({ ...f, ...updates }));
+      const msgs = [];
+      if (STATE_GST_MAP[code]) msgs.push(`State: ${STATE_GST_MAP[code]}`);
+      if (pan) msgs.push(`PAN: ${pan}`);
+      if (msgs.length) {
+        setGstWarn(`Auto-filled — ${msgs.join(', ')}`);
+        setTimeout(() => setGstWarn(''), 4000);
       }
     }
   };
 
+  const tabHasErr = (id, e) => ({
+    basic:   ['clientName','businessType','pan','gst'],
+    contact: ['contactPerson','mobile','altMobile','email'],
+    address: ['billingAddr','state','city','pincode'],
+    bank:    ['ifsc'],
+    payment: ['paymentModes'],
+  }[id]?.some(f => e[f]) || false);
+
   const validateAll = () => {
     const e = {};
-    if (!form.clientName.trim())  e.clientName = 'Client Name is required';
-    if (!form.businessType)       e.businessType = 'Business Type is required';
-    if (form.pan && !validate.pan(form.pan))   e.pan = 'Invalid PAN (e.g. ABCDE1234F)';
-    if (form.gst && !validate.gst(form.gst))   e.gst = 'Invalid GST (15-char format)';
-    if (!form.contactPerson.trim()) e.contactPerson = 'Contact Person is required';
-    if (!form.mobile)              e.mobile = 'Mobile is required';
-    else if (!validate.mobile(form.mobile)) e.mobile = 'Invalid mobile number';
-    if (form.email && !validate.email(form.email)) e.email = 'Invalid email address';
-    if (form.altMobile && !validate.mobile(form.altMobile)) e.altMobile = 'Invalid mobile number';
-    if (!form.billingAddr.trim()) e.billingAddr = 'Billing Address is required';
-    if (!form.state)              e.state = 'State is required';
-    if (!form.city.trim())        e.city = 'City is required';
-    if (form.pincode && !validate.pin(form.pincode)) e.pincode = 'Invalid pincode';
-    if (form.ifsc && !validate.ifsc(form.ifsc)) e.ifsc = 'Invalid IFSC code (e.g. SBIN0001234)';
+    if (!form.clientName.trim())     e.clientName    = 'Client Name is required';
+    if (!form.businessType)          e.businessType   = 'Business Type is required';
+    if (form.pan && !validators.pan(form.pan))   e.pan  = 'Invalid PAN (e.g. ABCDE1234F)';
+    if (form.gst && !validators.gst(form.gst))   e.gst  = 'Invalid GST (15-char format)';
+    if (!form.contactPerson.trim())  e.contactPerson  = 'Contact Person is required';
+    if (!form.mobile)                e.mobile         = 'Mobile is required';
+    else if (!validators.mobile(form.mobile)) e.mobile = 'Invalid mobile (10 digits, starts 6-9)';
+    if (form.altMobile && !validators.mobile(form.altMobile)) e.altMobile = 'Invalid mobile number';
+    if (form.email && !validators.email(form.email)) e.email = 'Invalid email address';
+    if (!form.billingAddr.trim())    e.billingAddr    = 'Billing Address is required';
+    if (!form.state)                 e.state          = 'State is required';
+    if (!form.city.trim())           e.city           = 'City is required';
+    if (form.pincode && !validators.pin(form.pincode)) e.pincode = 'Invalid pincode';
+    if (form.ifsc && !validators.ifsc(form.ifsc))    e.ifsc    = 'Invalid IFSC (e.g. SBIN0001234)';
     if (form.paymentModes.length === 0) e.paymentModes = 'Select at least one payment mode';
     setErrs(e);
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    const status = form.status || (isEdit ? 'approved' : 'pending');
     if (!validateAll()) {
-      // jump to first tab with error
-      const tabFields = {
-        basic:   ['clientName','businessType','pan','gst'],
-        contact: ['contactPerson','mobile','email','altMobile'],
-        address: ['billingAddr','state','city','pincode'],
-        bank:    ['ifsc'],
-        payment: ['paymentModes'],
-      };
-      for (const [t, fields] of Object.entries(tabFields)) {
-        if (fields.some(f => errs[f])) { setTab(t); break; }
-      }
+      const errTab = TABS.find(t => tabHasErr(t.id, errs));
+      if (errTab) setTab(errTab.id);
       setToast({ type: 'error', msg: 'Please fix the highlighted errors before saving.' });
       return;
     }
-    setToast({ type: 'success', msg: `Client "${form.clientName}" (${form.clientCode}) created successfully!` });
+    if (!selectedCompany) {
+      setToast({ type: 'error', msg: 'No company selected. Please select a company first.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      const s = (v) => (v === undefined || v === null) ? '' : String(v);
+      fd.append('companyId',      s(selectedCompany.companyId));
+      fd.append('clientName',     s(form.clientName));
+      fd.append('businessType',   s(form.businessType));
+      fd.append('industryType',   s(form.industryType));
+      fd.append('pan',            s(form.pan));
+      fd.append('gst',            s(form.gst));
+      fd.append('gstType',        s(form.gstType));
+      fd.append('gstRegistered',  s(form.gstRegistered));
+      fd.append('cin',            s(form.cin));
+      fd.append('msme',           s(form.msme));
+      fd.append('tdsApplicable',  s(form.tdsApplicable));
+      fd.append('contactPerson',  s(form.contactPerson));
+      fd.append('mobile',         s(form.mobile));
+      fd.append('altMobile',      s(form.altMobile));
+      fd.append('email',          s(form.email));
+      fd.append('website',        s(form.website));
+      fd.append('landline',       s(form.landline));
+      fd.append('billingAddr',    s(form.billingAddr));
+      fd.append('shippingAddr',   s(form.shippingAddr));
+      fd.append('state',          s(form.state));
+      fd.append('city',           s(form.city));
+      fd.append('pincode',        s(form.pincode));
+      fd.append('country',        s(form.country));
+      fd.append('bankName',       s(form.bankName));
+      fd.append('accountHolder',  s(form.accountHolder));
+      fd.append('accountNo',      s(form.accountNo));
+      fd.append('ifsc',           s(form.ifsc));
+      fd.append('branch',         s(form.branch));
+      fd.append('upi',            s(form.upi));
+      fd.append('paymentTerms',   s(form.paymentTerms));
+      fd.append('creditLimit',    s(form.creditLimit));
+      fd.append('currency',       s(form.currency));
+      fd.append('category',       s(form.category));
+      fd.append('salesPerson',    s(form.salesPerson));
+      fd.append('remarks',        s(form.remarks));
+      fd.append('status',         status);
+      fd.append('paymentModes',   JSON.stringify(form.paymentModes || []));
+
+      // Document metadata + files
+      const docMeta = documents.filter(d => d.name).map(d => ({ name: d.name }));
+      fd.append('documentsJson', JSON.stringify(docMeta));
+      documents.forEach(doc => { if (doc.file) fd.append('documents', doc.file); });
+
+      if (isEdit) {
+        await axios.put(`/api/clients/${clientId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setToast({ type: 'success', msg: `Client "${form.clientName}" (${clientId}) updated successfully!` });
+        setTimeout(() => navigate('/client/view'), 1800);
+      } else {
+        const res = await axios.post('/api/clients', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setToast({ type: 'success', msg: `Client "${form.clientName}" (${res.data.clientId}) saved successfully!` });
+        setTimeout(() => handleReset(), 1800);
+      }
+    } catch (err) {
+      setToast({ type: 'error', msg: 'Save failed: ' + (err.response?.data?.error || err.message) });
+    } finally { setSaving(false); }
   };
 
-  const handleReset = () => { setForm({ ...INIT }); setErrs({}); fetchNextId(); };
+  const handleReset = () => { setForm({ ...INIT }); setErrs({}); setDocuments([{ id: 1, name: '', file: null }]); setTab('basic'); fetchNextId(); };
 
-  /* ── render ──────────────────────────────────────────── */
+  const tabIdx = TABS.findIndex(t => t.id === tab);
+
+  /* ── focus / blur helpers ── */
+  const onFocus = e => { e.target.style.borderColor = P; };
+  const onBlur  = (err) => e => { e.target.style.borderColor = err ? '#EF4444' : '#9CA3AF'; };
+
+  /* ── SO-style input / select styles ── */
+  const ri = (err=false) => ({
+    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    fontSize:12, fontFamily:F, color:'#111827', background:err?'#FFF5F5':'#fff',
+    outline:'none', width:'100%', boxSizing:'border-box',
+  });
+  const rs = (err=false) => ({
+    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    fontSize:12, fontFamily:F, color:'#111827', background:'#fff',
+    outline:'none', cursor:'pointer', width:'100%', boxSizing:'border-box',
+  });
+
+
+  if (loadingData) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300, flexDirection:'column', gap:12, fontFamily:F }}>
+        <div style={{ width:36, height:36, border:'3px solid #E5E5E5', borderTopColor:P, borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <div style={{ fontSize:13, color:'#64748b' }}>Loading client data…</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ fontFamily: "'72', 'Inter', Arial, Helvetica, sans-serif", color: '#32363A' }}>
-      <style>{`@keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
-
+    <div style={{ fontFamily: F, background: BG, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
 
-      {/* ── Page Header ── */}
-      <div style={{ background: '#354A5E', borderRadius: '6px 6px 0 0', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '11px', color: '#A8C4E0', letterSpacing: '0.6px', marginBottom: '2px' }}>CLIENT MASTER MANAGEMENT</div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>New Client Registration</div>
+      {/* ── Import Result Modal ── */}
+      {importResult && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9998, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:560, width:'90%', maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:F }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ margin:0, fontSize:16, color:'#1E293B' }}>Import Results</h3>
+              <button onClick={() => setImportResult(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:16 }}>
+              {[
+                { l:'Total Rows', v:importResult.total,    c:'#1E293B', bg:'#F1F5F9', bc:'#D1D5DB' },
+                { l:'Imported',   v:importResult.imported, c:'#059669', bg:'#ECFDF5', bc:'#A7F3D0' },
+                { l:'Failed',     v:importResult.failed,   c:'#DC2626', bg:'#FEF2F2', bc:'#FECACA' },
+              ].map(s => (
+                <div key={s.l} style={{ padding:'10px 14px', background:s.bg, borderRadius:8, border:`1px solid ${s.bc}`, textAlign:'center' }}>
+                  <div style={{ fontSize:24, fontWeight:700, color:s.c }}>{s.v}</div>
+                  <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            {importResult.imported > 0 && (
+              <div style={{ padding:'8px 12px', background:'#ECFDF5', borderRadius:6, marginBottom:12, fontSize:12, color:'#065f46', fontWeight:600 }}>
+                ✅ {importResult.imported} client(s) created and sent for approval. Check the <strong>Pending</strong> tab to approve them.
+              </div>
+            )}
+            {importResult.errors?.length > 0 && (
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:'#DC2626', marginBottom:6 }}>Failed Rows:</div>
+                <div style={{ maxHeight:200, overflowY:'auto', border:'1px solid #FECACA', borderRadius:6 }}>
+                  {importResult.errors.map((e, i) => (
+                    <div key={i} style={{ padding:'5px 10px', fontSize:11.5, borderBottom:'1px solid #FEE2E2', color:'#7F1D1D', background: i%2===0?'#FFF5F5':'#FEF2F2' }}>
+                      <span style={{ fontWeight:700 }}>Row {e.row}:</span> {e.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={() => setImportResult(null)} style={{ marginTop:16, width:'100%', padding:'8px 0', background:'#2563EB', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:F }}>Close</button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={handleReset} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: 'white', padding: '7px 18px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>Cancel</button>
-          <button onClick={handleSave} style={{ background: '#0070F2', border: 'none', color: 'white', padding: '7px 20px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}
-            onMouseEnter={e => e.currentTarget.style.background = '#0064DB'}
-            onMouseLeave={e => e.currentTarget.style.background = '#0070F2'}><I.Save /> Save Client</button>
-        </div>
-      </div>
+      )}
 
-      {/* ── Tab Bar ── */}
-      <div style={{ background: '#fff', borderLeft: '1px solid #E5E5E5', borderRight: '1px solid #E5E5E5', display: 'flex', overflowX: 'auto', borderBottom: '2px solid #E5E5E5' }}>
+      {/* ── Excel Import Toolbar (create mode only) ── */}
+      {!isEdit && (
+        <div style={{ flexShrink:0, background:'#EFF6FF', borderBottom:'1px solid #BFDBFE', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11.5, color:'#1D4ED8', fontFamily:F, fontWeight:500, flex:1 }}>
+            📊 Bulk import clients from Excel — download the sample template, fill it in, then upload.
+          </span>
+          <button type="button" onClick={downloadSample} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:'pointer', background:'#fff', border:'1px solid #93C5FD', color:'#1D4ED8', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4 }}>
+            📥 Download Sample
+          </button>
+          <button type="button" onClick={() => xlInputRef.current?.click()} disabled={importing} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:importing?'not-allowed':'pointer', background:importing?'#93C5FD':'#2563EB', border:'none', color:'#fff', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4, opacity:importing?0.7:1 }}>
+            {importing ? '⏳ Importing…' : '📤 Import Excel'}
+          </button>
+          <input type="file" ref={xlInputRef} accept=".xlsx,.xls" style={{ display:'none' }} onChange={handleImportFile} />
+        </div>
+      )}
+
+      {/* ── Tab Bar — flat horizontal, same as Sales Order ── */}
+      <div style={{ flexShrink:0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
         {TABS.map(t => {
-          const active = tab === t.id;
-          const hasErr = {
-            basic:   ['clientName','businessType','pan','gst'].some(f => errs[f]),
-            contact: ['contactPerson','mobile','email','altMobile'].some(f => errs[f]),
-            address: ['billingAddr','state','city','pincode'].some(f => errs[f]),
-            bank:    ['ifsc'].some(f => errs[f]),
-            payment: ['paymentModes'].some(f => errs[f]),
-          }[t.id];
+          const isActive = tab === t.id;
+          const hasErr   = Object.keys(errs).length > 0 && tabHasErr(t.id, errs);
           return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              display: 'flex', alignItems: 'center', gap: '7px', padding: '10px 18px',
-              cursor: 'pointer', background: active ? '#fff' : '#F5F6F7',
-              border: 'none', borderBottom: active ? '3px solid #0070F2' : '3px solid transparent',
-              borderRight: '1px solid #E5E5E5',
-              color: hasErr ? '#BB0000' : active ? '#0070F2' : '#6A6D70',
-              fontSize: '13px', fontWeight: active ? 600 : 400, fontFamily: 'inherit',
-              whiteSpace: 'nowrap', marginBottom: '-2px', transition: 'color 0.1s',
-              position: 'relative',
-            }}>
-              <span style={{ opacity: active ? 1 : 0.6 }}>{t.icon}</span>
+              display:'flex', alignItems:'center', justifyContent:'center', gap:5,
+              flex:1, height:36, padding:'0 6px', cursor:'pointer',
+              background: isActive ? '#DBEAFE' : 'transparent',
+              border:'none', borderBottom: hasErr ? '2px solid #EF4444' : isActive ? `2px solid ${P}` : '2px solid transparent',
+              color: hasErr ? '#DC2626' : isActive ? P : '#111827',
+              fontSize:11.5, fontWeight: isActive ? 700 : 500, fontFamily:F,
+              whiteSpace:'nowrap', transition:'all 0.12s', marginBottom:-2, position:'relative',
+            }}
+            onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background='#EFF6FF';e.currentTarget.style.color=PD;} }}
+            onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color=hasErr?'#DC2626':'#111827';} }}>
+              {hasErr && <span style={{ position:'absolute', top:4, right:4, width:6, height:6, borderRadius:'50%', background:'#EF4444' }} />}
+              <span style={{fontSize:14}}>{t.icon}</span>
               {t.label}
-              {hasErr && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#BB0000', position: 'absolute', top: '8px', right: '8px' }} />}
             </button>
           );
         })}
       </div>
 
-      {/* ── Tab Content ── */}
-      <div style={{ background: '#F5F6F7', border: '1px solid #E5E5E5', borderTop: 'none', borderRadius: '0 0 6px 6px', padding: '20px', minHeight: '460px' }}>
+      {/* ── Form Body ── */}
+      <div style={{ flex:1, overflowY:'auto', padding:'12px 14px', background:'#F5F7FA' }}>
 
-        {/* ── TAB 1: Basic Information ── */}
+        {/* ══ TAB 1: Basic Information ══ */}
         {tab === 'basic' && (
-          <>
-            <div style={s.card}>
-              <div style={s.sectionHead}>Client Identity</div>
-              <div style={s.grid2}>
-                <FInput label="Client Name" req value={form.clientName} onChange={v => set('clientName', v)} placeholder="e.g. ABC Pvt Ltd" err={errs.clientName} />
-                <div>
-                  <label style={s.label}>Client ID <span style={s.req}>*</span></label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      value={idLoading ? 'Loading…' : form.clientCode}
-                      readOnly
-                      style={{ ...s.input(false, false), flex: 1, fontFamily: 'monospace', letterSpacing: '2px', fontWeight: 700, fontSize: '15px', background: '#F0F4F8', color: '#0070F2', cursor: 'default' }}
-                    />
-                    <button onClick={fetchNextId} title="Refresh ID" style={{ padding: '7px 12px', background: '#EAF1FB', border: '1px solid #A9CBF4', color: '#0070F2', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>↻</button>
-                  </div>
-                  <div style={s.hint}>Auto-assigned by system · starts at 100001</div>
-                </div>
-                <FSelect label="Business Type" req value={form.businessType} onChange={v => set('businessType', v)}
-                  options={['Proprietorship','Partnership','Private Limited','Public Limited','LLP','Government','Individual','Trust / NGO','HUF']} err={errs.businessType} />
-                <FSelect label="Industry Type" value={form.industryType} onChange={v => set('industryType', v)} options={INDUSTRY_TYPES} />
-              </div>
-            </div>
-
-            <div style={s.card}>
-              <div style={s.sectionHead}>Tax Identity</div>
-              <div style={s.grid2}>
-                <FInput label="PAN Number" value={form.pan} onChange={v => set('pan', v)} placeholder="ABCDE1234F"
-                  err={errs.pan} hint="Format: 5 letters, 4 digits, 1 letter" maxLength={10} upper />
-                <div>
-                  <FInput label="GST Number" value={form.gst} onChange={v => set('gst', v)} placeholder="22AAAAA0000A1Z5"
-                    err={errs.gst} hint="15-character GST Identification Number" maxLength={15} upper />
-                  {gstWarn && <div style={{ fontSize: '11px', color: '#188918', marginTop: '3px', fontWeight: 600 }}>✓ {gstWarn}</div>}
-                </div>
-                <FInput label="CIN Number" value={form.cin} onChange={v => set('cin', v)} placeholder="U74999MH2020PTC123456" hint="Corporate Identity Number (optional)" upper />
-                <FInput label="MSME Number" value={form.msme} onChange={v => set('msme', v)} placeholder="UDYAM-XX-00-0000000" hint="Optional – for MSME-registered businesses" />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── TAB 2: Contact Details ── */}
-        {tab === 'contact' && (
-          <div style={s.card}>
-            <div style={s.sectionHead}>Contact Information</div>
-            <div style={s.grid2}>
-              <FInput label="Contact Person Name" req value={form.contactPerson} onChange={v => set('contactPerson', v)} placeholder="Full name" err={errs.contactPerson} />
-              <FInput label="Mobile Number" req value={form.mobile} onChange={v => set('mobile', v.replace(/\D/, ''))} placeholder="10-digit mobile" maxLength={10} err={errs.mobile} hint="Indian mobile: starts with 6-9" />
-              <FInput label="Alternate Mobile" value={form.altMobile} onChange={v => set('altMobile', v.replace(/\D/, ''))} placeholder="Alternate number" maxLength={10} err={errs.altMobile} />
-              <FInput label="Email ID" type="email" value={form.email} onChange={v => set('email', v)} placeholder="example@company.com" err={errs.email} />
-              <FInput label="Landline Number" value={form.landline} onChange={v => set('landline', v)} placeholder="STD + Number (e.g. 0222-1234567)" />
-              <FInput label="Website" value={form.website} onChange={v => set('website', v)} placeholder="https://www.company.com" />
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 3: Address Details ── */}
-        {tab === 'address' && (
-          <>
-            <div style={s.card}>
-              <div style={s.sectionHead}>Billing Address</div>
-              <FTextarea label="Billing Address" req value={form.billingAddr} onChange={v => set('billingAddr', v)} placeholder="Door no, Street, Area..." err={errs.billingAddr} />
-              <div style={{ height: '14px' }} />
-              <div style={s.grid3}>
-                <FSelect label="State" req value={form.state} onChange={v => set('state', v)} options={STATES} err={errs.state} />
-                <FInput label="City" req value={form.city} onChange={v => set('city', v)} placeholder="City" err={errs.city} />
-                <FInput label="Pincode" value={form.pincode} onChange={v => set('pincode', v.replace(/\D/, ''))} placeholder="6-digit" maxLength={6} err={errs.pincode} />
-              </div>
-              <div style={{ marginTop: '14px' }}>
-                <FInput label="Country" value={form.country} onChange={v => set('country', v)} />
-              </div>
-            </div>
-            <div style={s.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <div style={s.sectionHead}>Shipping Address</div>
-                <button onClick={() => set('shippingAddr', form.billingAddr)} style={{ fontSize: '12px', color: '#0070F2', background: '#EAF1FB', border: '1px solid #A9CBF4', borderRadius: '4px', padding: '4px 12px', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
-                  Copy from Billing
-                </button>
-              </div>
-              <FTextarea label="Shipping Address" value={form.shippingAddr} onChange={v => set('shippingAddr', v)} placeholder="Door no, Street, Area... (leave blank if same as billing)" />
-            </div>
-          </>
-        )}
-
-        {/* ── TAB 4: Tax & Compliance ── */}
-        {tab === 'tax' && (
-          <div style={s.card}>
-            <div style={s.sectionHead}>GST & Tax Settings</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '600px' }}>
-              <div style={{ padding: '14px 16px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderLeft: '3px solid #0070F2', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST Registration</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px', color: '#32363A' }}>GST Registered</span>
-                  <Toggle id="gstReg" checked={form.gstRegistered} onChange={e => set('gstRegistered', e.target.checked)} />
-                </div>
-                {form.gstRegistered && (
-                  <div style={{ marginTop: '12px' }}>
-                    <label style={s.label}>GST Type</label>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      {['Regular', 'Composition', 'Unregistered', 'Consumer', 'SEZ'].map(t => (
-                        <label key={t} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                          <input type="radio" name="gstType" value={t} checked={form.gstType === t} onChange={() => set('gstType', t)} style={{ accentColor: '#0070F2' }} />
-                          {t}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ padding: '14px 16px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderLeft: '3px solid #E9730C', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TDS Applicability</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px', color: '#32363A' }}>TDS Applicable</span>
-                  <Toggle id="tds" checked={form.tdsApplicable} onChange={e => set('tdsApplicable', e.target.checked)} />
-                </div>
-              </div>
-
-              <div style={s.grid2}>
-                <FileUpload label="PAN Card Upload" hint="PDF, JPG, PNG – max 2MB" />
-                <FileUpload label="GST Certificate Upload" hint="PDF, JPG, PNG – max 2MB" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 5: Banking Details ── */}
-        {tab === 'bank' && (
-          <div style={s.card}>
-            <div style={s.sectionHead}>Bank Account Information</div>
-            <div style={s.grid2}>
-              <FSelect label="Bank Name" value={form.bankName} onChange={v => set('bankName', v)}
-                options={['State Bank of India','HDFC Bank','ICICI Bank','Axis Bank','Punjab National Bank','Bank of Baroda','Canara Bank','Union Bank of India','Kotak Mahindra Bank','IndusInd Bank','Yes Bank','IDBI Bank','Federal Bank','South Indian Bank','Other']} />
-              <FInput label="Account Holder Name" value={form.accountHolder} onChange={v => set('accountHolder', v)} placeholder="As per bank records" />
-              <FInput label="Account Number" value={form.accountNo} onChange={v => set('accountNo', v.replace(/\D/, ''))} placeholder="Account number" />
-              <div>
-                <FInput label="IFSC Code" value={form.ifsc} onChange={v => set('ifsc', v)} placeholder="e.g. SBIN0001234" maxLength={11} err={errs.ifsc} upper hint="11-character code" />
-                {form.ifsc.length === 11 && validate.ifsc(form.ifsc) && (
-                  <div style={{ fontSize: '11px', color: '#188918', marginTop: '3px', fontWeight: 600 }}>✓ Valid IFSC format</div>
-                )}
-              </div>
-              <FInput label="Branch Name" value={form.branch} onChange={v => set('branch', v)} placeholder="Branch name and city" />
-              <FInput label="UPI ID" value={form.upi} onChange={v => set('upi', v)} placeholder="name@bank (optional)" hint="Optional — for UPI-based payments" />
-            </div>
-            <div style={{ marginTop: '16px', padding: '10px 14px', background: '#FEF3CD', border: '1px solid #F6C244', borderLeft: '3px solid #F6C244', borderRadius: '4px', fontSize: '12px', color: '#7A4F01', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <I.Alert />
-              <span>Bank account details will be used for payment processing. Please verify all information carefully before saving.</span>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 6: Payment & Terms ── */}
-        {tab === 'payment' && (
-          <div style={s.card}>
-            <div style={s.sectionHead}>Payment Configuration</div>
-            <div style={s.grid2}>
-              <FSelect label="Payment Terms" req value={form.paymentTerms} onChange={v => set('paymentTerms', v)}
-                options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery']} />
-              <div>
-                <label style={s.label}>Currency</label>
-                <select value={form.currency} onChange={e => set('currency', e.target.value)} style={s.select(false)}>
-                  <option value="INR">INR — Indian Rupee ₹</option>
-                  <option value="USD">USD — US Dollar $</option>
-                  <option value="EUR">EUR — Euro €</option>
-                  <option value="GBP">GBP — British Pound £</option>
-                  <option value="AED">AED — UAE Dirham</option>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="👤  Client Identity"/>
+              <FR label="Client Name" req>
+                <input style={ri(!!errs.clientName)} value={form.clientName} onChange={e=>set('clientName',e.target.value)} placeholder="e.g. ABC Pvt Ltd" onFocus={onFocus} onBlur={onBlur(errs.clientName)}/>
+                {errs.clientName&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}
+              </FR>
+              <FR label="Client ID">
+                <input readOnly value={idLoading?'Loading…':form.clientCode} style={{...ri(),color:P,fontWeight:700,background:'#F8FAFF',width:120}}/>
+                <button type="button" onClick={fetchNextId} style={{height:24,width:24,borderRadius:4,border:'1px solid #D1D5DB',background:'#EFF6FF',color:P,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>↻</button>
+              </FR>
+              <FR label="Business Type" req>
+                <select style={rs(!!errs.businessType)} value={form.businessType} onChange={e=>set('businessType',e.target.value)} onFocus={onFocus} onBlur={onBlur(errs.businessType)}>
+                  <option value="">— Select —</option>
+                  {['Proprietorship','Partnership','Private Limited','Public Limited','LLP','Government','Individual','Trust / NGO','HUF'].map(o=><option key={o} value={o}>{o}</option>)}
                 </select>
-              </div>
-              <div>
-                <label style={s.label}>Credit Limit ({form.currency})</label>
-                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #BBBCBD', borderRadius: '4px', overflow: 'hidden', background: '#FAFAFA' }}>
-                  <span style={{ padding: '7px 10px', background: '#EEF3F8', borderRight: '1px solid #E5E5E5', fontSize: '13px', color: '#354A5E', fontWeight: 600 }}>₹</span>
-                  <input value={form.creditLimit} onChange={e => set('creditLimit', e.target.value.replace(/\D/, ''))}
-                    placeholder="0" style={{ flex: 1, padding: '7px 10px', border: 'none', outline: 'none', background: 'transparent', fontSize: '13px', fontFamily: 'inherit' }} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '18px' }}>
-              <label style={s.label}>Payment Modes <span style={s.req}>*</span></label>
-              <MultiCheck
-                options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','Credit Card']}
-                selected={form.paymentModes}
-                onChange={v => set('paymentModes', v)}
-              />
-              {errs.paymentModes && <div style={s.err}>{errs.paymentModes}</div>}
-            </div>
-
-            {/* Summary card */}
-            {(form.paymentTerms || form.creditLimit) && (
-              <div style={{ marginTop: '20px', padding: '14px', background: '#EAF1FB', border: '1px solid #A9CBF4', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Summary</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                  <SummaryCell label="Terms" value={form.paymentTerms} />
-                  <SummaryCell label="Credit Limit" value={form.creditLimit ? `₹ ${Number(form.creditLimit).toLocaleString('en-IN')}` : '—'} />
-                  <SummaryCell label="Currency" value={form.currency} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── TAB 7: Additional Details ── */}
-        {tab === 'extra' && (
-          <div style={s.card}>
-            <div style={s.sectionHead}>Classification & Assignment</div>
-            <div style={s.grid2}>
-              <div>
-                <label style={s.label}>Client Category</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[
-                    { val: 'Regular',    color: '#0070F2', bg: '#EAF1FB', border: '#A9CBF4' },
-                    { val: 'VIP',        color: '#E9730C', bg: '#FEF3E2', border: '#F6C244' },
-                    { val: 'Blacklisted',color: '#BB0000', bg: '#FFEBEB', border: '#F5B8B8' },
-                  ].map(opt => (
-                    <button key={opt.val} onClick={() => set('category', opt.val)} style={{
-                      flex: 1, padding: '8px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1px solid ${form.category === opt.val ? opt.color : '#E5E5E5'}`,
-                      background: form.category === opt.val ? opt.bg : '#FAFAFA',
-                      color: form.category === opt.val ? opt.color : '#6A6D70',
-                      fontSize: '12px', fontWeight: form.category === opt.val ? 700 : 400,
-                      transition: 'all 0.12s',
-                    }}>{opt.val}</button>
+              </FR>
+              <FR label="Industry Type">
+                <select style={rs()} value={form.industryType} onChange={e=>set('industryType',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Select —</option>
+                  {INDUSTRY_TYPES.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Sales Person">
+                <select style={rs()} value={form.salesPerson} onChange={e=>set('salesPerson',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Assign —</option>
+                  {SALES_PERSONS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Category">
+                <div style={{display:'flex',gap:6}}>
+                  {[{v:'Regular',c:'#2563EB',bg:'#EFF6FF'},{v:'VIP',c:'#D97706',bg:'#FEF3C7'},{v:'Blacklisted',c:'#DC2626',bg:'#FEF2F2'}].map(o=>(
+                    <button key={o.v} type="button" onClick={()=>set('category',o.v)} style={{
+                      padding:'2px 10px',borderRadius:4,border:`1px solid ${form.category===o.v?o.c:'#D1D5DB'}`,
+                      background:form.category===o.v?o.bg:'#fff',color:form.category===o.v?o.c:'#6B7280',
+                      fontSize:11,fontWeight:form.category===o.v?700:400,cursor:'pointer',fontFamily:F
+                    }}>{o.v}</button>
                   ))}
                 </div>
-                {form.category === 'Blacklisted' && (
-                  <div style={{ fontSize: '11px', color: '#BB0000', marginTop: '6px', fontWeight: 600, display: 'flex', gap: '5px', alignItems: 'center' }}>
-                    <I.Alert /> This client is blacklisted — transactions will be blocked.
+              </FR>
+            </VCard>
+
+            <VCard>
+              <PH title="📋  Tax Identity"/>
+              <FR label="PAN Number">
+                <input style={ri(!!errs.pan)} value={form.pan} maxLength={10} onChange={e=>set('pan',e.target.value.toUpperCase())} placeholder="ABCDE1234F" onFocus={onFocus} onBlur={onBlur(errs.pan)}/>
+              </FR>
+              <FR label="GST Number">
+                <div style={{flex:1}}>
+                  <input style={ri(!!errs.gst)} value={form.gst} maxLength={15} onChange={e=>set('gst',e.target.value.toUpperCase())} placeholder="22AAAAA0000A1Z5" onFocus={onFocus} onBlur={onBlur(errs.gst)}/>
+                  {gstWarn&&<div style={{fontSize:10,color:'#10b981',fontWeight:600,fontFamily:F,marginTop:2}}>✓ {gstWarn}</div>}
+                </div>
+              </FR>
+              <FR label="CIN Number">
+                <input style={ri()} value={form.cin} onChange={e=>set('cin',e.target.value.toUpperCase())} placeholder="U74999MH2020PTC123456" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="MSME / Udyam">
+                <input style={ri()} value={form.msme} onChange={e=>set('msme',e.target.value.toUpperCase())} placeholder="UDYAM-XX-00-0000000" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="GST Type">
+                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {['Regular','Composition','Unregistered','SEZ'].map(t=>(
+                    <button key={t} type="button" onClick={()=>set('gstType',t)} style={{
+                      padding:'2px 8px',borderRadius:4,border:`1px solid ${form.gstType===t?P:'#D1D5DB'}`,
+                      background:form.gstType===t?'#DBEAFE':'#fff',color:form.gstType===t?P:'#6B7280',
+                      fontSize:11,fontWeight:form.gstType===t?700:400,cursor:'pointer',fontFamily:F
+                    }}>{t}</button>
+                  ))}
+                </div>
+              </FR>
+              <FR label="GST Registered">
+                <Toggle id="gstReg" checked={form.gstRegistered} onChange={e=>set('gstRegistered',e.target.checked)}/>
+              </FR>
+              <FR label="TDS Applicable">
+                <Toggle id="tds" checked={form.tdsApplicable} onChange={e=>set('tdsApplicable',e.target.checked)}/>
+              </FR>
+            </VCard>
+          </div>
+        )}
+
+        {/* ══ TAB 2: Contact Details ══ */}
+        {tab === 'contact' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="📞  Contact Person"/>
+              <FR label="Contact Person" req>
+                <input style={ri(!!errs.contactPerson)} value={form.contactPerson} onChange={e=>set('contactPerson',e.target.value)} placeholder="Full name" onFocus={onFocus} onBlur={onBlur(errs.contactPerson)}/>
+                {errs.contactPerson&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}
+              </FR>
+              <FR label="Mobile Number" req>
+                <input style={ri(!!errs.mobile)} value={form.mobile} maxLength={10} onChange={e=>set('mobile',e.target.value.replace(/\D/,''))} placeholder="10-digit mobile" onFocus={onFocus} onBlur={onBlur(errs.mobile)}/>
+                {errs.mobile&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}
+              </FR>
+              <FR label="Alternate Mobile">
+                <input style={ri(!!errs.altMobile)} value={form.altMobile} maxLength={10} onChange={e=>set('altMobile',e.target.value.replace(/\D/,''))} placeholder="Alternate number" onFocus={onFocus} onBlur={onBlur(errs.altMobile)}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📡  Communication"/>
+              <FR label="Email ID">
+                <input type="email" style={ri(!!errs.email)} value={form.email} onChange={e=>set('email',e.target.value)} placeholder="contact@company.com" onFocus={onFocus} onBlur={onBlur(errs.email)}/>
+              </FR>
+              <FR label="Landline Number">
+                <input style={ri()} value={form.landline} onChange={e=>set('landline',e.target.value)} placeholder="STD + Number" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="Website">
+                <input style={ri()} value={form.website} onChange={e=>set('website',e.target.value)} placeholder="https://www.company.com" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
+          </div>
+        )}
+
+        {/* ══ TAB 3: Address Details ══ */}
+        {tab === 'address' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="🏠  Billing Address"/>
+              <div style={{display:'flex',alignItems:'flex-start',borderBottom:'1px solid #CBD5E1',padding:'4px 6px',background:'#fff',minHeight:64}}>
+                <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:140,maxWidth:140,padding:'2px 8px 0 0',textAlign:'left',flexShrink:0}}>Address <span style={{color:'#DC2626'}}>*</span></label>
+                <textarea value={form.billingAddr} onChange={e=>set('billingAddr',e.target.value)} rows={3} placeholder="Door no, Street, Area, District…"
+                  style={{flex:1,padding:'2px 6px',border:'none',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'transparent',boxSizing:'border-box',minHeight:60}}/>
+              </div>
+              <FR label="State" req>
+                <select style={rs(!!errs.state)} value={form.state} onChange={e=>set('state',e.target.value)} onFocus={onFocus} onBlur={onBlur(errs.state)}>
+                  <option value="">— Select State —</option>
+                  {STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </FR>
+              <FR label="City" req>
+                <input style={ri(!!errs.city)} value={form.city} onChange={e=>set('city',e.target.value)} placeholder="City" onFocus={onFocus} onBlur={onBlur(errs.city)}/>
+              </FR>
+              <FR label="Pincode">
+                <input style={ri(!!errs.pincode)} value={form.pincode} maxLength={6} onChange={e=>set('pincode',e.target.value.replace(/\D/,''))} placeholder="6-digit pincode" onFocus={onFocus} onBlur={onBlur(errs.pincode)}/>
+              </FR>
+              <FR label="Country">
+                <input style={ri()} value={form.country} onChange={e=>set('country',e.target.value)} onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,padding:'6px 12px',letterSpacing:0.2,borderBottom:'1px solid #D1D5DB',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span>🚚  Shipping Address</span>
+                <button type="button" onClick={()=>set('shippingAddr',form.billingAddr)} style={{padding:'2px 10px',borderRadius:4,border:'1px solid #D1D5DB',background:'#EFF6FF',color:P,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:F}}>📋 Copy Billing</button>
+              </div>
+              <div style={{padding:'8px 6px',background:'#fff'}}>
+                <textarea value={form.shippingAddr} onChange={e=>set('shippingAddr',e.target.value)} rows={8} placeholder="Leave blank if same as billing address…"
+                  style={{width:'100%',padding:'6px 8px',border:'1px solid #9CA3AF',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'#fff',boxSizing:'border-box',borderRadius:4,minHeight:160}}
+                  onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor='#9CA3AF'}/>
+              </div>
+            </VCard>
+          </div>
+        )}
+
+        {/* ══ TAB 4: Tax & Compliance ══ */}
+        {tab === 'tax' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="📋  GST & Compliance"/>
+              <FR label="GST Registered">
+                <Toggle id="gstReg2" checked={form.gstRegistered} onChange={e=>set('gstRegistered',e.target.checked)}/>
+              </FR>
+              <FR label="GST Type">
+                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {['Regular','Composition','Unregistered','Consumer','SEZ'].map(t=>(
+                    <button key={t} type="button" onClick={()=>set('gstType',t)} style={{
+                      padding:'2px 8px',borderRadius:4,border:`1px solid ${form.gstType===t?P:'#D1D5DB'}`,
+                      background:form.gstType===t?'#DBEAFE':'#fff',color:form.gstType===t?P:'#6B7280',
+                      fontSize:11,fontWeight:form.gstType===t?700:400,cursor:'pointer',fontFamily:F
+                    }}>{t}</button>
+                  ))}
+                </div>
+              </FR>
+              <FR label="TDS Applicable">
+                <Toggle id="tds2" checked={form.tdsApplicable} onChange={e=>set('tdsApplicable',e.target.checked)}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📎  Document Uploads"/>
+              <div style={{padding:'8px 10px',display:'flex',flexDirection:'column',gap:8}}>
+                {documents.map((doc,idx)=>(
+                  <div key={doc.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:6,background:'#EFF6FF',border:'1px solid #D1D5DB'}}>
+                    <span style={{fontSize:11,fontWeight:700,color:'#94a3b8',width:18}}>{idx+1}.</span>
+                    <input value={doc.name} placeholder="Document name" onChange={e=>setDocuments(d=>d.map(x=>x.id===doc.id?{...x,name:e.target.value}:x))}
+                      style={{...ri(),flex:1,height:26}}/>
+                    <input type="file" onChange={e=>setDocuments(d=>d.map(x=>x.id===doc.id?{...x,file:e.target.files[0]}:x))}
+                      style={{fontSize:10,fontFamily:F,flex:1}} accept=".pdf,.jpg,.png,.doc,.docx"/>
+                    {documents.length>1&&(
+                      <button type="button" onClick={()=>setDocuments(d=>d.filter(x=>x.id!==doc.id))}
+                        style={{padding:'2px 8px',background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:4,cursor:'pointer',fontSize:11,fontFamily:F}}>✕</button>
+                    )}
                   </div>
-                )}
+                ))}
+                <button type="button" onClick={()=>setDocuments(d=>[...d,{id:Math.max(...d.map(x=>x.id))+1,name:'',file:null}])}
+                  style={{padding:'6px',borderRadius:6,cursor:'pointer',background:'#faf5ff',border:'2px dashed #ddd6fe',color:'#7c3aed',fontSize:11,fontWeight:600,fontFamily:F,display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>+ Add Document</button>
               </div>
-              <FSelect label="Sales Person Assigned" value={form.salesPerson} onChange={v => set('salesPerson', v)} options={SALES_PERSONS} placeholder="— Assign Sales Person —" />
-            </div>
+            </VCard>
+          </div>
+        )}
 
-            <div style={{ marginTop: '16px' }}>
-              <FTextarea label="Remarks" value={form.remarks} onChange={v => set('remarks', v)} placeholder="Internal notes about this client..." rows={4} />
-            </div>
-
-            <div style={{ marginTop: '16px' }}>
-              <FileUpload label="Attachments (Documents, Agreements, etc.)" hint="PDF, DOCX, JPG — max 10MB each" />
-            </div>
-
-            {/* Review card */}
-            <div style={{ marginTop: '20px', padding: '14px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderRadius: '4px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quick Review</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                <SummaryCell label="Client Name"  value={form.clientName  || '—'} />
-                <SummaryCell label="Client Code"  value={form.clientCode  || '—'} />
-                <SummaryCell label="Business"     value={form.businessType || '—'} />
-                <SummaryCell label="Mobile"       value={form.mobile      || '—'} />
-                <SummaryCell label="GST"          value={form.gst         || '—'} />
-                <SummaryCell label="State"        value={form.state       || '—'} />
-                <SummaryCell label="Pay Terms"    value={form.paymentTerms|| '—'} />
-                <SummaryCell label="Category"     value={form.category    || '—'} />
-                <SummaryCell label="Sales Person" value={form.salesPerson || '—'} />
+        {/* ══ TAB 5: Banking Details ══ */}
+        {tab === 'bank' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="🏦  Bank Account"/>
+              <FR label="Bank Name">
+                <select style={rs()} value={form.bankName} onChange={e=>set('bankName',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Select Bank —</option>
+                  {['State Bank of India','HDFC Bank','ICICI Bank','Axis Bank','Punjab National Bank','Bank of Baroda','Canara Bank','Union Bank of India','Kotak Mahindra Bank','IndusInd Bank','Yes Bank','IDBI Bank','Federal Bank','South Indian Bank','Other'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Account Holder">
+                <input style={ri()} value={form.accountHolder} onChange={e=>set('accountHolder',e.target.value)} placeholder="As per bank records" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="Account Number">
+                <input style={ri()} value={form.accountNo} onChange={e=>set('accountNo',e.target.value.replace(/\D/,''))} placeholder="Account number" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="IFSC Code">
+                <div style={{flex:1}}>
+                  <input style={ri(!!errs.ifsc)} value={form.ifsc} maxLength={11} onChange={e=>set('ifsc',e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" onFocus={onFocus} onBlur={onBlur(errs.ifsc)}/>
+                  {form.ifsc.length===11&&validators.ifsc(form.ifsc)&&<div style={{fontSize:10,color:'#10b981',fontWeight:600,fontFamily:F,marginTop:2}}>✓ Valid IFSC</div>}
+                </div>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📋  Branch & UPI"/>
+              <FR label="Branch Name">
+                <input style={ri()} value={form.branch} onChange={e=>set('branch',e.target.value)} placeholder="Branch name and city" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="UPI ID">
+                <input style={ri()} value={form.upi} onChange={e=>set('upi',e.target.value)} placeholder="name@bank" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <div style={{margin:'8px 10px',padding:'8px 12px',background:'#fffbeb',border:'1px solid #fde68a',borderLeft:'4px solid #f59e0b',borderRadius:6,fontSize:11,color:'#92400e',display:'flex',gap:6,fontFamily:F}}>
+                <span>⚠️</span><span>Verify all bank details carefully before saving. Errors may delay client payments.</span>
               </div>
-            </div>
+            </VCard>
+          </div>
+        )}
+
+        {/* ══ TAB 6: Payment & Terms ══ */}
+        {tab === 'payment' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="💳  Payment Terms"/>
+              <FR label="Payment Terms">
+                <select style={rs()} value={form.paymentTerms} onChange={e=>set('paymentTerms',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  {['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Currency">
+                <select style={rs()} value={form.currency} onChange={e=>set('currency',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  {['INR','USD','EUR','GBP','AED'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label={`Credit Limit (${form.currency})`}>
+                <input style={ri()} value={form.creditLimit} onChange={e=>set('creditLimit',e.target.value.replace(/\D/,''))} placeholder="0" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="💰  Payment Modes"/>
+              <div style={{padding:'8px 12px'}}>
+                <MultiCheck options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','Credit Card']} selected={form.paymentModes} onChange={v=>set('paymentModes',v)} error={errs.paymentModes}/>
+              </div>
+              {(form.paymentTerms||form.creditLimit)&&(
+                <div style={{margin:'0 10px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toLocaleString('en-IN')}`:''},{l:'Currency',v:form.currency}].map(c=>(
+                    <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
+                      <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F}}>{c.v||'—'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </VCard>
+          </div>
+        )}
+
+        {/* ══ TAB 7: Additional Details ══ */}
+        {tab === 'extra' && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="⚙️  Classification"/>
+              <FR label="Client Category">
+                <div style={{display:'flex',gap:6}}>
+                  {[{v:'Regular',c:'#2563EB',bg:'#EFF6FF'},{v:'VIP',c:'#D97706',bg:'#FEF3C7'},{v:'Blacklisted',c:'#DC2626',bg:'#FEF2F2'}].map(o=>(
+                    <button key={o.v} type="button" onClick={()=>set('category',o.v)} style={{
+                      padding:'2px 10px',borderRadius:4,border:`1px solid ${form.category===o.v?o.c:'#D1D5DB'}`,
+                      background:form.category===o.v?o.bg:'#fff',color:form.category===o.v?o.c:'#6B7280',
+                      fontSize:11,fontWeight:form.category===o.v?700:400,cursor:'pointer',fontFamily:F
+                    }}>{o.v}</button>
+                  ))}
+                </div>
+              </FR>
+              {form.category==='Blacklisted'&&<div style={{padding:'4px 12px',fontSize:11,color:'#dc2626',fontWeight:600,fontFamily:F,background:'#FEF2F2'}}>⚠️ Blacklisted clients will be blocked from sales transactions.</div>}
+              <FR label="Sales Person">
+                <select style={rs()} value={form.salesPerson} onChange={e=>set('salesPerson',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Assign —</option>
+                  {SALES_PERSONS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <div style={{display:'flex',alignItems:'flex-start',borderBottom:'1px solid #CBD5E1',padding:'4px 6px',background:'#fff',minHeight:64}}>
+                <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:140,maxWidth:140,padding:'2px 8px 0 0',textAlign:'left',flexShrink:0}}>Remarks</label>
+                <textarea value={form.remarks} onChange={e=>set('remarks',e.target.value)} rows={3} placeholder="Internal notes about this client…"
+                  style={{flex:1,padding:'2px 6px',border:'none',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'transparent',boxSizing:'border-box',minHeight:60}}/>
+              </div>
+            </VCard>
+            <VCard>
+              <PH title="👁️  Quick Review"/>
+              <div style={{padding:'8px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                {[{l:'Client Name',v:form.clientName},{l:'Client Code',v:form.clientCode},{l:'Business',v:form.businessType},{l:'Mobile',v:form.mobile},{l:'GST',v:form.gst},{l:'State',v:form.state},{l:'Pay Terms',v:form.paymentTerms},{l:'Category',v:form.category},{l:'Sales Person',v:form.salesPerson}].map(c=>(
+                  <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
+                    <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F,wordBreak:'break-all'}}>{c.v||'—'}</div>
+                  </div>
+                ))}
+              </div>
+            </VCard>
           </div>
         )}
       </div>
 
-      {/* ── Footer ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', background: '#F5F6F7', border: '1px solid #E5E5E5', borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
-        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} title={t.label} style={{
-              width: '28px', height: '5px', borderRadius: '3px', border: 'none', cursor: 'pointer',
-              background: tab === t.id ? '#0070F2' : '#D9D9D9', transition: 'background 0.15s',
-            }} />
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: '#6A6D70' }}>
-            Tab {TABS.findIndex(t => t.id === tab) + 1} of {TABS.length} — {TABS.find(t => t.id === tab)?.label}
+      {/* ── Footer (sticky, dark navy) ── */}
+      <div style={{
+        position:'sticky', bottom:0, zIndex:50,
+        padding:'10px 20px', background:'#1E293B', borderTop:'1px solid #334155',
+        display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0,
+      }}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11.5,color:'#94A3B8',fontFamily:F}}>
+            Step {tabIdx+1} of {TABS.length} — <strong style={{color:'#E2E8F0'}}>{TABS[tabIdx]?.label}</strong>
           </span>
-          {TABS.findIndex(t => t.id === tab) > 0 && (
-            <button onClick={() => setTab(TABS[TABS.findIndex(t => t.id === tab) - 1].id)} style={{ padding: '7px 14px', background: '#fff', border: '1px solid #D9D9D9', color: '#32363A', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' }}>← Prev</button>
+          {tabIdx>0&&(
+            <button type="button" onClick={()=>setTab(TABS[tabIdx-1].id)} style={{height:30,padding:'0 12px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#CBD5E1',fontSize:11.5,fontWeight:600,fontFamily:F}}>◀ Back</button>
           )}
-          {TABS.findIndex(t => t.id === tab) < TABS.length - 1 ? (
-            <button onClick={() => setTab(TABS[TABS.findIndex(t => t.id === tab) + 1].id)} style={{ padding: '7px 14px', background: '#0070F2', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' }}>Next →</button>
-          ) : (
-            <button onClick={handleSave} style={{ padding: '7px 20px', background: '#0070F2', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <I.Save /> Save Client
-            </button>
+          {tabIdx<TABS.length-1&&(
+            <button type="button" onClick={()=>setTab(TABS[tabIdx+1].id)} style={{height:30,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'#2563EB',border:'none',color:'#fff',fontSize:11.5,fontWeight:600,fontFamily:F}}>Next ▶</button>
           )}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          {isEdit
+            ? <button type="button" onClick={() => navigate('/client/view')} style={{height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F}}>← Back to List</button>
+            : <button type="button" onClick={handleReset} style={{height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F}}>Reset</button>
+          }
+          {!isEdit && <button type="button" onClick={()=>setToast({type:'success',msg:'Draft saved!'})} style={{height:32,padding:'0 16px',borderRadius:6,cursor:'pointer',background:'#F59E0B',border:'none',color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:F}}>💾 Save Draft</button>}
+          <button type="button" onClick={handleSave} disabled={saving} style={{height:32,padding:'0 18px',borderRadius:6,cursor:saving?'not-allowed':'pointer',background:saving?'#93C5FD':'#2563EB',border:'none',color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:F,opacity:saving?0.7:1}}>{saving?'⏳ Saving…': isEdit ? '✅ Update Client' : '✅ Save Client'}</button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ── Helpers ─────────────────────────────────────── */
-function SummaryCell({ label, value }) {
-  return (
-    <div style={{ padding: '8px 10px', background: '#fff', borderRadius: '4px', border: '1px solid #E5E5E5' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6A6D70', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{label}</div>
-      <div style={{ fontSize: '13px', color: '#32363A', fontWeight: 500, wordBreak: 'break-all' }}>{value}</div>
     </div>
   );
 }

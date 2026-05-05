@@ -1,0 +1,35 @@
+{
+  "txnId": 100002,
+  "type": "gdn",
+  "gdnNo": "GDN-100002",
+  "date": "2026-04-14",
+  "fromType": "store",
+  "dispatchFrom": "Warehouse A",
+  "fromVendorId": "",
+  "fromVendorName": "",
+  "fromPOId": "",
+  "fromPONo": "",
+  "preparedBy": "",
+  "destinationType": "client",
+  "partyType": "client",
+  "partyId": "100001",
+  "partyName": "Epp Composites Private Limited",
+  "soRef": "300001",
+  "poRef": "",
+  "orderRef": "EPS/SO/26-27/001",
+  "dcNo": "",
+  "refDate": "",
+  "vehicleNo": "",
+  "notes": "",
+  "items": [
+    {
+      "itemCode": "9000001",
+      "itemName": "FRP TOILET IWC ",
+      "qty": 2,
+      "unit": "NOS",
+      "location": "Warehouse A"
+    }
+  ],
+  "companyId": "C1",
+  "createdAt": "2026-04-14T06:49:35.201Z"
+}

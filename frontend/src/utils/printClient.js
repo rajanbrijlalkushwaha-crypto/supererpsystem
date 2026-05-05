@@ -1,258 +1,293 @@
-const isImage = (f) => /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(f || '');
-const isPdf   = (f) => /\.pdf$/i.test(f || '');
-
-const fetchBase64 = async (clientId, fileName) => {
+/* Fetch a URL and return a base64 data URI */
+const fetchBase64 = async (url) => {
   try {
-    const res = await fetch(`/api/clients/${clientId}/download/${fileName}`);
+    const res  = await fetch(url);
     const blob = await res.blob();
-    return await new Promise((resolve) => {
+    return await new Promise(resolve => {
       const reader = new FileReader();
-      reader.onload = () => resolve({ base64: reader.result, mimeType: blob.type });
+      reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(blob);
     });
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
-export const printClientDetails = async (client) => {
-  // Fetch all attachments as base64
-  const docsWithData = await Promise.all(
-    (client.documents || []).map(async (doc) => {
-      if (doc.fileName && client.clientId) {
-        const data = await fetchBase64(client.clientId, doc.fileName);
-        return { ...doc, ...data };
-      }
-      return doc;
-    })
-  );
+const v = (val) => val || '';
+const dash = (val) => val || '';
 
-  const statusLabel = { draft: 'Draft', pending: 'Pending Approval', approved: 'Approved' }[client.status] || client.status || 'Draft';
-  const statusBg    = { draft: '#c87800', pending: '#1a6fa8', approved: '#1a7a3c' }[client.status] || '#555';
+export const printClientDetails = async (client, company) => {
+  /* ── Fetch logo as base64 if available ── */
+  let logoBase64 = null;
+  if (company?.logoFileName) {
+    logoBase64 = await fetchBase64(`/api/companies/logo/${encodeURIComponent(company.logoFileName)}?companyId=${company.companyId||''}`);
+  }
 
-  const contactRows = (client.contactPersons || []).map((c, i) => `
-    <tr>
-      <td>${i + 1}</td><td>${c.name || '—'}</td><td>${c.designation || '—'}</td>
-      <td>${c.mobileNumber || '—'}</td><td>${c.email || '—'}</td>
-    </tr>`).join('');
+  const contact   = (client.contactPersons || [])[0] || {};
+  const today     = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+  const payModes  = Array.isArray(client.paymentModes) ? client.paymentModes.join(', ') : (client.paymentModes || '');
 
-  const docTableRows = docsWithData.map((d, i) => `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${d.name || `Document ${i + 1}`}</td>
-      <td>${d.fileName || '—'}</td>
-      <td style="text-align:center;font-weight:bold;color:${d.fileName ? '#1a7a3c' : '#c00'}">${d.fileName ? '✓' : '✗'}</td>
-    </tr>`).join('');
+  /* ── Company header block ── */
+  const logoTag = logoBase64
+    ? `<img src="${logoBase64}" alt="Logo" style="height:64px;max-width:120px;object-fit:contain;" />`
+    : `<div style="width:64px;height:64px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#999;">No Logo</div>`;
 
-  // Build embedded attachment blocks
-  const attachmentBlocks = docsWithData
-    .filter(d => d.base64)
-    .map((d, i) => {
-      const title = `<div class="att-title">Attachment ${i + 1} — ${d.name || d.fileName}</div>`;
-      if (isImage(d.fileName)) {
-        return `<div class="att-block">
-          ${title}
-          <div class="att-body"><img src="${d.base64}" alt="${d.name || ''}" /></div>
-        </div>`;
-      }
-      if (isPdf(d.fileName)) {
-        return `<div class="att-block">
-          ${title}
-          <div class="att-body att-pdf">
-            <embed src="${d.base64}" type="application/pdf" width="100%" height="1050px" />
-          </div>
-        </div>`;
-      }
-      return `<div class="att-block">
-        ${title}
-        <div class="att-body att-nopreview">⚠ Preview not available for this file type (${d.fileName})</div>
-      </div>`;
-    }).join('');
+  const coAddr = [company?.address, company?.city, company?.state, company?.pincode].filter(Boolean).join(', ');
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
-  <title>Client Details — ${client.companyName || ''}</title>
+  <meta charset="utf-8">
+  <title>Client Details — ${v(client.companyName || client.clientName)}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; background: #fff; }
 
-    body {
-      font-family: 'Times New Roman', Times, serif;
-      font-size: 12pt;
-      color: #000;
-      background: #fff;
-    }
+    .page { padding: 12mm 14mm; }
 
-    .page { padding: 18mm 16mm; }
-
-    /* ── Page Header ──────────────────────── */
-    .page-header {
-      border: 2px solid #000;
-      padding: 10px 14px;
-      margin-bottom: 14px;
+    /* ── Company header ── */
+    .co-header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      text-align: center;
     }
-    .company-name { font-size: 18pt; font-weight: bold; letter-spacing: 1px; }
-    .report-title { font-size: 10pt; font-style: italic; margin-top: 3px; }
-    .id-block { text-align: right; }
-    .client-id-label { font-size: 10pt; }
-    .client-id-value { font-size: 16pt; font-weight: bold; }
-    .status-badge {
-      display: inline-block;
-      padding: 2px 10px;
-      background: ${statusBg};
-      color: #fff;
-      font-size: 9pt;
+    .co-info { text-align: center; }
+    .co-name { font-size: 16pt; font-weight: bold; line-height: 1.2; }
+    .co-sub  { font-size: 9pt; color: #333; margin-top: 3px; line-height: 1.6; }
+
+    /* ── Section heading ── */
+    .sec-head {
+      font-size: 10pt;
       font-weight: bold;
-      margin-top: 4px;
+      text-decoration: underline;
+      margin: 8px 0 4px;
     }
 
-    /* ── Section ──────────────────────────── */
-    .section { margin-bottom: 14px; }
-    .section-header {
-      background: #000; color: #fff;
-      font-size: 10pt; font-weight: bold;
-      padding: 3px 8px;
-      text-transform: uppercase; letter-spacing: 0.5px;
+    /* ── Form table ── */
+    table.form { width: 100%; border-collapse: collapse; }
+    table.form td { padding: 3px 0; font-size: 10pt; vertical-align: top; }
+    table.form td.lbl { font-weight: normal; width: 130px; white-space: nowrap; }
+    table.form td.sep { width: 10px; text-align: center; }
+    table.form td.val { min-width: 80px; }
+    table.form td.sign { border-bottom: 1px solid #000; min-width: 160px; }
+
+    /* ── Two-col wrapper ── */
+    .two-col { display: flex; gap: 14px; }
+    .two-col > div { flex: 1; }
+
+    /* ── Sign row ── */
+    .sign-line {
+      display: inline-block;
+      width: 160px;
+      border-bottom: 1px solid #000;
+      margin-left: 6px;
     }
 
-    /* ── Info table ────────────────────────── */
-    .info-table { width: 100%; border-collapse: collapse; border: 1px solid #000; }
-    .info-table td { border: 1px solid #000; padding: 4px 8px; font-size: 11pt; vertical-align: top; }
-    .info-table td.label { font-weight: bold; width: 22%; background: #f0f0f0; font-size: 10pt; }
+    /* ── Divider ── */
+    .hr { border: none; border-top: 1px solid #000; margin: 8px 0; }
 
-    /* ── Data tables ────────────────────────── */
-    table.data-table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11pt; }
-    table.data-table th { background: #333; color: #fff; border: 1px solid #000; padding: 4px 8px; text-align: left; font-size: 10pt; }
-    table.data-table td { border: 1px solid #000; padding: 4px 8px; }
-    table.data-table tbody tr:nth-child(even) td { background: #f7f7f7; }
-
-    /* ── Attachments ────────────────────────── */
-    .att-block {
-      border: 1px solid #000;
-      margin-bottom: 16px;
-      page-break-inside: avoid;
-    }
-    .att-title {
-      background: #333; color: #fff;
-      padding: 4px 10px;
-      font-size: 10pt; font-weight: bold;
-    }
-    .att-body { padding: 8px; }
-    .att-body img { max-width: 100%; display: block; border: 1px solid #ccc; }
-    .att-pdf { padding: 0; }
-    .att-nopreview { font-style: italic; color: #666; font-size: 11pt; padding: 12px; }
-
-    /* ── Footer ─────────────────────────────── */
-    .page-footer {
-      margin-top: 18px;
-      border-top: 1px solid #000;
-      padding-top: 6px;
-      font-size: 9pt;
-      display: flex;
-      justify-content: space-between;
-    }
-
-    /* ── Print rules ─────────────────────────── */
     @media print {
-      @page { margin: 10mm; size: A4 portrait; }
-      .page { padding: 0; }
-      .att-block { page-break-inside: avoid; }
+      @page { margin: 0; size: A4 portrait; }
+      .page { padding: 10mm 14mm 24mm 14mm; }
     }
   </style>
 </head>
 <body>
 <div class="page">
 
-  <!-- Header -->
-  <div class="page-header">
+  <!-- ══ COMPANY HEADER ══ -->
+  <div class="co-header">
+    ${logoTag}
+    <div class="co-info">
+      <div class="co-name">${dash(company?.companyName || 'Epsilon Enterprise')}</div>
+      <div class="co-sub">
+        ${coAddr ? coAddr + '<br>' : ''}
+        ${company?.gstin  ? 'GSTIN: ' + company.gstin + '&nbsp;&nbsp;' : ''}
+        ${company?.phone  ? 'Ph: '   + company.phone  + '&nbsp;&nbsp;' : ''}
+        ${company?.email  ? 'Email: '+ company.email               : ''}
+        <br><span style="color:#888;font-size:8pt">Printed: ${today}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ROW 1: Client Details + Tax Identity ══ -->
+  <div class="two-col">
+
+    <!-- Client Details -->
     <div>
-      <div class="company-name">Epsilon Enterprise</div>
-      <div class="report-title">Client Information Report</div>
+      <div class="sec-head">Client Details</div>
+      <table class="form">
+        <tr><td class="lbl">Client ID</td><td class="sep">:</td><td class="val">${dash(client.clientId)}</td></tr>
+        <tr><td class="lbl">Client Name</td><td class="sep">:</td><td class="val">${dash(client.companyName || client.clientName)}</td></tr>
+        <tr><td class="lbl">Business Type</td><td class="sep">:</td><td class="val">${dash(client.businessType)}</td></tr>
+        <tr><td class="lbl">Industries Type</td><td class="sep">:</td><td class="val">${dash(client.industryType)}</td></tr>
+        <tr><td class="lbl">Category</td><td class="sep">:</td><td class="val">${dash(client.category)}</td></tr>
+        <tr><td class="lbl">TDS Applicable</td><td class="sep">:</td><td class="val">${client.tdsApplicable ? 'Yes' : 'No'}</td></tr>
+      </table>
     </div>
-    <div class="id-block">
-      <div class="client-id-label">Client ID</div>
-      <div class="client-id-value">${client.clientId || '—'}</div>
-      <div><span class="status-badge">${statusLabel}</span></div>
+
+    <!-- Tax Identity -->
+    <div>
+      <div class="sec-head">Tax Identity</div>
+      <table class="form">
+        <tr><td class="lbl">Pan N0</td><td class="sep">:</td><td class="val">${dash(client.pan)}</td></tr>
+        <tr><td class="lbl">GSTIN No</td><td class="sep">:</td><td class="val">${dash(client.gstin || client.gst)}</td></tr>
+        <tr><td class="lbl">CIN No</td><td class="sep">:</td><td class="val">${dash(client.cin)}</td></tr>
+        <tr><td class="lbl">MSME if Applicable</td><td class="sep">:</td><td class="val">${dash(client.msme)}</td></tr>
+        <tr><td class="lbl">GST Type</td><td class="sep">:</td><td class="val">${dash(client.gstType)}</td></tr>
+        <tr><td class="lbl">GST Registred</td><td class="sep">:</td><td class="val">${client.gstRegistered !== false ? 'Yes' : 'No'}</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <hr class="hr">
+
+  <!-- ══ Contact Details ══ -->
+  <div class="sec-head">Contact Details:</div>
+  <div class="two-col">
+    <div>
+      <table class="form">
+        <tr><td class="lbl">Name</td><td class="sep">:</td><td class="val">${dash(contact.name || client.contactPerson)}</td></tr>
+        <tr><td class="lbl">Mobile no</td><td class="sep">:</td><td class="val">${dash(contact.mobileNumber || client.mobile)}</td></tr>
+        <tr><td class="lbl">Alternate No</td><td class="sep">:</td><td class="val">${dash(contact.altMobile || client.altMobile)}</td></tr>
+        <tr><td class="lbl">Landline</td><td class="sep">:</td><td class="val">${dash(client.landline)}</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="form">
+        <tr><td class="lbl">Email id</td><td class="sep">:</td><td class="val">${dash(contact.email || client.email)}</td></tr>
+        <tr><td class="lbl">Website</td><td class="sep">:</td><td class="val">${dash(client.website)}</td></tr>
+      </table>
     </div>
   </div>
 
-  <!-- Company Information -->
-  <div class="section">
-    <div class="section-header">Company Information</div>
-    <table class="info-table">
-      <tbody>
-        <tr>
-          <td class="label">Company Name</td>
-          <td colspan="3"><strong>${client.companyName || '—'}</strong></td>
-        </tr>
-        <tr>
-          <td class="label">Address</td>
-          <td colspan="3">${client.address || '—'}</td>
-        </tr>
-        <tr>
-          <td class="label">City</td><td>${client.city || '—'}</td>
-          <td class="label">State</td><td>${client.state || '—'}</td>
-        </tr>
-        <tr>
-          <td class="label">Pincode</td><td>${client.pincode || '—'}</td>
-          <td class="label">GST Type</td><td>${client.gstType || '—'}</td>
-        </tr>
-        <tr>
-          <td class="label">GSTIN</td>
-          <td colspan="3">${client.gstin || '—'}</td>
-        </tr>
-      </tbody>
-    </table>
+  <hr class="hr">
+
+  <!-- ══ Billing + Shipping Address ══ -->
+  <div class="two-col">
+
+    <div>
+      <div class="sec-head">Billing Address</div>
+      <table class="form">
+        <tr><td class="lbl">Address</td><td class="sep">:</td><td class="val">${dash(client.billingAddr || client.address)}</td></tr>
+        <tr><td class="lbl">State</td><td class="sep">:</td><td class="val">${dash(client.state)}</td></tr>
+        <tr><td class="lbl">City</td><td class="sep">:</td><td class="val">${dash(client.city)}</td></tr>
+        <tr><td class="lbl">Pincode</td><td class="sep">:</td><td class="val">${dash(client.pincode)}</td></tr>
+        <tr><td class="lbl">Country</td><td class="sep">:</td><td class="val">${dash(client.country || 'India')}</td></tr>
+      </table>
+    </div>
+
+    <div>
+      <div class="sec-head">Shipping Address</div>
+      <table class="form">
+        <tr><td class="lbl">Address</td><td class="sep">:</td><td class="val">${dash(client.shippingAddr)}</td></tr>
+        <tr><td class="lbl">State</td><td class="sep">:</td><td class="val">${dash(client.state)}</td></tr>
+        <tr><td class="lbl">City</td><td class="sep">:</td><td class="val">${dash(client.city)}</td></tr>
+        <tr><td class="lbl">Pincode</td><td class="sep">:</td><td class="val">${dash(client.pincode)}</td></tr>
+        <tr><td class="lbl">Country</td><td class="sep">:</td><td class="val">${dash(client.country || 'India')}</td></tr>
+      </table>
+    </div>
+
   </div>
 
-  <!-- Contact Persons -->
-  <div class="section">
-    <div class="section-header">Contact Persons</div>
-    ${contactRows
-      ? `<table class="data-table">
-           <thead><tr><th>#</th><th>Name</th><th>Designation</th><th>Mobile</th><th>Email</th></tr></thead>
-           <tbody>${contactRows}</tbody>
-         </table>`
-      : `<table class="info-table"><tbody><tr><td>No contact persons listed.</td></tr></tbody></table>`
-    }
+  <hr class="hr">
+
+  <!-- ══ Bank Account ══ -->
+  <div class="sec-head">Bank Account</div>
+  <table class="form">
+    <tr>
+      <td class="lbl">Bank Name</td><td class="sep">:</td><td class="val" style="width:180px">${dash(client.bankName)}</td>
+      <td style="width:20px"></td>
+      <td class="lbl">Account Holder</td><td class="sep">:</td><td class="val">${dash(client.accountHolder)}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Account No</td><td class="sep">:</td><td class="val">${dash(client.accountNo)}</td>
+      <td></td>
+      <td class="lbl">IFSC Code</td><td class="sep">:</td><td class="val">${dash(client.ifsc)}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Branch</td><td class="sep">:</td><td class="val">${dash(client.branch)}</td>
+      <td></td><td></td><td></td><td></td>
+    </tr>
+  </table>
+
+  <hr class="hr">
+
+  <!-- ══ Payment Terms + Payment Mode ══ -->
+  <div class="two-col">
+
+    <div>
+      <div class="sec-head">Payment Terms</div>
+      <table class="form">
+        <tr><td class="lbl">Payment Terms</td><td class="sep">:</td><td class="val">${dash(client.paymentTerms)}</td></tr>
+        <tr><td class="lbl">Currency</td><td class="sep">:</td><td class="val">${dash(client.currency)}</td></tr>
+        <tr><td class="lbl">Credit Limit</td><td class="sep">:</td><td class="val">${client.creditLimit ? '₹ ' + Number(client.creditLimit).toLocaleString('en-IN') : '—'}</td></tr>
+      </table>
+    </div>
+
+    <div>
+      <div class="sec-head">Payment Mode</div>
+      <table class="form">
+        <tr><td class="lbl">NEFT/RTGS/UPI</td><td class="sep">:</td><td class="val">${dash(payModes)}</td></tr>
+      </table>
+    </div>
+
   </div>
 
-  <!-- Documents List -->
-  <div class="section">
-    <div class="section-header">Attached Documents</div>
-    ${docTableRows
-      ? `<table class="data-table">
-           <thead><tr><th>#</th><th>Document Name</th><th>File Name</th><th style="text-align:center">Attached</th></tr></thead>
-           <tbody>${docTableRows}</tbody>
-         </table>`
-      : `<table class="info-table"><tbody><tr><td>No documents attached.</td></tr></tbody></table>`
-    }
-  </div>
+  <hr class="hr">
 
-  <!-- Footer (before attachments) -->
-  <div class="page-footer">
-    <span>Epsilon Enterprise — Client Portal</span>
-    <span>Printed: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-  </div>
+  <!-- ══ Remarks ══ -->
+  <div class="sec-head">Remarks</div>
+  <table class="form">
+    <tr><td class="lbl">Internal Notes</td><td class="sep">:</td><td class="val" style="min-height:30px">${dash(client.remarks)}</td></tr>
+  </table>
 
-  <!-- Embedded Attachments -->
-  ${attachmentBlocks ? `
-  <div style="margin-top:24px;">
-    <div class="section-header" style="margin-bottom:12px;">Document Attachments</div>
-    ${attachmentBlocks}
-  </div>` : ''}
+  <hr class="hr">
+
+  <!-- ══ Created By / Approved By ══ -->
+  <div class="two-col" style="margin-top:10px">
+
+    <div>
+      <div class="sec-head">Created By</div>
+      <table class="form" style="margin-top:6px">
+        <tr><td class="lbl">Username</td><td class="sep">:</td><td class="val">&nbsp;</td></tr>
+        <tr style="height:8px"><td colspan="3"></td></tr>
+        <tr><td class="lbl">Date</td><td class="sep">:</td><td class="val">&nbsp;</td></tr>
+        <tr style="height:8px"><td colspan="3"></td></tr>
+        <tr><td class="lbl">Sign</td><td class="sep">:</td><td class="sign">&nbsp;</td></tr>
+      </table>
+    </div>
+
+    <div>
+      <div class="sec-head">Approved by</div>
+      <table class="form" style="margin-top:6px">
+        <tr><td class="lbl">Username</td><td class="sep">:</td><td class="val">&nbsp;</td></tr>
+        <tr style="height:8px"><td colspan="3"></td></tr>
+        <tr><td class="lbl">Date</td><td class="sep">:</td><td class="val">&nbsp;</td></tr>
+        <tr style="height:8px"><td colspan="3"></td></tr>
+        <tr><td class="lbl">Sign</td><td class="sep">:</td><td class="sign">&nbsp;</td></tr>
+      </table>
+    </div>
+
+  </div>
 
 </div>
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=800');
-  win.document.write(html);
+  const pageUrl = window.location.href;
+  const htmlWithFooter = html.replace('</body>', `
+  <div style="position:fixed;bottom:6mm;left:14mm;font-size:8pt;color:#555;font-family:Arial,sans-serif;">
+    ${pageUrl}
+  </div>
+</body>`);
+
+  const win = window.open('', '_blank', 'width=860,height=900');
+  win.document.write(htmlWithFooter);
   win.document.close();
   win.focus();
-  // Give embedded PDFs time to render before printing
-  setTimeout(() => win.print(), 1200);
+  setTimeout(() => win.print(), 600);
 };

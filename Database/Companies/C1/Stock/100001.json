@@ -1,0 +1,26 @@
+{
+  "txnId": 100001,
+  "type": "grn",
+  "grnNo": "GRN-100001",
+  "date": "2026-04-14",
+  "sourceType": "vendor",
+  "partyType": "vendor",
+  "partyId": "",
+  "partyName": "",
+  "poRef": "",
+  "dcNo": "",
+  "vehicleNo": "",
+  "notes": "",
+  "items": [
+    {
+      "itemCode": 9000001,
+      "itemName": "FRP TOILET IWC ",
+      "qty": 10,
+      "unit": "NOS",
+      "location": "Warehouse A",
+      "rate": 250000
+    }
+  ],
+  "companyId": "C1",
+  "createdAt": "2026-04-14T06:48:57.557Z"
+}

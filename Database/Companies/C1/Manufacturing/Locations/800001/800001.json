@@ -1,0 +1,12 @@
+{
+  "id": 800001,
+  "companyId": "C1",
+  "name": "zak",
+  "address": "",
+  "city": "Ahmedabad",
+  "type": "Factory",
+  "capacity": "10",
+  "status": "active",
+  "notes": "",
+  "createdAt": "2026-04-06T09:31:38.354Z"
+}

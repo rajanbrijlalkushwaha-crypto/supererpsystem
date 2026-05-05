@@ -152,6 +152,35 @@ async function init() {
       INDEX idx_company (company_id)
     ) ENGINE=InnoDB;
 
+    CREATE TABLE IF NOT EXISTS items (
+      id            INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      company_id    VARCHAR(20)  NOT NULL,
+      item_code     INT          NOT NULL DEFAULT 0,
+      item_name     VARCHAR(255) NOT NULL,
+      uom           VARCHAR(50),
+      hsn_code      VARCHAR(30),
+      item_type     VARCHAR(50)  DEFAULT 'Raw Material',
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_company_item (company_id, item_code),
+      INDEX idx_company (company_id)
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE IF NOT EXISTS bank_accounts (
+      id              INT          PRIMARY KEY,
+      bank_name       VARCHAR(255) NOT NULL,
+      account_holder  VARCHAR(255),
+      account_number  VARCHAR(100) NOT NULL,
+      ifsc_code       VARCHAR(30),
+      account_type    VARCHAR(50)  DEFAULT 'Current',
+      opening_balance DECIMAL(15,2) DEFAULT 0,
+      current_balance DECIMAL(15,2) DEFAULT 0,
+      notes           TEXT,
+      status          VARCHAR(30)  DEFAULT 'active',
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
+
     CREATE TABLE IF NOT EXISTS tally_pending (
       id             INT AUTO_INCREMENT PRIMARY KEY,
       company_id     VARCHAR(20),
@@ -166,6 +195,45 @@ async function init() {
       port           INT          DEFAULT 9000,
       company_name   VARCHAR(255),
       updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE IF NOT EXISTS manufacturing_locations (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      company_id   VARCHAR(20),
+      name         VARCHAR(255) NOT NULL,
+      address      TEXT,
+      city         VARCHAR(100),
+      type         VARCHAR(50)  DEFAULT 'Factory',
+      capacity     VARCHAR(100),
+      status       VARCHAR(30)  DEFAULT 'active',
+      notes        TEXT,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_company (company_id)
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE IF NOT EXISTS manufacturing_job_sheets (
+      id             INT AUTO_INCREMENT PRIMARY KEY,
+      company_id     VARCHAR(20),
+      job_no         VARCHAR(100),
+      so_id          INT,
+      so_number      VARCHAR(100),
+      customer_name  VARCHAR(255),
+      location_id    INT DEFAULT 0,
+      location_name  VARCHAR(255),
+      item_name      VARCHAR(255),
+      item_code      VARCHAR(100),
+      qty_required   DECIMAL(15,3) DEFAULT 0,
+      qty_produced   DECIMAL(15,3) DEFAULT 0,
+      uom            VARCHAR(50),
+      due_date       DATE,
+      start_date     DATE,
+      end_date       DATE,
+      status         VARCHAR(30)  DEFAULT 'pending',
+      bom            JSON,
+      notes          TEXT,
+      created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_company (company_id)
     ) ENGINE=InnoDB;
   `);
 

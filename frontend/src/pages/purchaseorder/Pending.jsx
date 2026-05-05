@@ -66,11 +66,11 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
         background: '#fff', borderRadius: 10, width: '100%', maxWidth: 900,
         maxHeight: '92vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
-        fontFamily: "'72','Inter',Arial,sans-serif",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}>
 
         {/* ── Modal Header ── */}
-        <div style={{ background: '#354A5E', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ background: '#2F6FED', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 10, color: '#A8C4E0', letterSpacing: '0.8px', textTransform: 'uppercase' }}>Purchase Order — Pending Approval</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', display: 'flex', gap: 10, alignItems: 'center', marginTop: 2 }}>
@@ -92,12 +92,12 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
                 <div style={{ fontSize: 10, color: '#6A6D70' }}>Grand Total</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#354A5E' }}>{items.length}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#2F6FED' }}>{items.length}</div>
                 <div style={{ fontSize: 10, color: '#6A6D70' }}>Line Items</div>
               </div>
               {attachments.length > 0 && (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#354A5E' }}>{attachments.length}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#2F6FED' }}>{attachments.length}</div>
                   <div style={{ fontSize: 10, color: '#6A6D70' }}>Attachments</div>
                 </div>
               )}
@@ -183,7 +183,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
-                  <tr style={{ background: '#354A5E' }}>
+                  <tr style={{ background: '#2F6FED' }}>
                     {['#','Item','HSN','Qty','Unit','Rate','Discount','GST%','Amount'].map(h => (
                       <th key={h} style={{ padding: '6px 8px', color: '#fff', fontWeight: 600, fontSize: 11, textAlign: h === '#' ? 'center' : h === 'Amount' || h === 'Rate' ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
@@ -238,7 +238,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
                     <span>{row.l}</span><span style={{ fontFamily: 'monospace' }}>{fmt(row.v)}</span>
                   </div>
                 ))}
-                <div style={{ borderTop: '2px solid #354A5E', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, color: '#354A5E' }}>
+                <div style={{ borderTop: '2px solid #2F6FED', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, color: '#2F6FED' }}>
                   <span>Grand Total</span>
                   <span style={{ color: ACC, fontFamily: 'monospace' }}>{fmt(total)}</span>
                 </div>

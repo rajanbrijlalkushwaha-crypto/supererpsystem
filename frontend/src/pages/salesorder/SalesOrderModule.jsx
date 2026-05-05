@@ -12,11 +12,12 @@ import { useCompany } from '../../context/CompanyContext';
 import { printSalesOrder } from '../../utils/printSalesOrder';
 
 /* ── colours ── */
-const N = '#1a4a7a';
-const W = '#ffffff';
-const B = '#b0b0b0';
-const R = '#cc2200';
-const F = "Arial,'Segoe UI',sans-serif";
+const N  = '#2563EB';
+const ND = '#1D4ED8';
+const W  = '#ffffff';
+const B  = '#E2E8F0';
+const R  = '#DC2626';
+const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /* ── helpers ── */
 const api  = (url, cfg={}) => axios({url, ...cfg});
@@ -26,22 +27,25 @@ const uid  = () => Date.now() + Math.random();
 
 /* ═══════════════════════ PRIMITIVES ═══════════════════════ */
 
+const BD = '#D1D5DB';
 function Btn({ children, onClick, v='def', disabled, type, title, small }) {
   const s = {
-    def: { bg:'#d8d8d8', border:'1px solid #888',   color:'#000' },
-    pri: { bg:N,         border:`1px solid #0d2f50`, color:W, fw:700 },
-    dan: { bg:R,         border:`1px solid #991100`, color:W, fw:700 },
-    suc: { bg:'#006620', border:`1px solid #004410`, color:W, fw:700 },
-  }[v] || {};
+    def: { bg:'#F9FAFB', color:'#374151', border:BD },
+    pri: { bg:'#EEF4FF', color:N,         border:'#BFDBFE' },
+    dan: { bg:'#FEF2F2', color:'#DC2626', border:'#FECACA' },
+    suc: { bg:'#ECFDF5', color:'#059669', border:'#A7F3D0' },
+  }[v] || { bg:'#F9FAFB', color:'#374151', border:BD };
   return (
     <button type={type||'button'} onClick={onClick} disabled={disabled} title={title}
       style={{
-        background:s.bg, border:s.border, color:s.color||'#000',
-        padding: small ? '0 7px' : '1px 12px',
-        height: small ? 20 : 22,
-        fontSize:small?10:11, fontFamily:F, fontWeight:s.fw||400,
-        cursor:disabled?'default':'pointer', borderRadius:0,
-        whiteSpace:'nowrap', opacity:disabled?0.5:1,
+        background: disabled ? '#F9FAFB' : s.bg,
+        border: `1px solid ${disabled ? BD : s.border}`,
+        color: disabled ? '#9CA3AF' : s.color,
+        padding: small ? '0 8px' : '0 12px',
+        height: small ? 24 : 28,
+        fontSize: small ? 11 : 12, fontFamily: F, fontWeight: 600,
+        cursor: disabled ? 'default' : 'pointer', borderRadius: 5,
+        whiteSpace: 'nowrap', opacity: disabled ? 0.7 : 1,
       }}>
       {children}
     </button>
@@ -58,13 +62,13 @@ function Inp({ value, onChange, type='text', placeholder, readOnly, disabled, st
       placeholder={placeholder} readOnly={readOnly} disabled={disabled}
       min={min} max={max} onKeyDown={onKeyDown}
       style={{
-        height:20, padding:'0 4px', border:'1px solid #888', borderRadius:0,
-        fontSize:12, fontFamily:F, color:'#000',
-        background: readOnly?'#f0f0f0': disabled?'#e8e8e8': W,
+        height:28, padding:'0 8px', border:`1px solid #9CA3AF`, borderRadius:4,
+        fontSize:12, fontFamily:F, color:'#111827',
+        background: readOnly?'#F9FAFB': disabled?'#F3F4F6': W,
         outline:'none', width:'100%', boxSizing:'border-box', ...style,
       }}
-      onFocus={e=>{ if(!readOnly&&!disabled) e.target.style.borderColor=N; }}
-      onBlur={e=>(e.target.style.borderColor='#888')}
+      onFocus={e=>{ if(!readOnly&&!disabled) { e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; } }}
+      onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
     />
   );
 }
@@ -73,14 +77,14 @@ function Sel({ value, onChange, options=[], disabled, style }) {
   return (
     <select value={value} onChange={onChange} disabled={disabled}
       style={{
-        height:20, padding:'0 2px', border:'1px solid #888', borderRadius:0,
-        fontSize:12, fontFamily:F, color:'#000',
-        background:disabled?'#e8e8e8':W,
+        height:28, padding:'0 8px', border:`1px solid #9CA3AF`, borderRadius:4,
+        fontSize:12, fontFamily:F, color:'#111827',
+        background:disabled?'#F3F4F6':W,
         outline:'none', width:'100%', boxSizing:'border-box',
         cursor:'pointer', ...style,
       }}
-      onFocus={e=>(e.target.style.borderColor=N)}
-      onBlur={e=>(e.target.style.borderColor='#888')}
+      onFocus={e=>{ e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; }}
+      onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
     >
       {options.map((o,i)=><option key={i} value={o.value??o}>{o.label??o}</option>)}
     </select>
@@ -91,34 +95,34 @@ function Txt({ value, onChange, placeholder, rows=3 }) {
   return (
     <textarea value={value??''} onChange={onChange} placeholder={placeholder} rows={rows}
       style={{
-        width:'100%', padding:'2px 4px', border:'1px solid #888', borderRadius:0,
-        fontSize:12, fontFamily:F, color:'#000', background:W,
-        resize:'vertical', outline:'none', boxSizing:'border-box',
+        width:'100%', padding:'5px 8px', border:'1px solid #D1D5DB', borderRadius:5,
+        fontSize:12, fontFamily:F, color:'#111827', background:W,
+        resize:'vertical', outline:'none', boxSizing:'border-box', lineHeight:1.5,
       }}
-      onFocus={e=>(e.target.style.borderColor=N)}
-      onBlur={e=>(e.target.style.borderColor='#888')}
+      onFocus={e=>{ e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; }}
+      onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
     />
   );
 }
 
 /* label + field row */
-function FR({ label, children, w=120, req }) {
+function FR({ label, children, w=130, req }) {
   return (
-    <div style={{display:'flex',alignItems:'center',minHeight:24,borderBottom:'1px solid #ebebeb',padding:'2px 4px'}}>
-      <label style={{fontSize:11,fontWeight:700,color:'#333',minWidth:w,maxWidth:w,
-        padding:'0 8px 0 0',textAlign:'right',flexShrink:0}}>
-        {label}{req&&<span style={{color:R}}>*</span>}
+    <div style={{display:'flex',alignItems:'center',minHeight:30,borderBottom:'1px solid #CBD5E1',padding:'2px 6px',background:'#fff'}}>
+      <label style={{fontSize:11.5,fontWeight:700,color:'#000000',minWidth:w,maxWidth:w,
+        padding:'0 8px 0 0',textAlign:'left',flexShrink:0}}>
+        {label}{req&&<span style={{color:R,marginLeft:2}}>*</span>}
       </label>
       <div style={{flex:1,display:'flex',gap:4,alignItems:'center'}}>{children}</div>
     </div>
   );
 }
 
-/* section panel header (non-collapsible, just a label bar) */
+/* section panel header */
 function PH({ title }) {
   return (
-    <div style={{background:'#3a6a9a',color:W,fontSize:11,fontWeight:700,
-      padding:'4px 10px',marginBottom:4,letterSpacing:0.3}}>
+    <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,
+      padding:'6px 12px',letterSpacing:0.2,borderBottom:`1px solid ${BD}`}}>
       {title}
     </div>
   );
@@ -143,49 +147,47 @@ function Badge({ s }) {
 
 /* ═══════════════════════ INNER SECTION TABS ═══════════════════════ */
 const INNER_TABS = [
-  { id:'order-details',  label:'Order Details'     },
-  { id:'item-details',   label:'Item Details'       },
-  { id:'addon-items',    label:'Add-on Items'       },
-  { id:'charges',        label:'Addl. Charges'      },
-  { id:'bank-guarantee', label:'Bank Guarantee'     },
-  { id:'scope',          label:'Scope of Work'      },
-  { id:'warranty',       label:'Warranty'           },
-  { id:'activities',     label:'Activities'         },
-  { id:'attachments',    label:'Attachments'        },
+  { id:'order-details',  label:'Order Details',   icon:'📋' },
+  { id:'item-details',   label:'Item Details',    icon:'📦' },
+  { id:'addon-items',    label:'Add-on Items',    icon:'➕' },
+  { id:'charges',        label:'Addl. Charges',   icon:'💰' },
+  { id:'bank-guarantee', label:'Bank Guarantee',  icon:'🏦' },
+  { id:'scope',          label:'Scope of Work',   icon:'📝' },
+  { id:'warranty',       label:'Warranty',        icon:'🛡️' },
+  { id:'activities',     label:'Activities',      icon:'⚡' },
+  { id:'attachments',    label:'Attachments',     icon:'📎' },
+  { id:'specs',          label:'Specifications',  icon:'📐' },
 ];
 
 function SectionTabBar({ active, onChange }) {
   return (
     <div style={{
-      background:'#e4e8ed',
-      borderBottom:`2px solid ${N}`,
-      display:'flex', flexWrap:'nowrap', overflowX:'auto',
-      padding:'4px 6px 0', gap:2, flexShrink:0,
+      background:'#F8FAFC',
+      borderBottom:`2px solid #D1D5DB`,
+      display:'flex', flexWrap:'nowrap', overflowX:'hidden',
+      padding:'0 2px', gap:0, flexShrink:0,
     }}>
       {INNER_TABS.map((t, idx) => {
         const isAct = active === t.id;
         return (
           <button key={t.id} onClick={() => onChange(t.id)}
             style={{
-              fontFamily:F, fontSize:11, fontWeight:isAct?700:400,
-              color: isAct ? N : '#555',
-              background: isAct ? W : '#d4d8de',
-              border:`1px solid ${isAct ? B : '#bbb'}`,
-              borderBottom: isAct ? `1px solid ${W}` : `1px solid ${B}`,
-              marginBottom: isAct ? -2 : 0,
-              padding:'3px 8px',
+              fontFamily:F, fontSize:11, fontWeight:isAct?700:500,
+              color: isAct ? N : '#111827',
+              background: isAct ? '#DBEAFE' : 'transparent',
+              border: 'none',
+              borderBottom: isAct ? `2px solid ${N}` : '2px solid transparent',
+              marginBottom: -2,
+              padding:'0 8px',
+              height: 32,
               cursor:'pointer', whiteSpace:'nowrap',
-              position:'relative', zIndex: isAct ? 1 : 0,
-              flexShrink:0,
-              display:'flex', alignItems:'center', gap:4,
-            }}>
-            <span style={{
-              display:'inline-flex', alignItems:'center', justifyContent:'center',
-              background: isAct ? N : '#888',
-              color:W, borderRadius:'50%',
-              width:14, height:14,
-              fontSize:9, fontWeight:700, flexShrink:0,
-            }}>{idx+1}</span>
+              flexShrink:1, flex:1,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:3,
+              transition:'all 0.12s',
+            }}
+            onMouseEnter={e=>{ if(!isAct){ e.currentTarget.style.background='#EFF6FF'; e.currentTarget.style.color='#1D4ED8'; }}}
+            onMouseLeave={e=>{ if(!isAct){ e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#111827'; }}}>
+            <span style={{fontSize:12, lineHeight:1}}>{t.icon}</span>
             {t.label}
           </button>
         );
@@ -211,8 +213,8 @@ function ClientSearch({ clients, onSelect, onClose }) {
     : clients;
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{background:W,border:`2px solid ${N}`,width:500,maxHeight:420,display:'flex',flexDirection:'column'}}>
-        <div style={{background:N,color:W,padding:'5px 10px',fontSize:12,fontWeight:700,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{background:W,border:`2px solid ${N}`,width:500,maxHeight:420,display:'flex',flexDirection:'column',borderRadius:10,overflow:'hidden'}}>
+        <div style={{background:`linear-gradient(135deg, ${N}, ${ND})`,color:W,padding:'5px 10px',fontSize:12,fontWeight:700,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span>🔍 Client Search</span>
           <button onClick={onClose} style={{background:'none',border:'none',color:W,cursor:'pointer',fontSize:16}}>✕</button>
         </div>
@@ -223,10 +225,10 @@ function ClientSearch({ clients, onSelect, onClose }) {
         </div>
         <div style={{flex:1,overflowY:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
-            <thead style={{background:N,position:'sticky',top:0}}>
+            <thead style={{background:`linear-gradient(90deg,#eef2ff,#f0f4ff)`,position:'sticky',top:0}}>
               <tr>
                 {['Client ID','Name','City','GSTIN'].map((h,i)=>(
-                  <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,textAlign:'left',borderRight:'1px solid #2a5a8a'}}>{h}</th>
+                  <th key={i} style={{padding:'4px 8px',color:N,fontWeight:700,textAlign:'left',borderRight:`1px solid rgba(99,102,241,0.15)`}}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -259,13 +261,13 @@ function ClientSearch({ clients, onSelect, onClose }) {
 /* ═══════════════════════ TAB 1 — ORDER DETAILS ═══════════════════════ */
 function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
   return (
-    <div style={{padding:'8px 10px',display:'flex',flexDirection:'column',gap:10}}>
+    <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:10}}>
 
       {/* ── Row 1: Customer Details + Reference Numbers ── */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,columnGap:16}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
 
         {/* LEFT: Bill To — Customer Details */}
-        <div style={{border:`1px solid ${B}`,background:W}}>
+        <div style={{border:`1px solid #E2E8F0`,background:W,borderRadius:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
           <PH title="Bill To — Customer Details" />
           <div style={{padding:'0 6px 6px'}}>
             <div style={{display:'flex',alignItems:'center',minHeight:24,borderBottom:'1px solid #ebebeb',padding:'2px 4px'}}>
@@ -276,8 +278,8 @@ function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
                 <Inp value={form.customerName} onChange={e=>setF('customerName',e.target.value)}
                   placeholder="Type or click 🔍 to search…" style={{flex:1}}/>
                 <button onClick={()=>setShowSearch(true)} title="Search client"
-                  style={{background:'#d8ecff',color:'#003875',border:'1px solid #88aacc',
-                    padding:'0 8px',fontSize:15,cursor:'pointer',height:22,fontFamily:F,fontWeight:700,flexShrink:0}}>
+                  style={{background:'#EFF6FF',color:N,border:`1px solid #BFDBFE`,
+                    padding:'0 10px',fontSize:14,cursor:'pointer',height:28,fontFamily:F,fontWeight:700,flexShrink:0,borderRadius:5}}>
                   🔍
                 </button>
               </div>
@@ -295,11 +297,11 @@ function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
         </div>
 
         {/* RIGHT: Reference Numbers & Terms */}
-        <div style={{border:`1px solid ${B}`,background:W}}>
+        <div style={{border:`1px solid #E2E8F0`,background:W,borderRadius:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
           <PH title="Reference Numbers & Terms" />
           <div style={{padding:'0 6px 6px'}}>
             <FR label="ERP Order ID" w={130} req>
-              <Inp value={form.nextId||''} readOnly style={{width:120,background:'#ffffcc',fontWeight:700}}/>
+              <Inp value={form.nextId||''} readOnly style={{width:130,background:'#F0FDF4',fontWeight:700,color:'#166534',border:'1px solid #BBF7D0'}}/>
               <span style={{fontSize:10,color:'#888',paddingLeft:4}}>(auto-generated)</span>
             </FR>
             <FR label="Order No." w={130}>
@@ -336,7 +338,7 @@ function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
       </div>
 
       {/* ── Row 2: Ship To ── */}
-      <div style={{border:`1px solid ${B}`,background:W}}>
+      <div style={{border:`1px solid #E2E8F0`,background:W,borderRadius:8,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
         <PH title="Ship To — Delivery / Site Address" />
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,columnGap:16,padding:'0 6px 6px'}}>
           <div>
@@ -390,11 +392,96 @@ const ITEM_TYPES = ['Manufactured','Bought Out'];
 const GST_RATES  = [0,5,12,18,28];
 const UNITS      = ['NOS','Kg','Ltr','Mtr','Box','Pcs','Set','Sqft','MT'];
 
-function newItem() { return {_id:uid(),type:'Manufactured',description:'',qty:1,unit:'NOS',rate:0,gst:18,bom:[]}; }
-function newBomLine() { return {_id:uid(),itemName:'',qty:1,unit:'NOS'}; }
+function newItem() { return {_id:uid(),type:'Manufactured',itemCode:'',description:'',additionalDesc:'',hsnCode:'',qty:1,unit:'NOS',rate:0,gst:18,bom:[]}; }
+function newBomLine() { return {_id:uid(),itemCode:'',itemName:'',qty:1,unit:'NOS'}; }
+
+/* ── Item Picker Modal ── */
+function ItemPickerModal({ companyId, onSelect, onClose }) {
+  const [items, setItems]   = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get(`/api/items?companyId=${companyId}`)
+      .then(r => setItems(r.data || []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [companyId]);
+
+  const filtered = items.filter(it => {
+    const q = search.toLowerCase();
+    return !q || String(it.itemCode).includes(q) ||
+      (it.itemName || '').toLowerCase().includes(q) ||
+      (it.hsnCode  || '').toLowerCase().includes(q);
+  });
+
+  return (
+    <div style={{ position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.45)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+      <div style={{ background:'#fff',width:620,maxHeight:'80vh',display:'flex',flexDirection:'column',border:'2px solid '+N,fontFamily:F }}>
+        {/* Header */}
+        <div style={{ background:N,color:W,padding:'6px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
+          <span style={{ fontWeight:700,fontSize:13 }}>📦 Select Item</span>
+          <button onClick={onClose} style={{ background:'transparent',border:'none',color:W,fontSize:16,cursor:'pointer',lineHeight:1 }}>✕</button>
+        </div>
+        {/* Search */}
+        <div style={{ padding:'6px 10px',borderBottom:'1px solid #ddd',flexShrink:0 }}>
+          <input autoFocus value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search by code, name or HSN…"
+            style={{ width:'100%',height:24,padding:'0 8px',border:'1px solid #aaa',fontSize:12,fontFamily:F,outline:'none',boxSizing:'border-box' }} />
+        </div>
+        {/* List */}
+        <div style={{ overflowY:'auto',flex:1 }}>
+          <table style={{ width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F }}>
+            <thead style={{ position:'sticky',top:0,zIndex:1 }}>
+              <tr>
+                {['Code','Item Name','UOM','HSN','Type'].map(h => (
+                  <th key={h} style={{ padding:'4px 8px',background:N,color:W,fontWeight:700,textAlign:'left',borderRight:'1px solid #2a5a8a',whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={5} style={{ padding:16,textAlign:'center',color:'#888' }}>Loading…</td></tr>}
+              {!loading && filtered.length===0 && (
+                <tr><td colSpan={5} style={{ padding:16,textAlign:'center',color:'#888' }}>
+                  No items found. <a href="/items/create" target="_blank" style={{ color:N }}>Create item →</a>
+                </td></tr>
+              )}
+              {filtered.map((it,i) => (
+                <tr key={it.itemCode}
+                  onClick={() => onSelect(it)}
+                  style={{ background:i%2===0?'#fff':'#f5f8fc',cursor:'pointer' }}
+                  onMouseEnter={e=>e.currentTarget.style.background='#dbeafe'}
+                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f5f8fc'}
+                >
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',fontWeight:700,color:'#1a4a7a' }}>{it.itemCode}</td>
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee' }}>{it.itemName}</td>
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',textAlign:'center' }}>{it.uom||'—'}</td>
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',textAlign:'center',fontFamily:'monospace' }}>{it.hsnCode||'—'}</td>
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee' }}>
+                    <span style={{ fontSize:10,padding:'1px 6px',borderRadius:2,fontWeight:700,
+                      background: it.itemType==='Ready Product'?'#e8f5e9':'#fff3e0',
+                      color:      it.itemType==='Ready Product'?'#2e7d32':'#e65100',
+                      border:     it.itemType==='Ready Product'?'1px solid #a5d6a7':'1px solid #ffcc80',
+                    }}>{it.itemType}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* Footer */}
+        <div style={{ padding:'5px 10px',borderTop:'1px solid #ddd',fontSize:10,color:'#666',flexShrink:0 }}>
+          {filtered.length} item{filtered.length!==1?'s':''} · Click row to select
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TabItemDetails({ items, setItems }) {
-  const [bomOpen, setBomOpen] = useState(null);
+  const { selectedCompany } = useCompany();
+  const [bomOpen, setBomOpen]       = useState(null);
+  const [pickerFor, setPickerFor]   = useState(null); // _id of row opening picker
 
   const add    = () => setItems(p=>[...p,newItem()]);
   const upd    = (id,k,v) => setItems(p=>p.map(r=>r._id===id?{...r,[k]:v}:r));
@@ -402,6 +489,17 @@ function TabItemDetails({ items, setItems }) {
   const addBom = (id) => setItems(p=>p.map(r=>r._id===id?{...r,bom:[...(r.bom||[]),newBomLine()]}:r));
   const updBom = (iid,bid,k,v) => setItems(p=>p.map(r=>r._id===iid?{...r,bom:r.bom.map(b=>b._id===bid?{...b,[k]:v}:b)}:r));
   const delBom = (iid,bid) => setItems(p=>p.map(r=>r._id===iid?{...r,bom:r.bom.filter(b=>b._id!==bid)}:r));
+
+  const handleItemSelect = (masterItem) => {
+    setItems(p => p.map(r => r._id === pickerFor ? {
+      ...r,
+      itemCode:    masterItem.itemCode,
+      description: masterItem.itemName,
+      unit:        masterItem.uom || r.unit,
+      hsnCode:     masterItem.hsnCode || '',
+    } : r));
+    setPickerFor(null);
+  };
 
   const th = (w,right) => ({padding:'3px 5px',background:N,color:W,fontWeight:700,fontSize:10,textAlign:right?'right':'left',
     border:'1px solid #2a5a8a',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:2,width:w});
@@ -411,23 +509,30 @@ function TabItemDetails({ items, setItems }) {
 
   return (
     <div style={{padding:'8px 10px'}}>
+      {pickerFor && (
+        <ItemPickerModal
+          companyId={selectedCompany?.companyId}
+          onSelect={handleItemSelect}
+          onClose={() => setPickerFor(null)}
+        />
+      )}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
         <span style={{fontSize:12,fontWeight:700,color:N}}>Line Items — Manufactured / Bought Out</span>
         <Btn v="suc" onClick={add}>+ Add Item</Btn>
       </div>
       <div style={{overflowX:'auto',border:`1px solid ${B}`}}>
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:700}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:1050}}>
           <thead>
             <tr>
-              {[['#',30],['Type',110],['Description / Item Name',0],['Qty',60],['Unit',60],
-                ['Rate ₹',85],['GST %',60],['Amount ₹',95],['',70]].map(([h,w],i)=>(
-                <th key={i} style={th(w||undefined, i>=5&&i<=6)}>{h}</th>
+              {[['#',28],['Type',100],['Item Code',80],['Item Name',0],['Additional Description',0],['HSN Code',80],['Qty',55],['Unit',55],
+                ['Rate ₹',80],['GST %',55],['Amount ₹',90],['',68]].map(([h,w],i)=>(
+                <th key={i} style={th(w||undefined, i>=8&&i<=9)}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {items.length===0 && (
-              <tr><td colSpan={9} style={{padding:'14px',textAlign:'center',color:'#888',fontSize:11,background:'#fafafa'}}>
+              <tr><td colSpan={12} style={{padding:'14px',textAlign:'center',color:'#888',fontSize:11,background:'#fafafa'}}>
                 No items added — click [+ Add Item] to start
               </td></tr>
             )}
@@ -438,15 +543,32 @@ function TabItemDetails({ items, setItems }) {
               return (
                 <>
                   <tr key={it._id} style={{background:idx%2===0?W:'#f5f8fc'}}>
-                    <td style={{...td(30),textAlign:'center',color:'#888'}}>{idx+1}</td>
-                    <td style={td(110)}><Sel value={it.type} onChange={e=>upd(it._id,'type',e.target.value)} options={ITEM_TYPES}/></td>
-                    <td style={td()}><Inp value={it.description} onChange={e=>upd(it._id,'description',e.target.value)} placeholder="Item / product description"/></td>
-                    <td style={td(60)}><Inp type="number" value={it.qty} onChange={e=>upd(it._id,'qty',e.target.value)} min="0"/></td>
-                    <td style={td(60)}><Sel value={it.unit} onChange={e=>upd(it._id,'unit',e.target.value)} options={UNITS}/></td>
-                    <td style={td(85)}><Inp type="number" value={it.rate} onChange={e=>upd(it._id,'rate',e.target.value)} min="0"/></td>
-                    <td style={td(60)}><Sel value={it.gst} onChange={e=>upd(it._id,'gst',e.target.value)} options={GST_RATES.map(r=>({value:r,label:`${r}%`}))}/></td>
-                    <td style={{...td(95),textAlign:'right',fontWeight:700,color:'#005500'}}>{fmt(sub+tax)}</td>
-                    <td style={{...td(70),textAlign:'center'}}>
+                    <td style={{...td(28),textAlign:'center',color:'#888'}}>{idx+1}</td>
+                    <td style={td(100)}><Sel value={it.type} onChange={e=>upd(it._id,'type',e.target.value)} options={ITEM_TYPES}/></td>
+                    <td style={{...td(80),textAlign:'center'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:3,justifyContent:'center'}}>
+                        <button onClick={()=>setPickerFor(it._id)} title="Search from Item Master"
+                          style={{background:'#e8f0ff',color:'#1a4a7a',border:'1px solid #aac',padding:'0 5px',fontSize:10,cursor:'pointer',height:18,fontFamily:F,whiteSpace:'nowrap',flexShrink:0,fontWeight:700}}>
+                          📋
+                        </button>
+                        <span style={{fontSize:10,color:'#1a4a7a',fontWeight:700}}>
+                          {it.itemCode||'—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={td()}>
+                      <Inp value={it.description} readOnly placeholder="Select item via 📋"/>
+                    </td>
+                    <td style={td()}>
+                      <Inp value={it.additionalDesc||''} onChange={e=>upd(it._id,'additionalDesc',e.target.value)} placeholder="Additional description…"/>
+                    </td>
+                    <td style={td(80)}><Inp value={it.hsnCode||''} onChange={e=>upd(it._id,'hsnCode',e.target.value)} placeholder="HSN Code"/></td>
+                    <td style={td(55)}><Inp type="number" value={it.qty} onChange={e=>upd(it._id,'qty',e.target.value)} min="0"/></td>
+                    <td style={td(55)}><Sel value={it.unit} onChange={e=>upd(it._id,'unit',e.target.value)} options={UNITS}/></td>
+                    <td style={td(80)}><Inp type="number" value={it.rate} onChange={e=>upd(it._id,'rate',e.target.value)} min="0"/></td>
+                    <td style={td(55)}><Sel value={it.gst} onChange={e=>upd(it._id,'gst',e.target.value)} options={GST_RATES.map(r=>({value:r,label:`${r}%`}))}/></td>
+                    <td style={{...td(90),textAlign:'right',fontWeight:700,color:'#005500'}}>{fmt(sub+tax)}</td>
+                    <td style={{...td(68),textAlign:'center'}}>
                       <div style={{display:'flex',gap:3,justifyContent:'center'}}>
                         {it.type==='Manufactured' && (
                           <button onClick={()=>setBomOpen(isBomOpen?null:it._id)}
@@ -463,7 +585,7 @@ function TabItemDetails({ items, setItems }) {
                   </tr>
                   {it.type==='Manufactured' && isBomOpen && (
                     <tr key={`bom-${it._id}`}>
-                      <td colSpan={9} style={{padding:0,background:'#f0f7ff',borderLeft:'3px solid #4488cc',borderBottom:'2px solid #88aacc'}}>
+                      <td colSpan={12} style={{padding:0,background:'#f0f7ff',borderLeft:'3px solid #4488cc',borderBottom:'2px solid #88aacc'}}>
                         <div style={{padding:'6px 8px 6px 24px'}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
                             <span style={{fontSize:11,fontWeight:700,color:N}}>
@@ -514,7 +636,7 @@ function TabItemDetails({ items, setItems }) {
           {items.length>0 && (
             <tfoot>
               <tr style={{background:'#e8f0f8',borderTop:'2px solid #888'}}>
-                <td colSpan={7} style={{padding:'4px 8px',textAlign:'right',fontWeight:700,fontSize:11,color:N}}>Items Total (incl. GST)</td>
+                <td colSpan={9} style={{padding:'4px 8px',textAlign:'right',fontWeight:700,fontSize:11,color:N}}>Items Total (incl. GST)</td>
                 <td style={{padding:'4px 8px',textAlign:'right',fontWeight:700,fontSize:12,color:'#005500'}}>{fmt(total)}</td>
                 <td/>
               </tr>
@@ -990,6 +1112,479 @@ function TabAttachments({ attachments, setAttachments }) {
   );
 }
 
+/* ═══════════════════════ RICH TEXT EDITOR ═══════════════════════ */
+function RichEditor({ value, onChange }) {
+  const ref      = useRef(null);
+  const colorRef = useRef(null);
+  const hlRef    = useRef(null);
+  const [tableOpen, setTableOpen] = useState(false);
+  const [tRows,     setTRows]     = useState(3);
+  const [tCols,     setTCols]     = useState(4);
+
+  /* set HTML only on mount / external change (not while typing) */
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = value || '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* when loadEdit fires, specSheet changes from outside → sync to DOM */
+  const lastExternal = useRef(value);
+  useEffect(() => {
+    if (value !== lastExternal.current && ref.current && document.activeElement !== ref.current) {
+      ref.current.innerHTML = value || '';
+      lastExternal.current = value;
+    }
+  }, [value]);
+
+  const exec = useCallback((cmd, val = null) => {
+    ref.current?.focus();
+    document.execCommand(cmd, false, val);
+  }, []);
+
+  const onInput = () => {
+    lastExternal.current = ref.current.innerHTML;
+    onChange(ref.current.innerHTML);
+  };
+
+  /* Paste handler — preserve WordPad / Word formatting, strip junk */
+  const onPaste = useCallback((e) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData('text/html');
+    const text = e.clipboardData.getData('text/plain');
+
+    if (html) {
+      /* Strip MS Office / WordPad noise while keeping structure */
+      let clean = html
+        .replace(/<!--[\s\S]*?-->/g, '')                    // HTML comments
+        .replace(/<o:p[^>]*>[\s\S]*?<\/o:p>/gi, '')         // Word <o:p>
+        .replace(/<\/?(?:xml|w:|m:|v:|o:)[^>]*>/gi, '')     // Word XML tags
+        .replace(/\s+mso-[^;:"'}\s]+\s*:[^;}"']+;?/gi, '')  // mso-* CSS props
+        .replace(/\s+panose-[^;:"'}\s]+\s*:[^;}"']+;?/gi, '') // panose-*
+        .replace(/\s+font-family:\s*['"][^'"]*Wingdings[^'"]*['"]\s*;?/gi, '') // Wingdings
+        .replace(/style="\s*"/gi, '')                        // empty style attrs
+        .replace(/<span[^>]*>\s*<\/span>/gi, '')             // empty spans
+        .replace(/<p[^>]*>\s*(&nbsp;)?\s*<\/p>/gi, '<br>')  // empty paragraphs
+        .replace(/<font[^>]*face="Symbol"[^>]*>[\s\S]*?<\/font>/gi, ''); // Symbol font
+
+      /* Insert the cleaned HTML at cursor */
+      ref.current?.focus();
+      document.execCommand('insertHTML', false, clean);
+    } else if (text) {
+      /* Plain text — preserve line breaks */
+      const safe = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+      ref.current?.focus();
+      document.execCommand('insertHTML', false, safe);
+    }
+
+    onInput();
+  }, []);
+
+  const insertTable = () => {
+    let html = '<table style="border-collapse:collapse;width:100%;margin:8px 0">';
+    for (let r = 0; r < tRows; r++) {
+      html += '<tr>';
+      for (let c = 0; c < tCols; c++) {
+        if (r === 0) {
+          html += '<th style="border:1px solid #aaa;padding:6px 10px;background:#1a3c6e;color:#fff;font-weight:700;min-width:70px">&nbsp;</th>';
+        } else {
+          html += '<td style="border:1px solid #aaa;padding:5px 10px;min-width:70px">&nbsp;</td>';
+        }
+      }
+      html += '</tr>';
+    }
+    html += '</table><br>';
+    ref.current?.focus();
+    document.execCommand('insertHTML', false, html);
+    onInput();
+    setTableOpen(false);
+  };
+
+  const TB = { /* toolbar button base */
+    padding:'2px 7px', fontSize:12, fontFamily:'Arial,sans-serif',
+    border:'1px solid #CBD5E1', borderRadius:3, cursor:'pointer',
+    background:'#fff', color:'#1e293b', height:24, lineHeight:'20px',
+    display:'inline-flex', alignItems:'center', gap:2, whiteSpace:'nowrap',
+    userSelect:'none',
+  };
+  const SEL = { ...TB, padding:'1px 4px' };
+  const SEP = <span style={{width:1,height:18,background:'#CBD5E1',margin:'0 2px',display:'inline-block',flexShrink:0}}/>;
+
+  return (
+    <div style={{border:'1px solid #D1D5DB',borderRadius:5,overflow:'visible',
+      background:'#fff',display:'flex',flexDirection:'column',position:'relative'}}>
+
+      {/* ── Toolbar ── */}
+      <div style={{background:'#F8FAFC',borderBottom:'1px solid #D1D5DB',
+        padding:'5px 8px',display:'flex',flexWrap:'wrap',gap:3,alignItems:'center',flexShrink:0}}>
+
+        {/* Heading */}
+        <select onChange={e=>exec('formatBlock',e.target.value)} style={SEL}>
+          <option value="p">Normal</option>
+          <option value="h1">Heading 1</option>
+          <option value="h2">Heading 2</option>
+          <option value="h3">Heading 3</option>
+          <option value="h4">Heading 4</option>
+          <option value="pre">Code</option>
+        </select>
+
+        {/* Font family */}
+        <select onChange={e=>exec('fontName',e.target.value)} style={{...SEL,minWidth:96}}>
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Verdana">Verdana</option>
+          <option value="Tahoma">Tahoma</option>
+        </select>
+
+        {/* Font size */}
+        <select onChange={e=>exec('fontSize',e.target.value)} defaultValue="3" style={{...SEL,width:52}}>
+          <option value="1">8</option>
+          <option value="2">10</option>
+          <option value="3">12</option>
+          <option value="4">14</option>
+          <option value="5">18</option>
+          <option value="6">24</option>
+          <option value="7">36</option>
+        </select>
+
+        {SEP}
+
+        {/* Bold / Italic / Underline / Strike */}
+        <button onMouseDown={e=>{e.preventDefault();exec('bold');}}       style={TB} title="Bold (Ctrl+B)"><b>B</b></button>
+        <button onMouseDown={e=>{e.preventDefault();exec('italic');}}     style={TB} title="Italic (Ctrl+I)"><i>I</i></button>
+        <button onMouseDown={e=>{e.preventDefault();exec('underline');}}  style={TB} title="Underline (Ctrl+U)"><u>U</u></button>
+        <button onMouseDown={e=>{e.preventDefault();exec('strikeThrough');}} style={TB} title="Strikethrough"><s>S</s></button>
+
+        {SEP}
+
+        {/* Text colour */}
+        <button onMouseDown={e=>e.preventDefault()} onClick={()=>colorRef.current?.click()}
+          style={{...TB}} title="Text Color">
+          A <span style={{width:12,height:3,background:'#e00',borderRadius:1,display:'inline-block'}}/>
+        </button>
+        <input ref={colorRef} type="color" defaultValue="#000000"
+          onChange={e=>exec('foreColor',e.target.value)}
+          style={{width:0,height:0,opacity:0,position:'absolute',pointerEvents:'none'}}/>
+
+        {/* Highlight */}
+        <button onMouseDown={e=>e.preventDefault()} onClick={()=>hlRef.current?.click()}
+          style={{...TB}} title="Highlight Color">
+          H <span style={{width:12,height:3,background:'#ff0',borderRadius:1,display:'inline-block'}}/>
+        </button>
+        <input ref={hlRef} type="color" defaultValue="#ffff00"
+          onChange={e=>exec('hiliteColor',e.target.value)}
+          style={{width:0,height:0,opacity:0,position:'absolute',pointerEvents:'none'}}/>
+
+        {SEP}
+
+        {/* Alignment */}
+        <button onMouseDown={e=>{e.preventDefault();exec('justifyLeft');}}   style={TB} title="Align Left">≡L</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('justifyCenter');}} style={TB} title="Center">≡C</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('justifyRight');}}  style={TB} title="Align Right">≡R</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('justifyFull');}}   style={TB} title="Justify">≡J</button>
+
+        {SEP}
+
+        {/* Lists */}
+        <button onMouseDown={e=>{e.preventDefault();exec('insertUnorderedList');}} style={TB} title="Bullet List">• List</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('insertOrderedList');}}   style={TB} title="Numbered List">1. List</button>
+
+        {/* Indent */}
+        <button onMouseDown={e=>{e.preventDefault();exec('indent');}}   style={TB} title="Indent">→</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('outdent');}}  style={TB} title="Outdent">←</button>
+
+        {SEP}
+
+        {/* Table */}
+        <button onMouseDown={e=>e.preventDefault()} onClick={()=>setTableOpen(o=>!o)}
+          style={{...TB,color:'#1a3c6e',fontWeight:700}} title="Insert Table">⊞ Table</button>
+
+        {SEP}
+
+        {/* HR + clear */}
+        <button onMouseDown={e=>{e.preventDefault();exec('insertHorizontalRule');}} style={TB} title="Horizontal Rule">― HR</button>
+        <button onMouseDown={e=>{e.preventDefault();exec('removeFormat');}}         style={TB} title="Clear Formatting">✕ Format</button>
+      </div>
+
+      {/* ── Table size picker (popover) ── */}
+      {tableOpen && (
+        <div style={{position:'absolute',top:42,left:0,zIndex:200,background:'#fff',
+          border:'1px solid #D1D5DB',borderRadius:6,boxShadow:'0 6px 20px rgba(0,0,0,0.15)',
+          padding:'14px 18px',display:'flex',flexDirection:'column',gap:10,minWidth:230}}>
+          <div style={{fontWeight:700,fontSize:13,color:'#1a3c6e'}}>⊞ Insert Table</div>
+          <div style={{display:'flex',gap:10,alignItems:'center',fontSize:12}}>
+            <span>Rows:</span>
+            <input type="number" min={1} max={30} value={tRows} onChange={e=>setTRows(+e.target.value)}
+              style={{width:52,padding:'3px 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:12,fontFamily:F}}/>
+            <span>Cols:</span>
+            <input type="number" min={1} max={15} value={tCols} onChange={e=>setTCols(+e.target.value)}
+              style={{width:52,padding:'3px 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:12,fontFamily:F}}/>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={insertTable}
+              style={{background:'#1a3c6e',color:'#fff',border:'none',padding:'5px 16px',
+                borderRadius:4,fontSize:12,cursor:'pointer',fontWeight:700,fontFamily:F}}>Insert</button>
+            <button onClick={()=>setTableOpen(false)}
+              style={{background:'#F3F4F6',border:'1px solid #D1D5DB',padding:'5px 14px',
+                borderRadius:4,fontSize:12,cursor:'pointer',fontFamily:F}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Editable area ── */}
+      <style>{`
+        .spec-editor:empty:before {
+          content: attr(data-ph);
+          color: #9CA3AF;
+          pointer-events: none;
+        }
+        .spec-editor table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+        .spec-editor td, .spec-editor th { border: 1px solid #aaa; padding: 5px 10px; min-width: 60px; }
+        .spec-editor th { background: #1a3c6e; color: #fff; font-weight: 700; }
+        .spec-editor h1 { font-size: 1.8em; margin: 8px 0 4px; }
+        .spec-editor h2 { font-size: 1.4em; margin: 6px 0 3px; }
+        .spec-editor h3 { font-size: 1.15em; margin: 5px 0 2px; }
+        .spec-editor h4 { font-size: 1em; margin: 4px 0 2px; }
+        .spec-editor pre { background: #f3f4f6; padding: 8px 12px; border-radius: 4px; font-size: 12px; }
+        .spec-editor ul, .spec-editor ol { padding-left: 24px; }
+        .spec-editor hr { border: none; border-top: 2px solid #e5e7eb; margin: 10px 0; }
+      `}</style>
+      <div
+        ref={ref}
+        className="spec-editor"
+        contentEditable
+        suppressContentEditableWarning
+        data-ph="Start typing your specifications here…  Use the toolbar above to format text, insert tables, bullet lists, headings, and more."
+        onInput={onInput}
+        onPaste={onPaste}
+        style={{
+          minHeight: 440, padding: '14px 18px', outline: 'none',
+          fontSize: 13, fontFamily: 'Arial, sans-serif', lineHeight: 1.75,
+          background: '#fff', overflowY: 'auto', color: '#111',
+          flex: 1,
+        }}
+      />
+    </div>
+  );
+}
+
+/* ═══════════════════════ SPECIFICATIONS TAB ═══════════════════════ */
+/* ─── Structured specs builder ─── */
+function StructuredSpecs({ items, groups, setGroups }) {
+  const newRow    = () => ({ _id:uid(), srNo:'', description:'', qty:'', remarks:'' });
+  const newSub    = () => ({ _id:uid(), title:'', text:'', rows:[newRow()] });
+  const newHdr    = () => ({ _id:uid(), title:'', subHeaders:[newSub()] });
+  const newGroup  = () => ({ _id:uid(), itemId:'', itemName:'', headers:[newHdr()] });
+
+  const addGroup  = () => setGroups(p=>[...p,newGroup()]);
+  const delGroup  = (gid) => setGroups(p=>p.filter(g=>g._id!==gid));
+  const setGItem  = (gid,iid,iname) => setGroups(p=>p.map(g=>g._id===gid?{...g,itemId:iid,itemName:iname}:g));
+
+  const addHdr  = (gid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:[...g.headers,newHdr()]}:g));
+  const delHdr  = (gid,hid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.filter(h=>h._id!==hid)}:g));
+  const setHdrT = (gid,hid,t) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,title:t}:h)}:g));
+
+  const addSub  = (gid,hid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:[...h.subHeaders,newSub()]}:h)}:g));
+  const delSub  = (gid,hid,sid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.filter(s=>s._id!==sid)}:h)}:g));
+  const setSubF = (gid,hid,sid,k,v) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(s=>s._id===sid?{...s,[k]:v}:s)}:h)}:g));
+
+  const addRow  = (gid,hid,sid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(s=>s._id===sid?{...s,rows:[...s.rows,newRow()]}:s)}:h)}:g));
+  const delRow  = (gid,hid,sid,rid) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(s=>s._id===sid?{...s,rows:s.rows.filter(r=>r._id!==rid)}:s)}:h)}:g));
+  const updRow  = (gid,hid,sid,rid,k,v) => setGroups(p=>p.map(g=>g._id===gid?{...g,headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(s=>s._id===sid?{...s,rows:s.rows.map(r=>r._id===rid?{...r,[k]:v}:r)}:s)}:h)}:g));
+
+  return (
+    <div style={{overflowY:'auto',flex:1,paddingBottom:8}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <span style={{fontSize:11,color:'#6B7280'}}>Organise specs by item → header → sub-header → rows</span>
+        <Btn v="suc" onClick={addGroup}>+ Add Item Group</Btn>
+      </div>
+      {groups.length===0 && (
+        <div style={{padding:'28px',textAlign:'center',color:'#888',background:'#fafafa',border:`1px dashed ${B}`,borderRadius:6,fontSize:12}}>
+          Click [+ Add Item Group] to begin
+        </div>
+      )}
+      {groups.map(group=>(
+        <div key={group._id} style={{marginBottom:14,border:`1px solid ${B}`,borderRadius:6,overflow:'hidden'}}>
+          {/* Group: item selector */}
+          <div style={{background:N,padding:'6px 10px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <span style={{color:W,fontWeight:700,fontSize:11}}>Item:</span>
+            <select value={group.itemId}
+              onChange={e=>{const s=items.find(it=>it._id===e.target.value);setGItem(group._id,e.target.value,s?(s.description||s.itemCode||''):'');}}
+              style={{fontSize:11,fontFamily:F,padding:'2px 5px',border:'none',borderRadius:3,minWidth:200}}>
+              <option value="">— Select from order items —</option>
+              {items.map(it=><option key={it._id} value={it._id}>{it.description||it.itemCode}</option>)}
+            </select>
+            <input value={group.itemName} onChange={e=>setGItem(group._id,'',e.target.value)}
+              placeholder={group.itemId?'':'Or type custom item name…'} disabled={!!group.itemId}
+              style={{fontSize:11,fontFamily:F,padding:'2px 6px',border:'1px solid rgba(255,255,255,0.4)',
+                borderRadius:3,minWidth:160,background:group.itemId?'rgba(255,255,255,0.15)':'#fff',
+                color:group.itemId?'rgba(255,255,255,0.6)':'#111'}}/>
+            <div style={{flex:1}}/>
+            <Btn v="suc" onClick={()=>addHdr(group._id)} style={{fontSize:10}}>+ Header</Btn>
+            <button onClick={()=>delGroup(group._id)}
+              style={{background:'#ffe0e0',color:R,border:'1px solid #cc8888',padding:'0 7px',fontSize:11,cursor:'pointer',height:24,borderRadius:3,fontWeight:700}}>✕ Remove</button>
+          </div>
+          {/* Headers */}
+          {group.headers.map(hdr=>(
+            <div key={hdr._id} style={{borderTop:`1px solid ${B}`}}>
+              <div style={{background:'#EFF6FF',padding:'4px 10px',display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:11,color:N,fontWeight:700,whiteSpace:'nowrap'}}>Header:</span>
+                <Inp value={hdr.title} onChange={e=>setHdrT(group._id,hdr._id,e.target.value)}
+                  placeholder="e.g. Technical Specifications, Mechanical Properties…" style={{flex:1}}/>
+                <Btn v="suc" onClick={()=>addSub(group._id,hdr._id)} style={{fontSize:10}}>+ Sub-Header</Btn>
+                <button onClick={()=>delHdr(group._id,hdr._id)}
+                  style={{background:'#ffe0e0',color:R,border:'1px solid #cc8888',padding:'0 6px',fontSize:11,cursor:'pointer',height:22,borderRadius:3}}>✕</button>
+              </div>
+              {hdr.subHeaders.map(sub=>(
+                <div key={sub._id} style={{marginLeft:20,borderTop:'1px solid #E5E7EB'}}>
+                  <div style={{background:'#F8FAFC',padding:'3px 10px',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:10,color:'#64748B',fontWeight:700,whiteSpace:'nowrap'}}>Sub-Header:</span>
+                    <Inp value={sub.title} onChange={e=>setSubF(group._id,hdr._id,sub._id,'title',e.target.value)}
+                      placeholder="e.g. Dimensions, Material Grade…" style={{flex:1}}/>
+                    <Btn v="suc" onClick={()=>addRow(group._id,hdr._id,sub._id)} style={{fontSize:10}}>+ Row</Btn>
+                    <button onClick={()=>delSub(group._id,hdr._id,sub._id)}
+                      style={{background:'#ffe0e0',color:R,border:'1px solid #cc8888',padding:'0 6px',fontSize:10,cursor:'pointer',height:20,borderRadius:3}}>✕</button>
+                  </div>
+                  <div style={{padding:'3px 10px 4px',background:'#FAFBFC'}}>
+                    <textarea value={sub.text||''} onChange={e=>setSubF(group._id,hdr._id,sub._id,'text',e.target.value)}
+                      placeholder="Optional notes / description for this sub-header…" rows={2}
+                      style={{width:'100%',fontSize:11,fontFamily:F,padding:'3px 6px',border:'1px solid #E5E7EB',
+                        borderRadius:3,resize:'vertical',boxSizing:'border-box'}}/>
+                  </div>
+                  <div style={{padding:'0 10px 8px'}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
+                      <thead>
+                        <tr style={{background:N}}>
+                          {['Sr No','Description','Qty','Remarks',''].map((h,i)=>(
+                            <th key={i} style={{padding:'3px 5px',color:W,fontWeight:700,fontSize:10,textAlign:'left',border:'1px solid #2a5a8a',whiteSpace:'nowrap'}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sub.rows.length===0&&<tr><td colSpan={5} style={{padding:'8px',textAlign:'center',color:'#888',fontSize:11}}>Click [+ Row] to add rows</td></tr>}
+                        {sub.rows.map((row,ri)=>(
+                          <tr key={row._id} style={{background:ri%2===0?W:'#f5f8fc'}}>
+                            <td style={{border:'1px solid #e0e0e0',width:52,padding:'2px 4px'}}><Inp value={row.srNo} onChange={e=>updRow(group._id,hdr._id,sub._id,row._id,'srNo',e.target.value)} placeholder={String(ri+1)}/></td>
+                            <td style={{border:'1px solid #e0e0e0',padding:'2px 4px'}}><Inp value={row.description} onChange={e=>updRow(group._id,hdr._id,sub._id,row._id,'description',e.target.value)} placeholder="Description…"/></td>
+                            <td style={{border:'1px solid #e0e0e0',width:70,padding:'2px 4px'}}><Inp value={row.qty} onChange={e=>updRow(group._id,hdr._id,sub._id,row._id,'qty',e.target.value)} placeholder="—"/></td>
+                            <td style={{border:'1px solid #e0e0e0',padding:'2px 4px'}}><Inp value={row.remarks} onChange={e=>updRow(group._id,hdr._id,sub._id,row._id,'remarks',e.target.value)} placeholder="Remarks…"/></td>
+                            <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px'}}>
+                              <button onClick={()=>delRow(group._id,hdr._id,sub._id,row._id)}
+                                style={{background:'#ffe0e0',color:R,border:'1px solid #cc8888',padding:'0 4px',fontSize:10,cursor:'pointer',height:18}}>✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Spec file uploader ─── */
+function SpecFileUpload({ files, setFiles }) {
+  const add = (e) => {
+    const newFs = Array.from(e.target.files).map(f=>({
+      _id:uid(), name:f.name.replace(/\.[^.]+$/,''),
+      fileName:f.name, fileType:f.name.split('.').pop().toLowerCase(), file:f,
+    }));
+    setFiles(p=>[...p,...newFs]);
+    e.target.value='';
+  };
+  const del = (id) => setFiles(p=>p.filter(f=>f._id!==id));
+  const upd = (id,k,v) => setFiles(p=>p.map(f=>f._id===id?{...f,[k]:v}:f));
+  const ico = t => ({'pdf':'📄','doc':'📝','docx':'📝','xls':'📊','xlsx':'📊','txt':'📃'}[t]||'📎');
+
+  return (
+    <div style={{overflowY:'auto',flex:1}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+        <span style={{fontSize:11,color:'#6B7280'}}>Attach Excel, Word, PDF or TXT files as specification documents</span>
+        <label style={{background:'#16A34A',color:'#fff',border:'none',padding:'4px 14px',fontSize:11,
+          cursor:'pointer',fontFamily:F,fontWeight:700,borderRadius:4,display:'inline-flex',alignItems:'center',gap:4}}>
+          + Upload File
+          <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={add} style={{display:'none'}}/>
+        </label>
+      </div>
+      {files.length===0 && (
+        <div style={{padding:'28px',textAlign:'center',color:'#888',background:'#fafafa',border:`1px dashed ${B}`,borderRadius:6,fontSize:12}}>
+          No spec files — click [+ Upload File] to attach PDF, Word, Excel or TXT
+        </div>
+      )}
+      {files.length>0 && (
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
+          <thead>
+            <tr style={{background:N}}>
+              {['#','','Label / Description','File Name',''].map((h,i)=>(
+                <th key={i} style={{padding:'4px 6px',color:W,fontWeight:700,fontSize:10,textAlign:'left',border:'1px solid #2a5a8a'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {files.map((f,i)=>(
+              <tr key={f._id} style={{background:i%2===0?W:'#f5f8fc'}}>
+                <td style={{border:'1px solid #e0e0e0',width:28,textAlign:'center',padding:'2px 4px',color:'#888'}}>{i+1}</td>
+                <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px',fontSize:16}}>{ico(f.fileType)}</td>
+                <td style={{border:'1px solid #e0e0e0',padding:'2px 4px'}}>
+                  <Inp value={f.name} onChange={e=>upd(f._id,'name',e.target.value)} placeholder="Label for this file…"/>
+                </td>
+                <td style={{border:'1px solid #e0e0e0',padding:'3px 6px',color:f.file?'#005500':'#555',fontWeight:f.file?700:400}}>
+                  {f.file?`✔ ${f.file.name}`:(f.fileName||'—')}
+                </td>
+                <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px'}}>
+                  <button onClick={()=>del(f._id)}
+                    style={{background:'#ffe0e0',color:R,border:'1px solid #cc8888',padding:'0 4px',fontSize:10,cursor:'pointer',height:18}}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ─── Tab wrapper with mode toggle ─── */
+function TabSpecifications({ items, specMode, setSpecMode, specHtml, setSpecHtml, specGroups, setSpecGroups, specFileList, setSpecFileList }) {
+  const modes = [
+    { id:'freewrite',  label:'✍ Free Write' },
+    { id:'structured', label:'📋 Structured' },
+    { id:'upload',     label:'📎 Upload File' },
+  ];
+  return (
+    <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:8,height:'100%',boxSizing:'border-box'}}>
+      {/* Mode toggle */}
+      <div style={{display:'flex',gap:4,flexShrink:0,flexWrap:'wrap',alignItems:'center'}}>
+        <span style={{fontSize:11,fontWeight:700,color:N,marginRight:4}}>📐 Specifications — Mode:</span>
+        {modes.map(m=>(
+          <button key={m.id} onClick={()=>setSpecMode(m.id)}
+            style={{padding:'4px 14px',fontSize:11,fontWeight:specMode===m.id?700:500,
+              background:specMode===m.id?N:'#F3F4F6',color:specMode===m.id?W:'#374151',
+              border:`1px solid ${specMode===m.id?N:'#D1D5DB'}`,borderRadius:4,cursor:'pointer',fontFamily:F}}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+      {/* Content */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+        {specMode==='freewrite'  && <RichEditor value={specHtml} onChange={setSpecHtml}/>}
+        {specMode==='structured' && <StructuredSpecs items={items} groups={specGroups} setGroups={setSpecGroups}/>}
+        {specMode==='upload'     && <SpecFileUpload files={specFileList} setFiles={setSpecFileList}/>}
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════ ORDER SUMMARY STRIP ═══════════════════════ */
 function OrderSummaryStrip({ items, charges }) {
   const itemsNet  = items.reduce((s,it)=>(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)+s, 0);
@@ -998,18 +1593,18 @@ function OrderSummaryStrip({ items, charges }) {
   const chgGst    = charges.reduce((s,ch)=>{const a=parseFloat(ch.amount)||0;return s+a*(parseFloat(ch.gst)||0)/100;},0);
   const grand     = itemsNet+itemsGst+chgNet+chgGst;
   return (
-    <div style={{display:'flex',alignItems:'center',gap:12,padding:'2px 10px',
-      background:'#1e3a5f',borderTop:'1px solid #0d2f50',flexShrink:0,flexWrap:'wrap'}}>
-      <span style={{fontSize:10,color:'#aac0d8',fontFamily:F}}>
-        Items: <strong style={{color:'#fff'}}>{fmt(itemsNet+itemsGst)}</strong>
+    <div style={{display:'flex',alignItems:'center',gap:16,padding:'5px 14px',
+      background:'#1E293B',borderTop:`1px solid #334155`,flexShrink:0,flexWrap:'wrap'}}>
+      <span style={{fontSize:11,color:'#94A3B8',fontFamily:F}}>
+        Items: <strong style={{color:'#F1F5F9'}}>{fmt(itemsNet+itemsGst)}</strong>
       </span>
-      <span style={{color:'#556677',fontSize:10}}>|</span>
-      <span style={{fontSize:10,color:'#aac0d8',fontFamily:F}}>
-        Charges: <strong style={{color:'#fff'}}>{fmt(chgNet+chgGst)}</strong>
+      <span style={{color:'#334155',fontSize:10}}>|</span>
+      <span style={{fontSize:11,color:'#94A3B8',fontFamily:F}}>
+        Charges: <strong style={{color:'#F1F5F9'}}>{fmt(chgNet+chgGst)}</strong>
       </span>
-      <span style={{color:'#556677',fontSize:10}}>|</span>
-      <span style={{fontSize:11,color:'#ffd700',fontFamily:F,fontWeight:700}}>
-        Grand Total: {fmt(grand)}
+      <span style={{color:'#334155',fontSize:10}}>|</span>
+      <span style={{fontSize:12,color:'#38BDF8',fontFamily:F,fontWeight:700}}>
+        Grand Total: <strong style={{color:'#fff',fontSize:13}}>{fmt(grand)}</strong>
       </span>
     </div>
   );
@@ -1053,19 +1648,19 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
   const val  = v  => (v==null||v===''||v==='—') ? <span style={{color:'#bbb',fontStyle:'italic'}}>—</span> : v;
 
   /* ── shared inline styles ── */
-  const SH = {background:'#1a3a6b',color:'#fff',padding:'5px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.7px',fontFamily:F};
+  const SH = {background:'linear-gradient(90deg,#eef2ff 0%,#f8fafc 100%)',color:N,padding:'5px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.7px',fontFamily:F,borderBottom:`1px solid rgba(99,102,241,0.15)`};
   const CELL_L = {fontSize:10,fontWeight:700,color:'#445',minWidth:110,padding:'3px 8px',borderRight:'1px solid #e8ecf4',background:'#f6f8fc',flexShrink:0,whiteSpace:'nowrap'};
   const CELL_V = {fontSize:11,color:'#111',padding:'3px 8px',fontFamily:F};
   const ROW    = {display:'flex',minHeight:24,borderBottom:'1px solid #eef1f8',alignItems:'center'};
   const SecHead = ({title,count})=>(
-    <div style={{...SH,marginTop:14,display:'flex',alignItems:'center',gap:8,borderLeft:'4px solid #c8a000'}}>
+    <div style={{...SH,marginTop:14,display:'flex',alignItems:'center',gap:8,borderLeft:`4px solid ${N}`}}>
       {title}
-      {count!=null&&<span style={{background:'#fff',color:'#1a3a6b',borderRadius:10,padding:'0 7px',fontSize:9,fontWeight:800}}>{count}</span>}
+      {count!=null&&<span style={{background:N,color:'#fff',borderRadius:10,padding:'0 7px',fontSize:9,fontWeight:800}}>{count}</span>}
     </div>
   );
 
   /* table helpers */
-  const TH = (props) => <th style={{padding:'5px 8px',background:'#1a3a6b',color:'#fff',fontSize:10,fontWeight:700,textAlign:props.r?'right':props.c?'center':'left',border:'1px solid #2a4a8a',whiteSpace:'nowrap',...props.style}}>{props.children}</th>;
+  const TH = (props) => <th style={{padding:'5px 8px',background:'#eef2ff',color:N,fontSize:10,fontWeight:700,textAlign:props.r?'right':props.c?'center':'left',border:`1px solid rgba(99,102,241,0.15)`,whiteSpace:'nowrap',...props.style}}>{props.children}</th>;
   const TD = (props) => <td style={{padding:'4px 8px',border:'1px solid #dde4f0',fontSize:11,verticalAlign:'top',textAlign:props.r?'right':props.c?'center':'left',fontWeight:props.bold?700:400,...props.style}}>{props.children}</td>;
 
   return (
@@ -1075,7 +1670,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
         onClick={e=>e.stopPropagation()}>
 
         {/* ══ STICKY HEADER ══ */}
-        <div style={{background:'#1a3a6b',color:'#fff',padding:'10px 16px',flexShrink:0,borderBottom:'3px solid #c8a000',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{background:`linear-gradient(135deg, ${N}, ${ND})`,color:'#fff',padding:'10px 16px',flexShrink:0,borderBottom:`3px solid rgba(255,255,255,0.2)`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
             <div style={{fontSize:10,opacity:.65,letterSpacing:.8,textTransform:'uppercase',fontFamily:F}}>Epsilon Enterprise · Sales Order</div>
             <div style={{fontSize:14,fontWeight:800,fontFamily:F,marginTop:2}}>
@@ -1298,9 +1893,9 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
                   <span>{l}</span><span>{v}</span>
                 </div>
               ))}
-              <div style={{display:'flex',justifyContent:'space-between',padding:'7px 12px',fontSize:13,fontFamily:F,fontWeight:800,color:'#fff',background:'#1a3a6b'}}>
+              <div style={{display:'flex',justifyContent:'space-between',padding:'7px 12px',fontSize:13,fontFamily:F,fontWeight:800,color:'#fff',background:`linear-gradient(135deg,${N},${ND})`}}>
                 <span>GRAND TOTAL</span>
-                <span style={{color:'#ffd700'}}>{fmt(grandTotal)}</span>
+                <span style={{color:'#fff'}}>{fmt(grandTotal)}</span>
               </div>
             </div>
             {(o.cgst||o.sgst||o.igst)&&(
@@ -1423,10 +2018,10 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
             </div>}
           </>}
 
-          {/* ── ATTACHMENTS WITH INLINE PDF VIEWER ── */}
+          {/* ── ATTACHMENTS ── */}
           {attachments.length>0&&<>
-            <SecHead title="Attachments — Documents & PDFs" count={attachments.length}/>
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <SecHead title="Attachments" count={attachments.length}/>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {attachments.map((a,i)=>{
                 const fileName = a.fileName||a.name||'';
                 const isPdf    = fileName.toLowerCase().endsWith('.pdf');
@@ -1436,34 +2031,23 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
                   : null;
                 const viewUrl  = dlUrl ? dlUrl + '&inline=1' : null;
                 return (
-                  <div key={i} style={{border:'1px solid #c8d4e8',borderLeft:'4px solid #1a3a6b'}}>
-                    {/* header row */}
-                    <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:'#f6f8fc'}}>
-                      <span style={{background:'#1a3a6b',color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{i+1}</span>
-                      <span style={{fontSize:16,flexShrink:0}}>{isPdf?'📄':isImg?'🖼️':'📎'}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12,fontWeight:700,color:'#1a3a6b'}}>{a.name||fileName||`Document ${i+1}`}</div>
-                        {a.filePath&&<div style={{fontSize:9,color:'#888',marginTop:1}}>{a.filePath}</div>}
-                      </div>
-                      {dlUrl&&<a href={dlUrl} target="_blank" rel="noopener noreferrer"
-                        style={{background:'#1a3a6b',color:'#fff',padding:'4px 12px',fontSize:10,fontWeight:700,textDecoration:'none',flexShrink:0}}>
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'#f6f8fc',border:'1px solid #dde4f0',borderLeft:`4px solid ${N}`,borderRadius:4}}>
+                    <span style={{background:N,color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{i+1}</span>
+                    <span style={{fontSize:16,flexShrink:0}}>{isPdf?'📄':isImg?'🖼️':'📎'}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:'#1a3a6b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||fileName||`Document ${i+1}`}</div>
+                      <div style={{fontSize:10,color:'#888',marginTop:1}}>{isPdf?'PDF Document':isImg?'Image':'File'}</div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexShrink:0}}>
+                      {viewUrl&&<a href={viewUrl} target="_blank" rel="noopener noreferrer"
+                        style={{background:'#EEF4FF',color:N,padding:'4px 10px',fontSize:10,fontWeight:700,textDecoration:'none',borderRadius:4,border:`1px solid ${N}30`}}>
+                        👁 View
+                      </a>}
+                      {dlUrl&&<a href={dlUrl} download target="_blank" rel="noopener noreferrer"
+                        style={{background:N,color:'#fff',padding:'4px 10px',fontSize:10,fontWeight:700,textDecoration:'none',borderRadius:4}}>
                         ⬇ Download
                       </a>}
                     </div>
-                    {/* inline PDF */}
-                    {isPdf&&viewUrl&&(
-                      <iframe src={viewUrl} title={fileName}
-                        style={{width:'100%',height:600,border:'none',display:'block',background:'#f0f0f0'}}/>
-                    )}
-                    {/* inline image */}
-                    {isImg&&viewUrl&&(
-                      <div style={{padding:8,textAlign:'center',background:'#f0f4f8'}}>
-                        <img src={viewUrl} alt={fileName} style={{maxWidth:'100%',maxHeight:400,border:'1px solid #ccd4e8'}}/>
-                      </div>
-                    )}
-                    {!isPdf&&!isImg&&!dlUrl&&(
-                      <div style={{padding:'6px 12px',fontSize:10,color:'#aaa',fontStyle:'italic'}}>File not available for preview.</div>
-                    )}
                   </div>
                 );
               })}
@@ -1535,9 +2119,9 @@ function ViewTab({ companyId, onEdit }) {
           : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
             <thead style={{position:'sticky',top:0,zIndex:2}}>
-              <tr style={{background:N}}>
+              <tr style={{background:'#eef2ff'}}>
                 {['Order ID','Order No.','Date','Customer','Client PO','Status','Total ₹','Actions'].map((h,i)=>(
-                  <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,fontSize:10,textAlign:'left',borderRight:'1px solid #2a5a8a',whiteSpace:'nowrap'}}>{h}</th>
+                  <th key={i} style={{padding:'4px 8px',color:N,fontWeight:700,fontSize:10,textAlign:'left',borderRight:`1px solid #D1D5DB`,whiteSpace:'nowrap',borderBottom:`2px solid #D1D5DB`}}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1691,7 +2275,11 @@ export default function SalesOrderModule() {
   const [scopes,      setScopes]      = useState([]);
   const [warranty,    setWarranty]    = useState({});
   const [activities,  setActivities]  = useState([]);
-  const [attachments, setAttachments] = useState([]);
+  const [attachments,  setAttachments]  = useState([]);
+  const [specMode,     setSpecMode]     = useState('freewrite');
+  const [specHtml,     setSpecHtml]     = useState('');
+  const [specGroups,   setSpecGroups]   = useState([]);
+  const [specFileList, setSpecFileList] = useState([]);
 
   /* clients */
   const [clients,    setClients]    = useState([]);
@@ -1703,9 +2291,16 @@ export default function SalesOrderModule() {
   const [ok,     setOk]     = useState('');
 
   /* totals */
-  const itemsGrand   = items.reduce((s,it)=>{const sub=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);return s+sub+sub*(parseFloat(it.gst)||0)/100;},0);
-  const chargesGrand = charges.reduce((s,ch)=>{const a=parseFloat(ch.amount)||0;return s+a+a*(parseFloat(ch.gst)||0)/100;},0);
-  const orderValue   = itemsGrand+chargesGrand;
+  const itemsNet     = items.reduce((s,it)=>(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)+s, 0);
+  const itemsGst     = items.reduce((s,it)=>{const sub=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);return s+sub*(parseFloat(it.gst)||0)/100;},0);
+  const chargesNet   = charges.reduce((s,ch)=>s+(parseFloat(ch.amount)||0),0);
+  const chargesGst   = charges.reduce((s,ch)=>{const a=parseFloat(ch.amount)||0;return s+a*(parseFloat(ch.gst)||0)/100;},0);
+  const itemsGrand   = itemsNet + itemsGst;
+  const chargesGrand = chargesNet + chargesGst;
+  const totalGST     = itemsGst + chargesGst;
+  const cgstVal      = totalGST / 2;
+  const sgstVal      = totalGST / 2;
+  const orderValue   = itemsGrand + chargesGrand;
 
   const setF = (k,v) => setForm(p=>({...p,[k]:v}));
 
@@ -1720,6 +2315,7 @@ export default function SalesOrderModule() {
     setForm(blankForm()); setItems([]); setAddons([]); setCharges([]);
     setBg({applicable:false,basis:'basic',pct:0}); setScopes([]);
     setWarranty({}); setActivities([]); setAttachments([]);
+    setSpecMode('freewrite'); setSpecHtml(''); setSpecGroups([]); setSpecFileList([]);
     setError(''); setOk(''); setSecTab('order-details');
     api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>setF('nextId',r.data.nextId)).catch(()=>{});
   };
@@ -1747,6 +2343,20 @@ export default function SalesOrderModule() {
     setScopes((o.scopeItems||[]).map(s=>({...s,_id:s._id||uid()})));
     setActivities((o.tasks||[]).map(a=>({...a,_id:a._id||uid()})));
     setAttachments((o.attachments||[]).map(a=>({...a,_id:a._id||uid()})));
+    const specRaw = o.specSheet||'';
+    let specParsed = { mode:'freewrite', html:'', groups:[] };
+    try { const p = JSON.parse(specRaw); if (p && p.mode) specParsed = p; else specParsed.html = specRaw; }
+    catch { specParsed.html = specRaw; }
+    setSpecMode(specParsed.mode||'freewrite');
+    setSpecHtml(specParsed.html||'');
+    setSpecGroups((specParsed.groups||[]).map(g=>({...g,_id:g._id||uid(),
+      headers:(g.headers||[]).map(h=>({...h,_id:h._id||uid(),
+        subHeaders:(h.subHeaders||[]).map(s=>({...s,_id:s._id||uid(),
+          rows:(s.rows||[]).map(r=>({...r,_id:r._id||uid()})),
+        })),
+      })),
+    })));
+    setSpecFileList((o.specFiles||[]).map(f=>({...f,_id:f._id||uid()})));
     setEditOrder(o); setSecTab('order-details');
     setError(''); setOk('');
     navigate('/sales-order/create');
@@ -1812,6 +2422,10 @@ export default function SalesOrderModule() {
       fd.append('vehicleNumber',  form.vehicleNumber||'');
       fd.append('internalNotes',  form.notes);
       fd.append('status',        status);
+      fd.append('subTotal',      itemsNet + chargesNet);
+      fd.append('totalGST',      totalGST);
+      fd.append('cgst',          cgstVal);
+      fd.append('sgst',          sgstVal);
       fd.append('grandTotal',    orderValue);
       fd.append('items',         JSON.stringify(items.map(({_id,...r})=>r)));
       fd.append('addons',        JSON.stringify(addons.map(({_id,...r})=>r)));
@@ -1820,6 +2434,18 @@ export default function SalesOrderModule() {
       fd.append('tasks',         JSON.stringify(activities.map(({_id,...r})=>r)));
       fd.append('bankGuarantee', JSON.stringify(bg));
       fd.append('warranty',      JSON.stringify(warranty));
+      fd.append('specSheet', JSON.stringify({
+        mode: specMode, html: specHtml,
+        groups: specGroups.map(({_id,...g})=>({...g,
+          headers:(g.headers||[]).map(({_id,...h})=>({...h,
+            subHeaders:(h.subHeaders||[]).map(({_id,...s})=>({...s,
+              rows:(s.rows||[]).map(({_id,...r})=>r),
+            })),
+          })),
+        })),
+      }));
+      specFileList.forEach(f=>{ if(f.file) fd.append('specUploadFiles',f.file); });
+      fd.append('specFiles', JSON.stringify(specFileList.map(({_id,file,...r})=>({...r,fileName:file?.name||r.fileName||''}))));
       attachments.forEach(a=>{ if(a.file) fd.append('attachmentFiles',a.file); });
       fd.append('attachments',   JSON.stringify(attachments.map(({_id,file,...r})=>({...r,fileName:file?.name||r.fileName||''}))));
 
@@ -1861,7 +2487,7 @@ export default function SalesOrderModule() {
             fontSize:11,color:'#005500',fontWeight:700,flexShrink:0}}>✔ {ok}</div>}
 
           {/* Section Content */}
-          <div style={{flex:1,overflowY:'auto',background:'#f0f0f0'}}>
+          <div style={{flex:1,overflowY:'auto',background:'#F5F7FA'}}>
 
             {secTab==='order-details'   && <TabOrderDetails   form={form} setF={setF} showSearch={showSearch} setShowSearch={setShowSearch}/>}
             {secTab==='item-details'    && <TabItemDetails    items={items} setItems={setItems}/>}
@@ -1872,6 +2498,7 @@ export default function SalesOrderModule() {
             {secTab==='warranty'        && <TabWarranty       warranty={warranty} setWarranty={setWarranty}/>}
             {secTab==='activities'      && <TabActivities     activities={activities} setActivities={setActivities}/>}
             {secTab==='attachments'     && <TabAttachments    attachments={attachments} setAttachments={setAttachments}/>}
+            {secTab==='specs'           && <TabSpecifications items={items} specMode={specMode} setSpecMode={setSpecMode} specHtml={specHtml} setSpecHtml={setSpecHtml} specGroups={specGroups} setSpecGroups={setSpecGroups} specFileList={specFileList} setSpecFileList={setSpecFileList}/>}
 
           </div>
 
@@ -1879,37 +2506,56 @@ export default function SalesOrderModule() {
           <OrderSummaryStrip items={items} charges={charges}/>
 
           {/* Bottom Action Bar */}
-          <div style={{background:'#e8eaed',borderTop:`1px solid ${B}`,padding:'4px 8px',
-            display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+          <div style={{background:'#FFFFFF',borderTop:`1px solid #E5E7EB`,padding:'6px 12px',
+            display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
 
             {/* Prev / Next */}
             <button onClick={goPrev} disabled={isFirst}
-              style={{background:isFirst?'#e0e0e0':'#c8d8ea',color:isFirst?'#aaa':N,
-                border:`1px solid ${isFirst?'#ccc':N}`,padding:'1px 12px',fontSize:11,
-                cursor:isFirst?'default':'pointer',fontFamily:F,fontWeight:700,height:22}}>
+              style={{background:isFirst?'#F9FAFB':`#EFF6FF`,color:isFirst?'#9CA3AF':N,
+                border:`1px solid ${isFirst?'#E5E7EB':'#BFDBFE'}`,padding:'0 14px',fontSize:11.5,
+                cursor:isFirst?'default':'pointer',fontFamily:F,fontWeight:600,height:28,borderRadius:5}}>
               ← Prev
             </button>
-            <span style={{fontSize:10,color:'#666',minWidth:90,textAlign:'center'}}>
-              {secIdx+1} / {INNER_TABS.length} — {INNER_TABS[secIdx].label}
+            <span style={{fontSize:11,color:'#6B7280',minWidth:110,textAlign:'center',
+              background:'#F9FAFB',border:'1px solid #E5E7EB',borderRadius:5,padding:'3px 10px',whiteSpace:'nowrap'}}>
+              {secIdx+1} / {INNER_TABS.length} · {INNER_TABS[secIdx].label}
             </span>
             <button onClick={goNext} disabled={isLast}
-              style={{background:isLast?'#e0e0e0':'#c8d8ea',color:isLast?'#aaa':N,
-                border:`1px solid ${isLast?'#ccc':N}`,padding:'1px 12px',fontSize:11,
-                cursor:isLast?'default':'pointer',fontFamily:F,fontWeight:700,height:22}}>
+              style={{background:isLast?'#F9FAFB':`#EFF6FF`,color:isLast?'#9CA3AF':N,
+                border:`1px solid ${isLast?'#E5E7EB':'#BFDBFE'}`,padding:'0 14px',fontSize:11.5,
+                cursor:isLast?'default':'pointer',fontFamily:F,fontWeight:600,height:28,borderRadius:5}}>
               Next →
             </button>
 
-            <Sep/>
+            <div style={{flex:1}}/>
 
             {/* Save Actions */}
-            <Btn v="pri" onClick={()=>submit('approved')} disabled={saving}>
-              {saving?'Saving…':'💾 Save & Approve'}
-            </Btn>
-            <Btn onClick={()=>submit('draft')} disabled={saving}>Save as Draft</Btn>
-            <Btn onClick={()=>submit('pending')} disabled={saving}>Submit for Approval</Btn>
-
+            <button onClick={()=>submit('draft')} disabled={saving}
+              style={{background:saving?'#F9FAFB':'#F59E0B',color:saving?'#9CA3AF':'#fff',border:'none',
+                padding:'0 16px',fontSize:12,cursor:saving?'default':'pointer',
+                fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
+              💾 Save Draft
+            </button>
+            <button onClick={()=>submit('pending')} disabled={saving}
+              style={{background:saving?'#F9FAFB':'#2563EB',color:saving?'#9CA3AF':'#fff',border:'none',
+                padding:'0 16px',fontSize:12,cursor:saving?'default':'pointer',
+                fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
+              📤 Submit for Approval
+            </button>
+            <button onClick={()=>submit('approved')} disabled={saving}
+              style={{background:'#16A34A',color:'#fff',border:'none',
+                padding:'0 18px',fontSize:12,cursor:saving?'default':'pointer',
+                fontFamily:F,fontWeight:700,height:30,borderRadius:5,
+                boxShadow:'0 2px 6px rgba(22,163,74,0.3)'}}>
+              {saving?'Saving…':'✓ Save & Approve'}
+            </button>
             <Sep/>
-            <Btn onClick={resetForm} disabled={saving}>🗑 Clear</Btn>
+            <button onClick={resetForm} disabled={saving}
+              style={{background:saving?'#F9FAFB':'#DC2626',color:saving?'#9CA3AF':'#fff',border:'none',
+                padding:'0 12px',fontSize:12,cursor:saving?'default':'pointer',
+                fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
+              🗑 Clear
+            </button>
           </div>
         </>
       )}

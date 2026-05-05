@@ -1,0 +1,224 @@
+{
+  "orderId": 300001,
+  "status": "approved",
+  "orderNo": "EE2627001",
+  "orderDate": "2026-04-07",
+  "orderType": "Supply & Installation",
+  "salesPerson": "Ms. Varsha Leuva",
+  "customerName": "Power Grid Corporation of India Ltd",
+  "customerCode": "100003",
+  "customerGstin": "27AAACP0252G1ZT",
+  "customerState": "Maharashtra",
+  "customerCity": "Nagpur",
+  "customerPincode": "441108",
+  "shipToName": "Power Grid Corporation of India Ltd",
+  "shipToAddress": "Plot No. B-14, Lokmat Karmchari Griha Nirman\r\nSahakari Sanstha ,Butibor",
+  "shipToCity": "Nagpur",
+  "shipToState": "Maharashtra",
+  "shipToPincode": "441108",
+  "shipToContact": "Ashish Okte ",
+  "shipToMobile": "",
+  "shipToEmail": "ashish.okte@powergrid.in",
+  "address": "Plot No. B-14, Lokmat Karmchari Griha Nirman\r\nSahakari Sanstha ,Butibor",
+  "contactPerson": "Ashish Okte ",
+  "mobile": "",
+  "email": "ashish.okte@powergrid.in",
+  "customerPO": "GEMC-511687757499660",
+  "poDate": "2026-04-07",
+  "enquiryRef": "",
+  "quotationRef": "",
+  "deliveryDate": "2026-06-06",
+  "incoterms": "",
+  "overallDiscount": 0,
+  "freightCharges": 0,
+  "packingCharges": 0,
+  "roundOff": 0,
+  "subTotal": 3516186.44,
+  "totalGST": 632913.5592,
+  "grandTotal": 4149099.9992000004,
+  "cgst": 316456.7796,
+  "sgst": 316456.7796,
+  "igst": 0,
+  "deliveryAddr": "",
+  "shippingAddr": "",
+  "dispatchMode": "Road",
+  "transporterName": "",
+  "vehicleNumber": "",
+  "deliveryInstructions": "",
+  "paymentTerms": "Net 30",
+  "paymentMode": "",
+  "billingTerms": "",
+  "creditLimit": "",
+  "dueDate": "",
+  "productSpecs": "",
+  "technicalDetails": "",
+  "drawingNumber": "",
+  "version": "",
+  "customFields": [],
+  "termsConditions": "",
+  "internalNotes": "",
+  "customerNotes": "",
+  "party": "Power Grid Corporation of India Ltd",
+  "partyGstin": "27AAACP0252G1ZT",
+  "reference": "GEMC-511687757499660",
+  "orderRef": "",
+  "shippedBy": "Road",
+  "destination": "",
+  "narration": "",
+  "items": [
+    {
+      "type": "Bought Out",
+      "itemCode": 9000002,
+      "description": "CABIN 40X10X19 FT ",
+      "additionalDesc": "",
+      "hsnCode": "94060099",
+      "qty": 1,
+      "unit": "NOS",
+      "rate": "2927118.64",
+      "gst": 18,
+      "bom": []
+    },
+    {
+      "type": "Bought Out",
+      "itemCode": 9000001,
+      "description": "PORTA CABIN ",
+      "additionalDesc": "",
+      "hsnCode": "94060099",
+      "qty": 1,
+      "unit": "NOS",
+      "rate": "150000",
+      "gst": 18,
+      "bom": []
+    }
+  ],
+  "charges": [
+    {
+      "chargeType": "Erection & Commissioning",
+      "description": "Civil and Installation",
+      "amount": "439067.80",
+      "gst": 18
+    }
+  ],
+  "attachments": [
+    {
+      "name": "GEM Order Copy",
+      "fileName": "1777023033927-07-04-2026_POWERGRID_GEMC-511687757499660-07042026.pdf",
+      "filePath": "docs/1777023033927-07-04-2026_POWERGRID_GEMC-511687757499660-07042026.pdf"
+    },
+    {
+      "name": "tally order ",
+      "fileName": "1777023033932-TALLY _EPROP_SO_26-27_001.pdf",
+      "filePath": "docs/1777023033932-TALLY _EPROP_SO_26-27_001.pdf"
+    },
+    {
+      "name": "Specification",
+      "fileName": "1777023033937-40X20 TECHINICAL SPECS.pdf",
+      "filePath": "docs/1777023033937-40X20 TECHINICAL SPECS.pdf"
+    },
+    {
+      "name": "drawing ",
+      "fileName": "1777023033942-40X20 DRAWING.pdf",
+      "filePath": "docs/1777023033942-40X20 DRAWING.pdf"
+    }
+  ],
+  "documents": [
+    {
+      "name": "GEM Order Copy",
+      "fileName": "1777023033927-07-04-2026_POWERGRID_GEMC-511687757499660-07042026.pdf",
+      "filePath": "docs/1777023033927-07-04-2026_POWERGRID_GEMC-511687757499660-07042026.pdf"
+    },
+    {
+      "name": "tally order ",
+      "fileName": "1777023033932-TALLY _EPROP_SO_26-27_001.pdf",
+      "filePath": "docs/1777023033932-TALLY _EPROP_SO_26-27_001.pdf"
+    },
+    {
+      "name": "Specification",
+      "fileName": "1777023033937-40X20 TECHINICAL SPECS.pdf",
+      "filePath": "docs/1777023033937-40X20 TECHINICAL SPECS.pdf"
+    },
+    {
+      "name": "drawing ",
+      "fileName": "1777023033942-40X20 DRAWING.pdf",
+      "filePath": "docs/1777023033942-40X20 DRAWING.pdf"
+    }
+  ],
+  "scopeItems": [
+    {
+      "item": "Civil Work",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Transport / Logistics",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Installation & Commissioning",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Loading / Unloading",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Documentation",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Procurement",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    },
+    {
+      "item": "Testing & Inspection",
+      "clientScope": false,
+      "ourScope": true,
+      "remarks": ""
+    }
+  ],
+  "bomItems": [],
+  "tasks": [],
+  "materialPlanningItems": [],
+  "bankGuarantee": {
+    "applicable": false,
+    "basis": "basic",
+    "pct": 0,
+    "bankName": "",
+    "bgNo": "",
+    "expiry": "",
+    "remarks": ""
+  },
+  "warranty": {},
+  "addons": [
+    {
+      "description": "Ac",
+      "category": "Free Item",
+      "qty": 1,
+      "unit": "NOS",
+      "includedInPrice": true,
+      "remarks": ""
+    }
+  ],
+  "createdAt": "2026-04-24T09:30:33.955Z",
+  "updatedAt": "2026-05-02T12:41:02.062Z",
+  "specSheet": "{\"mode\":\"upload\",\"html\":\"\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n<div class=\\\"WordSection1\\\">\\n\\n<p class=\\\"MsoBodyText\\\" style=\\\"margin-top:3.3pt;margin-right:0cm;margin-bottom:\\n0cm;margin-left:8.6pt;margin-bottom:.0001pt;line-height:115%;punctuation-wrap:\\nsimple;mso-line-break-override:restrictions\\\"><br></p></div><p></p>\",\"groups\":[]}",
+  "specFiles": [
+    {
+      "name": "40X20 TECHINICAL SPECS",
+      "fileName": "1777097929958-40X20 TECHINICAL SPECS.pdf",
+      "fileType": "pdf",
+      "filePath": "docs/specs/1777097929958-40X20 TECHINICAL SPECS.pdf"
+    }
+  ]
+}

@@ -12,20 +12,32 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'frontend', 'build')));
 
-// Normalize companyId — prevents duplicate query params from sending an array to MariaDB
+// Normalize companyId — prevents duplicate query params sending an array
 app.use((req, _res, next) => {
   if (Array.isArray(req.query.companyId)) req.query.companyId = req.query.companyId[0];
   next();
 });
 
+// ── Auth routes (no token required — public) ──
+app.use('/api/auth', require('./api/auth').router);
+
 // ── OLD MODE: existing API routes (UNTOUCHED) ──
 app.use('/api/clients',         require('./api/clients'));
 app.use('/api/vendors',         require('./api/vendors'));
+app.use('/api/items',           require('./api/items'));
 app.use('/api/sales-orders',    require('./api/salesOrders'));
 app.use('/api/purchase-orders', require('./api/purchaseOrders'));
 app.use('/api/companies',       require('./api/companies'));
 app.use('/api/accounts',        require('./api/accounts'));
 app.use('/api/tally',           require('./api/tally'));
+app.use('/api/manufacturing',   require('./api/manufacturing'));
+app.use('/api/stock',           require('./api/stock'));
+app.use('/api/projects',        require('./api/projects'));
+app.use('/api/bills',           require('./api/bills'));
+app.use('/api/passwords',       require('./api/passwords'));
+
+// ── Vendor Portal (self-registration, vendor login) ──
+app.use('/api/vendor-portal', require('./api/vendor-portal').router);
 
 // ── SAP MODE: isolated SAP API routes (new) ──
 app.use('/api/sap/projects',         require('./api/sap/projects'));
