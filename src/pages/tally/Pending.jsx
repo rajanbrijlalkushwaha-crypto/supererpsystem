@@ -82,16 +82,15 @@ const Pending = () => {
     <div className="client-list-page">
       {/* Header */}
       <div className="client-list-header">
-        <h2 className="form-title" style={{ margin: 0 }}>
-          Tally Import — Pending Approval
-          <span className="count-badge" style={{ background: items.length > 0 ? '#f59e0b' : '#94a3b8' }}>
-            {items.length}
-          </span>
-        </h2>
+        <div>
+          <h2 className="form-title" style={{ margin: 0 }}>
+            Tally Import — Pending Approval
+            {items.length > 0 && <span className="count-badge">{items.length}</span>}
+          </h2>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', marginTop: 1 }}>Review changes before importing into ERP</div>
+        </div>
         <div className="client-list-actions">
-          <button className="add-button" style={{ marginTop: 0, background: '#0ea5e9' }} onClick={() => navigate('/tally/import')}>
-            + New Import
-          </button>
+          <button className="add-button" onClick={() => navigate('/tally/import')}>+ New Import</button>
         </div>
       </div>
 

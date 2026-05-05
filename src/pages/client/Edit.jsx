@@ -64,7 +64,7 @@ const validators = {
 ═══════════════════════════════════════════════════ */
 const css = {
   card:    { background:'#fff', border:'1px solid #E5E5E5', borderRadius:'6px', padding:'20px 22px', marginBottom:'16px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
-  secHead: { fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #0070F2', paddingBottom:'5px', marginBottom:'16px' },
+  secHead: { fontSize:'11px', fontWeight:700, color:'#2F6FED', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #0070F2', paddingBottom:'5px', marginBottom:'16px' },
   lbl:     { fontSize:'12px', fontWeight:600, color:'#32363A', marginBottom:'4px', display:'block' },
   req:     { color:'#BB0000', marginLeft:'2px' },
   err:     { fontSize:'11px', color:'#BB0000', marginTop:'3px', fontWeight:600 },
@@ -419,11 +419,11 @@ const EditClient = () => {
      RENDER
   ════════════════════════════════════════════════ */
   return (
-    <div style={{ fontFamily:"'72','Inter',Arial,Helvetica,sans-serif", color:'#32363A' }}>
+    <div style={{ fontFamily:"'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color:'#32363A' }}>
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
 
       {/* ── Header ── */}
-      <div style={{ background:'#354A5E', borderRadius:'6px 6px 0 0', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ background:'#2F6FED', borderRadius:'6px 6px 0 0', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div>
           <div style={{ fontSize:'11px', color:'#A8C4E0', letterSpacing:'0.6px', marginBottom:'2px' }}>CLIENT MASTER MANAGEMENT</div>
           <div style={{ fontSize:'16px', fontWeight:700, color:'#fff' }}>
@@ -548,7 +548,7 @@ const EditClient = () => {
             <div style={css.secHead}>GST & Compliance Settings</div>
             <div style={{ display:'flex', flexDirection:'column', gap:'18px', maxWidth:'620px' }}>
               <div style={{ padding:'14px 16px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #0070F2', borderRadius:'4px' }}>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>GST Registration</div>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>GST Registration</div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
                   <span style={{ fontSize:'13px' }}>GST Registered</span>
                   <Toggle id="gstReg" checked={form.gstRegistered} onChange={e => set('gstRegistered', e.target.checked)} />
@@ -568,7 +568,7 @@ const EditClient = () => {
                 )}
               </div>
               <div style={{ padding:'14px 16px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #E9730C', borderRadius:'4px' }}>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>TDS Applicability</div>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>TDS Applicability</div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   <span style={{ fontSize:'13px' }}>TDS Applicable</span>
                   <Toggle id="tds" checked={form.tdsApplicable} onChange={e => set('tdsApplicable', e.target.checked)} />
@@ -577,7 +577,7 @@ const EditClient = () => {
 
               {/* Existing documents */}
               <div>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>Documents</div>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>Documents</div>
                 {documents.length === 0 && <div style={{ fontSize:'12px', color:'#94A3B8', marginBottom:'10px' }}>No documents attached.</div>}
                 {documents.map((doc, i) => (
                   <div key={i} style={{ display:'flex', gap:'10px', marginBottom:'8px', alignItems:'flex-end', flexWrap:'wrap', padding:'10px 12px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #0070F2', borderRadius:'4px' }}>
@@ -650,7 +650,7 @@ const EditClient = () => {
               <div>
                 <label style={css.lbl}>Credit Limit ({form.currency})</label>
                 <div style={{ display:'flex', alignItems:'center', border:'1px solid #BBBCBD', borderRadius:'4px', overflow:'hidden', background:'#FAFAFA' }}>
-                  <span style={{ padding:'7px 10px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'13px', color:'#354A5E', fontWeight:600 }}>₹</span>
+                  <span style={{ padding:'7px 10px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'13px', color:'#2F6FED', fontWeight:600 }}>₹</span>
                   <input value={form.creditLimit} onChange={e => set('creditLimit',e.target.value.replace(/\D/,''))} placeholder="0" style={{ flex:1, padding:'7px 10px', border:'none', outline:'none', background:'transparent', fontSize:'13px', fontFamily:'inherit' }} />
                 </div>
               </div>
@@ -688,7 +688,7 @@ const EditClient = () => {
 
             {/* Quick Review */}
             <div style={{ marginTop:'20px', padding:'14px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px' }}>
-              <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'12px' }}>Quick Review</div>
+              <div style={{ fontSize:'11px', fontWeight:700, color:'#2F6FED', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'12px' }}>Quick Review</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
                 <SummaryCell label="Client Name"   value={form.clientName} />
                 <SummaryCell label="Client ID"     value={form.clientCode} />

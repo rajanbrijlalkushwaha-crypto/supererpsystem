@@ -7,7 +7,7 @@ import { useCompany } from '../../context/CompanyContext';
    COLOR PALETTE
 ═══════════════════════════════════ */
 const C = {
-  shell:    '#354A5E',
+  shell:    '#2F6FED',
   accent:   '#0070F2',
   bg:       '#F0F2F5',
   white:    '#ffffff',
@@ -219,7 +219,7 @@ const ProjectDashboard = () => {
   const scopeIcon = { 'Supply':'📦','Add-on Material':'🔩','Installation':'🔧','Transportation':'🚛','Civil Work':'🏗️','Other':'📋' };
 
   return (
-    <div style={{ fontFamily:"'72','Inter',Arial,Helvetica,sans-serif", background:C.bg, minHeight:'100vh', paddingBottom:80 }}>
+    <div style={{ fontFamily:"'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background:C.bg, minHeight:'100vh', paddingBottom:80 }}>
 
       {/* ══════════════════════════════════
           STICKY HEADER

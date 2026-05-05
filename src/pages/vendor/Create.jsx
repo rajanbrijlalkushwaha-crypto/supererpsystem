@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
@@ -38,13 +38,13 @@ const STATE_GST_MAP = {
 };
 
 const TABS = [
-  { id: 'basic',   label: 'Basic Information',  icon: '🏢' },
-  { id: 'contact', label: 'Contact Details',    icon: '📞' },
-  { id: 'address', label: 'Address Details',    icon: '📍' },
-  { id: 'tax',     label: 'Tax & Compliance',   icon: '📋' },
-  { id: 'bank',    label: 'Banking Details',    icon: '🏦' },
-  { id: 'payment', label: 'Payment & Terms',    icon: '💳' },
-  { id: 'extra',   label: 'Additional Details', icon: '⚙️' },
+  { id: 'basic',   label: 'Basic Information', sub: 'Company profile',   icon: '🏢', iconBg: '#EFF6FF', iconColor: '#2563EB' },
+  { id: 'contact', label: 'Contact Details',   sub: 'People & phones',   icon: '📞', iconBg: '#FFF7ED', iconColor: '#EA580C' },
+  { id: 'address', label: 'Address Details',   sub: 'Billing & shipping', icon: '📍', iconBg: '#FFF7ED', iconColor: '#EA580C' },
+  { id: 'tax',     label: 'Tax & Compliance',  sub: 'GST, PAN, docs',    icon: '📋', iconBg: '#F0FDF4', iconColor: '#16A34A' },
+  { id: 'bank',    label: 'Banking Details',   sub: 'Account & IFSC',    icon: '🏦', iconBg: '#F0F9FF', iconColor: '#0284C7' },
+  { id: 'payment', label: 'Payment & Terms',   sub: 'Modes & credit',    icon: '💳', iconBg: '#FAF5FF', iconColor: '#7C3AED' },
+  { id: 'extra',   label: 'Additional',        sub: 'Category & notes',  icon: '⚙️', iconBg: '#F8FAFC', iconColor: '#475569' },
 ];
 
 /* ═══════════════════════════════════════════════════
@@ -59,7 +59,6 @@ const validators = {
   ifsc:   v => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v),
 };
 
-
 /* ═══════════════════════════════════════════════════
    INITIAL STATE
 ═══════════════════════════════════════════════════ */
@@ -72,205 +71,196 @@ const INIT_FORM = {
   bankName: '', accountHolder: '', accountNo: '', ifsc: '', branch: '', upi: '',
   paymentTerms: '30 Days', creditLimit: '', paymentModes: [], currency: 'INR',
   category: 'Regular', purchasePerson: '', remarks: '',
+  status: 'pending',
 };
 
 /* ═══════════════════════════════════════════════════
-   ATOMS
+   DESIGN TOKENS
 ═══════════════════════════════════════════════════ */
-/* ── shared style constants ── */
-const F = "Arial,'Segoe UI',sans-serif";
-const css = {
-  card: {
-    background: '#fff', border: '1px solid #b0b0b0', borderRadius: 0,
-    padding: 0, marginBottom: '12px',
-    boxShadow: 'none', overflow: 'hidden',
-  },
-  secHead: {
-    fontSize: '11px', fontWeight: 700, color: '#fff', textTransform: 'uppercase',
-    letterSpacing: '0.6px', background: '#354A5E',
-    padding: '5px 14px',
-    borderBottom: '1px solid #b0b0b0',
-  },
-  /* FR = field row */
-  fr: {
-    display: 'flex', alignItems: 'center', minHeight: 24,
-    borderBottom: '1px solid #ebebeb', padding: '2px 4px',
-  },
-  lbl: {
-    fontSize: 11, fontWeight: 700, color: '#333', fontFamily: F,
-    minWidth: 140, maxWidth: 140, textAlign: 'right',
-    paddingRight: 8, flexShrink: 0,
-  },
-  req: { color: '#cc2200', marginLeft: 2 },
-  err: { fontSize: 10, color: '#cc2200', marginTop: 1, fontWeight: 600, fontFamily: F },
-  hint:{ fontSize: 10, color: '#888', marginTop: 1, fontFamily: F },
-  g2:  { display: 'block' },   /* replaced grid — FR rows are always full-width */
-  g3:  { display: 'block' },
-};
+const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const P  = '#2563EB';
+const PD = '#1D4ED8';
+const PB = '#EFF6FF';
+const BD = '#D1D5DB';
+const BG = '#F5F7FA';
 
-const inpStyle = (err) => ({
-  height: 20, padding: '0 4px',
-  border: `1px solid ${err ? '#cc2200' : '#888'}`,
-  borderRadius: 0, fontSize: 12, fontFamily: F,
-  color: '#000', background: '#fff', outline: 'none',
-  width: '100%', boxSizing: 'border-box',
+/* ── Shared input / select style ── */
+const inp = (err = false) => ({
+  width: '100%', height: 38, padding: '0 12px 0 42px',
+  fontSize: 13, fontFamily: F,
+  border: `1px solid ${err ? '#EF4444' : '#9CA3AF'}`,
+  borderRadius: 6, background: err ? '#FFF5F5' : '#fff',
+  color: '#111827', outline: 'none', boxSizing: 'border-box',
+  transition: 'border-color 0.15s',
 });
-const selStyle = (err) => ({
-  height: 20, padding: '0 2px',
-  border: `1px solid ${err ? '#cc2200' : '#888'}`,
-  borderRadius: 0, fontSize: 12, fontFamily: F,
-  color: '#000', background: '#fff', outline: 'none',
-  width: '100%', boxSizing: 'border-box', cursor: 'pointer',
+const inpNoIcon = (err = false) => ({
+  width: '100%', height: 38, padding: '0 12px',
+  fontSize: 13, fontFamily: F,
+  border: `1px solid ${err ? '#EF4444' : '#9CA3AF'}`,
+  borderRadius: 6, background: err ? '#FFF5F5' : '#fff',
+  color: '#111827', outline: 'none', boxSizing: 'border-box',
+  transition: 'border-color 0.15s',
+});
+const sel = (err = false) => ({
+  width: '100%', height: 38, padding: '0 32px 0 42px',
+  fontSize: 13, fontFamily: F,
+  border: `1px solid ${err ? '#EF4444' : '#9CA3AF'}`,
+  borderRadius: 6, background: '#fff',
+  color: '#111827', outline: 'none', cursor: 'pointer',
+  boxSizing: 'border-box', appearance: 'none',
+  transition: 'border-color 0.15s',
 });
 
-function FInput({ label, req, value, onChange, placeholder, err, hint, type='text', maxLength, upper, style, readOnly }) {
-  return (
-    <div style={{ ...css.fr, ...style }}>
-      <label style={css.lbl}>{label}{req && <span style={css.req}>*</span>}</label>
-      <div style={{ flex: 1 }}>
-        <input
-          type={type} value={value} maxLength={maxLength} placeholder={placeholder}
-          readOnly={readOnly}
-          onChange={e => onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
-          style={{ ...inpStyle(err), background: readOnly ? '#f0f0f0' : '#fff' }}
-        />
-        {err  && <div style={css.err}>{err}</div>}
-        {!err && hint && <div style={css.hint}>{hint}</div>}
-      </div>
+/* ── Section header ── */
+const SectionHead = ({ icon, iconBg, title, subtitle }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '14px 20px', borderBottom: `1px solid ${BD}`,
+    background: '#F1F5F9',
+  }}>
+    <div style={{
+      width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+      background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+    }}>{icon}</div>
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#1E293B', letterSpacing: '0.6px', textTransform: 'uppercase', fontFamily: F }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 11, color: '#94a3b8', fontFamily: F, marginTop: 1 }}>{subtitle}</div>}
     </div>
-  );
-}
+  </div>
+);
 
-function FSelect({ label, req, value, onChange, options, err, placeholder='— Select —', style }) {
-  return (
-    <div style={{ ...css.fr, ...style }}>
-      <label style={css.lbl}>{label}{req && <span style={css.req}>*</span>}</label>
-      <div style={{ flex: 1 }}>
-        <select value={value} onChange={e => onChange(e.target.value)} style={selStyle(err)}>
-          <option value="">{placeholder}</option>
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-        {err && <div style={css.err}>{err}</div>}
-      </div>
+/* ── Field wrapper ── */
+const Field = ({ label, required, icon, error, children, hint }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: F }}>
+      {label} {required && <span style={{ color: '#EF4444' }}>*</span>}
+    </label>
+    <div style={{ position: 'relative' }}>
+      {icon && (
+        <span style={{
+          position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+          fontSize: 16, pointerEvents: 'none', lineHeight: 1, zIndex: 1,
+        }}>{icon}</span>
+      )}
+      {children}
     </div>
-  );
-}
+    {hint && !error && <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: F }}>{hint}</div>}
+    {error && <div style={{ fontSize: 11, color: '#EF4444', fontFamily: F, fontWeight: 600 }}>{error}</div>}
+  </div>
+);
 
-function FTextarea({ label, req, value, onChange, placeholder, rows=3, err }) {
-  return (
-    <div style={{ ...css.fr, alignItems: 'flex-start', padding: '4px' }}>
-      <label style={{ ...css.lbl, paddingTop: 2 }}>{label}{req && <span style={css.req}>*</span>}</label>
-      <div style={{ flex: 1 }}>
-        <textarea
-          value={value} rows={rows} placeholder={placeholder}
-          onChange={e => onChange(e.target.value)}
-          style={{ width: '100%', padding: '2px 4px', border: `1px solid ${err ? '#cc2200' : '#888'}`,
-            borderRadius: 0, fontSize: 12, fontFamily: F, color: '#000', background: '#fff',
-            outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
-        />
-        {err && <div style={css.err}>{err}</div>}
-      </div>
+/* ── Textarea field ── */
+const FieldArea = ({ label, required, error, value, onChange, placeholder, rows = 3 }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: F }}>
+      {label} {required && <span style={{ color: '#EF4444' }}>*</span>}
+    </label>
+    <textarea value={value} rows={rows} placeholder={placeholder} onChange={e => onChange(e.target.value)}
+      style={{
+        width: '100%', padding: '10px 12px', fontFamily: F, fontSize: 13, color: '#1e293b',
+        border: `1px solid ${error ? '#EF4444' : '#9CA3AF'}`,
+        borderRadius: 6, outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+        background: '#fff', transition: 'border-color 0.15s',
+      }}
+      onFocus={e => e.target.style.borderColor = P}
+      onBlur={e => e.target.style.borderColor = error ? '#EF4444' : '#9CA3AF'}
+    />
+    {error && <div style={{ fontSize: 11, color: '#EF4444', fontFamily: F, fontWeight: 600 }}>{error}</div>}
+  </div>
+);
+
+/* ── Select with icon ── */
+const SelField = ({ label, required, icon, error, value, onChange, options, placeholder = '— Select —' }) => (
+  <Field label={label} required={required} icon={icon} error={error}>
+    <div style={{ position: 'relative' }}>
+      {icon && <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, zIndex: 1 }}>{icon}</span>}
+      <select value={value} onChange={e => onChange(e.target.value)}
+        style={sel(!!error)}
+        onFocus={e => e.target.style.borderColor = P}
+        onBlur={e => e.target.style.borderColor = error ? '#EF4444' : '#9CA3AF'}>
+        <option value="">{placeholder}</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#94a3b8', pointerEvents: 'none' }}>▾</span>
     </div>
-  );
-}
+  </Field>
+);
 
+/* ── Toggle ── */
 function Toggle({ id, checked, onChange }) {
   return (
-    <label htmlFor={id} style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+    <label htmlFor={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
       <div style={{
-        position: 'relative', width: '42px', height: '22px',
-        background: checked ? '#0070F2' : '#BBBCBD', borderRadius: '11px',
+        position: 'relative', width: 44, height: 24,
+        background: checked ? P : '#CBD5E1', borderRadius: 12,
         transition: 'background 0.2s', flexShrink: 0,
       }}>
         <input id={id} type="checkbox" checked={checked} onChange={onChange}
           style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
         <div style={{
-          position: 'absolute', top: '3px', left: checked ? '22px' : '3px',
-          width: '16px', height: '16px', background: 'white', borderRadius: '50%',
+          position: 'absolute', top: 4, left: checked ? 24 : 4,
+          width: 16, height: 16, background: '#fff', borderRadius: '50%',
           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
         }} />
       </div>
-      <span style={{ fontSize: '13px', color: checked ? '#0070F2' : '#6A6D70', fontWeight: checked ? 600 : 400 }}>
+      <span style={{ fontSize: 13, color: checked ? P : '#94a3b8', fontWeight: checked ? 600 : 400, fontFamily: F }}>
         {checked ? 'Yes' : 'No'}
       </span>
     </label>
   );
 }
 
-function FileUpload({ label, hint, onChange }) {
-  const [file, setFile] = useState(null);
-  return (
-    <div>
-      <label style={css.lbl}>{label}</label>
-      <label style={{
-        display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
-        border: '1px dashed #BBBCBD', borderRadius: '4px', padding: '10px 14px',
-        background: '#FAFAFA', transition: 'border-color 0.15s',
-      }}
-        onMouseEnter={e => e.currentTarget.style.borderColor = '#0070F2'}
-        onMouseLeave={e => e.currentTarget.style.borderColor = '#BBBCBD'}
-      >
-        <span style={{ fontSize: '18px' }}>📤</span>
-        <div>
-          <div style={{ fontSize: '13px', color: '#32363A', fontWeight: 500 }}>
-            {file ? file.name : 'Click to upload'}
-          </div>
-          {hint && !file && <div style={{ fontSize: '11px', color: '#6A6D70' }}>{hint}</div>}
-        </div>
-        <input type="file" onChange={e => { setFile(e.target.files[0]); onChange && onChange(e.target.files[0]); }}
-          style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
-      </label>
-      {file && <div style={{ fontSize: '11px', color: '#188918', marginTop: '4px', fontWeight: 600 }}>✓ {file.name}</div>}
-    </div>
-  );
-}
-
-function MultiCheck({ options, selected, onChange }) {
+/* ── MultiCheck pills ── */
+function MultiCheck({ options, selected, onChange, error }) {
   const toggle = opt => onChange(selected.includes(opt) ? selected.filter(x => x !== opt) : [...selected, opt]);
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-      {options.map(opt => {
-        const on = selected.includes(opt);
-        return (
-          <button key={opt} type="button" onClick={() => toggle(opt)} style={{
-            padding: '5px 14px', borderRadius: '16px',
-            border: `1px solid ${on ? '#0070F2' : '#D9D9D9'}`,
-            background: on ? '#EAF1FB' : '#FAFAFA',
-            color: on ? '#0070F2' : '#6A6D70',
-            fontSize: '12px', fontWeight: on ? 600 : 400,
-            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s',
-          }}>{opt}</button>
-        );
-      })}
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {options.map(opt => {
+          const on = selected.includes(opt);
+          return (
+            <button key={opt} type="button" onClick={() => toggle(opt)} style={{
+              padding: '6px 14px', borderRadius: 20, cursor: 'pointer', fontFamily: F,
+              border: `1.5px solid ${on ? P : '#D1D5DB'}`,
+              background: on ? PB : '#fff',
+              color: on ? P : '#64748b',
+              fontSize: 12, fontWeight: on ? 700 : 500, transition: 'all 0.12s',
+            }}>{opt}</button>
+          );
+        })}
+      </div>
+      {error && <div style={{ fontSize: 11, color: '#EF4444', fontFamily: F, marginTop: 5, fontWeight: 600 }}>{error}</div>}
     </div>
   );
 }
 
+/* ── Toast ── */
 function Toast({ type, msg, onClose }) {
   React.useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, [onClose]);
   const ok = type === 'success';
   return (
     <div style={{
-      position: 'fixed', top: '20px', right: '24px', zIndex: 9999,
-      background: ok ? '#E8F5E9' : '#FFEBEB',
-      border: `1px solid ${ok ? '#82C98A' : '#F5B8B8'}`,
-      borderLeft: `4px solid ${ok ? '#188918' : '#BB0000'}`,
-      borderRadius: '6px', padding: '14px 18px', minWidth: '320px',
-      display: 'flex', alignItems: 'center', gap: '10px',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.14)',
+      position: 'fixed', top: 20, right: 24, zIndex: 9999,
+      background: ok ? '#ecfdf5' : '#fef2f2',
+      border: `1px solid ${ok ? '#a7f3d0' : '#fecaca'}`,
+      borderLeft: `4px solid ${ok ? '#10b981' : '#ef4444'}`,
+      borderRadius: 10, padding: '14px 18px', minWidth: 320,
+      display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 8px 24px rgba(99,102,241,0.12)', fontFamily: F,
     }}>
-      <span style={{ fontSize: '18px' }}>{ok ? '✅' : '❌'}</span>
-      <span style={{ fontSize: '13px', color: ok ? '#0A6640' : '#BB0000', fontWeight: 600, flex: 1 }}>{msg}</span>
-      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6A6D70', fontSize: '18px' }}>×</button>
+      <span style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</span>
+      <span style={{ fontSize: 13, color: ok ? '#065f46' : '#991b1b', fontWeight: 600, flex: 1 }}>{msg}</span>
+      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8' }}>×</button>
     </div>
   );
 }
 
+/* ── Summary Cell ── */
 function SummaryCell({ label, value }) {
   return (
-    <div style={{ padding: '8px 10px', background: '#fff', borderRadius: '4px', border: '1px solid #E5E5E5' }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6A6D70', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{label}</div>
-      <div style={{ fontSize: '13px', color: '#32363A', fontWeight: 500, wordBreak: 'break-all' }}>{value || '—'}</div>
+    <div style={{ padding: '10px 12px', background: PB, borderRadius: 8, border: `1px solid ${BD}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: P, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3, fontFamily: F }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 600, fontFamily: F, wordBreak: 'break-all' }}>{value || '—'}</div>
     </div>
   );
 }
@@ -278,7 +268,30 @@ function SummaryCell({ label, value }) {
 /* ═══════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════ */
+/* ── Shared layout components — defined at module level so React never remounts them on re-render ── */
+const FR = ({ label, children, req, w=140 }) => (
+  <div style={{display:'flex',alignItems:'center',minHeight:30,borderBottom:'1px solid #CBD5E1',padding:'2px 6px',background:'#fff'}}>
+    <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:w,maxWidth:w,padding:'0 8px 0 0',textAlign:'left',flexShrink:0}}>
+      {label}{req&&<span style={{color:'#DC2626',marginLeft:2}}>*</span>}
+    </label>
+    <div style={{flex:1,display:'flex',gap:4,alignItems:'center'}}>{children}</div>
+  </div>
+);
+const PH = ({ title }) => (
+  <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,padding:'6px 12px',letterSpacing:0.2,borderBottom:'1px solid #D1D5DB'}}>
+    {title}
+  </div>
+);
+const VCard = ({ children }) => (
+  <div style={{border:'1px solid #D1D5DB',borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden',background:'#fff'}}>
+    {children}
+  </div>
+);
+
 const CreateVendor = () => {
+  const { vendorId } = useParams();
+  const isEdit        = !!vendorId;
+
   const { selectedCompany } = useCompany();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('basic');
@@ -288,60 +301,135 @@ const CreateVendor = () => {
   const [loading, setLoading]     = useState(false);
   const [gstWarn, setGstWarn]     = useState('');
   const [idLoading, setIdLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(isEdit);
+  const [importing, setImporting]       = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const xlInputRef = useRef(null);
+
+  const downloadSample = async () => {
+    try {
+      const res = await axios.get('/api/vendors/sample-excel', {
+        params: { companyId: selectedCompany?.companyId },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: res.headers['content-type'] }));
+      const a = document.createElement('a'); a.href = url;
+      a.download = 'Vendor_Import_Template.xlsx';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setToast({ type: 'error', msg: 'Download failed: ' + err.message });
+    }
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (!selectedCompany) { setToast({ type: 'error', msg: 'Select a company first.' }); return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('companyId', selectedCompany.companyId);
+    setImporting(true);
+    try {
+      const res = await axios.post('/api/vendors/import-excel', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setImportResult(res.data);
+    } catch (err) {
+      setToast({ type: 'error', msg: 'Import failed: ' + (err.response?.data?.error || err.message) });
+    } finally { setImporting(false); }
+  };
 
   const fetchNextId = useCallback(async () => {
-    if (!selectedCompany) return;
+    if (!selectedCompany || isEdit) return;
     setIdLoading(true);
     try {
       const res = await axios.get(`/api/vendors/next-id?companyId=${selectedCompany.companyId}`);
       setForm(f => ({ ...f, vendorCode: String(res.data.nextId) }));
     } catch {
       setForm(f => ({ ...f, vendorCode: '200001' }));
-    } finally {
-      setIdLoading(false);
-    }
-  }, [selectedCompany]);
+    } finally { setIdLoading(false); }
+  }, [selectedCompany, isEdit]);
 
   useEffect(() => { fetchNextId(); }, [fetchNextId]);
 
-  /* documents list (kept separate for FormData) */
+  /* Load existing vendor data in edit mode */
+  useEffect(() => {
+    if (!isEdit) return;
+    setLoadingData(true);
+    axios.get(`/api/vendors/${vendorId}?companyId=${selectedCompany?.companyId || ''}`)
+      .then(res => {
+        const v   = res.data;
+        const cp0 = (v.contactPersons || [])[0] || {};
+        setForm(f => ({
+          ...f,
+          vendorCode:    String(v.vendorId || vendorId),
+          vendorName:    v.vendorName    || v.companyName || '',
+          businessType:  v.businessType  || '',
+          industryType:  v.industryType  || '',
+          pan:           v.pan           || '',
+          gst:           v.gstin         || v.gst || '',
+          cin:           v.cin           || '',
+          msme:          v.msme          || '',
+          contactPerson: cp0.name        || v.contactPerson || '',
+          mobile:        cp0.mobileNumber|| v.mobile       || '',
+          altMobile:     cp0.altMobile   || v.altMobile    || '',
+          email:         cp0.email       || v.email        || '',
+          website:       v.website       || '',
+          landline:      v.landline      || '',
+          billingAddr:   v.address       || v.billingAddr  || '',
+          shippingAddr:  v.shippingAddr  || '',
+          state:         v.state         || '',
+          city:          v.city          || '',
+          pincode:       v.pincode       || '',
+          country:       v.country       || 'India',
+          gstRegistered: v.gstRegistered !== undefined ? v.gstRegistered : true,
+          gstType:       v.gstType       || 'Regular',
+          tdsApplicable: v.tdsApplicable || false,
+          bankName:      v.bankName      || '',
+          accountHolder: v.accountHolder || '',
+          accountNo:     v.accountNo     || '',
+          ifsc:          v.ifsc          || '',
+          branch:        v.branch        || '',
+          upi:           v.upi           || '',
+          paymentTerms:  v.paymentTerms  || '30 Days',
+          creditLimit:   v.creditLimit   || '',
+          paymentModes:  v.paymentModes  || [],
+          currency:      v.currency      || 'INR',
+          category:      v.category      || 'Regular',
+          purchasePerson: v.purchasePerson || '',
+          remarks:       v.remarks       || '',
+          status:        v.status        || 'approved',
+        }));
+        setDocuments(
+          (v.documents || []).length > 0
+            ? (v.documents).map(d => ({ id: Math.random(), name: d.name || '', file: null, fileName: d.fileName || null }))
+            : [{ id: 1, name: '', file: null }]
+        );
+      })
+      .catch(err => setToast({ type: 'error', msg: 'Failed to load vendor: ' + err.message }))
+      .finally(() => setLoadingData(false));
+  }, [vendorId, isEdit, selectedCompany]);
+
   const [documents, setDocuments] = useState([{ id: 1, name: '', file: null }]);
 
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
     setErrs(e => ({ ...e, [k]: '' }));
-
-    /* GST → auto-fill state */
     if (k === 'gst' && v.length === 15) {
       const code = parseInt(v.slice(0, 2), 10);
-      if (STATE_GST_MAP[code]) {
-        setForm(f => ({ ...f, gst: v, state: STATE_GST_MAP[code] }));
-        setGstWarn(`State auto-filled: ${STATE_GST_MAP[code]}`);
-        setTimeout(() => setGstWarn(''), 3500);
+      const pan  = v.slice(2, 12);                      // chars 3-12 of GST = PAN
+      const updates = { gst: v };
+      if (STATE_GST_MAP[code]) updates.state = STATE_GST_MAP[code];
+      if (pan) updates.pan = pan;
+      setForm(f => ({ ...f, ...updates }));
+      const msgs = [];
+      if (STATE_GST_MAP[code]) msgs.push(`State: ${STATE_GST_MAP[code]}`);
+      if (pan) msgs.push(`PAN: ${pan}`);
+      if (msgs.length) {
+        setGstWarn(`Auto-filled — ${msgs.join(', ')}`);
+        setTimeout(() => setGstWarn(''), 4000);
       }
     }
-  };
-
-  /* ── Validation ──────────────────────────────────── */
-  const runValidate = () => {
-    const e = {};
-    if (!form.vendorName.trim())   e.vendorName = 'Vendor Name is required';
-    if (!form.businessType)        e.businessType = 'Business Type is required';
-    if (form.pan && !validators.pan(form.pan))   e.pan  = 'Invalid PAN (e.g. ABCDE1234F)';
-    if (form.gst && !validators.gst(form.gst))   e.gst  = 'Invalid GST (15-char format)';
-    if (!form.contactPerson.trim()) e.contactPerson = 'Contact Person is required';
-    if (!form.mobile)               e.mobile = 'Mobile is required';
-    else if (!validators.mobile(form.mobile))     e.mobile = 'Invalid mobile (10 digits, starts 6-9)';
-    if (form.altMobile && !validators.mobile(form.altMobile)) e.altMobile = 'Invalid mobile number';
-    if (form.email && !validators.email(form.email))           e.email = 'Invalid email address';
-    if (!form.billingAddr.trim())  e.billingAddr = 'Billing Address is required';
-    if (!form.state)               e.state = 'State is required';
-    if (!form.city.trim())         e.city  = 'City is required';
-    if (form.pincode && !validators.pin(form.pincode)) e.pincode = 'Invalid pincode';
-    if (form.ifsc && !validators.ifsc(form.ifsc)) e.ifsc = 'Invalid IFSC (e.g. SBIN0001234)';
-    if (form.paymentModes.length === 0) e.paymentModes = 'Select at least one payment mode';
-    setErrs(e);
-    return e;
   };
 
   const tabHasErr = (id, e) => ({
@@ -352,8 +440,30 @@ const CreateVendor = () => {
     payment: ['paymentModes'],
   }[id]?.some(f => e[f]) || false);
 
-  /* ── Submit ──────────────────────────────────────── */
-  const submitForm = async (status) => {
+  const runValidate = () => {
+    const e = {};
+    if (!form.vendorName.trim())    e.vendorName = 'Vendor Name is required';
+    if (!form.businessType)         e.businessType = 'Business Type is required';
+    if (form.pan && !validators.pan(form.pan))   e.pan  = 'Invalid PAN (e.g. ABCDE1234F)';
+    if (form.gst && !validators.gst(form.gst))   e.gst  = 'Invalid GST (15-char format)';
+    if (!form.contactPerson.trim()) e.contactPerson = 'Contact Person is required';
+    if (!form.mobile)               e.mobile = 'Mobile is required';
+    else if (!validators.mobile(form.mobile)) e.mobile = 'Invalid mobile (10 digits, starts 6-9)';
+    if (form.altMobile && !validators.mobile(form.altMobile)) e.altMobile = 'Invalid mobile number';
+    if (form.email && !validators.email(form.email)) e.email = 'Invalid email address';
+    if (!form.billingAddr.trim())   e.billingAddr = 'Billing Address is required';
+    if (!form.state)                e.state = 'State is required';
+    if (!form.city.trim())          e.city  = 'City is required';
+    if (form.pincode && !validators.pin(form.pincode)) e.pincode = 'Invalid pincode';
+    if (form.ifsc && !validators.ifsc(form.ifsc)) e.ifsc = 'Invalid IFSC (e.g. SBIN0001234)';
+    if (form.paymentModes.length === 0) e.paymentModes = 'Select at least one payment mode';
+    setErrs(e);
+    return e;
+  };
+
+  const submitForm = async (statusArg) => {
+    // In edit mode always preserve the existing status; in create mode use the passed arg
+    const status = isEdit ? (form.status || 'approved') : statusArg;
     const e = runValidate();
     if (Object.keys(e).length > 0) {
       const errTab = TABS.find(t => tabHasErr(t.id, e));
@@ -361,69 +471,42 @@ const CreateVendor = () => {
       setToast({ type: 'error', msg: 'Please fix the highlighted errors before saving.' });
       return;
     }
-
     setLoading(true);
     try {
       const fd = new FormData();
-      /* core fields */
-      fd.append('vendorName',    form.vendorName);
-      fd.append('vendorCode',    form.vendorCode);
-      fd.append('businessType',  form.businessType);
-      fd.append('industryType',  form.industryType);
-      fd.append('pan',           form.pan);
-      fd.append('gstin',         form.gst);
-      fd.append('gstType',       form.gstType);
-      fd.append('cin',           form.cin);
-      fd.append('msme',          form.msme);
-      fd.append('contactPerson', form.contactPerson);
-      fd.append('mobile',        form.mobile);
-      fd.append('altMobile',     form.altMobile);
-      fd.append('email',         form.email);
-      fd.append('website',       form.website);
-      fd.append('landline',      form.landline);
-      fd.append('address',       form.billingAddr);
-      fd.append('shippingAddr',  form.shippingAddr);
-      fd.append('state',         form.state);
-      fd.append('city',          form.city);
-      fd.append('pincode',       form.pincode);
-      fd.append('country',       form.country);
-      fd.append('gstRegistered', form.gstRegistered);
-      fd.append('tdsApplicable', form.tdsApplicable);
-      fd.append('bankName',      form.bankName);
-      fd.append('accountHolder', form.accountHolder);
-      fd.append('accountNo',     form.accountNo);
-      fd.append('ifsc',          form.ifsc);
-      fd.append('branch',        form.branch);
-      fd.append('upi',           form.upi);
-      fd.append('paymentTerms',  form.paymentTerms);
-      fd.append('creditLimit',   form.creditLimit);
-      fd.append('paymentModes',  JSON.stringify(form.paymentModes));
-      fd.append('currency',      form.currency);
-      fd.append('category',      form.category);
-      fd.append('purchasePerson',form.purchasePerson);
-      fd.append('remarks',       form.remarks);
-      fd.append('status',        status);
-
+      Object.entries({
+        vendorName: form.vendorName, vendorCode: form.vendorCode,
+        businessType: form.businessType, industryType: form.industryType,
+        pan: form.pan, gstin: form.gst, gstType: form.gstType,
+        cin: form.cin, msme: form.msme, contactPerson: form.contactPerson,
+        mobile: form.mobile, altMobile: form.altMobile, email: form.email,
+        website: form.website, landline: form.landline, address: form.billingAddr,
+        shippingAddr: form.shippingAddr, state: form.state, city: form.city,
+        pincode: form.pincode, country: form.country, gstRegistered: form.gstRegistered,
+        tdsApplicable: form.tdsApplicable, bankName: form.bankName,
+        accountHolder: form.accountHolder, accountNo: form.accountNo,
+        ifsc: form.ifsc, branch: form.branch, upi: form.upi,
+        paymentTerms: form.paymentTerms, creditLimit: form.creditLimit,
+        currency: form.currency, category: form.category,
+        purchasePerson: form.purchasePerson, remarks: form.remarks, status,
+      }).forEach(([k, v]) => fd.append(k, v));
+      fd.append('paymentModes', JSON.stringify(form.paymentModes));
       const docMeta = documents.filter(d => d.name).map(d => ({ name: d.name }));
       fd.append('documents', JSON.stringify(docMeta));
       documents.forEach(doc => { if (doc.file) fd.append('documents', doc.file); });
-
-      const res = await axios.post('/api/vendors', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-
-      setToast({
-        type: 'success',
-        msg: `Vendor "${form.vendorName}" (${res.data.vendorId}) ${status === 'pending' ? 'sent for approval!' : 'saved as draft.'}.`,
-      });
-      if (status === 'pending') {
-        setTimeout(() => navigate('/vendor/pending'), 1800);
+      if (isEdit) {
+        await axios.put(`/api/vendors/${vendorId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setToast({ type: 'success', msg: `Vendor "${form.vendorName}" (${vendorId}) updated successfully!` });
+        setTimeout(() => navigate('/vendor/view'), 1800);
       } else {
-        resetForm();
+        const res = await axios.post('/api/vendors', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setToast({ type: 'success', msg: `Vendor "${form.vendorName}" (${res.data.vendorId}) ${status === 'pending' ? 'sent for approval!' : 'saved as draft.'}` });
+        if (status === 'pending') setTimeout(() => navigate('/vendor/pending'), 1800);
+        else resetForm();
       }
     } catch (err) {
       setToast({ type: 'error', msg: 'Error: ' + (err.response?.data?.error || err.message) });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const resetForm = () => {
@@ -436,421 +519,483 @@ const CreateVendor = () => {
 
   const tabIdx = TABS.findIndex(t => t.id === activeTab);
 
-  /* ════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════ */
+  /* ── focus handler factory ── */
+  const onFocus = e => { e.target.style.borderColor = P; };
+  const onBlur  = (err) => e => { e.target.style.borderColor = err ? '#EF4444' : 'rgba(99,102,241,0.2)'; };
+
+  /* ── Card wrapper ── */
+  const Card = ({ children }) => (
+    <div style={{ background: '#fff', border: `1px solid ${BD}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(99,102,241,0.06)' }}>
+      {children}
+    </div>
+  );
+
+  /* ── SO-style row input / select (no icon padding) ── */
+  const ri = (err=false) => ({
+    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    fontSize:12, fontFamily:F, color:'#111827', background:err?'#FFF5F5':'#fff',
+    outline:'none', width:'100%', boxSizing:'border-box',
+  });
+  const rs = (err=false) => ({
+    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    fontSize:12, fontFamily:F, color:'#111827', background:'#fff',
+    outline:'none', cursor:'pointer', width:'100%', boxSizing:'border-box',
+  });
+
+  if (loadingData) {
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:300, flexDirection:'column', gap:12, fontFamily:F }}>
+        <div style={{ width:36, height:36, border:'3px solid #E5E5E5', borderTopColor:P, borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <div style={{ fontSize:13, color:'#64748b' }}>Loading vendor data…</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ fontFamily: F, color: '#32363A', display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ fontFamily: F, background: BG, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
 
-      {/* ── Page Header ── */}
-      <div style={{
-        background: '#354A5E', borderRadius: 0,
-        padding: '5px 14px', display: 'flex', alignItems: 'center',
-      }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', fontFamily: F, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          New Vendor Registration
+      {/* ── Import Result Modal ── */}
+      {importResult && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9998, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:560, width:'90%', maxHeight:'80vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:F }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+              <h3 style={{ margin:0, fontSize:16, color:'#1E293B' }}>Import Results</h3>
+              <button onClick={() => setImportResult(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:16 }}>
+              {[
+                { l:'Total Rows', v:importResult.total,    c:'#1E293B', bg:'#F1F5F9', bc:'#D1D5DB' },
+                { l:'Imported',   v:importResult.imported, c:'#059669', bg:'#ECFDF5', bc:'#A7F3D0' },
+                { l:'Failed',     v:importResult.failed,   c:'#DC2626', bg:'#FEF2F2', bc:'#FECACA' },
+              ].map(s => (
+                <div key={s.l} style={{ padding:'10px 14px', background:s.bg, borderRadius:8, border:`1px solid ${s.bc}`, textAlign:'center' }}>
+                  <div style={{ fontSize:24, fontWeight:700, color:s.c }}>{s.v}</div>
+                  <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            {importResult.imported > 0 && (
+              <div style={{ padding:'8px 12px', background:'#ECFDF5', borderRadius:6, marginBottom:12, fontSize:12, color:'#065f46', fontWeight:600 }}>
+                ✅ {importResult.imported} vendor(s) created and sent for approval. Check the <strong>Pending</strong> tab to approve them.
+              </div>
+            )}
+            {importResult.errors?.length > 0 && (
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:'#DC2626', marginBottom:6 }}>Failed Rows:</div>
+                <div style={{ maxHeight:200, overflowY:'auto', border:'1px solid #FECACA', borderRadius:6 }}>
+                  {importResult.errors.map((e, i) => (
+                    <div key={i} style={{ padding:'5px 10px', fontSize:11.5, borderBottom:'1px solid #FEE2E2', color:'#7F1D1D', background: i%2===0?'#FFF5F5':'#FEF2F2' }}>
+                      <span style={{ fontWeight:700 }}>Row {e.row}:</span> {e.error}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={() => setImportResult(null)} style={{ marginTop:16, width:'100%', padding:'8px 0', background:'#2563EB', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:700, fontFamily:F }}>Close</button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Tab Bar ── */}
-      <div style={{
-        background: '#e4e8ed', borderBottom: '2px solid #354A5E',
-        display: 'flex', flexWrap: 'nowrap', overflowX: 'auto',
-        padding: '4px 6px 0', gap: 2,
-      }}>
+      {/* ── Excel Import Toolbar (create mode only) ── */}
+      {!isEdit && (
+        <div style={{ flexShrink:0, background:'#EFF6FF', borderBottom:'1px solid #BFDBFE', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11.5, color:'#1D4ED8', fontFamily:F, fontWeight:500, flex:1 }}>
+            📊 Bulk import vendors from Excel — download the sample template, fill it in, then upload.
+          </span>
+          <button type="button" onClick={downloadSample} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:'pointer', background:'#fff', border:'1px solid #93C5FD', color:'#1D4ED8', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4 }}>
+            📥 Download Sample
+          </button>
+          <button type="button" onClick={() => xlInputRef.current?.click()} disabled={importing} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:importing?'not-allowed':'pointer', background:importing?'#93C5FD':'#2563EB', border:'none', color:'#fff', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4, opacity:importing?0.7:1 }}>
+            {importing ? '⏳ Importing…' : '📤 Import Excel'}
+          </button>
+          <input type="file" ref={xlInputRef} accept=".xlsx,.xls" style={{ display:'none' }} onChange={handleImportFile} />
+        </div>
+      )}
+
+      {/* ── Tab Bar — flat horizontal, same as Sales Order ── */}
+      <div style={{ flexShrink: 0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
         {TABS.map(t => {
-          const active = activeTab === t.id;
-          const hasErr = Object.keys(errs).length > 0 && tabHasErr(t.id, errs);
+          const isActive = activeTab === t.id;
+          const hasErr   = Object.keys(errs).length > 0 && tabHasErr(t.id, errs);
           return (
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-              fontFamily: F, fontSize: 11, fontWeight: active ? 700 : 400,
-              color: hasErr ? '#cc2200' : active ? '#354A5E' : '#555',
-              background: active ? '#fff' : '#d4d8de',
-              border: `1px solid ${active ? '#b0b0b0' : '#bbb'}`,
-              borderBottom: active ? '1px solid #fff' : '1px solid #b0b0b0',
-              marginBottom: active ? -2 : 0, padding: '3px 11px',
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              position: 'relative', zIndex: active ? 1 : 0, flexShrink: 0,
-            }}>
+              display:'flex', alignItems:'center', justifyContent:'center', gap:5,
+              flex:1, height:36, padding:'0 6px',
+              cursor:'pointer', background: isActive ? '#DBEAFE' : 'transparent',
+              border:'none', borderBottom: hasErr ? '2px solid #EF4444' : isActive ? `2px solid ${P}` : '2px solid transparent',
+              color: hasErr ? '#DC2626' : isActive ? P : '#111827',
+              fontSize:11.5, fontWeight: isActive ? 700 : 500, fontFamily: F,
+              whiteSpace:'nowrap', transition:'all 0.12s', marginBottom:-2, position:'relative',
+            }}
+            onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background='#EFF6FF';e.currentTarget.style.color=PD;} }}
+            onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color=hasErr?'#DC2626':'#111827';} }}>
+              {hasErr && <span style={{ position:'absolute', top:4, right:4, width:6, height:6, borderRadius:'50%', background:'#EF4444' }} />}
+              <span style={{fontSize:14}}>{t.icon}</span>
               {t.label}
-              {hasErr && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#cc2200', position: 'absolute', top: 4, right: 4, display: 'inline-block' }} />}
             </button>
           );
         })}
       </div>
 
-      {/* ── Content Area ── */}
-      <div style={{ background: '#f0f0f0', border: '1px solid #b0b0b0', borderTop: 'none', padding: '10px', flex: 1, overflowY: 'auto' }}>
+      {/* ── Form Body ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', background:'#F5F7FA' }}>
 
         {/* ══ TAB 1: Basic Information ══ */}
         {activeTab === 'basic' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {/* LEFT: Vendor Identity */}
-            <div style={css.card}>
-              <div style={css.secHead}>Vendor Identity</div>
-              <FInput label="Vendor Name" req value={form.vendorName}
-                onChange={v => set('vendorName', v)} placeholder="e.g. ABC Supplies Pvt Ltd" err={errs.vendorName} />
-              <div style={css.fr}>
-                <label style={css.lbl}>Vendor ID <span style={css.req}>*</span></label>
-                <div style={{ flex: 1, display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <input value={idLoading ? 'Loading…' : form.vendorCode} readOnly
-                    style={{ ...inpStyle(false), width: 100, fontFamily: 'monospace', fontWeight: 700, background: '#ffffcc' }} />
-                  <span style={{ fontSize: 10, color: '#888', fontFamily: F }}>(auto)</span>
-                  <button type="button" onClick={fetchNextId} title="Refresh"
-                    style={{ padding: '0 6px', background: '#f5f5f5', border: '1px solid #888', borderRadius: 0, cursor: 'pointer', fontSize: 12, fontFamily: F, height: 20 }}>↻</button>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="🏢  Vendor Identity"/>
+              <FR label="Vendor Name" req><input style={ri(!!errs.vendorName)} value={form.vendorName} onChange={e=>set('vendorName',e.target.value)} placeholder="e.g. ABC Supplies Pvt Ltd" onFocus={onFocus} onBlur={onBlur(errs.vendorName)}/>{errs.vendorName&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}</FR>
+              <FR label="Vendor ID"><input readOnly value={idLoading?'Loading…':form.vendorCode} style={{...ri(),color:P,fontWeight:700,background:'#F8FAFF',width:120}}/><button type="button" onClick={fetchNextId} style={{height:24,width:24,borderRadius:4,border:`1px solid #D1D5DB`,background:'#EFF6FF',color:P,cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>↻</button></FR>
+              <FR label="Business Type" req>
+                <select style={rs(!!errs.businessType)} value={form.businessType} onChange={e=>set('businessType',e.target.value)} onFocus={onFocus} onBlur={onBlur(errs.businessType)}>
+                  <option value="">— Select —</option>
+                  {['Proprietorship','Partnership','Private Limited','Public Limited','LLP','Government','Individual','Trust / NGO','HUF'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Industry Type">
+                <select style={rs()} value={form.industryType} onChange={e=>set('industryType',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Select —</option>
+                  {INDUSTRY_TYPES.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Purchase Person">
+                <select style={rs()} value={form.purchasePerson} onChange={e=>set('purchasePerson',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Assign —</option>
+                  {PURCHASE_PERSONS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Category">
+                <div style={{display:'flex',gap:6}}>
+                  {[{v:'Regular',c:'#2563EB',bg:'#EFF6FF'},{v:'Preferred',c:'#059669',bg:'#ECFDF5'},{v:'Blacklisted',c:'#DC2626',bg:'#FEF2F2'}].map(o=>(
+                    <button key={o.v} type="button" onClick={()=>set('category',o.v)} style={{
+                      padding:'2px 10px',borderRadius:4,border:`1px solid ${form.category===o.v?o.c:'#D1D5DB'}`,
+                      background:form.category===o.v?o.bg:'#fff',color:form.category===o.v?o.c:'#6B7280',
+                      fontSize:11,fontWeight:form.category===o.v?700:400,cursor:'pointer',fontFamily:F
+                    }}>{o.v}</button>
+                  ))}
                 </div>
-              </div>
-              <FSelect label="Business Type" req value={form.businessType}
-                onChange={v => set('businessType', v)} err={errs.businessType}
-                options={['Proprietorship','Partnership','Private Limited','Public Limited','LLP','Government','Individual','Trust / NGO','HUF']} />
-              <FSelect label="Industry Type" value={form.industryType}
-                onChange={v => set('industryType', v)} options={INDUSTRY_TYPES} />
-            </div>
+              </FR>
+            </VCard>
 
-            {/* RIGHT: Tax Identity */}
-            <div style={css.card}>
-              <div style={css.secHead}>Tax Identity</div>
-              <FInput label="PAN Number" value={form.pan} onChange={v => set('pan', v)}
-                placeholder="ABCDE1234F" err={errs.pan} hint="e.g. ABCDE1234F" maxLength={10} upper />
-              <div>
-                <FInput label="GST Number" value={form.gst} onChange={v => set('gst', v)}
-                  placeholder="22AAAAA0000A1Z5" err={errs.gst}
-                  hint="15-char GSTIN — state auto-fills" maxLength={15} upper />
-                {gstWarn && <div style={{ fontSize: 10, color: '#188918', padding: '1px 4px', fontFamily: F, fontWeight: 600 }}>✓ {gstWarn}</div>}
-              </div>
-              <FInput label="CIN Number" value={form.cin} onChange={v => set('cin', v)}
-                placeholder="U74999MH2020PTC123456" hint="Optional" upper />
-              <FInput label="MSME / Udyam" value={form.msme} onChange={v => set('msme', v)}
-                placeholder="UDYAM-XX-00-0000000" hint="Optional" />
-            </div>
+            <VCard>
+              <PH title="📋  Tax Identity"/>
+              <FR label="PAN Number"><input style={ri(!!errs.pan)} value={form.pan} maxLength={10} onChange={e=>set('pan',e.target.value.toUpperCase())} placeholder="ABCDE1234F" onFocus={onFocus} onBlur={onBlur(errs.pan)}/></FR>
+              <FR label="GST Number">
+                <div style={{flex:1}}>
+                  <input style={ri(!!errs.gst)} value={form.gst} maxLength={15} onChange={e=>set('gst',e.target.value.toUpperCase())} placeholder="22AAAAA0000A1Z5" onFocus={onFocus} onBlur={onBlur(errs.gst)}/>
+                  {gstWarn&&<div style={{fontSize:10,color:'#10b981',fontWeight:600,fontFamily:F,marginTop:2}}>✓ {gstWarn}</div>}
+                </div>
+              </FR>
+              <FR label="CIN Number"><input style={ri()} value={form.cin} onChange={e=>set('cin',e.target.value.toUpperCase())} placeholder="U74999MH2020PTC123456" onFocus={onFocus} onBlur={onBlur()}/></FR>
+              <FR label="MSME / Udyam"><input style={ri()} value={form.msme} onChange={e=>set('msme',e.target.value.toUpperCase())} placeholder="UDYAM-XX-00-0000000" onFocus={onFocus} onBlur={onBlur()}/></FR>
+              <FR label="GST Type">
+                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {['Regular','Composition','Unregistered','SEZ'].map(t=>(
+                    <button key={t} type="button" onClick={()=>set('gstType',t)} style={{
+                      padding:'2px 8px',borderRadius:4,border:`1px solid ${form.gstType===t?P:'#D1D5DB'}`,
+                      background:form.gstType===t?'#DBEAFE':'#fff',color:form.gstType===t?P:'#6B7280',
+                      fontSize:11,fontWeight:form.gstType===t?700:400,cursor:'pointer',fontFamily:F
+                    }}>{t}</button>
+                  ))}
+                </div>
+              </FR>
+              <FR label="GST Registered">
+                <Toggle id="gstReg" checked={form.gstRegistered} onChange={e=>set('gstRegistered',e.target.checked)}/>
+              </FR>
+              <FR label="TDS Applicable">
+                <Toggle id="tds" checked={form.tdsApplicable} onChange={e=>set('tdsApplicable',e.target.checked)}/>
+              </FR>
+            </VCard>
           </div>
         )}
 
         {/* ══ TAB 2: Contact Details ══ */}
         {activeTab === 'contact' && (
-          <div style={{ maxWidth: 620 }}>
-          <div style={css.card}>
-            <div style={css.secHead}>Contact Information</div>
-            <div style={css.g2}>
-              <FInput label="Contact Person Name" req value={form.contactPerson}
-                onChange={v => set('contactPerson', v)} placeholder="Full name" err={errs.contactPerson} />
-              <FInput label="Mobile Number" req value={form.mobile}
-                onChange={v => set('mobile', v.replace(/\D/,''))} placeholder="10-digit mobile"
-                maxLength={10} err={errs.mobile} hint="Starts with 6, 7, 8, or 9" />
-              <FInput label="Alternate Mobile" value={form.altMobile}
-                onChange={v => set('altMobile', v.replace(/\D/,''))} placeholder="Alternate number"
-                maxLength={10} err={errs.altMobile} />
-              <FInput label="Email ID" type="email" value={form.email}
-                onChange={v => set('email', v)} placeholder="contact@company.com" err={errs.email} />
-              <FInput label="Landline Number" value={form.landline}
-                onChange={v => set('landline', v)} placeholder="STD + Number (e.g. 0222-1234567)" />
-              <FInput label="Website" value={form.website}
-                onChange={v => set('website', v)} placeholder="https://www.vendor.com" />
-            </div>
-          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="📞  Contact Person"/>
+              <FR label="Contact Person" req>
+                <input style={ri(!!errs.contactPerson)} value={form.contactPerson} onChange={e=>set('contactPerson',e.target.value)} placeholder="Full name" onFocus={onFocus} onBlur={onBlur(errs.contactPerson)}/>
+                {errs.contactPerson&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}
+              </FR>
+              <FR label="Designation">
+                <input style={ri()} value={form.designation||''} onChange={e=>set('designation',e.target.value)} placeholder="e.g. Purchase Manager" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="Mobile Number" req>
+                <input style={ri(!!errs.mobile)} value={form.mobile} maxLength={10} onChange={e=>set('mobile',e.target.value.replace(/\D/,''))} placeholder="10-digit mobile" onFocus={onFocus} onBlur={onBlur(errs.mobile)}/>
+                {errs.mobile&&<span style={{color:'#DC2626',fontSize:10,whiteSpace:'nowrap'}}>Required</span>}
+              </FR>
+              <FR label="Alternate Mobile">
+                <input style={ri(!!errs.altMobile)} value={form.altMobile} maxLength={10} onChange={e=>set('altMobile',e.target.value.replace(/\D/,''))} placeholder="Alternate number" onFocus={onFocus} onBlur={onBlur(errs.altMobile)}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📡  Communication"/>
+              <FR label="Email ID">
+                <input type="email" style={ri(!!errs.email)} value={form.email} onChange={e=>set('email',e.target.value)} placeholder="contact@company.com" onFocus={onFocus} onBlur={onBlur(errs.email)}/>
+              </FR>
+              <FR label="Landline Number">
+                <input style={ri()} value={form.landline} onChange={e=>set('landline',e.target.value)} placeholder="STD + Number" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="Website">
+                <input style={ri()} value={form.website} onChange={e=>set('website',e.target.value)} placeholder="https://www.vendor.com" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
           </div>
         )}
 
         {/* ══ TAB 3: Address Details ══ */}
         {activeTab === 'address' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div style={css.card}>
-              <div style={css.secHead}>Billing Address</div>
-              <FTextarea label="Address" req value={form.billingAddr}
-                onChange={v => set('billingAddr', v)} placeholder="Door no, Street, Area, District…" err={errs.billingAddr} />
-              <FSelect label="State" req value={form.state}
-                onChange={v => set('state', v)} options={STATES} err={errs.state} />
-              <FInput label="City" req value={form.city}
-                onChange={v => set('city', v)} placeholder="City" err={errs.city} />
-              <FInput label="Pincode" value={form.pincode}
-                onChange={v => set('pincode', v.replace(/\D/,''))} placeholder="6-digit" maxLength={6} err={errs.pincode} />
-              <FInput label="Country" value={form.country} onChange={v => set('country', v)} />
-            </div>
-            <div style={css.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                background: '#354A5E', padding: '5px 14px',
-                borderBottom: '1px solid #b0b0b0' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Shipping / Delivery Address</span>
-                <button type="button" onClick={() => set('shippingAddr', form.billingAddr)} style={{
-                  fontSize: '11px', color: '#fff', background: 'rgba(255,255,255,0.15)',
-                  border: '1px solid rgba(255,255,255,0.35)', borderRadius: 0, padding: '2px 10px',
-                  cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit',
-                }}>📋 Copy from Billing</button>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="🏠  Billing Address"/>
+              <div style={{display:'flex',alignItems:'flex-start',borderBottom:'1px solid #CBD5E1',padding:'4px 6px',background:'#fff',minHeight:64}}>
+                <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:140,maxWidth:140,padding:'2px 8px 0 0',textAlign:'left',flexShrink:0}}>Address <span style={{color:'#DC2626'}}>*</span></label>
+                <textarea value={form.billingAddr} onChange={e=>set('billingAddr',e.target.value)} rows={3} placeholder="Door no, Street, Area, District…"
+                  style={{flex:1,padding:'2px 6px',border:'none',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'transparent',boxSizing:'border-box',minHeight:60}}/>
               </div>
-              <FTextarea label="Address" value={form.shippingAddr}
-                onChange={v => set('shippingAddr', v)}
-                placeholder="Leave blank if same as billing address…" />
-            </div>
+              <FR label="State" req>
+                <select style={rs(!!errs.state)} value={form.state} onChange={e=>set('state',e.target.value)} onFocus={onFocus} onBlur={onBlur(errs.state)}>
+                  <option value="">— Select State —</option>
+                  {STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </FR>
+              <FR label="City" req>
+                <input style={ri(!!errs.city)} value={form.city} onChange={e=>set('city',e.target.value)} placeholder="City" onFocus={onFocus} onBlur={onBlur(errs.city)}/>
+              </FR>
+              <FR label="Pincode">
+                <input style={ri(!!errs.pincode)} value={form.pincode} maxLength={6} onChange={e=>set('pincode',e.target.value.replace(/\D/,''))} placeholder="6-digit pincode" onFocus={onFocus} onBlur={onBlur(errs.pincode)}/>
+              </FR>
+              <FR label="Country">
+                <input style={ri()} value={form.country} onChange={e=>set('country',e.target.value)} onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,padding:'6px 12px',letterSpacing:0.2,borderBottom:'1px solid #D1D5DB',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span>🚚  Shipping Address</span>
+                <button type="button" onClick={()=>set('shippingAddr',form.billingAddr)} style={{padding:'2px 10px',borderRadius:4,border:'1px solid #D1D5DB',background:'#EFF6FF',color:P,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:F}}>📋 Copy Billing</button>
+              </div>
+              <div style={{padding:'8px 6px',background:'#fff'}}>
+                <textarea value={form.shippingAddr} onChange={e=>set('shippingAddr',e.target.value)} rows={8} placeholder="Leave blank if same as billing address…"
+                  style={{width:'100%',padding:'6px 8px',border:'1px solid #9CA3AF',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'#fff',boxSizing:'border-box',borderRadius:4,minHeight:160}}
+                  onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor='#9CA3AF'}/>
+              </div>
+            </VCard>
           </div>
         )}
 
         {/* ══ TAB 4: Tax & Compliance ══ */}
         {activeTab === 'tax' && (
-          <div style={{ maxWidth: 620 }}><div style={css.card}>
-            <div style={css.secHead}>GST & Compliance Settings</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '620px' }}>
-
-              {/* GST */}
-              <div style={{ padding: '14px 16px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderLeft: '3px solid #0070F2', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST Registration</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '13px' }}>GST Registered</span>
-                  <Toggle id="gstReg" checked={form.gstRegistered} onChange={e => set('gstRegistered', e.target.checked)} />
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="📋  GST & Compliance"/>
+              <FR label="GST Registered">
+                <Toggle id="gstReg" checked={form.gstRegistered} onChange={e=>set('gstRegistered',e.target.checked)}/>
+              </FR>
+              <FR label="GST Type">
+                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {['Regular','Composition','Unregistered','SEZ'].map(t=>(
+                    <button key={t} type="button" onClick={()=>set('gstType',t)} style={{
+                      padding:'2px 8px',borderRadius:4,border:`1px solid ${form.gstType===t?P:'#D1D5DB'}`,
+                      background:form.gstType===t?'#DBEAFE':'#fff',color:form.gstType===t?P:'#6B7280',
+                      fontSize:11,fontWeight:form.gstType===t?700:400,cursor:'pointer',fontFamily:F
+                    }}>{t}</button>
+                  ))}
                 </div>
-                {form.gstRegistered && (
-                  <>
-                    <label style={{ ...css.lbl, marginBottom: '8px' }}>GST Type</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {['Regular','Composition','Unregistered','Consumer','SEZ'].map(t => (
-                        <label key={t} style={{
-                          display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer',
-                          fontSize: '13px', padding: '5px 12px',
-                          border: `1px solid ${form.gstType === t ? '#0070F2' : '#D9D9D9'}`,
-                          borderRadius: '4px', background: form.gstType === t ? '#EAF1FB' : '#FAFAFA',
-                          color: form.gstType === t ? '#0070F2' : '#6A6D70',
-                          fontWeight: form.gstType === t ? 600 : 400,
-                        }}>
-                          <input type="radio" name="gstType" value={t}
-                            checked={form.gstType === t} onChange={() => set('gstType', t)}
-                            style={{ accentColor: '#0070F2' }} />
-                          {t}
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* TDS */}
-              <div style={{ padding: '14px 16px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderLeft: '3px solid #E9730C', borderRadius: '4px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TDS Applicability</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px' }}>TDS Applicable on this Vendor</span>
-                  <Toggle id="tds" checked={form.tdsApplicable} onChange={e => set('tdsApplicable', e.target.checked)} />
-                </div>
-              </div>
-
-              {/* Uploads */}
-              <div style={css.g2}>
-                <FileUpload label="PAN Card Upload" hint="PDF, JPG, PNG — max 2 MB" />
-                <FileUpload label="GST Certificate Upload" hint="PDF, JPG, PNG — max 2 MB" />
-              </div>
-
-              {/* Additional documents */}
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#354A5E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Additional Documents</div>
-                {documents.map((doc, i) => (
-                  <div key={doc.id} style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={css.lbl}>Document Name</label>
-                      <input value={doc.name} placeholder="e.g. Trade License"
-                        onChange={e => setDocuments(d => d.map(x => x.id === doc.id ? { ...x, name: e.target.value } : x))}
-                        style={inpStyle(false)} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={css.lbl}>File</label>
-                      <input type="file"
-                        onChange={e => setDocuments(d => d.map(x => x.id === doc.id ? { ...x, file: e.target.files[0] } : x))}
-                        style={{ fontSize: '12px', fontFamily: 'inherit' }}
-                        accept=".pdf,.jpg,.png,.doc,.docx" />
-                    </div>
-                    {documents.length > 1 && (
-                      <button type="button" onClick={() => setDocuments(d => d.filter(x => x.id !== doc.id))}
-                        style={{ padding: '7px 10px', background: '#FFEBEB', border: '1px solid #F5B8B8', color: '#BB0000', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit' }}>Remove</button>
+              </FR>
+              <FR label="TDS Applicable">
+                <Toggle id="tds" checked={form.tdsApplicable} onChange={e=>set('tdsApplicable',e.target.checked)}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📎  Document Uploads"/>
+              <div style={{padding:'8px 10px',display:'flex',flexDirection:'column',gap:8}}>
+                {documents.map((doc,idx)=>(
+                  <div key={doc.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:6,background:'#EFF6FF',border:'1px solid #D1D5DB'}}>
+                    <span style={{fontSize:11,fontWeight:700,color:'#94a3b8',width:18}}>{idx+1}.</span>
+                    <input value={doc.name} placeholder="Document name" onChange={e=>setDocuments(d=>d.map(x=>x.id===doc.id?{...x,name:e.target.value}:x))}
+                      style={{...ri(),flex:1,height:26}}/>
+                    <input type="file" onChange={e=>setDocuments(d=>d.map(x=>x.id===doc.id?{...x,file:e.target.files[0]}:x))}
+                      style={{fontSize:10,fontFamily:F,flex:1}} accept=".pdf,.jpg,.png,.doc,.docx"/>
+                    {documents.length>1&&(
+                      <button type="button" onClick={()=>setDocuments(d=>d.filter(x=>x.id!==doc.id))}
+                        style={{padding:'2px 8px',background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',borderRadius:4,cursor:'pointer',fontSize:11,fontFamily:F}}>✕</button>
                     )}
                   </div>
                 ))}
-                <button type="button"
-                  onClick={() => setDocuments(d => [...d, { id: Math.max(...d.map(x => x.id)) + 1, name: '', file: null }])}
-                  style={{ marginTop: '4px', padding: '6px 14px', background: '#EAF1FB', border: '1px solid #A9CBF4', color: '#0070F2', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'inherit' }}>
-                  + Add Document
-                </button>
+                <button type="button" onClick={()=>setDocuments(d=>[...d,{id:Math.max(...d.map(x=>x.id))+1,name:'',file:null}])}
+                  style={{padding:'6px',borderRadius:6,cursor:'pointer',background:'#faf5ff',border:'2px dashed #ddd6fe',color:'#7c3aed',fontSize:11,fontWeight:600,fontFamily:F,display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>+ Add Document</button>
               </div>
-            </div>
-          </div></div>
+            </VCard>
+          </div>
         )}
 
         {/* ══ TAB 5: Banking Details ══ */}
         {activeTab === 'bank' && (
-          <div style={{ maxWidth: 620 }}><div style={css.card}>
-            <div style={css.secHead}>Bank Account Information</div>
-            <div style={css.g2}>
-              <FSelect label="Bank Name" value={form.bankName} onChange={v => set('bankName', v)}
-                options={['State Bank of India','HDFC Bank','ICICI Bank','Axis Bank','Punjab National Bank','Bank of Baroda','Canara Bank','Union Bank of India','Kotak Mahindra Bank','IndusInd Bank','Yes Bank','IDBI Bank','Federal Bank','South Indian Bank','UCO Bank','Indian Bank','Bank of India','Central Bank of India','Other']} />
-              <FInput label="Account Holder Name" value={form.accountHolder}
-                onChange={v => set('accountHolder', v)} placeholder="As per bank records" />
-              <FInput label="Account Number" value={form.accountNo}
-                onChange={v => set('accountNo', v.replace(/\D/,''))} placeholder="Account number" />
-              <div>
-                <FInput label="IFSC Code" value={form.ifsc} onChange={v => set('ifsc', v)}
-                  placeholder="e.g. SBIN0001234" maxLength={11} err={errs.ifsc} upper
-                  hint="11-character bank IFSC code" />
-                {form.ifsc.length === 11 && validators.ifsc(form.ifsc) && (
-                  <div style={{ fontSize: '11px', color: '#188918', marginTop: '3px', fontWeight: 600 }}>✓ Valid IFSC format</div>
-                )}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="🏦  Bank Account"/>
+              <FR label="Bank Name">
+                <select style={rs()} value={form.bankName} onChange={e=>set('bankName',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Select Bank —</option>
+                  {['State Bank of India','HDFC Bank','ICICI Bank','Axis Bank','Punjab National Bank','Bank of Baroda','Canara Bank','Union Bank of India','Kotak Mahindra Bank','IndusInd Bank','Yes Bank','IDBI Bank','Federal Bank','South Indian Bank','UCO Bank','Indian Bank','Bank of India','Central Bank of India','Other'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label="Account Holder">
+                <input style={ri()} value={form.accountHolder} onChange={e=>set('accountHolder',e.target.value)} placeholder="As per bank records" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="Account Number">
+                <input style={ri()} value={form.accountNo} onChange={e=>set('accountNo',e.target.value.replace(/\D/,''))} placeholder="Account number" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="IFSC Code">
+                <div style={{flex:1}}>
+                  <input style={ri(!!errs.ifsc)} value={form.ifsc} maxLength={11} onChange={e=>set('ifsc',e.target.value.toUpperCase())} placeholder="e.g. SBIN0001234" onFocus={onFocus} onBlur={onBlur(errs.ifsc)}/>
+                  {form.ifsc.length===11&&validators.ifsc(form.ifsc)&&<div style={{fontSize:10,color:'#10b981',fontWeight:600,fontFamily:F,marginTop:2}}>✓ Valid IFSC</div>}
+                </div>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="📋  Branch & UPI"/>
+              <FR label="Branch Name">
+                <input style={ri()} value={form.branch} onChange={e=>set('branch',e.target.value)} placeholder="Branch name and city" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <FR label="UPI ID">
+                <input style={ri()} value={form.upi} onChange={e=>set('upi',e.target.value)} placeholder="name@bank" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+              <div style={{margin:'8px 10px',padding:'8px 12px',background:'#fffbeb',border:'1px solid #fde68a',borderLeft:'4px solid #f59e0b',borderRadius:6,fontSize:11,color:'#92400e',display:'flex',gap:6,fontFamily:F}}>
+                <span>⚠️</span><span>Verify all bank details carefully before saving. Errors may delay vendor payments.</span>
               </div>
-              <FInput label="Branch Name" value={form.branch}
-                onChange={v => set('branch', v)} placeholder="Branch name and city" />
-              <FInput label="UPI ID (Optional)" value={form.upi}
-                onChange={v => set('upi', v)} placeholder="name@bank"
-                hint="For UPI-based vendor payments" />
-            </div>
-            <div style={{ marginTop: '16px', padding: '10px 14px', background: '#FEF3CD', border: '1px solid #F6C244', borderLeft: '3px solid #F6C244', borderRadius: '4px', fontSize: '12px', color: '#7A4F01', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <span>⚠️</span>
-              <span>Bank details are used for vendor payments. Please verify all information carefully before saving.</span>
-            </div>
-          </div></div>
+            </VCard>
+          </div>
         )}
 
         {/* ══ TAB 6: Payment & Terms ══ */}
         {activeTab === 'payment' && (
-          <div style={{ maxWidth: 620 }}><div style={css.card}>
-            <div style={css.secHead}>Payment Configuration</div>
-            <div style={css.g2}>
-              <FSelect label="Payment Terms" req value={form.paymentTerms}
-                onChange={v => set('paymentTerms', v)}
-                options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery']} />
-              <div>
-                <label style={css.lbl}>Currency</label>
-                <select value={form.currency} onChange={e => set('currency', e.target.value)} style={selStyle(false)}>
-                  <option value="INR">INR — Indian Rupee ₹</option>
-                  <option value="USD">USD — US Dollar $</option>
-                  <option value="EUR">EUR — Euro €</option>
-                  <option value="GBP">GBP — British Pound £</option>
-                  <option value="AED">AED — UAE Dirham</option>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="💳  Payment Terms"/>
+              <FR label="Payment Terms">
+                <select style={rs()} value={form.paymentTerms} onChange={e=>set('paymentTerms',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  {['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery'].map(o=><option key={o} value={o}>{o}</option>)}
                 </select>
+              </FR>
+              <FR label="Currency">
+                <select style={rs()} value={form.currency} onChange={e=>set('currency',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  {['INR','USD','EUR','GBP','AED'].map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <FR label={`Credit Limit (${form.currency})`}>
+                <input style={ri()} value={form.creditLimit} onChange={e=>set('creditLimit',e.target.value.replace(/\D/,''))} placeholder="0" onFocus={onFocus} onBlur={onBlur()}/>
+              </FR>
+            </VCard>
+            <VCard>
+              <PH title="💰  Payment Modes"/>
+              <div style={{padding:'8px 12px'}}>
+                <MultiCheck options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','Credit Card']} selected={form.paymentModes} onChange={v=>set('paymentModes',v)} error={errs.paymentModes}/>
               </div>
-              <div>
-                <label style={css.lbl}>Credit Limit ({form.currency})</label>
-                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #BBBCBD', borderRadius: '4px', overflow: 'hidden', background: '#FAFAFA' }}>
-                  <span style={{ padding: '7px 10px', background: '#EEF3F8', borderRight: '1px solid #E5E5E5', fontSize: '13px', color: '#354A5E', fontWeight: 600 }}>₹</span>
-                  <input value={form.creditLimit} onChange={e => set('creditLimit', e.target.value.replace(/\D/,''))}
-                    placeholder="0"
-                    style={{ flex: 1, padding: '7px 10px', border: 'none', outline: 'none', background: 'transparent', fontSize: '13px', fontFamily: 'inherit' }} />
+              {(form.paymentTerms||form.creditLimit)&&(
+                <div style={{margin:'0 10px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toLocaleString('en-IN')}`:''},{l:'Currency',v:form.currency}].map(c=>(
+                    <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
+                      <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
+                      <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F}}>{c.v||'—'}</div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '18px' }}>
-              <label style={css.lbl}>Payment Modes <span style={css.req}>*</span></label>
-              <MultiCheck
-                options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','Credit Card']}
-                selected={form.paymentModes}
-                onChange={v => set('paymentModes', v)}
-              />
-              {errs.paymentModes && <div style={css.err}>{errs.paymentModes}</div>}
-            </div>
-
-            {(form.paymentTerms || form.creditLimit) && (
-              <div style={{ marginTop: '20px', padding: '14px', background: '#EAF1FB', border: '1px solid #A9CBF4', borderRadius: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#354A5E', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>Payment Summary</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                  <SummaryCell label="Terms"        value={form.paymentTerms} />
-                  <SummaryCell label="Credit Limit" value={form.creditLimit ? `₹ ${Number(form.creditLimit).toLocaleString('en-IN')}` : '—'} />
-                  <SummaryCell label="Currency"     value={form.currency} />
-                </div>
-              </div>
-            )}
-          </div></div>
+              )}
+            </VCard>
+          </div>
         )}
 
         {/* ══ TAB 7: Additional Details ══ */}
         {activeTab === 'extra' && (
-          <div style={{ maxWidth: 620 }}><div style={css.card}>
-            <div style={css.secHead}>Classification & Assignment</div>
-            <div style={css.g2}>
-              <div>
-                <label style={css.lbl}>Vendor Category</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[
-                    { val: 'Regular',     color: '#0070F2', bg: '#EAF1FB', border: '#A9CBF4' },
-                    { val: 'Preferred',   color: '#188918', bg: '#E8F5E9', border: '#82C98A' },
-                    { val: 'Blacklisted', color: '#BB0000', bg: '#FFEBEB', border: '#F5B8B8' },
-                  ].map(opt => (
-                    <button key={opt.val} type="button" onClick={() => set('category', opt.val)} style={{
-                      flex: 1, padding: '8px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1px solid ${form.category === opt.val ? opt.color : '#E5E5E5'}`,
-                      background: form.category === opt.val ? opt.bg : '#FAFAFA',
-                      color: form.category === opt.val ? opt.color : '#6A6D70',
-                      fontSize: '12px', fontWeight: form.category === opt.val ? 700 : 400, transition: 'all 0.12s',
-                    }}>{opt.val}</button>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <VCard>
+              <PH title="⚙️  Classification"/>
+              <FR label="Vendor Category">
+                <div style={{display:'flex',gap:6}}>
+                  {[{v:'Regular',c:'#2563EB',bg:'#EFF6FF'},{v:'Preferred',c:'#059669',bg:'#ECFDF5'},{v:'Blacklisted',c:'#DC2626',bg:'#FEF2F2'}].map(o=>(
+                    <button key={o.v} type="button" onClick={()=>set('category',o.v)} style={{
+                      padding:'2px 10px',borderRadius:4,border:`1px solid ${form.category===o.v?o.c:'#D1D5DB'}`,
+                      background:form.category===o.v?o.bg:'#fff',color:form.category===o.v?o.c:'#6B7280',
+                      fontSize:11,fontWeight:form.category===o.v?700:400,cursor:'pointer',fontFamily:F
+                    }}>{o.v}</button>
                   ))}
                 </div>
-                {form.category === 'Blacklisted' && (
-                  <div style={{ fontSize: '11px', color: '#BB0000', marginTop: '6px', fontWeight: 600 }}>
-                    ⚠️ Blacklisted vendors will be blocked from purchase transactions.
+              </FR>
+              {form.category==='Blacklisted'&&<div style={{padding:'4px 12px',fontSize:11,color:'#dc2626',fontWeight:600,fontFamily:F,background:'#FEF2F2'}}>⚠️ Blacklisted vendors will be blocked from purchase transactions.</div>}
+              <FR label="Purchase Person">
+                <select style={rs()} value={form.purchasePerson} onChange={e=>set('purchasePerson',e.target.value)} onFocus={onFocus} onBlur={onBlur()}>
+                  <option value="">— Assign —</option>
+                  {PURCHASE_PERSONS.map(o=><option key={o} value={o}>{o}</option>)}
+                </select>
+              </FR>
+              <div style={{display:'flex',alignItems:'flex-start',borderBottom:'1px solid #CBD5E1',padding:'4px 6px',background:'#fff',minHeight:64}}>
+                <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:140,maxWidth:140,padding:'2px 8px 0 0',textAlign:'left',flexShrink:0}}>Remarks</label>
+                <textarea value={form.remarks} onChange={e=>set('remarks',e.target.value)} rows={3} placeholder="Any internal notes about this vendor…"
+                  style={{flex:1,padding:'2px 6px',border:'none',outline:'none',fontSize:12,fontFamily:F,color:'#111827',resize:'vertical',background:'transparent',boxSizing:'border-box',minHeight:60}}/>
+              </div>
+            </VCard>
+            <VCard>
+              <PH title="👁️  Quick Review"/>
+              <div style={{padding:'8px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                {[{l:'Vendor Name',v:form.vendorName},{l:'Vendor Code',v:form.vendorCode},{l:'Business',v:form.businessType},{l:'Mobile',v:form.mobile},{l:'GST',v:form.gst},{l:'State',v:form.state},{l:'Pay Terms',v:form.paymentTerms},{l:'Category',v:form.category},{l:'GST Type',v:form.gstType}].map(c=>(
+                  <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
+                    <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F,wordBreak:'break-all'}}>{c.v||'—'}</div>
                   </div>
-                )}
+                ))}
               </div>
-              <FSelect label="Purchase Person Assigned" value={form.purchasePerson}
-                onChange={v => set('purchasePerson', v)} options={PURCHASE_PERSONS}
-                placeholder="— Assign Purchase Person —" />
-            </div>
-
-            <div style={{ marginTop: '16px' }}>
-              <FTextarea label="Remarks / Internal Notes" value={form.remarks}
-                onChange={v => set('remarks', v)} placeholder="Any internal notes about this vendor…" rows={4} />
-            </div>
-
-            {/* Quick Review */}
-            <div style={{ marginTop: '20px', padding: '14px', background: '#F5F8FC', border: '1px solid #CBE0F5', borderRadius: '4px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#354A5E', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Quick Review</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                <SummaryCell label="Vendor Name"  value={form.vendorName} />
-                <SummaryCell label="Vendor Code"  value={form.vendorCode} />
-                <SummaryCell label="Business"     value={form.businessType} />
-                <SummaryCell label="Mobile"       value={form.mobile} />
-                <SummaryCell label="GST"          value={form.gst} />
-                <SummaryCell label="State"        value={form.state} />
-                <SummaryCell label="Pay Terms"    value={form.paymentTerms} />
-                <SummaryCell label="Category"     value={form.category} />
-                <SummaryCell label="GST Type"     value={form.gstType} />
-              </div>
-            </div>
-          </div></div>
+            </VCard>
+          </div>
         )}
       </div>
 
-      {/* ── Footer Navigation ── */}
+      {/* ── Footer (sticky, dark navy) ── */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '6px 10px', background: '#f0f0f0',
-        border: '1px solid #b0b0b0', borderTop: '1px solid #b0b0b0',
-        flexShrink: 0, position: 'sticky', bottom: 0, zIndex: 10,
+        position:'sticky', bottom:0, zIndex:50,
+        padding:'10px 20px', background:'#1E293B', borderTop:'1px solid #334155',
+        display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0,
       }}>
-        {/* Left: Prev/Next tab navigation */}
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: '#666', fontFamily: F, marginRight: 4 }}>
-            {tabIdx + 1} / {TABS.length} — {TABS[tabIdx]?.label}
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11.5,color:'#94A3B8',fontFamily:F}}>
+            Step {tabIdx+1} of {TABS.length} — <strong style={{color:'#E2E8F0'}}>{TABS[tabIdx]?.label}</strong>
           </span>
-          {tabIdx > 0 && (
-            <button type="button" onClick={() => setActiveTab(TABS[tabIdx - 1].id)}
-              style={{ padding: '1px 10px', background: '#d8d8d8', border: '1px solid #888', color: '#000', borderRadius: 0, cursor: 'pointer', fontSize: 11, fontFamily: F, height: 22 }}>
-              ◀ Prev
-            </button>
+          {tabIdx>0&&(
+            <button type="button" onClick={()=>setActiveTab(TABS[tabIdx-1].id)} style={{
+              height:30,padding:'0 12px',borderRadius:6,cursor:'pointer',
+              background:'transparent',border:'1px solid #475569',color:'#CBD5E1',
+              fontSize:11.5,fontWeight:600,fontFamily:F,
+            }}>◀ Back</button>
           )}
-          {tabIdx < TABS.length - 1 && (
-            <button type="button" onClick={() => setActiveTab(TABS[tabIdx + 1].id)}
-              style={{ padding: '1px 10px', background: '#d8d8d8', border: '1px solid #888', color: '#000', borderRadius: 0, cursor: 'pointer', fontSize: 11, fontFamily: F, height: 22 }}>
-              Next ▶
-            </button>
+          {tabIdx<TABS.length-1&&(
+            <button type="button" onClick={()=>setActiveTab(TABS[tabIdx+1].id)} style={{
+              height:30,padding:'0 14px',borderRadius:6,cursor:'pointer',
+              background:'#2563EB',border:'none',color:'#fff',
+              fontSize:11.5,fontWeight:600,fontFamily:F,
+            }}>Next ▶</button>
           )}
         </div>
-        {/* Right: Save buttons always visible */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button type="button" onClick={resetForm} disabled={loading}
-            style={{ padding: '1px 12px', background: '#d8d8d8', border: '1px solid #888', color: '#000', borderRadius: 0, cursor: 'pointer', fontSize: 11, fontFamily: F, height: 22 }}>
-            Cancel
-          </button>
-          <button type="button" onClick={() => submitForm('draft')} disabled={loading}
-            style={{ padding: '1px 12px', background: '#354A5E', border: '1px solid #1a2e40', color: '#fff', borderRadius: 0, cursor: 'pointer', fontSize: 11, fontFamily: F, height: 22, fontWeight: 700 }}>
-            {loading ? '...' : '💾 Save Draft'}
-          </button>
-          <button type="button" onClick={() => submitForm('pending')} disabled={loading}
-            style={{ padding: '1px 14px', background: '#006620', border: '1px solid #004410', color: '#fff', borderRadius: 0, cursor: 'pointer', fontSize: 11, fontFamily: F, height: 22, fontWeight: 700 }}>
-            {loading ? 'Saving…' : '✅ Submit for Approval'}
-          </button>
+        <div style={{display:'flex',gap:8}}>
+          {isEdit
+            ? <button type="button" onClick={() => navigate('/vendor/view')} style={{ height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F }}>← Back to List</button>
+            : <button type="button" onClick={resetForm} disabled={loading} style={{ height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F }}>Reset</button>
+          }
+          {!isEdit && (
+            <button type="button" onClick={()=>submitForm('draft')} disabled={loading} style={{
+              height:32,padding:'0 16px',borderRadius:6,cursor:'pointer',
+              background:'#F59E0B',border:'none',color:'#fff',
+              fontSize:11.5,fontWeight:700,fontFamily:F,
+            }}>💾 Save Draft</button>
+          )}
+          <button type="button" onClick={()=>submitForm(isEdit ? 'active' : 'pending')} disabled={loading} style={{
+            height:32,padding:'0 18px',borderRadius:6,cursor:'pointer',
+            background:'#2563EB',border:'none',color:'#fff',
+            fontSize:11.5,fontWeight:700,fontFamily:F,
+          }}>{loading ? '⏳ Saving…' : isEdit ? '✅ Update Vendor' : '📤 Submit for Approval'}</button>
         </div>
       </div>
     </div>

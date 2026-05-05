@@ -16,7 +16,7 @@ const grand = (o) => {
 };
 
 /* ── Order Detail Modal ── */
-export function OrderModal({ order, onClose, onApprove, onReject, readOnly }) {
+export function OrderModal({ order, company, onClose, onApprove, onReject, readOnly }) {
   if (!order) return null;
   const items   = order.items && order.items.length ? order.items : [];
   const subTotal = items.reduce((s, it) => {
@@ -174,7 +174,7 @@ export function OrderModal({ order, onClose, onApprove, onReject, readOnly }) {
           display: 'flex', justifyContent: 'flex-end', gap: 10,
           background: '#f8fafc', borderRadius: '0 0 10px 10px', flexShrink: 0,
         }}>
-          <button onClick={() => printSalesOrder(order)} style={{
+          <button onClick={() => printSalesOrder(order, company)} style={{
             padding: '8px 18px', borderRadius: 6, border: '1px solid #cbd5e1',
             background: '#fff', cursor: 'pointer', fontSize: 14,
           }}>🖨️ Print</button>
@@ -274,6 +274,7 @@ const PendingSalesOrders = () => {
       {selected && (
         <OrderModal
           order={selected}
+          company={selectedCompany}
           onClose={() => setSelected(null)}
           onApprove={doApprove}
           onReject={doReject}

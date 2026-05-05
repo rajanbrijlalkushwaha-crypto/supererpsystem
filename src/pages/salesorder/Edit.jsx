@@ -45,36 +45,46 @@ const newItem = () => ({
 });
 
 /* ═══════════════════════════════════════════════════
+   DESIGN TOKENS — matches Create.jsx
+═══════════════════════════════════════════════════ */
+const P   = '#1B56B0';
+const SEC = '#EAF0FA';
+const BG  = '#EFF3F8';
+const BD  = '#C9D6E8';
+
+/* ═══════════════════════════════════════════════════
    STYLES
 ═══════════════════════════════════════════════════ */
 const S = {
-  page:  { fontFamily:"'72','Inter',Arial,Helvetica,sans-serif", color:'#32363A', background:'#F5F6F7', minHeight:'100vh' },
-  hdr:   { background:'#354A5E', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100, borderRadius:'6px 6px 0 0' },
-  card:  { background:'#fff', border:'1px solid #E5E5E5', borderRadius:'6px', padding:'14px 16px', marginBottom:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' },
-  sec:   { fontSize:'10px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #0070F2', paddingBottom:'4px', marginBottom:'12px' },
-  lbl:   { fontSize:'11px', fontWeight:600, color:'#32363A', marginBottom:'3px', display:'block' },
-  req:   { color:'#BB0000', marginLeft:'2px' },
-  err:   { fontSize:'10px', color:'#BB0000', marginTop:'2px', fontWeight:600 },
-  hint:  { fontSize:'10px', color:'#6A6D70', marginTop:'2px' },
-  g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 18px' },
-  g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px 18px' },
-  g4:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'10px 18px' },
+  page:  { fontFamily:"'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color:'#1E293B', background:BG, minHeight:'100vh' },
+  hdr:   { background:'linear-gradient(90deg,#122B54 0%,#1B3D72 100%)', padding:'0 24px', height:52, display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:100, boxShadow:'0 2px 10px rgba(0,0,0,0.22)' },
+  card:  { background:'#fff', border:`1px solid ${BD}`, borderRadius:'10px', padding:0, marginBottom:'14px', boxShadow:'0 1px 4px rgba(18,43,84,0.07)', overflow:'hidden' },
+  sec:   { fontSize:'13px', fontWeight:700, color:'#1a2d4a', background:SEC, padding:'10px 18px', borderBottom:`1px solid ${BD}`, margin:0, letterSpacing:'0.1px' },
+  body:  { padding:'16px 18px' },
+  lbl:   { fontSize:'12px', fontWeight:700, color:'#1E293B', marginBottom:'5px', display:'block', letterSpacing:'0.1px' },
+  req:   { color:'#DC2626', marginLeft:'2px' },
+  err:   { fontSize:'11px', color:'#DC2626', marginTop:'3px', fontWeight:600 },
+  hint:  { fontSize:'11px', color:'#64748B', marginTop:'3px' },
+  g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px 22px' },
+  g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'14px 22px' },
+  g4:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'14px 22px' },
   tbl:   { width:'100%', borderCollapse:'collapse', fontSize:'12px' },
-  th:    { background:'#354A5E', color:'#fff', padding:'7px 8px', textAlign:'left', fontWeight:600, fontSize:'11px', whiteSpace:'nowrap', borderRight:'1px solid #4A6075' },
-  td:    { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#fff', verticalAlign:'middle' },
-  tdAlt: { padding:'4px 5px', border:'1px solid #E5E5E5', background:'#F9FAFB', verticalAlign:'middle' },
+  th:    { background:'#1B3D72', color:'#fff', padding:'9px 10px', textAlign:'left', fontWeight:600, fontSize:'11px', whiteSpace:'nowrap', borderRight:'1px solid rgba(255,255,255,0.15)' },
+  td:    { padding:'7px 9px', border:`1px solid ${BD}`, background:'#fff', verticalAlign:'middle' },
+  tdAlt: { padding:'7px 9px', border:`1px solid ${BD}`, background:'#F8FAFD', verticalAlign:'middle' },
 };
 
 function inp(err, sm) {
   return {
-    width:'100%', padding: sm ? '5px 7px' : '6px 9px',
-    border:`1px solid ${err?'#BB0000':'#BBBCBD'}`,
-    borderRadius:'4px', fontSize:'12px', fontFamily:'inherit',
-    background:'#FAFAFA', color:'#32363A', outline:'none', boxSizing:'border-box',
+    width:'100%', padding: sm ? '5px 8px' : '8px 11px',
+    border:`1px solid ${err?'#DC2626':BD}`,
+    borderRadius: sm ? '5px' : '6px', fontSize: sm ? '12px' : '13px', fontFamily:'inherit',
+    background:'#FAFCFF', color:'#1E293B', outline:'none', boxSizing:'border-box',
+    transition:'border-color 0.15s, box-shadow 0.15s',
   };
 }
 function selStyle(sm) {
-  return { width:'100%', padding: sm?'5px 7px':'6px 9px', border:'1px solid #BBBCBD', borderRadius:'4px', fontSize:'12px', fontFamily:'inherit', background:'#FAFAFA', color:'#32363A', outline:'none', cursor:'pointer', boxSizing:'border-box' };
+  return { width:'100%', padding: sm?'5px 8px':'8px 11px', border:`1px solid ${BD}`, borderRadius: sm?'5px':'6px', fontSize: sm?'12px':'13px', fontFamily:'inherit', background:'#FAFCFF', color:'#1E293B', outline:'none', cursor:'pointer', boxSizing:'border-box', transition:'border-color 0.15s' };
 }
 
 function F({ label, req, children, err, hint }) {
@@ -180,6 +190,41 @@ const EditSalesOrder = () => {
   const [del, setDel]         = useState({ deliveryAddr:'', shippingAddr:'', dispatchMode:'Road', transporterName:'', vehicleNumber:'', deliveryInstructions:'' });
   const [pay, setPay]         = useState({ paymentTerms:'30 Days', paymentMode:'NEFT', billingTerms:'', creditLimit:'', dueDate:'' });
   const [specs, setSpecs]     = useState({ productSpecs:'', technicalDetails:'', drawingNumber:'', version:'', customFields:[] });
+
+  /* ── Specification Sheet ── */
+  const uid = () => Date.now() + Math.random();
+  const newSpecRow     = ()       => ({ _id: uid(), description:'', qty:'', remarks:'' });
+  const newSpecSubHead = ()       => ({ _id: uid(), title:'', rows:[newSpecRow()] });
+  const newSpecHeader  = ()       => ({ _id: uid(), title:'', subHeaders:[newSpecSubHead()] });
+  const newSpecGroup   = (item={})=> ({ _id: uid(), itemId: item._id||'', itemName: item.itemName||item.material||'', headers:[newSpecHeader()] });
+  const [specSheet, setSpecSheet] = useState([]);
+
+  const ssAddGroup = (item)           => setSpecSheet(s => [...s, newSpecGroup(item)]);
+  const ssDelGroup = (gid)            => setSpecSheet(s => s.filter(g => g._id !== gid));
+  const ssAddHdr   = (gid)            => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:[...g.headers, newSpecHeader()]} : g));
+  const ssDelHdr   = (gid,hid)        => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.filter(h=>h._id!==hid)} : g));
+  const ssSetHdrT  = (gid,hid,v)      => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,title:v}:h)} : g));
+  const ssAddSub   = (gid,hid)        => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:[...h.subHeaders,newSpecSubHead()]}:h)} : g));
+  const ssDelSub   = (gid,hid,sid)    => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.filter(sh=>sh._id!==sid)}:h)} : g));
+  const ssSetSubT  = (gid,hid,sid,v)  => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,title:v}:sh)}:h)} : g));
+  const ssAddRow   = (gid,hid,sid)    => setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:[...sh.rows,newSpecRow()]}:sh)}:h)} : g));
+  const ssDelRow   = (gid,hid,sid,rid)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:sh.rows.filter(r=>r._id!==rid)}:sh)}:h)} : g));
+  const ssUpdRow   = (gid,hid,sid,rid,field,val)=> setSpecSheet(s => s.map(g => g._id===gid ? {...g, headers:g.headers.map(h=>h._id===hid?{...h,subHeaders:h.subHeaders.map(sh=>sh._id===sid?{...sh,rows:sh.rows.map(r=>r._id===rid?{...r,[field]:val}:r)}:sh)}:h)} : g));
+
+  const loadSpecSheet = (saved) => {
+    if (!Array.isArray(saved) || !saved.length) return;
+    setSpecSheet(saved.map(g => ({
+      _id: uid(), itemId: g.itemId||'', itemName: g.itemName||'',
+      headers: (g.headers||[]).map(h => ({
+        _id: uid(), title: h.title||'',
+        subHeaders: (h.subHeaders||[]).map(sh => ({
+          _id: uid(), title: sh.title||'',
+          rows: (sh.rows||[]).map(r => ({ _id: uid(), description: r.description||'', qty: r.qty||'', remarks: r.remarks||'' })),
+        })),
+      })),
+    })));
+  };
+
   const [attachments, setAttachments] = useState([]);   // existing saved files
   const [newFiles,    setNewFiles]    = useState([]);   // new file objects to upload
   const [notes, setNotes]     = useState({ termsConditions:'', internalNotes:'', customerNotes:'' });
@@ -276,6 +321,7 @@ const EditSalesOrder = () => {
           internalNotes:   o.internalNotes   || o.narration || '',
           customerNotes:   o.customerNotes   || '',
         });
+        loadSpecSheet(o.specSheet || []);
         setScopeItems(o.scopeItems || []);
         setBOMItems(o.bomItems     || []);
         setTasks(o.tasks           || []);
@@ -452,6 +498,16 @@ const EditSalesOrder = () => {
         ...attachments.filter(a => a.replaceFile).map(a => ({ file: a.replaceFile, name: a.name })),
       ];
       toUpload.forEach(a => fd.append('attachmentFiles', a.file));
+      fd.append('specSheet',  JSON.stringify(specSheet.map(({ _id, ...g }) => ({
+        ...g,
+        headers: (g.headers||[]).map(({ _id:_hid, ...h }) => ({
+          ...h,
+          subHeaders: (h.subHeaders||[]).map(({ _id:_sid, ...sh }) => ({
+            ...sh,
+            rows: (sh.rows||[]).map(({ _id:_rid, ...r }) => r),
+          })),
+        })),
+      }))));
       fd.append('scopeItems', JSON.stringify(scopeItems.map(({ _id, ...s }) => s)));
       fd.append('bomItems',   JSON.stringify(bomItems.map(({ _id, ...b }) => b)));
       fd.append('tasks',      JSON.stringify(tasks.map(({ _id, ...t }) => t)));
@@ -479,7 +535,7 @@ const EditSalesOrder = () => {
   if (loading) {
     return (
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'350px', flexDirection:'column', gap:'12px', fontFamily:'inherit' }}>
-        <div style={{ width:'36px', height:'36px', border:'3px solid #E5E5E5', borderTopColor:'#0070F2', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <div style={{ width:'36px', height:'36px', border:`3px solid ${BD}`, borderTopColor:P, borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
         <div style={{ fontSize:'13px', color:'#6A6D70' }}>Loading sales order…</div>
         <style>{`@keyframes spin { to { transform:rotate(360deg); } }`}</style>
       </div>
@@ -503,23 +559,33 @@ const EditSalesOrder = () => {
           </div>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={() => navigate('/sales-order/view')} style={{ background:'transparent', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', padding:'6px 16px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
-            ✕ Cancel
+          <button onClick={() => navigate('/sales-order/view')}
+            style={{ background:'transparent', border:'1.5px solid rgba(255,255,255,0.4)', color:'rgba(255,255,255,0.85)', padding:'7px 14px', borderRadius:'6px', cursor:'pointer', fontSize:'12px', fontWeight:500, fontFamily:'inherit' }}
+            onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.1)';e.currentTarget.style.color='#fff';}}
+            onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='rgba(255,255,255,0.85)';}}>
+            ← Cancel
           </button>
-          <button onClick={() => handleSave('draft')} disabled={saving} style={{ background:'#6A6D70', border:'none', color:'#fff', padding:'6px 16px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>
-            {saving ? '…' : '💾 Save as Draft'}
+          <button onClick={() => handleSave('draft')} disabled={saving}
+            style={{ background:'rgba(255,255,255,0.12)', border:'1.5px solid rgba(255,255,255,0.5)', color:'#fff', padding:'7px 16px', borderRadius:'6px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}
+            onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.2)';}}
+            onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.12)';}}>
+            {saving ? '…' : 'Save Draft'}
           </button>
-          <button onClick={() => handleSave('pending')} disabled={saving} style={{ background:'#0070F2', border:'none', color:'#fff', padding:'6px 20px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
-            {saving ? 'Sending…' : '📤 Send for Approval'}
+          <button onClick={() => handleSave('pending')} disabled={saving}
+            style={{ background:'#fff', border:'2px solid #fff', color:P, padding:'7px 20px', borderRadius:'6px', cursor:saving?'default':'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit', opacity:saving?0.7:1 }}
+            onMouseEnter={e=>{ if(!saving) e.currentTarget.style.background='#EAF0FA'; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background='#fff'; }}>
+            {saving ? 'Saving…' : '✓ Update Order'}
           </button>
         </div>
       </div>
 
-      <div style={{ padding:'14px 16px' }}>
+      <div style={{ padding:'16px 20px' }}>
 
         {/* ── Order Header Card ── */}
-        <div style={{ ...S.card, marginBottom:'10px' }}>
-          <div style={{ ...S.sec, borderBottomColor:'#354A5E' }}>Order Header</div>
+        <div style={{ ...S.card, marginBottom:'12px' }}>
+          <div style={S.sec}>Order Header</div>
+          <div style={S.body}>
           <div style={S.g4}>
             <FIn label="Sales Order No" value={hdr.orderNo} readOnly hint="System ID — read only" />
             <div>
@@ -548,7 +614,7 @@ const EditSalesOrder = () => {
                   {filteredClients.slice(0,20).map(c => (
                     <div key={c.clientId} onClick={() => selectCustomer(c)}
                       style={{ padding:'7px 12px', cursor:'pointer', borderBottom:'1px solid #F0F0F0', fontSize:'12px' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#EAF1FB'}
+                      onMouseEnter={e => e.currentTarget.style.background=SEC}
                       onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                       <span style={{ fontWeight:600 }}>{c.companyName||c.clientName}</span>
                       <span style={{ color:'#6A6D70', marginLeft:'8px', fontSize:'11px' }}>#{c.clientId}</span>
@@ -562,38 +628,39 @@ const EditSalesOrder = () => {
             <FIn label="Mobile" value={hdr.mobile} onChange={v => setH('mobile',v)} />
             <FIn label="Email" value={hdr.email} onChange={v => setH('email',v)} />
           </div>
+          </div>{/* end S.body */}
         </div>
 
         {/* ── Tab Bar ── */}
-        <div style={{ background:'#fff', border:'1px solid #E5E5E5', display:'flex', overflowX:'auto', borderBottom:'2px solid #E5E5E5', borderRadius:'6px 6px 0 0' }}>
+        <div style={{ background:'#fff', border:`1px solid ${BD}`, display:'flex', overflowX:'auto', borderBottom:`1px solid ${BD}`, borderRadius:'10px 10px 0 0', padding:'0 8px', boxShadow:`0 1px 0 ${BD}` }}>
           {TABS.map(t => {
             const active  = activeTab === t.id;
             const hasErr  = (t.id==='general' && (errs.customerName||errs.orderDate)) || (t.id==='items' && errs.items);
             return (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-                display:'flex', alignItems:'center', gap:'5px', padding:'8px 14px',
-                cursor:'pointer', background: active?'#fff':'#F5F6F7',
-                border:'none', borderBottom: active?'3px solid #0070F2':'3px solid transparent',
-                borderRight:'1px solid #E5E5E5',
-                color: hasErr?'#BB0000': active?'#0070F2':'#6A6D70',
+                display:'flex', alignItems:'center', gap:'5px', padding:'11px 14px',
+                cursor:'pointer', background:'transparent',
+                border:'none', borderBottom: active?`2.5px solid ${P}`:'2.5px solid transparent',
+                color: hasErr?'#EF4444': active?P:'#6B7280',
                 fontSize:'12px', fontWeight: active?600:400, fontFamily:'inherit',
-                whiteSpace:'nowrap', marginBottom:'-2px', position:'relative',
+                whiteSpace:'nowrap', position:'relative', transition:'color 0.15s',
               }}>
                 <span style={{ fontSize:'13px' }}>{t.icon}</span>
                 {t.label}
-                {hasErr && <span style={{ width:'5px', height:'5px', borderRadius:'50%', background:'#BB0000', position:'absolute', top:'6px', right:'5px' }} />}
+                {hasErr && <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'#EF4444', position:'absolute', top:'8px', right:'3px' }} />}
               </button>
             );
           })}
         </div>
 
         {/* ── Tab Content ── */}
-        <div style={{ background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px', padding:'14px', minHeight:'400px' }}>
+        <div style={{ background:BG, border:`1px solid ${BD}`, borderTop:'none', borderRadius:'0 0 10px 10px', padding:'16px', minHeight:'400px' }}>
 
           {/* ══ TAB 1: General ══ */}
           {activeTab === 'general' && (
             <div style={S.card}>
               <div style={S.sec}>Order References & Dates</div>
+              <div style={S.body}>
               <div style={S.g3}>
                 <FIn label="Customer PO Number" value={gen.customerPO} onChange={v => setGen(g=>({...g,customerPO:v}))} placeholder="PO-XXXX" />
                 <div>
@@ -609,16 +676,18 @@ const EditSalesOrder = () => {
                 <FSel label="Incoterms" value={gen.incoterms} onChange={v => setGen(g=>({...g,incoterms:v}))}
                   options={['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DPU','DAP','DDP']} placeholder="— Select —" />
               </div>
+            </div>{/* end S.body */}
             </div>
           )}
 
           {/* ══ TAB 2: Items ══ */}
           {activeTab === 'items' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-                <div style={S.sec}>Item Details</div>
-                <button type="button" onClick={addRow} style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Item Details</span>
+                <button type="button" onClick={addRow} style={{ padding:'5px 14px', background:P, border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
               </div>
+              <div style={S.body}>
               {errs.items && <div style={{ ...S.err, marginBottom:'8px' }}>{errs.items}</div>}
               <div style={{ overflowX:'auto' }}>
                 <table style={S.tbl}>
@@ -664,7 +733,7 @@ const EditSalesOrder = () => {
                             </div>
                           </td>
                           <td style={bg}><select value={it.gstPercent} onChange={e => updItem(it._id,'gstPercent',e.target.value)} style={{ ...selStyle(true), minWidth:'55px' }}>{GST_RATES.map(r=><option key={r} value={r}>{r}%</option>)}</select></td>
-                          <td style={{ ...bg, textAlign:'right', fontWeight:600, color:'#0070F2', paddingRight:'8px' }}>₹{it.calc.total.toFixed(2)}</td>
+                          <td style={{ ...bg, textAlign:'right', fontWeight:600, color:P, paddingRight:'8px' }}>₹{it.calc.total.toFixed(2)}</td>
                           <td style={{ ...bg, textAlign:'center' }}>
                             <button type="button" onClick={() => delRow(it._id)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'3px', padding:'3px 7px', cursor:'pointer', fontSize:'11px', fontWeight:700 }}>✕</button>
                           </td>
@@ -675,17 +744,18 @@ const EditSalesOrder = () => {
                 </table>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', marginTop:'10px' }}>
-                <div style={{ minWidth:'240px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'10px 14px' }}>
+                <div style={{ minWidth:'240px', background:BG, border:`1px solid ${BD}`, borderRadius:'4px', padding:'10px 14px' }}>
                   {[['Subtotal (Taxable)', `₹${subTotal.toFixed(2)}`], ['Total GST', `₹${totalGST.toFixed(2)}`]].map(([k,v]) => (
                     <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'5px' }}>
                       <span style={{ color:'#6A6D70' }}>{k}</span><span style={{ fontWeight:600 }}>{v}</span>
                     </div>
                   ))}
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:700, color:'#0070F2', borderTop:'1px solid #CBE0F5', paddingTop:'6px', marginTop:'4px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:'13px', fontWeight:700, color:P, borderTop:`1px solid ${BD}`, paddingTop:'6px', marginTop:'4px' }}>
                     <span>Line Total</span><span>₹{(subTotal+totalGST).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
+            </div>{/* end S.body */}
             </div>
           )}
 
@@ -693,9 +763,10 @@ const EditSalesOrder = () => {
           {activeTab === 'pricing' && (
             <div style={S.card}>
               <div style={S.sec}>Pricing & Tax Summary</div>
+              <div style={S.body}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px' }}>
-                <div style={{ background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'12px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase' }}>Adjustments</div>
+                <div style={{ background:BG, border:`1px solid ${BD}`, borderRadius:'4px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.4px' }}>Adjustments</div>
                   {[
                     ['Overall Discount (₹)', 'overallDiscount'],
                     ['Freight Charges (₹)', 'freightCharges'],
@@ -708,8 +779,8 @@ const EditSalesOrder = () => {
                     </div>
                   ))}
                 </div>
-                <div style={{ background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', padding:'12px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', marginBottom:'10px', textTransform:'uppercase' }}>
+                <div style={{ background:BG, border:`1px solid ${BD}`, borderRadius:'4px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.4px' }}>
                     Tax — {isIntra ? 'Intrastate (CGST+SGST)' : 'Interstate (IGST)'}
                   </div>
                   {[
@@ -725,11 +796,12 @@ const EditSalesOrder = () => {
                       <span style={{ color:'#6A6D70' }}>{k}</span><span style={{ fontFamily:'monospace' }}>{v}</span>
                     </div>
                   ))}
-                  <div style={{ borderTop:'2px solid #0070F2', paddingTop:'8px', marginTop:'6px', display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:700, color:'#0070F2' }}>
+                  <div style={{ borderTop:`2px solid ${P}`, paddingTop:'8px', marginTop:'6px', display:'flex', justifyContent:'space-between', fontSize:'15px', fontWeight:700, color:P }}>
                     <span>Grand Total</span><span>₹{grandTotal.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
+            </div>{/* end S.body */}
             </div>
           )}
 
@@ -737,12 +809,13 @@ const EditSalesOrder = () => {
           {activeTab === 'delivery' && (
             <div style={S.card}>
               <div style={S.sec}>Delivery & Dispatch Details</div>
+              <div style={S.body}>
               <div style={S.g2}>
                 <FTA label="Delivery Address" req value={del.deliveryAddr} onChange={v => setDel(d=>({...d,deliveryAddr:v}))} placeholder="Full delivery address…" rows={3} />
                 <div>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'3px' }}>
                     <label style={S.lbl}>Shipping Address</label>
-                    <button type="button" onClick={() => setDel(d=>({...d,shippingAddr:d.deliveryAddr}))} style={{ fontSize:'10px', color:'#0070F2', background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'3px', padding:'2px 8px', cursor:'pointer' }}>Copy from Delivery</button>
+                    <button type="button" onClick={() => setDel(d=>({...d,shippingAddr:d.deliveryAddr}))} style={{ fontSize:'10px', color:P, background:SEC, border:`1px solid ${BD}`, borderRadius:'3px', padding:'2px 8px', cursor:'pointer' }}>Copy from Delivery</button>
                   </div>
                   <textarea value={del.shippingAddr} rows={3} onChange={e => setDel(d=>({...d,shippingAddr:e.target.value}))}
                     placeholder="Leave blank if same…" style={{ ...inp(false), resize:'vertical', minHeight:'66px' }} />
@@ -756,6 +829,7 @@ const EditSalesOrder = () => {
               <div style={{ marginTop:'10px' }}>
                 <FTA label="Delivery Instructions" value={del.deliveryInstructions} onChange={v => setDel(d=>({...d,deliveryInstructions:v}))} placeholder="Special delivery instructions…" rows={2} />
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -763,6 +837,7 @@ const EditSalesOrder = () => {
           {activeTab === 'payment' && (
             <div style={S.card}>
               <div style={S.sec}>Payment Configuration</div>
+              <div style={S.body}>
               <div style={S.g3}>
                 <FSel label="Payment Terms" value={pay.paymentTerms} onChange={v => setPay(p=>({...p,paymentTerms:v}))} options={['Advance','7 Days','15 Days','30 Days','45 Days','60 Days','90 Days','On Delivery','LC']} />
                 <FSel label="Payment Mode" value={pay.paymentMode} onChange={v => setPay(p=>({...p,paymentMode:v}))} options={['NEFT','RTGS','IMPS','Cheque','Cash','UPI','DD','LC','Credit Card']} />
@@ -775,45 +850,148 @@ const EditSalesOrder = () => {
                 <div>
                   <label style={S.lbl}>Credit Limit (₹)</label>
                   <div style={{ display:'flex', alignItems:'center', border:'1px solid #BBBCBD', borderRadius:'4px', overflow:'hidden', background:'#FAFAFA' }}>
-                    <span style={{ padding:'6px 9px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'12px', color:'#354A5E', fontWeight:600 }}>₹</span>
+                    <span style={{ padding:'6px 9px', background:SEC, borderRight:`1px solid ${BD}`, fontSize:'12px', color:'#1a2d4a', fontWeight:600 }}>₹</span>
                     <input type="number" value={pay.creditLimit} onChange={e => setPay(p=>({...p,creditLimit:e.target.value}))} placeholder="0" style={{ flex:1, padding:'6px 9px', border:'none', outline:'none', background:'transparent', fontSize:'12px', fontFamily:'inherit' }} />
                   </div>
                 </div>
                 <FTA label="Billing Terms" value={pay.billingTerms} onChange={v => setPay(p=>({...p,billingTerms:v}))} placeholder="Special billing terms…" rows={3} />
               </div>
-              <div style={{ marginTop:'14px', padding:'10px 14px', background:'#EAF1FB', border:'1px solid #A9CBF4', borderLeft:'4px solid #0070F2', borderRadius:'4px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:'12px', color:'#354A5E', fontWeight:600 }}>Order Grand Total</span>
-                <span style={{ fontSize:'16px', fontWeight:700, color:'#0070F2', fontFamily:'monospace' }}>₹{grandTotal.toFixed(2)}</span>
+              <div style={{ marginTop:'14px', padding:'10px 14px', background:SEC, border:`1px solid ${BD}`, borderLeft:`4px solid ${P}`, borderRadius:'4px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:'12px', color:'#1a2d4a', fontWeight:600 }}>Order Grand Total</span>
+                <span style={{ fontSize:'16px', fontWeight:700, color:P, fontFamily:'monospace' }}>₹{grandTotal.toFixed(2)}</span>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ══ TAB 6: Specs ══ */}
           {activeTab === 'specs' && (
-            <div style={S.card}>
-              <div style={S.sec}>Technical Specifications</div>
-              <div style={S.g2}>
-                <FTA label="Product Specifications" value={specs.productSpecs} onChange={v => setSpecs(s=>({...s,productSpecs:v}))} placeholder="Material grade, dimensions, tolerances…" rows={5} />
-                <FTA label="Technical Details" value={specs.technicalDetails} onChange={v => setSpecs(s=>({...s,technicalDetails:v}))} placeholder="Technical parameters, standards…" rows={5} />
+            <div>
+              {/* Toolbar */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'#1a2d4a' }}>Specification Sheet</div>
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    if (val === '__general__') { ssAddGroup({}); }
+                    else {
+                      const it = items.find(i => (i._id||i.itemCode||i.itemName) === val);
+                      if (it) ssAddGroup(it);
+                    }
+                    e.target.value='';
+                  }}
+                  style={{ ...selStyle(true), width:240 }}
+                >
+                  <option value="">＋ Add Spec Group (select item)…</option>
+                  {items.filter(it=>it.itemName||it.material).map((it,i)=>(
+                    <option key={i} value={it._id||it.itemCode||it.itemName}>{it.itemName||it.material}</option>
+                  ))}
+                  <option value="__general__">General / No specific item</option>
+                </select>
               </div>
-              <div style={{ ...S.g3, marginTop:'10px' }}>
-                <FIn label="Drawing Number" value={specs.drawingNumber} onChange={v => setSpecs(s=>({...s,drawingNumber:v}))} placeholder="DRG-XXXX" />
-                <FIn label="Version / Revision" value={specs.version} onChange={v => setSpecs(s=>({...s,version:v}))} placeholder="Rev A / v1.2" />
-              </div>
-              <div style={{ marginTop:'12px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase' }}>Custom Fields</div>
-                  <button type="button" onClick={addCF} style={{ fontSize:'11px', padding:'4px 10px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#0070F2', borderRadius:'3px', cursor:'pointer', fontWeight:600 }}>+ Add Field</button>
+
+              {specSheet.length === 0 && (
+                <div style={{ textAlign:'center', padding:'40px 20px', color:'#94A3B8', fontSize:13, background:'#fff', border:`1px dashed ${BD}`, borderRadius:8 }}>
+                  No specifications yet. Select an item above to create a spec group.
                 </div>
-                {specs.customFields.length===0 && <div style={{ fontSize:'12px', color:'#94A3B8' }}>No custom fields.</div>}
-                {specs.customFields.map((cf, i) => (
-                  <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'center' }}>
-                    <input value={cf.key} onChange={e => updCF(i,'key',e.target.value)} placeholder="Field Name" style={{ ...inp(false,true), width:'160px', flex:'0 0 160px' }} />
-                    <input value={cf.value} onChange={e => updCF(i,'value',e.target.value)} placeholder="Value" style={{ ...inp(false,true), flex:1 }} />
-                    <button type="button" onClick={() => delCF(i)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'3px', padding:'5px 8px', cursor:'pointer', fontSize:'11px', fontWeight:700, flexShrink:0 }}>✕</button>
+              )}
+
+              {specSheet.map((grp) => (
+                <div key={grp._id} style={{ ...S.card, marginBottom:14 }}>
+                  <div style={{ background:'#1a3c6e', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
+                    <span style={{ fontSize:16 }}>📦</span>
+                    <span style={{ flex:1, fontWeight:700, color:'#fff', fontSize:13 }}>{grp.itemName || 'General Specifications'}</span>
+                    <button type="button" onClick={() => ssAddHdr(grp._id)}
+                      style={{ padding:'3px 10px', fontSize:11, background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.35)', color:'#fff', borderRadius:4, cursor:'pointer', fontWeight:600 }}>
+                      + Add Header
+                    </button>
+                    <button type="button" onClick={() => ssDelGroup(grp._id)}
+                      style={{ background:'rgba(239,68,68,0.25)', border:'1px solid rgba(239,68,68,0.5)', color:'#fca5a5', borderRadius:4, padding:'3px 8px', cursor:'pointer', fontSize:12 }}>✕</button>
                   </div>
-                ))}
-              </div>
+                  <div style={{ padding:'10px 14px' }}>
+                    {grp.headers.map((hdr) => (
+                      <div key={hdr._id} style={{ marginBottom:12, border:`1px solid ${BD}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ background:'#EEF4FF', borderBottom:`1px solid ${BD}`, padding:'6px 10px', display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ fontSize:11, fontWeight:700, color:P, textTransform:'uppercase', letterSpacing:'0.5px', flexShrink:0 }}>▌ HEADER</span>
+                          <input value={hdr.title} onChange={e => ssSetHdrT(grp._id, hdr._id, e.target.value)}
+                            placeholder="e.g. Civil Work, Electrical, Structural…"
+                            style={{ ...inp(false,true), flex:1, fontWeight:700, fontSize:12 }} />
+                          <button type="button" onClick={() => ssAddSub(grp._id, hdr._id)}
+                            style={{ padding:'3px 10px', fontSize:11, background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:4, cursor:'pointer', fontWeight:600, flexShrink:0 }}>
+                            + Sub Header
+                          </button>
+                          <button type="button" onClick={() => ssDelHdr(grp._id, hdr._id)}
+                            style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:4, padding:'3px 7px', cursor:'pointer', fontSize:12, flexShrink:0 }}>✕</button>
+                        </div>
+                        <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:10 }}>
+                          {hdr.subHeaders.map((sub) => {
+                            let srCounter = 0;
+                            return (
+                              <div key={sub._id} style={{ border:'1px solid #dde4f0', borderRadius:5, overflow:'hidden' }}>
+                                <div style={{ background:'#F0F6FF', borderBottom:'1px solid #dde4f0', padding:'5px 10px', display:'flex', alignItems:'center', gap:8 }}>
+                                  <span style={{ fontSize:11, fontWeight:600, color:'#3b5ea6', flexShrink:0 }}>▶ SUB HEADER</span>
+                                  <input value={sub.title} onChange={e => ssSetSubT(grp._id, hdr._id, sub._id, e.target.value)}
+                                    placeholder="e.g. Foundation, Wiring, Painting…"
+                                    style={{ ...inp(false,true), flex:1, fontSize:12 }} />
+                                  <button type="button" onClick={() => ssDelSub(grp._id, hdr._id, sub._id)}
+                                    style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:4, padding:'2px 7px', cursor:'pointer', fontSize:12, flexShrink:0 }}>✕</button>
+                                </div>
+                                <div style={{ overflowX:'auto' }}>
+                                  <table style={{ ...S.tbl, minWidth:600 }}>
+                                    <thead>
+                                      <tr>
+                                        <th style={{ ...S.th, width:44, textAlign:'center' }}>Sr No</th>
+                                        <th style={{ ...S.th }}>Description</th>
+                                        <th style={{ ...S.th, width:90, textAlign:'center' }}>Qty</th>
+                                        <th style={{ ...S.th }}>Remarks</th>
+                                        <th style={{ ...S.th, width:36 }}></th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sub.rows.map((row, ri) => {
+                                        srCounter++;
+                                        return (
+                                          <tr key={row._id} style={{ background: ri%2===0 ? '#fff' : '#F9FAFB' }}>
+                                            <td style={{ ...S.td, textAlign:'center', color:'#6B7280', fontWeight:600, fontSize:11 }}>{srCounter}</td>
+                                            <td style={S.td}>
+                                              <input value={row.description} onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'description',e.target.value)}
+                                                placeholder="Description…" style={{ ...inp(false,true), width:'100%' }} />
+                                            </td>
+                                            <td style={S.td}>
+                                              <input value={row.qty} onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'qty',e.target.value)}
+                                                placeholder="Qty" style={{ ...inp(false,true), width:'100%', textAlign:'center' }} />
+                                            </td>
+                                            <td style={S.td}>
+                                              <input value={row.remarks} onChange={e => ssUpdRow(grp._id,hdr._id,sub._id,row._id,'remarks',e.target.value)}
+                                                placeholder="Remarks…" style={{ ...inp(false,true), width:'100%' }} />
+                                            </td>
+                                            <td style={{ ...S.td, textAlign:'center' }}>
+                                              <button type="button" onClick={() => ssDelRow(grp._id,hdr._id,sub._id,row._id)}
+                                                style={{ background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#DC2626', borderRadius:3, padding:'2px 6px', cursor:'pointer', fontSize:11, fontWeight:700 }}>✕</button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div style={{ padding:'6px 10px', background:'#FAFBFC', borderTop:'1px solid #eef1f8' }}>
+                                  <button type="button" onClick={() => ssAddRow(grp._id, hdr._id, sub._id)}
+                                    style={{ padding:'3px 12px', fontSize:11, background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:4, cursor:'pointer', fontWeight:600 }}>
+                                    + Add Row
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -823,14 +1001,14 @@ const EditSalesOrder = () => {
             return (
               <div>
                 <div style={{ display:'flex', gap:10, marginBottom:12, flexWrap:'wrap' }}>
-                  {[{label:'Total Items',val:matPlan.length,color:'#354A5E'},{label:'Purchase',val:matPlan.filter(m=>m.itemType==='Purchase').length,color:'#0070F2'},{label:'Manufactured',val:matPlan.filter(m=>m.itemType==='Manufactured').length,color:'#188918'},{label:'Units/Cabins',val:groups.length,color:'#E9730C'}].map(p=>(
+                  {[{label:'Total Items',val:matPlan.length,color:'#1a2d4a'},{label:'Purchase',val:matPlan.filter(m=>m.itemType==='Purchase').length,color:P},{label:'Manufactured',val:matPlan.filter(m=>m.itemType==='Manufactured').length,color:'#188918'},{label:'Units/Cabins',val:groups.length,color:'#E9730C'}].map(p=>(
                     <div key={p.label} style={{ padding:'6px 14px',background:'#fff',border:`1px solid ${p.color}30`,borderLeft:`3px solid ${p.color}`,borderRadius:4 }}>
                       <div style={{ fontSize:18,fontWeight:700,color:p.color }}>{p.val}</div>
                       <div style={{ fontSize:10,color:'#6A6D70',textTransform:'uppercase',letterSpacing:'0.5px' }}>{p.label}</div>
                     </div>
                   ))}
                   <div style={{ marginLeft:'auto',display:'flex',alignItems:'center' }}>
-                    <button type="button" onClick={()=>setMatPlan(p=>[...p,newMatItem()])} style={{ padding:'6px 14px',background:'#0070F2',border:'none',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit' }}>+ Add Item</button>
+                    <button type="button" onClick={()=>setMatPlan(p=>[...p,newMatItem()])} style={{ padding:'6px 14px',background:P,border:'none',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit' }}>+ Add Item</button>
                   </div>
                 </div>
                 {groups.map(grp=>{
@@ -838,16 +1016,16 @@ const EditSalesOrder = () => {
                   return (
                     <div key={grp} style={{ ...S.card,marginBottom:12 }}>
                       <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:10 }}>
-                        <div style={{ fontSize:13,fontWeight:700,color:'#354A5E' }}>🏗️ {grp}</div>
+                        <div style={{ fontSize:13,fontWeight:700,color:'#1a2d4a' }}>🏗️ {grp}</div>
                         <span style={{ fontSize:11,color:'#6A6D70' }}>{grpItems.length} item(s)</span>
                       </div>
                       {grpItems.map((m,idx)=>(
-                        <div key={m._id||idx} style={{ marginBottom:8,border:'1px solid #E5E5E5',borderRadius:6,overflow:'hidden' }}>
+                        <div key={m._id||idx} style={{ marginBottom:8,border:`1px solid ${BD}`,borderRadius:6,overflow:'hidden' }}>
                           <div style={{ display:'grid',gridTemplateColumns:'28px 130px 1fr 110px 60px 70px 1fr 32px',gap:6,padding:'6px 8px',background:m.itemType==='Manufactured'?'#F0FFF4':'#F0F9FF',alignItems:'center' }}>
                             <div style={{ textAlign:'center',fontSize:11,fontWeight:700,color:'#6A6D70' }}>{idx+1}</div>
                             <input value={m.unitGroup} onChange={e=>updMat(m._id,'unitGroup',e.target.value)} placeholder="Cabin / Unit" style={inp(false,true)} />
                             <input value={m.itemName} onChange={e=>updMat(m._id,'itemName',e.target.value)} placeholder="Item name (e.g. AC, Steel Sheet)" style={inp(false,true)} />
-                            <select value={m.itemType} onChange={e=>updMat(m._id,'itemType',e.target.value)} style={{ ...selStyle(true),fontWeight:600,color:m.itemType==='Manufactured'?'#188918':'#0070F2',background:m.itemType==='Manufactured'?'#F0FFF4':'#EFF6FF' }}>
+                            <select value={m.itemType} onChange={e=>updMat(m._id,'itemType',e.target.value)} style={{ ...selStyle(true),fontWeight:600,color:m.itemType==='Manufactured'?'#188918':P,background:m.itemType==='Manufactured'?'#F0FFF4':'#EFF6FF' }}>
                               {MAT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                             </select>
                             <input type="number" value={m.requiredQty} min="0" onChange={e=>updMat(m._id,'requiredQty',e.target.value)} style={{ ...inp(false,true),textAlign:'right' }} />
@@ -901,10 +1079,11 @@ const EditSalesOrder = () => {
           {/* ══ Scope of Work ══ */}
           {activeTab === 'scope' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <div style={S.sec}>Scope of Work / Supply</div>
-                <button type="button" onClick={() => setScopeItems(p=>[...p,newScopeItem()])} style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Scope</button>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Scope of Work / Supply</span>
+                <button type="button" onClick={() => setScopeItems(p=>[...p,newScopeItem()])} style={{ padding:'5px 14px', background:P, border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Scope</button>
               </div>
+              <div style={S.body}>
               <div style={{ overflowX:'auto' }}>
                 <table style={S.tbl}>
                   <thead><tr>
@@ -935,19 +1114,21 @@ const EditSalesOrder = () => {
                   </tbody>
                 </table>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ══ BOM ══ */}
           {activeTab === 'bom' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <div style={S.sec}>BOM — Bill of Materials</div>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>BOM — Bill of Materials</span>
                 <div style={{ display:'flex', gap:8 }}>
                   <button type="button" onClick={autoGenBOM} style={{ padding:'5px 12px', background:'#188918', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>⚡ Auto-Generate from Scope</button>
-                  <button type="button" onClick={()=>setBOMItems(p=>[...p,newBOMItem()])} style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
+                  <button type="button" onClick={()=>setBOMItems(p=>[...p,newBOMItem()])} style={{ padding:'5px 14px', background:P, border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Row</button>
                 </div>
               </div>
+              <div style={S.body}>
               {bomItems.length===0 ? (
                 <div style={{ textAlign:'center', padding:'32px 0', color:'#94A3B8', fontSize:13 }}><div style={{ fontSize:36, marginBottom:8 }}>🔧</div>No BOM items. Click <b>"Auto-Generate from Scope"</b> or add rows manually.</div>
               ) : (
@@ -981,21 +1162,24 @@ const EditSalesOrder = () => {
                   </table>
                 </div>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
           {/* ══ Tasks ══ */}
           {activeTab === 'tasks' && (
             <div style={S.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                <div style={S.sec}>Tasks / Project Plan</div>
+              <div style={{ ...S.sec, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span>Tasks / Project Plan</span>
                 <div style={{ display:'flex', gap:8 }}>
                   <button type="button" onClick={autoGenTasks} style={{ padding:'5px 12px', background:'#188918', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>⚡ Auto-Create from Scope</button>
-                  <button type="button" onClick={()=>setTasks(p=>[...p,newTask()])} style={{ padding:'5px 14px', background:'#0070F2', border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Task</button>
+                  <button type="button" onClick={()=>setTasks(p=>[...p,newTask()])} style={{ padding:'5px 14px', background:P, border:'none', color:'#fff', borderRadius:4, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit' }}>+ Add Task</button>
                 </div>
               </div>
+              <div style={S.body}>
               {tasks.length===0 ? (
                 <div style={{ textAlign:'center', padding:'32px 0', color:'#94A3B8', fontSize:13 }}><div style={{ fontSize:36, marginBottom:8 }}>📌</div>No tasks yet. Click <b>"Auto-Create from Scope"</b> or add tasks manually.</div>
+
               ) : (
                 <>
                   {(() => {
@@ -1004,10 +1188,10 @@ const EditSalesOrder = () => {
                     return (
                       <div style={{ marginBottom:12, padding:'8px 14px', background:'#F0F9FF', border:'1px solid #BAE0FF', borderRadius:6, display:'flex', alignItems:'center', gap:16 }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#354A5E', fontWeight:600 }}><span>Project Progress</span><span>{pct}% ({done}/{tasks.length} tasks)</span></div>
-                          <div style={{ height:8, background:'#DBEAFE', borderRadius:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:pct===100?'#188918':'#0070F2', borderRadius:4, transition:'width 0.3s' }} /></div>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#1a2d4a', fontWeight:600 }}><span>Project Progress</span><span>{pct}% ({done}/{tasks.length} tasks)</span></div>
+                          <div style={{ height:8, background:'#DBEAFE', borderRadius:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:pct===100?'#188918':P, borderRadius:4, transition:'width 0.3s' }} /></div>
                         </div>
-                        <div style={{ fontSize:20, fontWeight:700, color:pct===100?'#188918':'#0070F2' }}>{pct}%</div>
+                        <div style={{ fontSize:20, fontWeight:700, color:pct===100?'#188918':P }}>{pct}%</div>
                       </div>
                     );
                   })()}
@@ -1036,7 +1220,7 @@ const EditSalesOrder = () => {
                             <td style={bg}><input value={tk.assignedTo} onChange={e=>updTask(tk._id,'assignedTo',e.target.value)} placeholder="Name" style={inp(false,true)} /></td>
                             <td style={bg}><input type="date" value={tk.startDate} onChange={e=>updTask(tk._id,'startDate',e.target.value)} style={inp(false,true)} /></td>
                             <td style={bg}><input type="date" value={tk.endDate} onChange={e=>updTask(tk._id,'endDate',e.target.value)} style={inp(false,true)} /></td>
-                            <td style={bg}><select value={tk.status} onChange={e=>updTask(tk._id,'status',e.target.value)} style={{ ...selStyle(true), color:tk.status==='Completed'?'#188918':tk.status==='In Progress'?'#0070F2':'#6A6D70', fontWeight:600 }}>{TASK_STATUS.map(s=><option key={s} value={s}>{s}</option>)}</select></td>
+                            <td style={bg}><select value={tk.status} onChange={e=>updTask(tk._id,'status',e.target.value)} style={{ ...selStyle(true), color:tk.status==='Completed'?'#188918':tk.status==='In Progress'?P:'#6A6D70', fontWeight:600 }}>{TASK_STATUS.map(s=><option key={s} value={s}>{s}</option>)}</select></td>
                             <td style={bg}><select value={tk.priority} onChange={e=>updTask(tk._id,'priority',e.target.value)} style={{ ...selStyle(true), color:priColor, fontWeight:600 }}>{PRIORITY.map(p=><option key={p} value={p}>{p}</option>)}</select></td>
                             <td style={bg}><input value={tk.remarks} onChange={e=>updTask(tk._id,'remarks',e.target.value)} placeholder="Remarks…" style={{ ...inp(false,true), minWidth:110 }} /></td>
                             <td style={{ ...bg, textAlign:'center' }}><button type="button" onClick={()=>delTask(tk._id)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:3, padding:'3px 7px', cursor:'pointer', fontSize:11, fontWeight:700 }}>✕</button></td>
@@ -1047,6 +1231,7 @@ const EditSalesOrder = () => {
                   </div>
                 </>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -1054,11 +1239,11 @@ const EditSalesOrder = () => {
           {activeTab === 'attach' && (
             <div style={S.card}>
               <div style={S.sec}>File Attachments</div>
-
+              <div style={S.body}>
               {/* Existing files */}
               {attachments.length > 0 && (
                 <>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', marginBottom:'8px' }}>Existing Files</div>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>Existing Files</div>
                   <table style={{ ...S.tbl, marginBottom:'14px' }}>
                     <thead>
                       <tr>
@@ -1077,8 +1262,8 @@ const EditSalesOrder = () => {
                             {a.fileName && !a.replaceMode ? (
                               <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:'11px', color:'#188918', fontWeight:600 }}>📎 Attached</span>
-                                <a href={`/api/sales-orders/${orderId}/download/${a.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:'#0070F2', textDecoration:'underline' }}>⬇️ Download</a>
-                                <button type="button" onClick={() => startReplace(i)} style={{ fontSize:'11px', padding:'3px 8px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#0070F2', borderRadius:'3px', cursor:'pointer' }}>Replace</button>
+                                <a href={`/api/sales-orders/${orderId}/download/${a.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:P, textDecoration:'underline' }}>⬇️ Download</a>
+                                <button type="button" onClick={() => startReplace(i)} style={{ fontSize:'11px', padding:'3px 8px', background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:'3px', cursor:'pointer' }}>Replace</button>
                               </div>
                             ) : a.replaceMode ? (
                               <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
@@ -1101,9 +1286,9 @@ const EditSalesOrder = () => {
               )}
 
               {/* Add new files */}
-              <div style={{ border:'2px dashed #CBE0F5', borderRadius:'6px', padding:'16px', textAlign:'center', background:'#F5F8FC', marginBottom:'14px' }}>
-                <div style={{ fontSize:'12px', color:'#354A5E', fontWeight:600, marginBottom:'6px' }}>Add New Files</div>
-                <label style={{ display:'inline-block', padding:'6px 20px', background:'#0070F2', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600 }}>
+              <div style={{ border:`2px dashed ${BD}`, borderRadius:'6px', padding:'16px', textAlign:'center', background:BG, marginBottom:'14px' }}>
+                <div style={{ fontSize:'12px', color:'#1a2d4a', fontWeight:600, marginBottom:'6px' }}>Add New Files</div>
+                <label style={{ display:'inline-block', padding:'6px 20px', background:P, color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600 }}>
                   📎 Choose Files
                   <input type="file" multiple accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png,.dwg,.doc,.docx" onChange={handleNewFiles} style={{ display:'none' }} />
                 </label>
@@ -1111,9 +1296,9 @@ const EditSalesOrder = () => {
 
               {newFiles.length > 0 && (
                 <div>
-                  <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', marginBottom:'8px' }}>New Files to Upload</div>
+                  <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'8px' }}>New Files to Upload</div>
                   {newFiles.map((a,i) => (
-                    <div key={i} style={{ display:'flex', gap:'10px', alignItems:'center', padding:'6px 10px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px', marginBottom:'5px' }}>
+                    <div key={i} style={{ display:'flex', gap:'10px', alignItems:'center', padding:'6px 10px', background:BG, border:`1px solid ${BD}`, borderRadius:'4px', marginBottom:'5px' }}>
                       <span style={{ flex:1, fontSize:'12px' }}>📄 {a.name}</span>
                       <span style={{ fontSize:'11px', color:'#6A6D70' }}>{(a.size/1024).toFixed(1)} KB</span>
                       <button type="button" onClick={() => removeNewFile(i)} style={{ background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'3px', padding:'3px 8px', cursor:'pointer', fontSize:'11px' }}>Remove</button>
@@ -1121,6 +1306,7 @@ const EditSalesOrder = () => {
                   ))}
                 </div>
               )}
+              </div>{/* end S.body */}
             </div>
           )}
 
@@ -1128,6 +1314,7 @@ const EditSalesOrder = () => {
           {activeTab === 'notes' && (
             <div style={S.card}>
               <div style={S.sec}>Notes & Terms</div>
+              <div style={S.body}>
               <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
                 <FTA label="Terms & Conditions" value={notes.termsConditions} onChange={v => setNotes(n=>({...n,termsConditions:v}))} placeholder="1. Goods once sold will not be taken back…" rows={5} />
                 <div style={S.g2}>
@@ -1136,8 +1323,8 @@ const EditSalesOrder = () => {
                 </div>
               </div>
               {/* Summary */}
-              <div style={{ marginTop:'14px', padding:'12px 14px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'4px solid #0070F2', borderRadius:'4px' }}>
-                <div style={{ fontSize:'11px', fontWeight:700, color:'#354A5E', textTransform:'uppercase', marginBottom:'10px' }}>Order Summary</div>
+              <div style={{ marginTop:'14px', padding:'12px 14px', background:BG, border:`1px solid ${BD}`, borderLeft:`4px solid ${P}`, borderRadius:'4px' }}>
+                <div style={{ fontSize:'11px', fontWeight:700, color:'#1a2d4a', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'10px' }}>Order Summary</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'8px' }}>
                   {[
                     ['Order No',   hdr.orderNo||orderId],
@@ -1149,39 +1336,40 @@ const EditSalesOrder = () => {
                     ['Total GST',  '₹'+totalGST.toFixed(2)],
                     ['Grand Total','₹'+grandTotal.toFixed(2)],
                   ].map(([k,v]) => (
-                    <div key={k} style={{ padding:'6px 8px', background:'#fff', borderRadius:'4px', border:'1px solid #E5E5E5' }}>
+                    <div key={k} style={{ padding:'6px 8px', background:'#fff', borderRadius:'4px', border:`1px solid ${BD}` }}>
                       <div style={{ fontSize:'10px', fontWeight:700, color:'#6A6D70', textTransform:'uppercase', letterSpacing:'0.3px', marginBottom:'2px' }}>{k}</div>
                       <div style={{ fontSize:'12px', color:'#32363A', fontWeight:500 }}>{v||'—'}</div>
                     </div>
                   ))}
                 </div>
               </div>
+              </div>{/* end S.body */}
             </div>
           )}
 
         </div>{/* end tab content */}
 
         {/* ── Sticky Footer ── */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px', position:'sticky', bottom:0 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:BG, border:`1px solid ${BD}`, borderTop:'none', borderRadius:'0 0 10px 10px', position:'sticky', bottom:0 }}>
           <div style={{ display:'flex', gap:'16px', alignItems:'center' }}>
-            <div style={{ background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'20px', padding:'4px 14px', fontSize:'12px', fontWeight:700, color:'#0070F2' }}>
+            <div style={{ background:SEC, border:`1px solid ${BD}`, borderRadius:'20px', padding:'4px 14px', fontSize:'12px', fontWeight:700, color:P }}>
               Grand Total: ₹{grandTotal.toFixed(2)}
             </div>
             <div style={{ display:'flex', gap:'4px' }}>
               {TABS.map(t => (
-                <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} title={t.label} style={{ width:'22px', height:'4px', borderRadius:'2px', border:'none', cursor:'pointer', background: activeTab===t.id?'#0070F2':'#D9D9D9' }} />
+                <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} title={t.label} style={{ width:'22px', height:'4px', borderRadius:'2px', border:'none', cursor:'pointer', background: activeTab===t.id?P:'#D9D9D9' }} />
               ))}
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
             <span style={{ fontSize:'11px', color:'#6A6D70' }}>{tabIdx+1}/{TABS.length} — {TABS[tabIdx]?.label}</span>
             {tabIdx > 0 && (
-              <button type="button" onClick={() => setActiveTab(TABS[tabIdx-1].id)} style={{ padding:'6px 12px', background:'#fff', border:'1px solid #D9D9D9', color:'#32363A', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Prev</button>
+              <button type="button" onClick={() => setActiveTab(TABS[tabIdx-1].id)} style={{ padding:'6px 12px', background:'#fff', border:`1px solid ${BD}`, color:'#32363A', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Prev</button>
             )}
             {tabIdx < TABS.length-1 ? (
-              <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)} style={{ padding:'6px 12px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
+              <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)} style={{ padding:'6px 12px', background:P, border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
             ) : (
-              <button type="button" onClick={() => handleSave('pending')} disabled={saving} style={{ padding:'6px 18px', background:'#0070F2', border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
+              <button type="button" onClick={() => handleSave('pending')} disabled={saving} style={{ padding:'6px 18px', background:P, border:'none', color:'#fff', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:700, fontFamily:'inherit' }}>
                 📤 Send for Approval
               </button>
             )}

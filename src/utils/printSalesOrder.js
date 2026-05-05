@@ -1,28 +1,42 @@
-/* ═══════════════════════════════════════════════════════════════
-   EPSILON ERP — Sales Order Print  |  Clean A4 Layout
-   Usage: printSalesOrder(order, company)
-   ═══════════════════════════════════════════════════════════════ */
+/* printSalesOrder.js — clean SO print, single outer table, no double borders */
 
 /* ── Helpers ── */
-const fmtD = d => {
-  if (!d) return '—';
-  const dt = new Date(d);
-  return isNaN(dt) ? d : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`;
+const fetchBase64 = async (url) => {
+  try {
+    const res  = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise(r => {
+      const rd = new FileReader(); rd.onload = () => r(rd.result); rd.readAsDataURL(blob);
+    });
+  } catch { return null; }
 };
-const fmtN = (n, d=2) => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d});
-const esc  = v => (!v && v!==0) ? '' : String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const v    = x => esc(x) || '—';
-const vb   = x => esc(x) || '';   /* blank if empty */
-const r    = n => fmtN(n);
 
-/* ── Amount in Words ── */
+const fetchRendered = async (orderId, fileName, companyId) => {
+  try {
+    const r = await fetch(`/api/sales-orders/${orderId}/render-attachment/${encodeURIComponent(fileName)}?companyId=${companyId}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+};
+
+/* ── Formatters ── */
+const esc  = v => (!v && v !== 0) ? '' : String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const dv   = v => esc(v) || '';
+const fmtD = v => {
+  if (!v) return '';
+  const dt = new Date(v);
+  return isNaN(dt) ? String(v) : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`;
+};
+const fmtN = n => Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+/* ── Amount in words ── */
 function numWords(n) {
   n = Math.round(Math.abs(n||0));
   if (!n) return 'Zero Rupees Only';
   const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve',
     'Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
   const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-  const seg = x => !x ? '' : x<20 ? a[x]+' ' : b[Math.floor(x/10)]+(x%10?' '+a[x%10]:'')+' ';
+  const seg = x => !x?'':x<20?a[x]+' ':b[Math.floor(x/10)]+(x%10?' '+a[x%10]:'')+' ';
   let w = '';
   if (Math.floor(n/10000000))          w += seg(Math.floor(n/10000000))+'Crore ';
   if (Math.floor((n%10000000)/100000)) w += seg(Math.floor((n%10000000)/100000))+'Lakh ';
@@ -32,577 +46,543 @@ function numWords(n) {
   return 'INR ' + w.trim() + ' Only';
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ──────────────────────────────────────────────────────────────────
+   Nested table builder — removes outer edges so containing <td>
+   provides the frame; no double borders.
+──────────────────────────────────────────────────────────────────── */
+const B = '1px solid #555';   // column separator / frame
+
+function buildNestedTable(cols, headerWidths, bodyRows, footRows) {
+  const n = cols.length;
+  const hasfoot = footRows && footRows.length > 0;
+
+  /* Header: bottom border under the header row + left border for each column divider.
+     No background fill. */
+  let thead = `<thead><tr>`;
+  cols.forEach((c, i) => {
+    const w = headerWidths[i] ? `width:${headerWidths[i]};` : '';
+    const s = `border-top:none;border-bottom:${B};border-left:${i===0?'none':B};border-right:none;`;
+    thead += `<th style="${s}${w}font-weight:bold;text-align:center;font-size:8.5pt;padding:3px 5px;white-space:nowrap;">${c}</th>`;
+  });
+  thead += `</tr></thead>`;
+
+  /* Body rows: ONLY left border (vertical column divider) — no horizontal lines between rows. */
+  let tbody = `<tbody>`;
+  bodyRows.forEach((row) => {
+    tbody += `<tr>`;
+    row.forEach((cell, ci) => {
+      const s = `border-top:none;border-bottom:none;border-left:${ci===0?'none':B};border-right:none;`;
+      tbody += `<td style="${cell.style||''}${s}padding:3px 5px;font-size:9pt;vertical-align:middle;">${cell.text}</td>`;
+    });
+    tbody += `</tr>`;
+  });
+  tbody += `</tbody>`;
+
+  /* Footer rows: top border on first row only (separator from body), then left borders per column.
+     cell.style comes first so that the explicit border sides in s override any border:none shorthand
+     that expandRow() puts on placeholder cells. */
+  let tfoot = '';
+  if (hasfoot) {
+    tfoot = `<tfoot>`;
+    footRows.forEach((row, ri) => {
+      tfoot += `<tr>`;
+      row.forEach((cell, ci) => {
+        /* Keep colspan intact — do NOT pre-expand footer rows.
+           Left border only on non-first cells (vertical separator before amount). */
+        const span = cell.colspan || 1;
+        const colAttr = span > 1 ? ` colspan="${span}"` : '';
+        const s = `border-top:${ri===0?B:'none'};border-bottom:none;border-left:${ci===0?'none':B};border-right:none;`;
+        tfoot += `<td${colAttr} style="${cell.style||''}${s}padding:4px 8px;font-size:9.5pt;">${cell.text}</td>`;
+      });
+      tfoot += `</tr>`;
+    });
+    tfoot += `</tfoot>`;
+  }
+
+  return `<table style="width:100%;border-collapse:collapse;border:${B};">${thead}${tbody}${tfoot}</table>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════
    MAIN EXPORT
-   ═══════════════════════════════════════════════════════════════ */
-export const printSalesOrder = (order, company = {}) => {
-  const o = order || {};
+══════════════════════════════════════════════════════════════════ */
+export const printSalesOrder = async (order, company = {}) => {
+  const o   = order || {};
+  const cid = company?.companyId || '';
+  const origin = window.location.origin;
 
-  /* Company */
-  const coName   = vb(company.companyName||company.name) || 'Epsilon Enterprise';
-  const coAddr   = vb(company.address) || '502, The Sungrace Arcade, Motera';
-  const coCity   = [company.city, company.state, company.pincode].filter(Boolean).join(', ') || 'Ahmedabad - 382424';
-  const coMobile = vb(company.mobile||company.phone) || '9328927043';
-  const coEmail  = vb(company.email) || 'Finacc@epsilonprefab.org';
-  const coGstin  = vb(company.gstin||company.gstNumber) || '24AAJFE8007G1ZM';
-  const coPan    = vb(company.pan);
+  /* ── Logo ── */
+  let logoB64 = null;
+  if (company?.logoFileName)
+    logoB64 = await fetchBase64(`/api/companies/logo/${encodeURIComponent(company.logoFileName)}?companyId=${cid}`);
 
-  /* Arrays */
-  const items      = Array.isArray(o.items)      ? o.items      : [];
-  const addons     = Array.isArray(o.addons)      ? o.addons     : [];
-  const charges    = Array.isArray(o.charges)     ? o.charges    : [];
-  const scopes     = Array.isArray(o.scopeItems)  ? o.scopeItems : [];
-  const activities = Array.isArray(o.tasks)       ? o.tasks      :
-                     Array.isArray(o.activities)  ? o.activities : [];
-  const atts       = Array.isArray(o.attachments) ? o.attachments: [];
-  const bg         = (typeof o.bankGuarantee==='object'&&o.bankGuarantee) ? o.bankGuarantee : {};
-  const wt         = (typeof o.warranty==='object'&&o.warranty) ? o.warranty : {};
+  /* ── Client record ── */
+  let cl = {};
+  if (o.customerCode && cid) {
+    try { const r = await fetch(`/api/clients/${o.customerCode}?companyId=${cid}`); if (r.ok) cl = await r.json(); } catch {}
+  }
 
-  /* Calculations */
-  const itemsNet  = items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
-  const itemsGst  = items.reduce((s,it)=>{const a=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);return s+a*(parseFloat(it.gstPercent||it.gst)||0)/100;},0);
-  const chgNet    = charges.reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
-  const chgGst    = charges.reduce((s,c)=>{const a=parseFloat(c.amount)||0;return s+a*(parseFloat(c.gst)||0)/100;},0);
-  const cgst      = parseFloat(o.cgst)||(itemsGst/2);
-  const sgst      = parseFloat(o.sgst)||(itemsGst/2);
-  const igst      = parseFloat(o.igst)||0;
+  /* ── Process attachments ── */
+  const atts = Array.isArray(o.attachments) ? o.attachments : [];
+  const processedAtts = await Promise.all(atts.map(async att => {
+    if (!att.fileName || !o.orderId || !cid) return { ...att, kind: 'missing' };
+    const ext = (att.fileName.split('.').pop()||'').toLowerCase();
+    if (ext === 'pdf') {
+      const url = `${origin}/api/sales-orders/${o.orderId}/download/${encodeURIComponent(att.fileName)}?companyId=${cid}&inline=1`;
+      return { ...att, kind: 'pdf', pdfUrl: url };
+    }
+    const rd = await fetchRendered(o.orderId, att.fileName, cid);
+    return { ...att, kind: rd?.kind||'unknown', ...(rd||{}) };
+  }));
+  const hasPdfs = processedAtts.some(a => a.kind === 'pdf');
+
+  /* ── Arrays ── */
+  const items   = Array.isArray(o.items)      ? o.items      : [];
+  const charges = Array.isArray(o.charges)    ? o.charges    : [];
+  const addons  = Array.isArray(o.addons)     ? o.addons     : [];
+  const scope   = Array.isArray(o.scopeItems) ? o.scopeItems : [];
+  const tasks   = Array.isArray(o.tasks)      ? o.tasks      : [];
+  const bg      = o.bankGuarantee || {};
+  const wty     = o.warranty      || {};
+
+  /* ── GST state logic ── */
+  const coState   = (company.state||company.companyState||'').toLowerCase().trim();
+  const custState = (o.customerState||'').toLowerCase().trim();
+  const sameState = coState && custState && coState === custState;
+
+  /* ── Calculations ── */
+  const itemTaxable = items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
+  const itemGstAmt  = items.reduce((s,it)=>{
+    const a=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+    return s+a*(parseFloat(it.gstPercent||it.gst)||0)/100;
+  }, 0);
+  const validChg  = charges.filter(c=>parseFloat(c.amount)>0);
+  const chgNet    = validChg.reduce((s,c)=>s+(parseFloat(c.amount)||0), 0);
+  const chgGstAmt = validChg.reduce((s,c)=>{ const a=parseFloat(c.amount)||0; return s+a*(parseFloat(c.gst)||0)/100; }, 0);
+  const discount  = parseFloat(o.overallDiscount)||0;
   const freight   = parseFloat(o.freightCharges)||0;
   const packing   = parseFloat(o.packingCharges)||0;
-  const discount  = parseFloat(o.overallDiscount)||0;
   const roundOff  = parseFloat(o.roundOff)||0;
-  const grand     = parseFloat(o.grandTotal)||(itemsNet+itemsGst+chgNet+chgGst-discount+freight+packing+roundOff);
+  const storedCgst= parseFloat(o.cgst)||0;
+  const storedSgst= parseFloat(o.sgst)||0;
+  const storedIgst= parseFloat(o.igst)||0;
+  const totalGstAmt= (storedCgst+storedSgst+storedIgst)||(itemGstAmt+chgGstAmt);
+  const grand     = parseFloat(o.grandTotal)||(itemTaxable+chgNet+totalGstAmt-discount+freight+packing+roundOff);
 
-  const statusLabel = (o.status||'Draft').charAt(0).toUpperCase()+(o.status||'Draft').slice(1);
+  /* ── Company ── */
+  const coName = dv(company.companyName||company.name)||'Epsilon Enterprise';
+  const coAddr = [company.address,company.city,company.state,company.pincode].filter(Boolean).join(', ');
+  const today  = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+  const logoTag = logoB64
+    ? `<img src="${logoB64}" style="height:56px;max-width:120px;object-fit:contain;vertical-align:middle;margin-right:12px;">`
+    : '';
 
-  /* ── CSS constants ── */
-  const ORANGE = '#ffe0b2';
-  const GRAY   = '#e8e8e8';
-  const BLACK  = '#000';
-  const BORDER = `1px solid ${BLACK}`;
+  /* ── Outer table: NO cell borders; only section-separator lines ── */
+  const SECL = '1.5px solid #555';  // section separator line
 
-  /* ── Shared cell style strings ── */
-  const TC = 'text-align:center;';
-  const TR = 'text-align:right;';
-  const TL = 'text-align:left;';
+  /* Data cells — NO border; just padding */
+  const oc    = `border:none;padding:3px 8px;vertical-align:top;font-size:9.5pt;`;
+  const lbl   = `${oc}white-space:nowrap;width:130px;font-weight:normal;`;
+  const sep   = `${oc}width:12px;text-align:center;`;
+  const val   = oc;
 
-  /* ════════════
-     ITEM ROWS
-     ════════════ */
-  const itemRows = items.length===0
-    ? `<tr><td colspan="8" style="height:28px;font-style:italic;${TC}color:#aaa;">No items added</td></tr>`
-    : items.map((it,i)=>{
-        const qty  = parseFloat(it.qty)||0;
-        const rate = parseFloat(it.rate)||0;
-        const amt  = qty*rate;
-        const gst  = parseFloat(it.gstPercent||it.gst)||0;
-        const name = vb(it.material||it.itemName||it.description);
-        const desc = vb(it.description||'');
-        const cell = (desc && desc!==name)
-          ? `<b>${esc(name)||'—'}</b><br/><span style="font-size:8pt;color:#444;">${esc(desc)}</span>`
-          : `<b>${esc(name)||'—'}</b>`;
-        return `<tr>
-          <td style="${TC}padding:4px;">${i+1}</td>
-          <td style="${TC}">${vb(it.type)||'—'}</td>
-          <td style="padding:4px 6px;">${cell}</td>
-          <td style="${TC}">${qty||'—'}</td>
-          <td style="${TC}">${vb(it.unit)||'—'}</td>
-          <td style="${TR}padding-right:6px;">${rate?r(rate):'—'}</td>
-          <td style="${TC}">${gst?gst+'%':'—'}</td>
-          <td style="${TR}padding-right:6px;">${amt?r(amt):'—'}</td>
-        </tr>`;
-      }).join('');
+  /* Section header — line ABOVE and BELOW, no fill */
+  const secHdr= `border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:10.5pt;font-weight:bold;background:none;padding:6px 8px;`;
 
-  /* ════════════════
-     SUMMARY ROWS (right-aligned box)
-     ════════════════ */
-  const summaryRows = [];
-  summaryRows.push(`<tr><td>Sub Total (excl. GST)</td><td style="${TR}">${r(itemsNet)}</td></tr>`);
-  charges.forEach(c=>{
-    const a=parseFloat(c.amount)||0;
-    if(a) summaryRows.push(`<tr><td>${vb(c.chargeType||c.description)||'Charge'}</td><td style="${TR}">${r(a)}</td></tr>`);
+  /* Sub-header (e.g. "Client Details | Tax Identity") — bold underline, no border */
+  const subHdr= `border:none;padding:7px 8px 2px;font-weight:bold;font-size:10pt;text-decoration:underline;`;
+
+  /* Company logo/name cell */
+  const coCell= `border:none;text-align:center;padding:12px 14px;`;
+
+  /* "Sales Order" title — line ABOVE and BELOW (like ─── SALES ORDER ───) */
+  const ttlCell=`border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:15pt;font-weight:bold;letter-spacing:3px;padding:9px;`;
+
+  /* Nested table wrapper — no outer border (table itself carries its own frame) */
+  const ndWrap= `border:none;padding:2px 0 8px;`;
+
+  // Row builder: left-label : left-val | right-label : right-val
+  const fr = (ll,lv,rl,rv) => `<tr>
+    <td style="${lbl}">${ll}</td><td style="${sep}">:</td><td style="${val}">${lv}</td>
+    <td style="${lbl}">${rl}</td><td style="${sep}">:</td><td style="${val}">${rv}</td>
+  </tr>`;
+
+  /* ══ ITEM TABLE ══ */
+  const itemCols   = ['Sr No','ITEM code','Item Name','Additional Description','HSN Code','Qty','UoM','Rate','Taxable'];
+  const itemWidths = ['30px','75px','','','75px','38px','44px','80px','90px'];
+
+  const itemBody = items.length
+    ? items.map((it,i) => {
+        const qty=parseFloat(it.qty)||0, rate=parseFloat(it.rate)||0, tax=qty*rate;
+        const nm=dv(it.material||it.itemName||it.description||'');
+        const addD=dv((it.description&&it.description!==nm?it.description:'')||it.additionalDesc||'');
+        return [
+          {text:`${i+1}`,style:'text-align:center;'},
+          {text:dv(it.itemCode||it.code)},
+          {text:nm||'—'},
+          {text:addD},
+          {text:dv(it.hsnCode),style:'text-align:center;'},
+          {text:qty?String(qty):'',style:'text-align:center;'},
+          {text:dv(it.unit),style:'text-align:center;'},
+          {text:rate?fmtN(rate):'',style:'text-align:right;'},
+          {text:tax?fmtN(tax):'',style:'text-align:right;'},
+        ];
+      })
+    : [[
+        {text:'No items',style:`text-align:center;color:#888;font-style:italic;`,colspan:9}
+      ]];
+
+  // Build total foot rows
+  // Order: 1) each charge (base, no GST)  2) Total Taxable  3) GST  4) Total Order Value
+  const footRowsRaw = [];
+  const R = 'text-align:right;';
+  const RB = 'text-align:right;font-weight:bold;';
+
+  // 1. Each additional charge — base amount only (no GST included)
+  validChg.forEach(c => {
+    const a = parseFloat(c.amount)||0;
+    footRowsRaw.push([
+      {text:dv(c.chargeType||c.description||'Additional Charge'), style:R, colspan:8},
+      {text:fmtN(a), style:R},
+    ]);
   });
-  if(freight)  summaryRows.push(`<tr><td>Transport / Freight</td><td style="${TR}">${r(freight)}</td></tr>`);
-  if(packing)  summaryRows.push(`<tr><td>Packing Charges</td><td style="${TR}">${r(packing)}</td></tr>`);
-  if(discount) summaryRows.push(`<tr><td>Discount</td><td style="${TR}color:#c00;">– ${r(discount)}</td></tr>`);
-  if(igst>0) {
-    summaryRows.push(`<tr><td>IGST</td><td style="${TR}">${r(igst)}</td></tr>`);
+
+  // 2. Total Taxable = items + sum of charge base amounts
+  const combinedTaxable = itemTaxable + chgNet;
+  footRowsRaw.push([
+    {text:'Total Taxable', style:RB, colspan:8},
+    {text:fmtN(combinedTaxable), style:RB},
+  ]);
+
+  // 3. GST on total taxable (split by state)
+  const rates = [...new Set(items.map(it=>parseFloat(it.gstPercent||it.gst)||0).filter(r=>r>0))];
+  const singleRate = rates.length===1 ? rates[0] : null;
+  if (sameState) {
+    const cgst = storedCgst||(totalGstAmt/2);
+    const sgst = storedSgst||(totalGstAmt/2);
+    footRowsRaw.push([
+      {text:`CGST${singleRate?` @ ${singleRate/2}%`:''}`, style:R, colspan:8},
+      {text:fmtN(cgst), style:R},
+    ]);
+    footRowsRaw.push([
+      {text:`SGST${singleRate?` @ ${singleRate/2}%`:''}`, style:R, colspan:8},
+      {text:fmtN(sgst), style:R},
+    ]);
   } else {
-    if(cgst>0) summaryRows.push(`<tr><td>CGST</td><td style="${TR}">${r(cgst)}</td></tr>`);
-    if(sgst>0) summaryRows.push(`<tr><td>SGST</td><td style="${TR}">${r(sgst)}</td></tr>`);
+    const igst = storedIgst||totalGstAmt;
+    footRowsRaw.push([
+      {text:`IGST${singleRate?` @ ${singleRate}%`:''}`, style:R, colspan:8},
+      {text:fmtN(igst), style:R},
+    ]);
   }
-  if(roundOff) summaryRows.push(`<tr><td>Round Off</td><td style="${TR}">${r(roundOff)}</td></tr>`);
 
-  /* ════════════
-     ADD-ON ROWS
-     ════════════ */
-  const addonRows = addons.length===0
-    ? `<tr><td colspan="7" style="height:24px;"></td></tr>`
-    : addons.map((a,i)=>`<tr>
-        <td style="${TC}">${i+1}</td>
-        <td>${vb(a.description||a.itemName)||'—'}</td>
-        <td style="${TC}">${vb(a.category)||'—'}</td>
-        <td style="${TC}">${a.qty||'—'}</td>
-        <td style="${TC}">${vb(a.unit)||'—'}</td>
-        <td style="${TC}">${a.includedInPrice?'Yes':'No'}</td>
-        <td>${vb(a.remarks)||'—'}</td>
-      </tr>`).join('');
+  // Optional adjustments
+  if (discount>0) footRowsRaw.push([
+    {text:'Discount', style:R, colspan:8},
+    {text:`− ${fmtN(discount)}`, style:`${R}color:#c00;`},
+  ]);
+  if (freight>0) footRowsRaw.push([{text:'Freight Charges',style:R,colspan:8},{text:fmtN(freight),style:R}]);
+  if (packing>0) footRowsRaw.push([{text:'Packing Charges',style:R,colspan:8},{text:fmtN(packing),style:R}]);
+  if (roundOff)  footRowsRaw.push([{text:'Round Off',style:R,colspan:8},{text:fmtN(roundOff),style:R}]);
 
-  /* ════════════
-     SCOPE ROWS
-     ════════════ */
-  const scopeRows = scopes.length===0
-    ? `<tr><td colspan="6" style="height:24px;"></td></tr><tr><td colspan="6" style="height:24px;"></td></tr>`
-    : scopes.map((s,i)=>`<tr>
-        <td style="${TC}">${i+1}</td>
-        <td>${vb(s.item||s.scope||s.description)||'—'}</td>
-        <td style="${TC};font-size:12pt;">${s.clientScope?'✓':''}</td>
-        <td style="${TC};font-size:12pt;">${s.ourScope!==false?'✓':''}</td>
-        <td>${vb(s.notes)||'—'}</td>
-        <td>${vb(s.remarks)||'—'}</td>
-      </tr>`).join('');
+  // 4. Total Order Value — bold, no background fill
+  footRowsRaw.push([
+    {text:'Total Order Value', style:RB, colspan:8},
+    {text:`₹ ${fmtN(grand)}`, style:RB},
+  ]);
 
-  /* ════════════
-     WARRANTY ROWS
-     ════════════ */
-  const wtRows = wt.period
-    ? `<tr>
-        <td style="${TC}">1</td>
-        <td>${vb(wt.period)||'—'}</td>
-        <td style="${TC}">${vb(wt.type)||'—'}</td>
-        <td style="${TC}">${fmtD(wt.startDate)}</td>
-        <td style="${TC}">${fmtD(wt.endDate)}</td>
-      </tr>`
-    : `<tr><td colspan="5" style="height:24px;"></td></tr><tr><td colspan="5" style="height:24px;"></td></tr>`;
+  // Convert colspan rows for buildNestedTable (which expects N cells per row)
+  const expandRow = (row, n) => {
+    const out = [];
+    row.forEach(cell => {
+      const span = cell.colspan||1;
+      out.push({text:cell.text, style:cell.style||''});
+      for (let k=1;k<span;k++) out.push({text:'',style:'border:none;'});
+    });
+    while (out.length < n) out.push({text:'',style:''});
+    return out.slice(0,n);
+  };
 
-  /* ════════════
-     BANK GUARANTEE ROW
-     ════════════ */
-  const bgOrderVal = bg.basis==='withGst' ? grand : itemsNet;
-  const bgPct      = parseFloat(bg.pct)||0;
-  const bgAmt      = bgPct ? bgOrderVal*bgPct/100 : 0;
-  const bgRow = bg.applicable
-    ? `<tr>
-        <td style="${TC}">1</td>
-        <td style="${TC}">Yes</td>
-        <td style="${TR}padding-right:6px;">${r(bgOrderVal)}</td>
-        <td style="${TC}">${bg.basis==='withGst'?'With GST':'Without GST'}</td>
-        <td style="${TC}">${bgPct?bgPct+'%':'—'}</td>
-        <td style="${TR}padding-right:6px;">${bgAmt?r(bgAmt):'—'}</td>
-        <td>${vb(bg.bankName)}${bg.bgNo?'<br/>BG No: '+vb(bg.bgNo):''}${bg.expiry?'<br/>Expiry: '+fmtD(bg.expiry):''}</td>
-      </tr>`
-    : `<tr><td style="${TC}">—</td><td colspan="6" style="color:#aaa;font-style:italic;">Not Applicable</td></tr>`;
+  const N_ITEM = itemCols.length; // 9
+  const itemBodyExpanded = itemBody[0]?.[0]?.colspan
+    ? [expandRow(itemBody[0], N_ITEM)]
+    : itemBody;
+  // Footer rows keep their colspan — buildNestedTable emits <td colspan> directly
+  const itemTable = buildNestedTable(itemCols, itemWidths, itemBodyExpanded, footRowsRaw);
 
-  /* ════════════
-     ACTIVITY ROWS
-     ════════════ */
-  const actRows = activities.length===0
-    ? `<tr><td colspan="7" style="height:24px;"></td></tr><tr><td colspan="7" style="height:24px;"></td></tr>`
-    : activities.map((a,i)=>{
-        const st = {Completed:'#c8e6c9',['In Progress']:'#bbdefb',Pending:'#fff9c4',['On Hold']:'#eeeeee',Cancelled:'#ffcdd2'}[a.status]||'#fff';
-        return `<tr>
-          <td style="${TC}">${i+1}</td>
-          <td>${vb(a.task||a.description)||'—'}</td>
-          <td style="${TC}">${fmtD(a.startDate)}</td>
-          <td style="${TC}">${fmtD(a.endDate)}</td>
-          <td>${vb(a.ref||a.reference)||'—'}</td>
-          <td style="${TC};background:${st};">${vb(a.status)||'Pending'}</td>
-          <td>${vb(a.remarks)||'—'}</td>
-        </tr>`;
-      }).join('');
+  /* ══ ADDON TABLE ══ */
+  const addonCols   = ['Sr No','ITEM code','Item Name','Additional Description','HSN Code','Qty','UoM','Category','Included Price','Remarks'];
+  const addonWidths = ['30px','75px','','','75px','38px','50px','80px','80px',''];
+  const addonBody = addons.length
+    ? addons.map(a=>[
+        {text:String(addons.indexOf(a)+1),style:'text-align:center;'},
+        {text:dv(a.itemCode)},
+        {text:dv(a.itemName||a.description)},
+        {text:dv(a.additionalDesc)},
+        {text:dv(a.hsnCode),style:'text-align:center;'},
+        {text:String(a.qty||''),style:'text-align:center;'},
+        {text:dv(a.unit),style:'text-align:center;'},
+        {text:dv(a.category)},
+        {text:a.includedInPrice?'Yes':'No',style:'text-align:center;'},
+        {text:dv(a.remarks)},
+      ])
+    : [[...Array(10)].map((_,i)=>i===0?{text:'No add-on items',style:'text-align:center;color:#888;font-style:italic;',colspan:10}:{text:'',style:'border:none;'})];
+  const addonTable = buildNestedTable(addonCols, addonWidths,
+    addons.length?addonBody:[expandRow(addonBody[0],10)], []);
 
-  /* ════════════
-     ATTACHMENT ROWS
-     ════════════ */
-  const attRows = atts.length===0
-    ? `<tr><td colspan="3" style="height:24px;"></td></tr>`
-    : atts.map((a,i)=>`<tr>
-        <td style="${TC}">${i+1}</td>
-        <td>${vb(a.name||a.fileName)||'Document '+(i+1)}</td>
-        <td>${vb(a.usedFor||a.description)||'—'}</td>
-      </tr>`).join('');
+  /* ══ SCOPE TABLE ══ */
+  const scopeCols   = ['#','Scope Item','Client Scope','Our Scope','Remarks'];
+  const scopeWidths = ['30px','','80px','80px',''];
+  const scopeBody = scope.length
+    ? scope.map((s,i)=>[
+        {text:String(i+1),style:'text-align:center;'},
+        {text:dv(s.item||s.description)},
+        {text:s.clientScope?'✓':'',style:'text-align:center;'},
+        {text:s.ourScope?'✓':'',style:'text-align:center;'},
+        {text:dv(s.remarks)},
+      ])
+    : [[{text:'—',style:'text-align:center;color:#888;',colspan:5},{text:'',style:'border:none;'},{text:'',style:'border:none;'},{text:'',style:'border:none;'},{text:'',style:'border:none;'}]];
+  const scopeTable = buildNestedTable(scopeCols, scopeWidths,
+    scope.length?scopeBody:[expandRow(scopeBody[0],5)], []);
 
-  /* ════════════════════════════════════════════════════
-     HTML
-     ════════════════════════════════════════════════════ */
+  /* ══ ACTIVITY TABLE ══ */
+  const actCols   = ['#','Task / Activity','Assigned To','Start Date','End Date','Status','Remarks'];
+  const actWidths = ['30px','','100px','75px','75px','80px',''];
+  const actBody = tasks.length
+    ? tasks.map((t,i)=>[
+        {text:String(i+1),style:'text-align:center;'},
+        {text:dv(t.task||t.description)},
+        {text:dv(t.assignedTo)},
+        {text:fmtD(t.startDate)},
+        {text:fmtD(t.endDate)},
+        {text:dv(t.status)},
+        {text:dv(t.remarks)},
+      ])
+    : [[{text:'—',style:'text-align:center;color:#888;',colspan:7},...Array(6).fill({text:'',style:'border:none;'})]];
+  const actTable = buildNestedTable(actCols, actWidths,
+    tasks.length?actBody:[expandRow(actBody[0],7)], []);
+
+  /* ══ ATTACHMENTS ══ */
+  let attHTML = '';
+  if (!processedAtts.length) {
+    attHTML = `<div style="border:1px solid #555;padding:12px;text-align:center;color:#888;font-style:italic;border-top:none;">No attachments</div>`;
+  } else {
+    processedAtts.forEach((att,i) => {
+      const label = att.name||att.fileName||`Document ${i+1}`;
+      let content = '';
+      if (att.kind==='pdf') {
+        content = `<div class="pdf-render" data-pdf-url="${att.pdfUrl||''}" style="width:100%;min-height:40px;background:#f9f9f9;"></div>`;
+      } else if (att.kind==='excel') {
+        content = `<div style="overflow-x:auto;padding:6px;font-size:8.5pt;">${att.html||''}</div>`;
+      } else if (att.kind==='word') {
+        content = `<div style="padding:10px;font-size:9.5pt;line-height:1.6;">${att.html||''}</div>`;
+      } else if (att.kind==='text') {
+        const safe=(att.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        content = `<pre style="padding:10px;font-family:monospace;font-size:8.5pt;white-space:pre-wrap;background:#f8f8f8;">${safe}</pre>`;
+      } else {
+        const ext=(att.fileName||'').split('.').pop().toUpperCase();
+        content = `<div style="padding:12px;text-align:center;color:#888;font-style:italic;">.${ext} file — cannot render inline</div>`;
+      }
+      attHTML += `<div class="att-block" style="border:1px solid #555;${i>0?'border-top:none;':''}">
+        <div style="background:#2a4a7a;color:#fff;font-weight:bold;font-size:9.5pt;padding:4px 10px;">${i+1}. ${dv(label)}</div>
+        ${content}
+      </div>`;
+    });
+  }
+
+  /* ══ CSS ══ */
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .page{padding:8mm 12mm;}
+    .embed-excel table{border-collapse:collapse;width:100%;}
+    .embed-excel td,.embed-excel th{border:1px solid #ccc;padding:2px 5px;font-size:8pt;}
+    .att-block{page-break-inside:avoid;break-inside:avoid;}
+    .sig-row{page-break-before:avoid;break-before:avoid;}
+    @media print{
+      @page{
+        margin:10mm 10mm 14mm;
+        size:A4 portrait;
+        @bottom-center{content:"Page " counter(page) " of " counter(pages);font-size:8pt;font-family:Arial,sans-serif;color:#555;}
+      }
+      .page{padding:0;}
+      canvas{max-width:100%;display:block;}
+      tr{page-break-inside:avoid;break-inside:avoid;}
+    }
+  `;
+
+  /* ══ HTML ══ */
   const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>SO — ${vb(o.orderNo||o.orderId)}</title>
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:"Times New Roman",Times,serif;font-size:10pt;color:#000;background:#ccc;}
+<html><head><meta charset="utf-8">
+<title>Sales Order — ${dv(o.orderNo||o.orderId)}</title>
+<style>${css}</style>
+</head><body><div class="page">
 
-/* ── Page ── */
-.page{background:#fff;max-width:210mm;margin:0 auto;padding:10mm 12mm 8mm;min-height:297mm;}
+<table style="width:100%;border-collapse:collapse;">
+<colgroup>
+  <col style="width:130px"><col style="width:14px"><col>
+  <col style="width:130px"><col style="width:14px"><col>
+</colgroup>
+<tbody>
 
-/* ── Toolbar (screen only) ── */
-.toolbar{background:#2c2c2c;color:#fff;padding:8px 20px;display:flex;
-  justify-content:space-between;align-items:center;max-width:210mm;margin:0 auto;}
-.pbtn{background:#f90;color:#000;border:none;padding:6px 24px;
-  font-family:"Times New Roman",Times,serif;font-size:10pt;font-weight:700;cursor:pointer;}
+<!-- ═══ COMPANY HEADER ═══ -->
+<tr><td colspan="6" style="${coCell}">
+  <div style="text-align:center;">
+    ${logoTag?`<div style="margin-bottom:6px;">${logoTag}</div>`:''}
+    <div style="font-size:22pt;font-weight:bold;line-height:1.2;letter-spacing:1px;">${coName}</div>
+    ${coAddr?`<div style="font-size:8.5pt;color:#444;margin-top:3px;">${coAddr}</div>`:''}
+    ${company?.gstin||company?.phone||company?.email?`<div style="font-size:8.5pt;margin-top:2px;">${[company?.gstin?'GSTIN: '+dv(company.gstin):'',company?.phone?'Ph: '+dv(company.phone):'',company?.email?'Email: '+dv(company.email):''].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>`:''}
+  </div>
+</td></tr>
 
-/* ── Company Header ── */
-.co-hd{text-align:center;padding-bottom:8px;border-bottom:2.5px solid #000;margin-bottom:6px;}
-.co-hd h1{font-size:24pt;font-weight:900;letter-spacing:0.5px;margin-bottom:3px;}
-.co-hd p{font-size:9.5pt;line-height:1.5;}
-.co-hd .gstin{font-size:10pt;font-weight:700;}
+<!-- ═══ TITLE ═══ -->
+<tr><td colspan="6" style="${ttlCell}">Sales Order</td></tr>
 
-/* ── SO Title Banner ── */
-.so-banner{
-  background:#ffe0b2;border:${BORDER};
-  text-align:center;font-size:13pt;font-weight:700;
-  letter-spacing:2px;padding:4px;margin-bottom:0;
-  text-transform:uppercase;
-}
+<!-- CLIENT DETAILS | TAX IDENTITY -->
+<tr>
+  <td colspan="3" style="${subHdr}">Client Details</td>
+  <td colspan="3" style="${subHdr}">Tax Identity</td>
+</tr>
+${fr('Client ID',         dv(o.customerCode||cl.clientId),          'Pan No',           dv(cl.panNo||o.panNo))}
+${fr('Client Name',       `<strong>${dv(o.customerName||o.party)}</strong>`,  'GSTIN No', dv(o.customerGstin||o.partyGstin||cl.gstinNo))}
+${fr('Business Type',     dv(cl.businessType||o.businessType),      'CIN No',           dv(cl.cinNo||o.cinNo))}
+${fr('Industries Type',   dv(cl.industryType||cl.industriesType||o.industryType), 'MSME if Applicable', dv(cl.msme||cl.msmeNo||o.msme))}
+${fr('Category',          dv(cl.category||o.category),              'GST Type',         dv(cl.gstType||o.gstType))}
+${fr('TDS Applicable',    dv(cl.tdsApplicable||o.tdsApplicable),    'GST Registered',   dv(cl.gstRegistered||o.gstRegistered))}
 
-/* ── All tables ── */
-table{width:100%;border-collapse:collapse;font-size:9.5pt;}
-td,th{border:${BORDER};padding:3px 5px;vertical-align:middle;}
+<!-- ORDER DESCRIPTION -->
+<tr><td colspan="6" style="${secHdr}">Order Description</td></tr>
+${fr('ERP No',      dv(o.orderId),                            'Client PO Date',    fmtD(o.poDate))}
+${fr('Order No',    `<strong>${dv(o.orderNo||o.voucherNumber)}</strong>`, 'Client Order No', `<strong>${dv(o.customerPO||o.reference)}</strong>`)}
+${fr('Order Date',  fmtD(o.orderDate||o.date),                'Delivery Due Date', `<strong>${fmtD(o.deliveryDate||o.dueDate)}</strong>`)}
+${fr('Order Type',  dv(o.orderType),                          'Payment Terms',     dv(o.paymentTerms))}
 
-/* ── Orange section header row ── */
-.sec td{background:#ffe0b2;font-weight:700;font-size:10pt;text-align:center;
-  padding:5px;letter-spacing:0.5px;text-transform:uppercase;}
+<!-- CONTACT -->
+<tr><td colspan="6" style="${secHdr}">Contact</td></tr>
+<tr>
+  <td colspan="3" style="${subHdr}">Billing</td>
+  <td colspan="3" style="${subHdr}">Shipping</td>
+</tr>
+${fr('Name',        dv(o.contactPerson),               'Name',        dv(o.shipToContact||o.shipToName))}
+${fr('Mobile No',   dv(o.mobile),                      'Mobile No',   dv(o.shipToMobile))}
+${fr('Alternate No',dv(o.alternateMobile||o.alternateNo||cl.alternateMobile),'Alternate No',dv(o.shipToAlternate))}
+${fr('Email id',    dv(o.email),                       'Email id',    dv(o.shipToEmail))}
 
-/* ── Gray column sub-headers ── */
-th{background:#e8e8e8;font-weight:700;font-size:9pt;text-align:center;}
+<!-- ADDRESS -->
+<tr><td colspan="6" style="${secHdr}">Address</td></tr>
+<tr>
+  <td colspan="3" style="${subHdr}">Billing</td>
+  <td colspan="3" style="${subHdr}">Shipping</td>
+</tr>
+${fr('Address', dv(o.address||o.customerAddress),      'Address', dv(o.shipToAddress||o.deliveryAddr||o.destination))}
+${fr('City',    dv(o.customerCity),                    'City',    dv(o.shipToCity))}
+${fr('State',   dv(o.customerState||o.stateName),      'State',   dv(o.shipToState))}
+${fr('Pincode', dv(o.customerPincode),                 'Pincode', dv(o.shipToPincode))}
 
-/* ── Order details grid ── */
-.lbl{font-weight:700;background:#f5f5f5;width:130px;white-space:nowrap;}
-.val{width:150px;}
+<!-- ITEM DESCRIPTION -->
+<tr><td colspan="6" style="${secHdr}">Item Description</td></tr>
+<tr><td colspan="6" style="${ndWrap}">${itemTable}</td></tr>
+<tr><td colspan="6" style="border:none;padding:4px 8px 8px;font-size:9.5pt;">
+  <strong>Amount in Words:</strong>&nbsp;${numWords(grand)}
+</td></tr>
 
-/* ── Bill To / Ship To ── */
-.party-hd td{background:#ffe0b2;font-weight:700;font-size:10pt;text-align:center;padding:5px;}
-.party-lbl{font-weight:700;font-size:9pt;color:#333;white-space:nowrap;}
+<!-- ADD ON ITEM -->
+<tr><td colspan="6" style="${secHdr}">Add On Item</td></tr>
+<tr><td colspan="6" style="${ndWrap}">${addonTable}</td></tr>
 
-/* ── Summary box ── */
-.sum-lbl{padding:3px 8px;font-size:9.5pt;}
-.sum-val{padding:3px 8px;text-align:right;font-size:9.5pt;white-space:nowrap;}
-.sum-total td{background:#ffe0b2;font-weight:700;font-size:11pt;}
+<!-- BANK GUARANTEE -->
+<tr><td colspan="6" style="${secHdr}">Bank Guarantee</td></tr>
+${fr('Applicable', bg.applicable?'Yes':'No', 'Bank Name', dv(bg.bankName))}
+${bg.applicable?`
+${fr('Basis',      dv(bg.basis),                    'BG No',      dv(bg.bgNo))}
+${fr('Percentage', bg.pct?bg.pct+'%':'',            'Expiry Date',fmtD(bg.expiry))}
+${fr('BG Amount',  bg.pct&&grand?'₹ '+fmtN(grand*(parseFloat(bg.pct)||0)/100):'', 'Remarks', dv(bg.remarks))}
+`:''}
 
-/* ── Amount in words ── */
-.words{border:${BORDER};padding:5px 8px;font-size:9.5pt;margin-bottom:6px;
-  background:#fffde7;}
+<!-- SCOPE OF WORK -->
+<tr><td colspan="6" style="${secHdr}">Scope of Work</td></tr>
+<tr><td colspan="6" style="${ndWrap}">${scopeTable}</td></tr>
 
-/* ── Page break ── */
-.pb{page-break-before:always;}
-.nb{page-break-inside:avoid;}
+<!-- WARRANTY PERIOD -->
+<tr><td colspan="6" style="${secHdr}">Warranty Period</td></tr>
+${fr('Warranty Period', dv(wty.period),         'Certificate No', dv(wty.certNo))}
+${fr('Type',            dv(wty.type),            'Issued By',      dv(wty.issuedBy))}
+${fr('Start Date',      fmtD(wty.startDate),    'Terms',          dv(wty.terms))}
+${fr('End Date',        fmtD(wty.endDate),       'Exclusions',     dv(wty.exclusions))}
 
-/* ── Signature ── */
-.sig td{height:65px;text-align:center;vertical-align:bottom;
-  padding-bottom:5px;font-size:9pt;}
+<!-- ACTIVITIES -->
+<tr><td colspan="6" style="${secHdr}">Activities</td></tr>
+<tr><td colspan="6" style="${ndWrap}">${actTable}</td></tr>
 
-/* ── Footer line ── */
-.footer{border-top:1.5px solid #000;margin-top:10px;padding-top:4px;
-  display:flex;justify-content:space-between;font-size:8.5pt;color:#444;}
-
-@media screen{body{padding:10px 0 30px;}}
-@media print{
-  @page{size:A4 portrait;margin:7mm 9mm;}
-  body{background:#fff;}
-  .page{padding:0;max-width:none;min-height:auto;}
-  .toolbar{display:none!important;}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  tr{page-break-inside:avoid;}
-  .nb{page-break-inside:avoid;}
-  .pb{page-break-before:always;}
-}
-</style>
-</head>
-<body>
-
-<!-- TOOLBAR -->
-<div class="toolbar">
-  <span>SO: <b>${vb(o.orderNo||('#'+o.orderId))}</b> &nbsp;·&nbsp; ${vb(o.customerName||o.party)}</span>
-  <button class="pbtn" onclick="window.print()">🖨️ &nbsp;Print / Save PDF</button>
-</div>
-
-<div class="page">
-
-<!-- ═══════════════════════════════
-     1. COMPANY HEADER
-     ═══════════════════════════════ -->
-<div class="co-hd">
-  <h1>${coName}</h1>
-  <p>${coAddr}${coCity?', '+coCity:''}</p>
-  <p>Mobile No: ${coMobile} &nbsp;&nbsp; Email: ${coEmail}</p>
-  <p class="gstin">GSTIN: ${coGstin}${coPan?' &nbsp;&nbsp; PAN: '+coPan:''}</p>
-</div>
-
-<!-- ═══════════════════════════════
-     2. SO TITLE BANNER
-     ═══════════════════════════════ -->
-<div class="so-banner">Sales Order</div>
-
-<!-- ═══════════════════════════════
-     3. ORDER REFERENCE DETAILS
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-top:0;margin-bottom:6px;">
-  <tr>
-    <td class="lbl">Epsilon ERP No.</td>
-    <td class="val"><b>${vb(o.orderId)}</b></td>
-    <td class="lbl">ERP Order Date</td>
-    <td class="val">${fmtD(o.orderDate||o.date)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">SO Number</td>
-    <td class="val"><b>${vb(o.orderNo||o.voucherNumber)||'—'}</b></td>
-    <td class="lbl">Status</td>
-    <td class="val"><b>${statusLabel}</b></td>
-  </tr>
-  <tr>
-    <td class="lbl">Quote Ref No.</td>
-    <td class="val">${v(o.quotationRef||o.orderRef)}</td>
-    <td class="lbl">Quote Date</td>
-    <td class="val">${fmtD(o.poDate)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Client Order No.</td>
-    <td class="val"><b>${v(o.customerPO||o.reference)}</b></td>
-    <td class="lbl">Client Order Date</td>
-    <td class="val">${fmtD(o.poDate)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Due / Delivery Date</td>
-    <td class="val"><b>${fmtD(o.deliveryDate||o.dueDate)}</b></td>
-    <td class="lbl">Payment Terms</td>
-    <td class="val">${v(o.paymentTerms)}</td>
-  </tr>
-  <tr>
-    <td class="lbl">Sales Person</td>
-    <td class="val">${v(o.salesPerson)}</td>
-    <td class="lbl">Order Type</td>
-    <td class="val">${v(o.orderType)}</td>
-  </tr>
-</table>
-
-<!-- ═══════════════════════════════
-     4. BILL TO / SHIP TO
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="party-hd">
-    <td style="width:50%;background:#ffe0b2;font-weight:700;font-size:10pt;text-align:center;padding:5px;">Bill To</td>
-    <td style="width:50%;background:#ffe0b2;font-weight:700;font-size:10pt;text-align:center;padding:5px;border-left:2px solid #000;">Ship To</td>
-  </tr>
-  <tr>
-    <td style="padding:6px 8px;vertical-align:top;">
-      <div style="font-size:10.5pt;font-weight:700;margin-bottom:4px;">${vb(o.customerName||o.party)||'—'}</div>
-      ${vb(o.address||o.shippingAddr)?`<div style="font-size:9pt;margin-bottom:2px;">${esc(o.address||o.shippingAddr)}</div>`:''}
-      <div style="font-size:9pt;">
-        ${vb(o.customerCity)?'<span class="party-lbl">City: </span>'+esc(o.customerCity)+'&nbsp;&nbsp;':''}
-        ${vb(o.customerState)?'<span class="party-lbl">State: </span>'+esc(o.customerState):''}
-      </div>
-      ${vb(o.customerPincode)?`<div style="font-size:9pt;"><span class="party-lbl">Pincode: </span>${esc(o.customerPincode)}</div>`:''}
-      ${vb(o.customerGstin||o.partyGstin)?`<div style="font-size:9pt;margin-top:3px;"><span class="party-lbl">GSTIN: </span>${esc(o.customerGstin||o.partyGstin)}</div>`:''}
-      <div style="font-size:9pt;margin-top:4px;border-top:1px dashed #bbb;padding-top:3px;">
-        ${vb(o.contactPerson)?'<span class="party-lbl">Contact: </span>'+esc(o.contactPerson)+'<br/>':''}
-        ${vb(o.mobile)?'<span class="party-lbl">Mobile: </span>'+esc(o.mobile)+'<br/>':''}
-        ${vb(o.email)?'<span class="party-lbl">Email: </span>'+esc(o.email):''}
-      </div>
-    </td>
-    <td style="padding:6px 8px;vertical-align:top;border-left:2px solid #000;">
-      <div style="font-size:10.5pt;font-weight:700;margin-bottom:4px;">${vb(o.shipToName||o.customerName||o.party)||'—'}</div>
-      ${vb(o.shipToAddress||o.deliveryAddr||o.destination)?`<div style="font-size:9pt;margin-bottom:2px;">${esc(o.shipToAddress||o.deliveryAddr||o.destination)}</div>`:''}
-      <div style="font-size:9pt;">
-        ${vb(o.shipToCity)?'<span class="party-lbl">City: </span>'+esc(o.shipToCity)+'&nbsp;&nbsp;':''}
-        ${vb(o.shipToState)?'<span class="party-lbl">State: </span>'+esc(o.shipToState):''}
-      </div>
-      ${vb(o.shipToPincode)?`<div style="font-size:9pt;"><span class="party-lbl">Pincode: </span>${esc(o.shipToPincode)}</div>`:''}
-      ${vb(o.dispatchMode||o.shippedBy)?`<div style="font-size:9pt;margin-top:3px;"><span class="party-lbl">Dispatch Mode: </span>${esc(o.dispatchMode||o.shippedBy)}</div>`:''}
-      <div style="font-size:9pt;margin-top:4px;border-top:1px dashed #bbb;padding-top:3px;">
-        ${vb(o.shipToContact||o.contactPerson)?'<span class="party-lbl">Contact: </span>'+esc(o.shipToContact||o.contactPerson)+'<br/>':''}
-        ${vb(o.shipToMobile||o.mobile)?'<span class="party-lbl">Mobile: </span>'+esc(o.shipToMobile||o.mobile)+'<br/>':''}
-        ${vb(o.shipToEmail||o.email)?'<span class="party-lbl">Email: </span>'+esc(o.shipToEmail||o.email):''}
-      </div>
-    </td>
-  </tr>
-</table>
-
-<!-- ═══════════════════════════════
-     5. ORDER DESCRIPTION / ITEMS
-     ═══════════════════════════════ -->
-<table style="margin-bottom:0;">
-  <tr class="sec"><td colspan="8">Order Description</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="width:88px;">Type</th>
-    <th style="text-align:left;padding-left:6px;">Item Description</th>
-    <th style="width:40px;">Qty</th>
-    <th style="width:42px;">Unit</th>
-    <th style="width:82px;text-align:right;padding-right:6px;">Rate (₹)</th>
-    <th style="width:52px;">GST @</th>
-    <th style="width:86px;text-align:right;padding-right:6px;">Amount (₹)</th>
-  </tr>
-  ${itemRows}
-</table>
-
-<!-- ═══════════════════════════════
-     6. FINANCIAL SUMMARY (right-aligned)
-     ═══════════════════════════════ -->
-<table style="margin-top:0;margin-bottom:6px;">
-  <tr>
-    <td style="border:none;width:55%;"></td>
-    <td style="border:none;width:45%;padding:0;">
-      <table style="margin:0;">
-        ${summaryRows.join('')}
-        <tr class="sum-total">
-          <td class="sum-lbl" style="background:#ffe0b2;font-weight:700;font-size:10.5pt;">Total Order Value</td>
-          <td class="sum-val" style="background:#ffe0b2;font-weight:700;font-size:10.5pt;">${r(grand)}</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-
-<!-- Amount in words -->
-<div class="words nb"><b>Amount in Words:</b> &nbsp; ${numWords(grand)}</div>
-
-${addons.length>0?`
-<!-- ═══════════════════════════════
-     7. ADD-ON ITEMS
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="7">Add On Items</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="text-align:left;padding-left:6px;">Item Name</th>
-    <th style="width:88px;">Category</th>
-    <th style="width:40px;">Qty</th>
-    <th style="width:42px;">UOM</th>
-    <th style="width:72px;">Included in SO</th>
-    <th style="text-align:left;padding-left:6px;">Remarks</th>
-  </tr>
-  ${addonRows}
-</table>`:''}
-
-<!-- ═══════════════════════════════
-     8. BANK GUARANTEE
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="7">Bank Guarantee</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="width:72px;">BG Applicable</th>
-    <th style="width:90px;text-align:right;padding-right:6px;">Order Value (₹)</th>
-    <th style="width:88px;">On Basis</th>
-    <th style="width:48px;">BG %</th>
-    <th style="width:90px;text-align:right;padding-right:6px;">BG Amount (₹)</th>
-    <th style="text-align:left;padding-left:6px;">BG Details &amp; Expiry</th>
-  </tr>
-  ${bgRow}
-</table>
-
-<!-- ═══════════════════════════════
-     9. SCOPE OF WORK
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="6">Scope of Work</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="text-align:left;padding-left:6px;">Scope Item / Activity</th>
-    <th style="width:72px;">Client Scope</th>
-    <th style="width:72px;">Our Scope</th>
-    <th style="text-align:left;padding-left:6px;">Notes</th>
-    <th style="text-align:left;padding-left:6px;">Remarks</th>
-  </tr>
-  ${scopeRows}
-</table>
-
-<!-- ═══════════════════════════════
-     10. WARRANTY DETAILS
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="5">Warranty Details</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="text-align:left;padding-left:6px;">Warranty Period</th>
-    <th style="width:100px;">Type</th>
-    <th style="width:88px;">Start Date</th>
-    <th style="width:88px;">End Date</th>
-  </tr>
-  ${wtRows}
-</table>
-
-<!-- ═══════════════════════════════
-     11. ACTIVITIES
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="7">Activities</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="text-align:left;padding-left:6px;">Activity Name</th>
-    <th style="width:82px;">Start Date</th>
-    <th style="width:82px;">End Date</th>
-    <th style="width:65px;">Ref</th>
-    <th style="width:78px;">Status</th>
-    <th style="text-align:left;padding-left:6px;">Remarks</th>
-  </tr>
-  ${actRows}
-</table>
-
-<!-- ═══════════════════════════════
-     12. ATTACHMENTS
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td colspan="3">Attachments</td></tr>
-  <tr>
-    <th style="width:32px;">Sr No.</th>
-    <th style="text-align:left;padding-left:6px;">Document Name</th>
-    <th style="text-align:left;padding-left:6px;">Used For</th>
-  </tr>
-  ${attRows}
-</table>
+<!-- ALL ATTACHMENTS -->
+<tr><td colspan="6" style="${secHdr}">All Attachment</td></tr>
+<tr><td colspan="6" style="${ndWrap}">
+  ${attHTML||`<div style="padding:14px;text-align:center;color:#888;font-style:italic;">No attachments</div>`}
+</td></tr>
 
 ${(o.termsConditions||o.customerNotes)?`
-<!-- ═══════════════════════════════
-     13. TERMS & CONDITIONS
-     ═══════════════════════════════ -->
-<table class="nb" style="margin-bottom:6px;">
-  <tr class="sec"><td>Terms &amp; Conditions</td></tr>
-  ${o.termsConditions?`<tr><td style="white-space:pre-wrap;font-size:9pt;padding:6px;line-height:1.5;">${esc(o.termsConditions)}</td></tr>`:''}
-  ${o.customerNotes?`<tr><td style="white-space:pre-wrap;font-size:9pt;padding:6px;background:#fffde7;line-height:1.5;">${esc(o.customerNotes)}</td></tr>`:''}
-</table>`:''}
+<!-- TERMS -->
+<tr><td colspan="6" style="${secHdr}">Terms &amp; Conditions</td></tr>
+<tr><td colspan="6" style="${oc}font-size:9pt;line-height:1.5;white-space:pre-wrap;">${esc(o.termsConditions||o.customerNotes)}</td></tr>
+`:''}
 
-<!-- ═══════════════════════════════
-     14. SIGNATURE BLOCK
-     ═══════════════════════════════ -->
-<table class="sig nb" style="margin-top:18px;">
-  <tr>
-    <td style="width:33.33%;text-align:center;height:70px;vertical-align:bottom;padding-bottom:5px;">
-      <div style="border-top:1px solid #000;margin:0 16px;padding-top:5px;">
-        <b>Prepared By</b><br/>
-        <span style="font-size:9pt;">${vb(o.salesPerson)||'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>
-      </div>
-    </td>
-    <td style="width:33.33%;text-align:center;height:70px;vertical-align:bottom;padding-bottom:5px;">
-      <div style="border-top:1px solid #000;margin:0 16px;padding-top:5px;">
-        <b>Checked By</b><br/>
-        <span style="font-size:9pt;">&nbsp;</span>
-      </div>
-    </td>
-    <td style="width:33.33%;text-align:center;height:70px;vertical-align:bottom;padding-bottom:5px;">
-      <div style="border-top:1px solid #000;margin:0 16px;padding-top:5px;">
-        <b>Authorised Signatory</b><br/>
-        <span style="font-size:9pt;">For ${coName}</span>
-      </div>
-    </td>
-  </tr>
+<!-- SIGNATURE -->
+<tr class="sig-row">
+  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+    <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;">
+      <strong>Prepared By</strong><br><span style="font-size:9pt;">${dv(o.salesPerson)||'&nbsp;'}</span>
+    </div>
+  </td>
+  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+    <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;"><strong>Checked By</strong></div>
+  </td>
+  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+    <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;">
+      <strong>Authorised Signatory</strong><br><span style="font-size:9pt;">For ${coName}</span>
+    </div>
+  </td>
+</tr>
+<tr><td colspan="6" style="border-top:${SECL};border-left:none;border-right:none;border-bottom:none;text-align:right;font-size:8pt;color:#666;background:#f5f5f5;padding:3px 8px;">
+  Printed: ${today}
+</td></tr>
+
+</tbody>
 </table>
-
-<!-- FOOTER -->
-<div class="footer">
-  <span><b>${coName}</b></span>
-  <span>SO: <b>${vb(o.orderNo||('#'+o.orderId))}</b> &nbsp;|&nbsp; ${vb(o.customerName||o.party)||'—'} &nbsp;|&nbsp; Total: <b>₹ ${r(grand)}</b></span>
-  <span>Printed: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span>
 </div>
 
-</div><!-- /page -->
-</body>
-</html>`;
+${hasPdfs?`
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+(async()=>{
+  const containers=document.querySelectorAll('.pdf-render');
+  for(const c of containers){
+    const url=c.getAttribute('data-pdf-url');
+    if(!url)continue;
+    try{
+      const pdf=await pdfjsLib.getDocument(url).promise;
+      const pw=c.clientWidth||760;
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p);
+        const vp0=page.getViewport({scale:1});
+        const vp=page.getViewport({scale:pw/vp0.width});
+        const canvas=document.createElement('canvas');
+        canvas.width=vp.width;canvas.height=vp.height;
+        canvas.style.cssText='width:100%;display:block;margin-bottom:2px;';
+        await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+        c.appendChild(canvas);
+      }
+    }catch(e){c.innerHTML='<div style="padding:10px;color:#c00;">Could not render PDF: '+e.message+'<\/div>';}
+  }
+  setTimeout(()=>window.print(),700);
+})();
+<\/script>`:''}
 
-  const win = window.open('', '_blank', 'width=900,height=950,scrollbars=yes');
-  if (!win) { alert('Please allow pop-ups to print the Sales Order.'); return; }
+</body></html>`;
+
+  const win = window.open('','_blank','width=920,height=980,scrollbars=yes');
+  if (!win){alert('Please allow pop-ups to print.');return;}
   win.document.write(html);
   win.document.close();
   win.focus();
+  if (!hasPdfs) setTimeout(()=>win.print(),900);
 };
