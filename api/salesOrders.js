@@ -70,7 +70,8 @@ router.get('/:orderId/material-balance', async (req, res) => {
       poList = poRows.map(pr => parseJ(pr.data, {}));
     }
 
-    const soItems = so.items || so.materialPlanningItems || [];
+    const soItems  = so.items || so.materialPlanningItems || [];
+    const soAddons = so.addons || [];
 
     const purchasedMap = {};
     poList.forEach(poData => {
@@ -80,7 +81,7 @@ router.get('/:orderId/material-balance', async (req, res) => {
       });
     });
 
-    const result = soItems.map(m => {
+    const mapItem = (m) => {
       const key       = (m.itemName || m.material || m.description || '').toLowerCase().trim();
       const required  = parseFloat(m.qty || m.requiredQty || m.quantity) || 0;
       const purchased = purchasedMap[key] || 0;
@@ -97,7 +98,32 @@ router.get('/:orderId/material-balance', async (req, res) => {
         balanceQty:   Math.max(0, required - purchased),
         overPurchased: purchased > required,
       };
-    });
+    };
+
+    const mapAddon = (a) => {
+      const key      = (a.description || '').toLowerCase().trim();
+      const required = parseFloat(a.qty) || 0;
+      const purchased = purchasedMap[key] || 0;
+      return {
+        itemName:     a.description || '',
+        specs:        a.remarks || '',
+        qty:          required,
+        unit:         a.unit || 'NOS',
+        hsnCode:      '',
+        itemCode:     '',
+        itemType:     a.category || 'Add-on',
+        bom:          [],
+        purchasedQty: purchased,
+        balanceQty:   Math.max(0, required - purchased),
+        overPurchased: purchased > required,
+        isAddon:      true,
+      };
+    };
+
+    const result = [
+      ...soItems.map(mapItem),
+      ...soAddons.filter(a => a.description).map(mapAddon),
+    ];
 
     res.json({ orderId, orderNo: so.orderNo, customerName: so.customerName, items: result, specFiles: so.specFiles || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
