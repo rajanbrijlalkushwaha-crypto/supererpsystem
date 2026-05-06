@@ -401,6 +401,121 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
   );
 }
 
+/* ═══════════════════════ VENDOR BILLS SECTION ═══════════════════════ */
+function VendorBillsSection({order,companyId}){
+  const [bills,setBills]=useState(order.vendorBills||[]);
+  const [acting,setActing]=useState(null); // billId being actioned
+
+  useEffect(()=>{
+    api(`/api/purchase-orders/${order.orderId}/vendor-bills?companyId=${companyId}`)
+      .then(r=>{ if(Array.isArray(r.data)) setBills(r.data); })
+      .catch(()=>{});
+  },[order.orderId,companyId]);// eslint-disable-line react-hooks/exhaustive-deps
+
+  const approve=async(b)=>{
+    if(!window.confirm(`Approve bill ${b.invoiceNo}?`)) return;
+    setActing(b.billId);
+    try{
+      const r=await api(`/api/purchase-orders/${order.orderId}/vendor-bills/${b.billId}`,{method:'PUT',data:{status:'approved',companyId}});
+      setBills(p=>p.map(x=>x.billId===b.billId?r.data.bill:x));
+    }catch(e){alert('Error: '+e.message);}
+    setActing(null);
+  };
+  const reject=async(b)=>{
+    const reason=window.prompt('Reason for rejection (optional):','');
+    if(reason===null) return;
+    setActing(b.billId);
+    try{
+      const r=await api(`/api/purchase-orders/${order.orderId}/vendor-bills/${b.billId}`,{method:'PUT',data:{status:'rejected',adminRemarks:reason,companyId}});
+      setBills(p=>p.map(x=>x.billId===b.billId?r.data.bill:x));
+    }catch(e){alert('Error: '+e.message);}
+    setActing(null);
+  };
+
+  if(!bills.length) return(
+    <div style={{marginTop:8}}>
+      <PH title="Vendor Bills (0)"/>
+      <div style={{padding:'8px 0',fontSize:11,color:'#888',fontFamily:F,fontStyle:'italic'}}>No bills submitted by vendor yet.</div>
+    </div>
+  );
+
+  const fmt2=n=>`₹${Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2})}`;
+  const fmtD2=d=>{ if(!d) return '—'; const s=String(d).slice(0,10); const [y,m,dy]=s.split('-'); return `${dy}-${m}-${y}`; };
+
+  return(
+    <div style={{marginTop:8}}>
+      <PH title={`Vendor Bills (${bills.length})`}/>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {bills.map((b,i)=>{
+          const statusColor={approved:{bg:'#ECFDF5',color:'#059669'},rejected:{bg:'#FEF2F2',color:'#DC2626'},submitted:{bg:'#F5F3FF',color:'#7C3AED'}}[b.status]||{bg:'#F1F5F9',color:'#64748B'};
+          return(
+            <div key={b.billId||i} style={{border:'1px solid #e0e0e0',borderRadius:4,overflow:'hidden'}}>
+              {/* Bill header */}
+              <div style={{background:'#F8FAFC',borderBottom:'1px solid #e0e0e0',padding:'6px 10px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <span style={{fontSize:12,fontWeight:700,color:N,fontFamily:F}}>🧾 Invoice #{b.invoiceNo}</span>
+                <span style={{fontSize:10,color:'#555',fontFamily:F}}>Date: {fmtD2(b.invoiceDate)}</span>
+                <span style={{padding:'1px 7px',fontSize:10,fontWeight:700,background:statusColor.bg,color:statusColor.color,borderRadius:10,border:`1px solid ${statusColor.color}`,fontFamily:F}}>{b.status||'submitted'}</span>
+                {b.uploadedBy==='vendor'&&<span style={{padding:'1px 7px',fontSize:10,fontWeight:600,background:'#FFFBEB',color:'#92400E',border:'1px solid #FCD34D',borderRadius:10,fontFamily:F}}>Uploaded by Vendor</span>}
+                <span style={{marginLeft:'auto',fontSize:12,fontWeight:800,color:'#059669',fontFamily:F}}>{fmt2(b.totalAmount)}</span>
+              </div>
+              {/* Bill items */}
+              {(b.billItems||[]).length>0&&(
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
+                    <thead>
+                      <tr style={{background:'#EFF6FF'}}>
+                        {['Item','Billed Qty','Rate','GST%','Amount'].map(h=>(
+                          <th key={h} style={{padding:'3px 8px',color:N,fontWeight:700,textAlign:h==='Item'?'left':'right',borderBottom:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {b.billItems.map((bi,j)=>{
+                        const net=bi.billedQty*bi.rate; const gst=net*bi.gstPercent/100;
+                        return(
+                          <tr key={j} style={{background:j%2===0?W:'#f9f9f9'}}>
+                            <td style={{padding:'3px 8px',border:'1px solid #eeeeee',fontWeight:600}}>{bi.itemName}</td>
+                            <td style={{padding:'3px 8px',border:'1px solid #eeeeee',textAlign:'right'}}>{bi.billedQty} {bi.unit}</td>
+                            <td style={{padding:'3px 8px',border:'1px solid #eeeeee',textAlign:'right'}}>{fmt2(bi.rate)}</td>
+                            <td style={{padding:'3px 8px',border:'1px solid #eeeeee',textAlign:'right'}}>{bi.gstPercent}%</td>
+                            <td style={{padding:'3px 8px',border:'1px solid #eeeeee',textAlign:'right',fontWeight:700,color:N}}>{fmt2(net+gst)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* Footer: remarks + actions */}
+              <div style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',borderTop:'1px solid #eeeeee',background:W}}>
+                <div style={{flex:1,fontSize:11,color:'#555',fontFamily:F}}>
+                  {b.description&&<span>📝 {b.description} · </span>}
+                  Net: {fmt2(b.netAmount)} · GST: {fmt2(b.gstAmount)} · <strong>Total: {fmt2(b.totalAmount)}</strong>
+                  {b.adminRemarks&&<span style={{color:'#DC2626'}}> · Admin: {b.adminRemarks}</span>}
+                  {b.reviewedAt&&<span style={{color:'#888'}}> · Reviewed: {fmtD2(b.reviewedAt?.slice(0,10))}</span>}
+                </div>
+                {b.fileName&&(
+                  <a href={`/api/purchase-orders/${order.orderId}/vendor-bill-file/${encodeURIComponent(b.fileName)}?companyId=${companyId}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{padding:'3px 10px',background:'#EFF6FF',color:N,border:'1px solid #BFDBFE',borderRadius:4,fontSize:11,fontWeight:600,textDecoration:'none',fontFamily:F}}>
+                    ⬇ PDF
+                  </a>
+                )}
+                {b.status!=='approved'&&b.status!=='rejected'&&(
+                  <>
+                    <Btn small v="suc" onClick={()=>approve(b)} disabled={acting===b.billId}>✔ Approve</Btn>
+                    <Btn small v="dan" onClick={()=>reject(b)} disabled={acting===b.billId}>✕ Reject</Btn>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════ PO VIEW MODAL ═══════════════════════ */
 function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,companyId}){
   const o=order||{};
@@ -558,6 +673,9 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
               </div>
             </>
           )}
+
+          {/* ── Vendor Bills ── */}
+          <VendorBillsSection order={o} companyId={companyId}/>
         </div>
 
         {/* footer */}
