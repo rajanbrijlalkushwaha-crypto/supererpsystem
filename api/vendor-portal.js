@@ -406,23 +406,116 @@ router.post('/reject/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* ── GET /api/vendor-portal/purchase-orders — vendor sees only PO number + amount ── */
+const multer = require('multer');
+const billUpload = multer({ storage: multer.memoryStorage() });
+
+const poJsonPath  = (companyId, orderId) =>
+  path.join(ROOT, 'Database', 'Companies', companyId, 'PurchaseOrder', String(orderId), `${orderId}.json`);
+const docsPath    = (companyId, orderId) =>
+  path.join(ROOT, 'Database', 'Companies', companyId, 'PurchaseOrder', String(orderId), 'docs');
+const billsPath   = (companyId, orderId) =>
+  path.join(ROOT, 'Database', 'Companies', companyId, 'PurchaseOrder', String(orderId), 'vendor-bills');
+
+const authByTokenOrHeader = (req, res, next) => {
+  let token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
+  if (!token) token = req.query.token || '';
+  const session = VENDOR_SESSIONS.get(token);
+  if (!session || Date.now() > session.expiresAt) { VENDOR_SESSIONS.delete(token); return res.status(401).json({ error: 'Session expired.' }); }
+  session.expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+  req.vendor = session;
+  next();
+};
+
+const vendorOwnsPO = (po, vendorId) =>
+  String(po.vendorId) === String(vendorId) || String(po.vendorCode) === String(vendorId);
+
+/* ── GET /api/vendor-portal/purchase-orders ── */
 router.get('/purchase-orders', requireVendorAuth, (req, res) => {
   try {
     const { companyId, vendorId } = req.vendor;
     const allPOs = jstore.readAll('PurchaseOrder', companyId);
-    const myPOs  = allPOs.filter(po =>
-      String(po.vendorId) === String(vendorId) ||
-      String(po.vendorCode) === String(vendorId)
-    );
+    const myPOs  = allPOs.filter(po => vendorOwnsPO(po, vendorId));
     const safePos = myPOs.map(po => ({
-      orderId:     po.orderId,
-      poNumber:    po.poNumber || po.orderNo || po.orderId,
-      date:        po.date || po.orderDate || po.createdAt || '',
-      totalAmount: po.grandTotal || po.totalAmount || po.total || 0,
-      status:      po.status || '',
+      orderId:      po.orderId,
+      poNumber:     po.poNumber || po.poNo || po.orderNo || String(po.orderId),
+      date:         po.poDate || po.date || po.orderDate || '',
+      deliveryDate: po.deliveryDate || '',
+      paymentTerms: po.paymentTerms || '',
+      totalAmount:  po.grandTotal || po.totalAmount || po.total || 0,
+      subTotal:     po.subTotal || 0,
+      totalGST:     po.totalGST || 0,
+      status:       po.status || '',
+      items: (po.items || []).map(it => ({
+        itemName:   it.itemName   || '',
+        description:it.description|| '',
+        hsnCode:    it.hsnCode    || '',
+        qty:        parseFloat(it.qty)  || 0,
+        unit:       it.unit       || 'NOS',
+        rate:       parseFloat(it.rate) || 0,
+        gstPercent: parseFloat(it.gstPercent) || 0,
+      })),
+      attachments: (po.attachments || po.documents || []).map(a => ({
+        name:     a.name || a.fileName,
+        fileName: a.fileName,
+        size:     a.size || 0,
+      })),
+      vendorBills: (po.vendorBills || []).map(b => ({
+        originalName: b.originalName,
+        fileName:     b.fileName,
+        size:         b.size || 0,
+        uploadedAt:   b.uploadedAt,
+      })),
     }));
     res.json(safePos);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── GET /api/vendor-portal/purchase-orders/:orderId/attachment/:fileName ── */
+router.get('/purchase-orders/:orderId/attachment/:fileName', authByTokenOrHeader, (req, res) => {
+  try {
+    const { companyId, vendorId } = req.vendor;
+    const { orderId, fileName } = req.params;
+    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
+    if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
+    const fp = path.join(docsPath(companyId, orderId), fileName);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found.' });
+    res.download(fp, fileName);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── POST /api/vendor-portal/purchase-orders/:orderId/upload-bill ── */
+router.post('/purchase-orders/:orderId/upload-bill', requireVendorAuth, billUpload.single('bill'), (req, res) => {
+  try {
+    const { companyId, vendorId } = req.vendor;
+    const { orderId } = req.params;
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
+    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
+    if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
+
+    const dir = billsPath(companyId, orderId);
+    fs.mkdirSync(dir, { recursive: true });
+    const fileName = `${Date.now()}-${req.file.originalname.replace(/[\\/:*?"<>|]/g, '_')}`;
+    fs.writeFileSync(path.join(dir, fileName), req.file.buffer);
+
+    const bill = { originalName: req.file.originalname, fileName, size: req.file.size, uploadedAt: new Date().toISOString() };
+    po.vendorBills = [...(po.vendorBills || []), bill];
+    saveJson(poJsonPath(companyId, orderId), po);
+
+    res.json({ success: true, bill });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── GET /api/vendor-portal/purchase-orders/:orderId/bills/:fileName ── */
+router.get('/purchase-orders/:orderId/bills/:fileName', authByTokenOrHeader, (req, res) => {
+  try {
+    const { companyId, vendorId } = req.vendor;
+    const { orderId, fileName } = req.params;
+    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
+    if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
+    const fp = path.join(billsPath(companyId, orderId), fileName);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found.' });
+    res.download(fp, fileName);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
