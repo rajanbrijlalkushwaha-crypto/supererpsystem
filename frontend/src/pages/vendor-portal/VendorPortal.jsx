@@ -3,289 +3,343 @@ import axios from 'axios';
 import { useVendorAuth } from '../../context/VendorAuthContext';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P  = '#2563EB';
-const BD = '#E5EAF2';
-const BG = '#F5F7FB';
-const R  = '#DC2626';
+const P  = '#1D4ED8';
+const BG = '#F1F5F9';
+const BD = '#E2E8F0';
 const G  = '#059669';
+const R  = '#DC2626';
+const O  = '#D97706';
 
-const STATUS_COLOR = {
-  approved:  { bg:'#ECFDF5', color:'#059669' },
-  pending:   { bg:'#FFFBEB', color:'#D97706' },
-  draft:     { bg:'#EFF6FF', color:'#2563EB' },
-  completed: { bg:'#F0FDF4', color:'#16A34A' },
-  cancelled: { bg:'#FEF2F2', color:'#DC2626' },
+const STATUS = {
+  approved:  { bg:'#ECFDF5', color:'#059669', label:'Approved' },
+  pending:   { bg:'#FFFBEB', color:'#D97706', label:'Pending' },
+  draft:     { bg:'#EFF6FF', color:'#2563EB', label:'Draft' },
+  completed: { bg:'#F0FDF4', color:'#16A34A', label:'Completed' },
+  cancelled: { bg:'#FEF2F2', color:'#DC2626', label:'Cancelled' },
+  submitted: { bg:'#F5F3FF', color:'#7C3AED', label:'Submitted' },
+  paid:      { bg:'#ECFDF5', color:'#059669', label:'Paid' },
+};
+const Badge = ({ s }) => {
+  const c = STATUS[s] || { bg:'#F1F5F9', color:'#64748B', label: s || 'Unknown' };
+  return <span style={{ padding:'2px 9px', borderRadius:20, fontSize:10, fontWeight:700, background:c.bg, color:c.color, fontFamily:F, whiteSpace:'nowrap' }}>{c.label}</span>;
 };
 
-const fmtAmt = n => `₹ ${Number(n||0).toLocaleString('en-IN', {minimumFractionDigits:2})}`;
-const fmtDate = d => { if (!d) return '—'; const s = String(d).slice(0,10); if (!s) return '—'; const [y,m,dy]=s.split('-'); return `${dy}-${m}-${y}`; };
-const fmtSize = b => b > 1024*1024 ? `${(b/1024/1024).toFixed(1)} MB` : `${Math.round(b/1024)} KB`;
+const fmt  = n => `₹ ${Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2 })}`;
+const fmtD = d => { if (!d) return '—'; const s=String(d).slice(0,10); const [y,m,dy]=s.split('-'); return `${dy}-${m}-${y}`; };
+const fmtSz= b => b>1048576?`${(b/1048576).toFixed(1)} MB`:`${Math.round(b/1024)} KB`;
+const fileIcon = n => { const e=(n||'').split('.').pop().toLowerCase(); return e==='pdf'?'📄':['jpg','jpeg','png'].includes(e)?'🖼':['xlsx','xls'].includes(e)?'📊':['doc','docx'].includes(e)?'📝':'📎'; };
 
-function StatusBadge({ status }) {
-  const s = STATUS_COLOR[status] || { bg:'#F1F5F9', color:'#64748b' };
-  return <span style={{ padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:700, background:s.bg, color:s.color, fontFamily:F }}>{status || 'Unknown'}</span>;
-}
+/* ─── Create Bill Modal ─── */
+function CreateBillModal({ po, token, onClose, onCreated }) {
+  const [form, setForm]   = useState({ invoiceNo:'', invoiceDate:'', description:'', netAmount:'', gstPercent: po.items[0]?.gstPercent ?? 18, notes:'' });
+  const [file, setFile]   = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr]     = useState('');
+  const fileRef = useRef();
 
-const TH = ({ children, right }) => (
-  <th style={{ padding:'8px 10px', background:P, color:'#fff', fontSize:11, fontWeight:700, textAlign:right?'right':'left', fontFamily:F, whiteSpace:'nowrap' }}>{children}</th>
-);
-const TD = ({ children, right, bold, color }) => (
-  <td style={{ padding:'7px 10px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}`, verticalAlign:'middle', textAlign:right?'right':'left', fontWeight:bold?700:400, color:color||'#1E293B' }}>{children}</td>
-);
+  const net   = parseFloat(form.netAmount) || 0;
+  const gstP  = parseFloat(form.gstPercent) || 0;
+  const gstA  = parseFloat((net * gstP / 100).toFixed(2));
+  const total = parseFloat((net + gstA).toFixed(2));
 
-function ActivationPending({ vendor, vendorLogout }) {
+  const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const submit = async () => {
+    if (!form.invoiceNo.trim())   { setErr('Invoice number is required.'); return; }
+    if (!form.invoiceDate)        { setErr('Invoice date is required.'); return; }
+    if (!net)                     { setErr('Net amount is required.'); return; }
+    setSaving(true); setErr('');
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k,v]) => fd.append(k, v));
+      fd.append('gstAmount', gstA);
+      fd.append('totalAmount', total);
+      if (file) fd.append('billFile', file);
+      const r = await fetch(`/api/vendor-portal/purchase-orders/${po.orderId}/create-bill`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await r.json();
+      if (data.success) { onCreated(data.bill); }
+      else setErr(data.error || 'Failed to submit bill.');
+    } catch { setErr('Network error. Please try again.'); }
+    setSaving(false);
+  };
+
+  const inp = (k, type='text', placeholder='') => (
+    <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={placeholder}
+      style={{ width:'100%', height:32, padding:'0 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, boxSizing:'border-box', outline:'none' }}
+      onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}
+    />
+  );
+  const lbl = (t, req) => <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginBottom:4 }}>{t}{req&&<span style={{color:R}}> *</span>}</div>;
+  const row2 = (children) => <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>{children}</div>;
+
   return (
-    <div style={{ fontFamily:F, background:'linear-gradient(135deg,#1E293B 0%,#2563EB 100%)', minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'24px' }}>
-      <div style={{ background:'#fff', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,0.3)', width:'100%', maxWidth:500, overflow:'hidden' }}>
-        <div style={{ background:'linear-gradient(135deg,#1E293B,#2563EB)', padding:'24px 28px' }}>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', fontWeight:600, textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:6 }}>Epsilon Enterprise</div>
-          <div style={{ fontSize:20, fontWeight:800, color:'#fff' }}>Vendor Portal</div>
-        </div>
-        <div style={{ padding:'32px 28px', textAlign:'center' }}>
-          <div style={{ width:72, height:72, borderRadius:'50%', background:'#FFF7ED', border:'3px solid #FED7AA', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:32 }}>⏳</div>
-          <div style={{ fontSize:18, fontWeight:800, color:'#1E293B', marginBottom:8 }}>Activation In Progress</div>
-          <div style={{ fontSize:13.5, color:'#64748b', lineHeight:1.7, marginBottom:24 }}>
-            Welcome, <strong>{vendor?.name}</strong>! Your registration is being reviewed. You'll be notified once activated.
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', width:'100%', maxWidth:560, borderRadius:10, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.35)', fontFamily:F }}>
+        <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>🧾 Create Bill / Invoice</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 }}>for {po.poNumber}</div>
           </div>
-          {vendor?.trackingNo && (
-            <div style={{ background:'#EFF6FF', border:'2px dashed #93C5FD', borderRadius:10, padding:'16px 20px', marginBottom:24 }}>
-              <div style={{ fontSize:11, color:'#2563EB', fontWeight:700, textTransform:'uppercase', letterSpacing:'2px', marginBottom:6 }}>Registration Tracking No.</div>
-              <div style={{ fontSize:20, fontWeight:900, color:'#1D4ED8', letterSpacing:3 }}>{vendor.trackingNo}</div>
+          <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', width:28, height:28, borderRadius:6, cursor:'pointer', fontSize:16 }}>✕</button>
+        </div>
+
+        <div style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+          {row2(
+            <>
+              <div>{lbl('Invoice No.', true)}{inp('invoiceNo','text','e.g. INV-2026-001')}</div>
+              <div>{lbl('Invoice Date', true)}{inp('invoiceDate','date')}</div>
+            </>
+          )}
+
+          <div>{lbl('Description / Work Done', false)}
+            <textarea value={form.description} onChange={e=>setF('description',e.target.value)} placeholder="Describe the goods / work supplied…" rows={2}
+              style={{ width:'100%', padding:'6px 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}
+              onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}/>
+          </div>
+
+          {row2(
+            <>
+              <div>{lbl('Net / Taxable Amount (₹)', true)}{inp('netAmount','number','0.00')}</div>
+              <div>
+                {lbl('GST %', false)}
+                <select value={form.gstPercent} onChange={e=>setF('gstPercent',e.target.value)}
+                  style={{ width:'100%', height:32, padding:'0 8px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, outline:'none' }}>
+                  {[0,5,12,18,28].map(g=><option key={g} value={g}>{g}%</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Calculated totals */}
+          {net > 0 && (
+            <div style={{ background:'#F8FAFC', border:`1px solid ${BD}`, borderRadius:6, padding:'10px 14px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+              {[['Net Amount', fmt(net), '#1E293B'], ['GST ('+gstP+'%)', fmt(gstA), O], ['Total Amount', fmt(total), G]].map(([l,v,c])=>(
+                <div key={l} style={{ textAlign:'center' }}>
+                  <div style={{ fontSize:10, color:'#6B7280', fontWeight:600 }}>{l}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:c, marginTop:2 }}>{v}</div>
+                </div>
+              ))}
             </div>
           )}
-          <button onClick={vendorLogout} style={{ width:'100%', padding:'10px 0', borderRadius:8, cursor:'pointer', background:'#fff', border:'1px solid #D1D5DB', color:'#374151', fontSize:13, fontWeight:600, fontFamily:F }}>Sign Out</button>
+
+          <div>
+            {lbl('Attach Invoice PDF / Image (optional)', false)}
+            <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+              onChange={e=>setFile(e.target.files[0]||null)}
+              style={{ fontSize:11, fontFamily:F, width:'100%' }}/>
+            {file && <div style={{ fontSize:10, color:G, marginTop:4 }}>Selected: {file.name} ({fmtSz(file.size)})</div>}
+          </div>
+
+          <div>{lbl('Notes / Remarks', false)}
+            <textarea value={form.notes} onChange={e=>setF('notes',e.target.value)} placeholder="Any remarks for this bill…" rows={2}
+              style={{ width:'100%', padding:'6px 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}
+              onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}/>
+          </div>
+
+          {err && <div style={{ padding:'8px 12px', background:'#FEF2F2', border:`1px solid #FCA5A5`, borderRadius:5, fontSize:12, color:R, fontWeight:600 }}>{err}</div>}
+
+          <div style={{ display:'flex', gap:10, justifyContent:'flex-end', paddingTop:4 }}>
+            <button onClick={onClose} style={{ padding:'7px 18px', borderRadius:6, border:`1px solid ${BD}`, background:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>Cancel</button>
+            <button onClick={submit} disabled={saving}
+              style={{ padding:'7px 22px', borderRadius:6, border:'none', background:saving?'#9CA3AF':G, color:'#fff', fontSize:12, fontWeight:700, cursor:saving?'default':'pointer', fontFamily:F }}>
+              {saving ? 'Submitting…' : '✓ Submit Bill'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── PO Detail Panel ── */
-function PODetailPanel({ po, token, onClose, payments }) {
-  const [billFile,   setBillFile]   = useState(null);
-  const [uploading,  setUploading]  = useState(false);
-  const [uploadMsg,  setUploadMsg]  = useState('');
-  const [bills,      setBills]      = useState(po.vendorBills || []);
-  const fileRef = useRef();
+/* ─── PO Card ─── */
+function POCard({ po, token, payments }) {
+  const [expanded, setExpanded]   = useState(false);
+  const [showBill, setShowBill]   = useState(false);
+  const [bills, setBills]         = useState(po.vendorBills || []);
 
-  const downloadUrl = (type, fileName) =>
-    `/api/vendor-portal/purchase-orders/${po.orderId}/${type}/${encodeURIComponent(fileName)}?token=${token}`;
+  const dlUrl = (type, fn) => `/api/vendor-portal/purchase-orders/${po.orderId}/${type}/${encodeURIComponent(fn)}?token=${token}`;
 
-  const uploadBill = async () => {
-    if (!billFile) return;
-    setUploading(true); setUploadMsg('');
-    try {
-      const fd = new FormData();
-      fd.append('bill', billFile);
-      const r = await fetch(`/api/vendor-portal/purchase-orders/${po.orderId}/upload-bill`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const data = await r.json();
-      if (data.success) {
-        setBills(prev => [...prev, data.bill]);
-        setBillFile(null);
-        if (fileRef.current) fileRef.current.value = '';
-        setUploadMsg('Bill uploaded successfully.');
-      } else {
-        setUploadMsg(data.error || 'Upload failed.');
-      }
-    } catch { setUploadMsg('Upload failed. Please try again.'); }
-    setUploading(false);
-  };
+  const siteLine = [po.siteName, po.siteCity].filter(Boolean).join(', ') || (po.linkedSO ? `Linked SO: ${po.linkedSO}` : '—');
 
   const poPayments = payments.filter(p =>
     String(p.poId || p.purchaseOrderId || p.orderId || '') === String(po.orderId) ||
     String(p.reference || '').includes(po.poNumber)
   );
+  const paidTotal = poPayments.reduce((s,p)=>s+(Number(p.amount)||0),0);
 
-  const calcRow = it => {
-    const base = (it.qty || 0) * (it.rate || 0);
-    const gst  = base * (it.gstPercent || 0) / 100;
-    return { base, gst, total: base + gst };
+  const calcAmt = it => {
+    const base = (it.qty||0)*(it.rate||0);
+    return base + base*(it.gstPercent||0)/100;
   };
 
-  const sec = { marginBottom:18 };
-  const secHead = title => (
-    <div style={{ fontSize:12, fontWeight:700, color:P, borderBottom:`2px solid ${P}`, paddingBottom:4, marginBottom:8, fontFamily:F }}>{title}</div>
-  );
-
   return (
-    <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', width:'100%', maxWidth:820, maxHeight:'92vh', display:'flex', flexDirection:'column', borderRadius:10, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:F }}>
+    <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)', marginBottom:14 }}>
 
-        {/* Header */}
-        <div style={{ background:'linear-gradient(135deg,#1E293B,#2563EB)', padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:800, color:'#fff' }}>📋 {po.poNumber}</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 }}>Purchase Order Details</div>
+      {/* Card Header */}
+      <div style={{ padding:'12px 16px', background:'#F8FAFC', borderBottom:`1px solid ${BD}`, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+            <span style={{ fontSize:15, fontWeight:800, color:P, fontFamily:F }}>📋 {po.poNumber}</span>
+            <Badge s={po.status}/>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <StatusBadge status={po.status} />
-            <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', width:28, height:28, borderRadius:6, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+          {/* Site Name — prominent */}
+          <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5 }}>
+            <span style={{ fontSize:12 }}>📍</span>
+            <span style={{ fontSize:12, fontWeight:600, color:'#374151', fontFamily:F }}>{siteLine}</span>
           </div>
         </div>
+        <div style={{ textAlign:'right', flexShrink:0 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:G, fontFamily:F }}>{fmt(po.totalAmount)}</div>
+          <div style={{ fontSize:10, color:'#6B7280', fontFamily:F }}>Date: {fmtD(po.date)} {po.deliveryDate?`· Delivery: ${fmtD(po.deliveryDate)}`:''}</div>
+        </div>
+      </div>
 
-        {/* Body */}
-        <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+      {/* Quick info row */}
+      <div style={{ padding:'8px 16px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'center', borderBottom:`1px solid ${BD}` }}>
+        <div style={{ fontSize:11, color:'#6B7280', fontFamily:F }}>
+          <span style={{ fontWeight:600, color:'#374151' }}>{po.items.length}</span> items
+          {po.paymentTerms && <> · Terms: <span style={{ fontWeight:600, color:'#374151' }}>{po.paymentTerms}</span></>}
+          {paidTotal > 0 && <> · Paid: <span style={{ fontWeight:600, color:G }}>{fmt(paidTotal)}</span></>}
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button onClick={()=>setExpanded(e=>!e)}
+            style={{ padding:'5px 12px', border:`1px solid ${BD}`, background:expanded?P:'#fff', color:expanded?'#fff':'#374151', borderRadius:5, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
+            {expanded ? '▲ Hide Details' : '▼ View Details'}
+          </button>
+          <button onClick={()=>setShowBill(true)}
+            style={{ padding:'5px 14px', border:'none', background:G, color:'#fff', borderRadius:5, cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:F }}>
+            🧾 Create Bill
+          </button>
+        </div>
+      </div>
 
-          {/* PO Summary */}
-          <div style={{ ...sec, display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-            {[
-              ['PO Date',       fmtDate(po.date)],
-              ['Delivery Date', fmtDate(po.deliveryDate)],
-              ['Payment Terms', po.paymentTerms || '—'],
-            ].map(([l,v]) => (
-              <div key={l} style={{ background:'#F8FAFC', border:`1px solid ${BD}`, borderRadius:6, padding:'8px 12px' }}>
-                <div style={{ fontSize:10, color:'#6B7280', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:3 }}>{l}</div>
-                <div style={{ fontSize:13, fontWeight:600, color:'#1E293B' }}>{v}</div>
-              </div>
-            ))}
-          </div>
+      {/* Attachments — always visible */}
+      {po.attachments.length > 0 && (
+        <div style={{ padding:'8px 16px', borderBottom:`1px solid ${BD}`, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', background:'#FAFAFA' }}>
+          <span style={{ fontSize:11, fontWeight:700, color:'#374151', fontFamily:F, whiteSpace:'nowrap' }}>📎 Attachments:</span>
+          {po.attachments.map((a,i)=>(
+            <a key={i} href={dlUrl('attachment', a.fileName)} target="_blank" rel="noreferrer"
+              style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 10px', background:'#EFF6FF', border:`1px solid #BFDBFE`, borderRadius:20, fontSize:11, color:P, textDecoration:'none', fontWeight:600, fontFamily:F }}>
+              {fileIcon(a.fileName)} {a.name || a.fileName} {a.size?<span style={{color:'#93C5FD',fontSize:9}}>({fmtSz(a.size)})</span>:''}
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded: items + bills */}
+      {expanded && (
+        <div style={{ padding:'14px 16px' }}>
 
           {/* Items */}
-          <div style={sec}>
-            {secHead(`Items (${po.items.length})`)}
-            {po.items.length === 0
-              ? <div style={{ padding:12, color:'#94A3B8', fontSize:12, textAlign:'center' }}>No items in this PO.</div>
-              : (
-              <div style={{ overflowX:'auto', border:`1px solid ${BD}`, borderRadius:4 }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-                  <thead>
-                    <tr>
-                      <TH>#</TH>
-                      <TH>Item Name</TH>
-                      <TH>HSN</TH>
-                      <TH right>Qty</TH>
-                      <TH>Unit</TH>
-                      <TH right>Rate ₹</TH>
-                      <TH right>GST%</TH>
-                      <TH right>Amount ₹</TH>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {po.items.map((it, i) => {
-                      const r = calcRow(it);
-                      return (
-                        <tr key={i} style={{ background: i%2===0?'#fff':'#F8FAFC' }}>
-                          <TD>{i+1}</TD>
-                          <TD bold>
-                            {it.itemName}
-                            {it.description && <div style={{ fontSize:10, color:'#6B7280', marginTop:2 }}>{it.description}</div>}
-                          </TD>
-                          <TD>{it.hsnCode || '—'}</TD>
-                          <TD right>{it.qty}</TD>
-                          <TD>{it.unit}</TD>
-                          <TD right>{fmtAmt(it.rate)}</TD>
-                          <TD right>{it.gstPercent}%</TD>
-                          <TD right bold color={P}>{fmtAmt(r.total)}</TD>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background:'#EFF6FF' }}>
-                      <td colSpan={7} style={{ padding:'6px 10px', fontSize:12, fontWeight:700, textAlign:'right', fontFamily:F }}>Grand Total</td>
-                      <td style={{ padding:'6px 10px', fontSize:13, fontWeight:800, textAlign:'right', color:P, fontFamily:F }}>{fmtAmt(po.totalAmount)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* PO Attachments */}
-          <div style={sec}>
-            {secHead(`PO Attachments (${po.attachments.length})`)}
-            {po.attachments.length === 0
-              ? <div style={{ padding:12, color:'#94A3B8', fontSize:12, textAlign:'center' }}>No attachments on this PO.</div>
-              : (
-              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {po.attachments.map((a, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#F8FAFC', border:`1px solid ${BD}`, borderRadius:6 }}>
-                    <span style={{ fontSize:18 }}>📎</span>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12, fontWeight:600, color:'#1E293B' }}>{a.name || a.fileName}</div>
-                      {a.size > 0 && <div style={{ fontSize:10, color:'#6B7280' }}>{fmtSize(a.size)}</div>}
-                    </div>
-                    <a href={downloadUrl('attachment', a.fileName)} target="_blank" rel="noreferrer"
-                      style={{ padding:'5px 12px', background:P, color:'#fff', borderRadius:5, fontSize:11, fontWeight:600, textDecoration:'none', fontFamily:F }}>
-                      ⬇ Download
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Advance Payments */}
-          <div style={sec}>
-            {secHead('Advance Payments')}
-            {poPayments.length === 0
-              ? <div style={{ padding:12, color:'#94A3B8', fontSize:12, textAlign:'center' }}>No advance payments recorded for this PO.</div>
-              : (
-              <table style={{ width:'100%', borderCollapse:'collapse', border:`1px solid ${BD}`, borderRadius:4, overflow:'hidden' }}>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:P, fontFamily:F, marginBottom:6, borderBottom:`1px solid ${BD}`, paddingBottom:3 }}>Items</div>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
                 <thead>
-                  <tr><TH>Date</TH><TH>Description</TH><TH>Mode</TH><TH right>Amount ₹</TH><TH>Status</TH></tr>
+                  <tr style={{ background:P }}>
+                    {['#','Item','HSN','Qty','Unit','Rate','GST%','Amount'].map((h,i)=>(
+                      <th key={i} style={{ padding:'5px 8px', color:'#fff', fontWeight:700, textAlign:i>=3?'right':'left', whiteSpace:'nowrap', borderRight:'1px solid #3B82F6' }}>{h}</th>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
-                  {poPayments.map((p,i)=>(
+                  {po.items.map((it,i)=>(
                     <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
-                      <TD>{fmtDate(p.date||p.createdAt)}</TD>
-                      <TD>{p.description||p.narration||'—'}</TD>
-                      <TD>{p.mode||p.paymentMode||'—'}</TD>
-                      <TD right bold color={G}>{fmtAmt(p.amount)}</TD>
-                      <TD><StatusBadge status={p.status}/></TD>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, color:'#9CA3AF' }}>{i+1}</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, fontWeight:600, color:'#1E293B' }}>
+                        {it.itemName}
+                        {it.description&&<div style={{fontSize:9,color:'#6B7280'}}>{it.description}</div>}
+                      </td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, color:'#6B7280' }}>{it.hsnCode||'—'}</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, textAlign:'right' }}>{it.qty}</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}` }}>{it.unit}</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, textAlign:'right' }}>{fmt(it.rate)}</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, textAlign:'right' }}>{it.gstPercent}%</td>
+                      <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:P }}>{fmt(calcAmt(it))}</td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr style={{ background:'#EFF6FF' }}>
+                    <td colSpan={7} style={{ padding:'5px 8px', fontWeight:700, textAlign:'right', fontSize:12, fontFamily:F }}>Grand Total</td>
+                    <td style={{ padding:'5px 8px', fontWeight:800, textAlign:'right', color:P, fontSize:13, fontFamily:F }}>{fmt(po.totalAmount)}</td>
+                  </tr>
+                </tfoot>
               </table>
-            )}
-          </div>
-
-          {/* Upload Your Bill */}
-          <div style={sec}>
-            {secHead('Upload Your Invoice / Bill')}
-            <div style={{ background:'#FFFBEB', border:'1px dashed #F59E0B', borderRadius:8, padding:'14px 16px', marginBottom:12 }}>
-              <div style={{ fontSize:11, color:'#78350F', marginBottom:10, fontWeight:600 }}>Upload your invoice or bill for this PO. Accepted: PDF, JPG, PNG, Excel, Word</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
-                <input ref={fileRef} type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
-                  onChange={e => setBillFile(e.target.files[0] || null)}
-                  style={{ fontSize:12, fontFamily:F, flex:1, minWidth:0 }}
-                />
-                <button onClick={uploadBill} disabled={!billFile || uploading}
-                  style={{ padding:'6px 18px', background:billFile&&!uploading?G:'#9CA3AF', color:'#fff', border:'none', borderRadius:6, cursor:billFile&&!uploading?'pointer':'default', fontSize:12, fontWeight:700, fontFamily:F, whiteSpace:'nowrap' }}>
-                  {uploading ? 'Uploading…' : '⬆ Upload'}
-                </button>
-              </div>
-              {uploadMsg && <div style={{ marginTop:8, fontSize:11, color: uploadMsg.includes('success') ? G : R, fontWeight:600 }}>{uploadMsg}</div>}
             </div>
-
-            {/* Bills list */}
-            {bills.length > 0 && (
-              <div>
-                <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:6 }}>Your Uploaded Bills ({bills.length})</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                  {bills.map((b, i) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#F0FDF4', border:`1px solid #A7F3D0`, borderRadius:6 }}>
-                      <span style={{ fontSize:18 }}>🧾</span>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:'#065F46' }}>{b.originalName}</div>
-                        <div style={{ fontSize:10, color:'#6B7280' }}>{fmtSize(b.size)} · {fmtDate(b.uploadedAt?.slice(0,10))}</div>
-                      </div>
-                      <a href={downloadUrl('bills', b.fileName)} target="_blank" rel="noreferrer"
-                        style={{ padding:'5px 12px', background:G, color:'#fff', borderRadius:5, fontSize:11, fontWeight:600, textDecoration:'none', fontFamily:F }}>
-                        ⬇ Download
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
+          {/* Submitted Bills */}
+          {bills.length > 0 && (
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:P, fontFamily:F, marginBottom:6, borderBottom:`1px solid ${BD}`, paddingBottom:3 }}>Your Bills ({bills.length})</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {bills.map((b,i)=>(
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#F0FDF4', border:`1px solid #A7F3D0`, borderRadius:6 }}>
+                    <span style={{ fontSize:18 }}>🧾</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#065F46' }}>Invoice #{b.invoiceNo} — {fmtD(b.invoiceDate)}</div>
+                      <div style={{ fontSize:11, color:'#374151', marginTop:2 }}>{b.description || '—'}</div>
+                      <div style={{ fontSize:10, color:'#6B7280', marginTop:1 }}>
+                        Net: {fmt(b.netAmount)} · GST {b.gstPercent}%: {fmt(b.gstAmount)} · <strong>Total: {fmt(b.totalAmount)}</strong>
+                        {b.submittedAt && ` · Submitted: ${fmtD(b.submittedAt?.slice(0,10))}`}
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
+                      <Badge s={b.status||'submitted'}/>
+                      {b.fileName && (
+                        <a href={dlUrl('bills', b.fileName)} target="_blank" rel="noreferrer"
+                          style={{ padding:'4px 10px', background:G, color:'#fff', borderRadius:4, fontSize:10, fontWeight:700, textDecoration:'none', fontFamily:F }}>
+                          ⬇ PDF
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showBill && (
+        <CreateBillModal
+          po={po}
+          token={token}
+          onClose={()=>setShowBill(false)}
+          onCreated={bill=>{setBills(prev=>[...prev,bill]);setShowBill(false);setExpanded(true);}}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════ ACTIVATION PENDING ════════════════════════ */
+function ActivationPending({ vendor, vendorLogout }) {
+  return (
+    <div style={{ fontFamily:F, background:'linear-gradient(135deg,#1E293B,#2563EB)', minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <div style={{ background:'#fff', borderRadius:16, boxShadow:'0 24px 60px rgba(0,0,0,0.3)', width:'100%', maxWidth:480, overflow:'hidden' }}>
+        <div style={{ background:'linear-gradient(135deg,#1E293B,#2563EB)', padding:'24px 28px' }}>
+          <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', fontWeight:600, letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:6 }}>Epsilon Enterprise</div>
+          <div style={{ fontSize:20, fontWeight:800, color:'#fff' }}>Vendor Portal</div>
+        </div>
+        <div style={{ padding:'32px 28px', textAlign:'center' }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>⏳</div>
+          <div style={{ fontSize:18, fontWeight:800, color:'#1E293B', marginBottom:8 }}>Activation In Progress</div>
+          <div style={{ fontSize:13, color:'#64748B', lineHeight:1.7, marginBottom:20 }}>
+            Welcome, <strong>{vendor?.name}</strong>! Your registration is under review. You'll be notified once activated.
+          </div>
+          {vendor?.trackingNo && (
+            <div style={{ background:'#EFF6FF', border:'2px dashed #93C5FD', borderRadius:8, padding:'14px', marginBottom:20 }}>
+              <div style={{ fontSize:10, color:P, fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', marginBottom:4 }}>Tracking No.</div>
+              <div style={{ fontSize:18, fontWeight:900, color:'#1D4ED8', letterSpacing:3 }}>{vendor.trackingNo}</div>
+            </div>
+          )}
+          <button onClick={vendorLogout} style={{ width:'100%', padding:'10px 0', borderRadius:8, cursor:'pointer', background:'#fff', border:'1px solid #D1D5DB', color:'#374151', fontSize:13, fontWeight:600, fontFamily:F }}>Sign Out</button>
         </div>
       </div>
     </div>
@@ -299,8 +353,6 @@ export default function VendorPortal() {
   const [pos,      setPOs]      = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [selectedPO, setSelectedPO] = useState(null);
-
   const token = localStorage.getItem('vendorToken') || '';
 
   useEffect(() => {
@@ -310,147 +362,90 @@ export default function VendorPortal() {
       axios.get('/api/vendor-portal/purchase-orders', { headers }),
       axios.get('/api/vendor-portal/payments',        { headers }),
     ])
-      .then(([poRes, payRes]) => { setPOs(poRes.data || []); setPayments(payRes.data || []); })
+      .then(([r1,r2])=>{ setPOs(r1.data||[]); setPayments(r2.data||[]); })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(()=>setLoading(false));
   }, [token]);
 
-  const kpis = {
-    totalPOs:  pos.length,
-    pending:   pos.filter(p => p.status === 'pending' || p.status === 'draft').length,
-    completed: pos.filter(p => p.status === 'completed' || p.status === 'approved').length,
-    totalPaid: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
-  };
+  if (vendor?.pending) return <ActivationPending vendor={vendor} vendorLogout={vendorLogout}/>;
 
-  if (vendor?.pending) return <ActivationPending vendor={vendor} vendorLogout={vendorLogout} />;
+  const kpis = [
+    { label:'My POs',       val: pos.length,                                        icon:'📋', color:P        },
+    { label:'Pending',      val: pos.filter(p=>p.status==='pending'||p.status==='draft').length, icon:'⏳', color:O },
+    { label:'Completed',    val: pos.filter(p=>p.status==='completed'||p.status==='approved').length, icon:'✅', color:G },
+    { label:'Amt Received', val: `₹ ${payments.reduce((s,p)=>s+(Number(p.amount)||0),0).toLocaleString('en-IN')}`, icon:'💰', color:'#7C3AED' },
+  ];
 
   return (
     <div style={{ fontFamily:F, background:BG, minHeight:'100vh', display:'flex', flexDirection:'column' }}>
 
-      {selectedPO && (
-        <PODetailPanel
-          po={selectedPO}
-          token={token}
-          payments={payments}
-          onClose={() => setSelectedPO(null)}
-        />
-      )}
-
       {/* Header */}
-      <div style={{ background:'linear-gradient(135deg,#1E293B,#2563EB)', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:'0 2px 8px rgba(0,0,0,0.2)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ background:'rgba(255,255,255,0.15)', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:700, color:'#fff' }}>🏢 Epsilon Enterprise</div>
-          <div style={{ height:20, width:1, background:'rgba(255,255,255,0.2)' }} />
-          <div style={{ fontSize:13, color:'rgba(255,255,255,0.8)', fontWeight:500 }}>Vendor Portal</div>
-        </div>
+      <div style={{ background:'linear-gradient(135deg,#1E293B,#1D4ED8)', padding:'11px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#fff', background:'rgba(255,255,255,0.12)', padding:'5px 10px', borderRadius:6 }}>🏢 Epsilon Enterprise</div>
+          <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)' }}>Vendor Portal</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ textAlign:'right' }}>
             <div style={{ fontSize:13, fontWeight:700, color:'#fff' }}>{vendor?.name}</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)' }}>Vendor ID: {vendor?.vendorId}</div>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.6)' }}>ID: {vendor?.vendorId}</div>
           </div>
-          <button onClick={vendorLogout} style={{ padding:'6px 14px', borderRadius:6, cursor:'pointer', background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', fontSize:12, fontWeight:600, fontFamily:F }}>Logout</button>
+          <button onClick={vendorLogout} style={{ padding:'5px 12px', borderRadius:6, cursor:'pointer', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', fontSize:12, fontFamily:F }}>Logout</button>
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', background:'#fff', borderBottom:`1px solid ${BD}` }}>
-        {[
-          { label:'My PO Orders',   value:kpis.totalPOs,  color:P,        icon:'📋' },
-          { label:'Pending',        value:kpis.pending,   color:'#D97706', icon:'⏳' },
-          { label:'Completed',      value:kpis.completed, color:G,         icon:'✅' },
-          { label:'Total Received', value:`₹ ${kpis.totalPaid.toLocaleString('en-IN')}`, color:'#7C3AED', icon:'💰' },
-        ].map((k, i) => (
-          <div key={i} style={{ padding:'14px 20px', borderRight: i<3?`1px solid ${BD}`:'none' }}>
-            <div style={{ fontSize:11, color:'#6B7280', fontWeight:600, marginBottom:4 }}>{k.icon} {k.label}</div>
-            <div style={{ fontSize:22, fontWeight:800, color:k.color }}>{k.value}</div>
+      {/* KPI */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', background:'#fff', borderBottom:`1px solid ${BD}`, flexShrink:0 }}>
+        {kpis.map((k,i)=>(
+          <div key={i} style={{ padding:'12px 18px', borderRight:i<3?`1px solid ${BD}`:'none' }}>
+            <div style={{ fontSize:11, color:'#6B7280', fontWeight:600 }}>{k.icon} {k.label}</div>
+            <div style={{ fontSize:20, fontWeight:800, color:k.color, marginTop:2 }}>{k.val}</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div style={{ background:'#fff', borderBottom:`1px solid ${BD}`, display:'flex', padding:'0 20px' }}>
-        {[
-          { id:'pos',      label:'📋 Purchase Orders' },
-          { id:'payments', label:'💰 Payments' },
-          { id:'profile',  label:'👤 My Profile' },
-        ].map(t => (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            padding:'10px 18px', cursor:'pointer', fontFamily:F, fontWeight: tab===t.id?700:500,
-            fontSize:12.5, background:'transparent', border:'none',
-            borderBottom: tab===t.id?`2px solid ${P}`:'2px solid transparent',
-            color: tab===t.id?P:'#64748b', marginBottom:-1,
-          }}>{t.label}</button>
+      <div style={{ background:'#fff', borderBottom:`1px solid ${BD}`, display:'flex', padding:'0 20px', flexShrink:0 }}>
+        {[{id:'pos',label:'📋 Purchase Orders'},{id:'payments',label:'💰 Payments'},{id:'profile',label:'👤 Profile'}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:'10px 16px', cursor:'pointer', fontFamily:F, fontWeight:tab===t.id?700:500, fontSize:12, background:'transparent', border:'none', borderBottom:tab===t.id?`2px solid ${P}`:'2px solid transparent', color:tab===t.id?P:'#64748B', marginBottom:-1 }}>{t.label}</button>
         ))}
       </div>
 
-      {/* Content */}
-      <div style={{ flex:1, padding:'16px 20px' }}>
+      {/* Body */}
+      <div style={{ flex:1, padding:'16px 20px', overflowY:'auto' }}>
         {loading ? (
-          <div style={{ textAlign:'center', padding:'60px', color:'#94A3B8', fontSize:14 }}>Loading your data…</div>
+          <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:14 }}>Loading…</div>
         ) : (
           <>
-            {/* Purchase Orders */}
+            {/* PO Cards */}
             {tab === 'pos' && (
-              pos.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'60px', color:'#94A3B8', fontSize:13 }}>No purchase orders found for your account.</div>
-              ) : (
-                <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <div style={{ padding:'10px 14px', background:'#F8FAFC', borderBottom:`1px solid ${BD}`, fontSize:11, color:'#6B7280', fontFamily:F }}>
-                    Click <strong>View Details</strong> on any PO to see items, download spec attachments, and upload your invoice.
-                  </div>
-                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                    <thead>
-                      <tr>
-                        {['PO Number','Date','Total Amount','Status',''].map(h => (
-                          <th key={h} style={{ padding:'9px 12px', background:P, color:'#fff', fontSize:11, fontWeight:700, textAlign: h==='Total Amount'?'right':'left', fontFamily:F }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pos.map((po, i) => (
-                        <tr key={i} style={{ background: i%2===0?'#fff':'#FAFBFC' }}
-                          onMouseEnter={e => e.currentTarget.style.background='#EFF6FF'}
-                          onMouseLeave={e => e.currentTarget.style.background=i%2===0?'#fff':'#FAFBFC'}>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}`, fontWeight:700, color:P }}>{po.poNumber}</td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}>{fmtDate(po.date)}</td>
-                          <td style={{ padding:'10px 12px', fontSize:13, fontFamily:F, borderBottom:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:G }}>{fmtAmt(po.totalAmount)}</td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}><StatusBadge status={po.status} /></td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}`, textAlign:'center' }}>
-                            <button onClick={() => setSelectedPO(po)}
-                              style={{ padding:'5px 14px', background:P, color:'#fff', border:'none', borderRadius:5, cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:F }}>
-                              View Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
+              pos.length === 0
+                ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No purchase orders found for your account.</div>
+                : pos.map(po => <POCard key={po.orderId} po={po} token={token} payments={payments}/>)
             )}
 
             {/* Payments */}
             {tab === 'payments' && (
-              payments.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'60px', color:'#94A3B8', fontSize:13 }}>No payment records found.</div>
-              ) : (
-                <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden', boxShadow:'0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              payments.length === 0
+                ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No payment records found.</div>
+                : (
+                <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                     <thead>
                       <tr>
-                        {['Date','Description','Amount','Mode','Status'].map(h => (
+                        {['Date','Description','Amount','Mode','Status'].map(h=>(
                           <th key={h} style={{ padding:'9px 12px', background:P, color:'#fff', fontSize:11, fontWeight:700, textAlign:'left', fontFamily:F }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {payments.map((p, i) => (
-                        <tr key={i} style={{ background: i%2===0?'#fff':'#FAFBFC' }}>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}>{fmtDate(p.date || p.createdAt)}</td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}>{p.description || p.narration || '—'}</td>
-                          <td style={{ padding:'10px 12px', fontSize:13, fontFamily:F, borderBottom:`1px solid ${BD}`, fontWeight:700, color:G }}>₹ {Number(p.amount || 0).toLocaleString('en-IN')}</td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}>{p.mode || p.paymentMode || '—'}</td>
-                          <td style={{ padding:'10px 12px', fontSize:12, fontFamily:F, borderBottom:`1px solid ${BD}` }}><StatusBadge status={p.status} /></td>
+                      {payments.map((p,i)=>(
+                        <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{fmtD(p.date||p.createdAt)}</td>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.description||p.narration||'—'}</td>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.mode||p.paymentMode||'—'}</td>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}><Badge s={p.status}/></td>
                         </tr>
                       ))}
                     </tbody>
@@ -461,20 +456,16 @@ export default function VendorPortal() {
 
             {/* Profile */}
             {tab === 'profile' && (
-              <div style={{ maxWidth:500, background:'#fff', borderRadius:10, border:`1px solid ${BD}`, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+              <div style={{ maxWidth:480, background:'#fff', borderRadius:10, border:`1px solid ${BD}`, overflow:'hidden' }}>
                 <div style={{ background:P, padding:'14px 18px' }}>
                   <div style={{ fontSize:14, fontWeight:700, color:'#fff' }}>{vendor?.name}</div>
                   <div style={{ fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 }}>Vendor ID: {vendor?.vendorId}</div>
                 </div>
                 <div style={{ padding:'14px 18px' }}>
-                  {[
-                    ['Email',      vendor?.email],
-                    ['Company ID', vendor?.companyId],
-                    ['Vendor ID',  vendor?.vendorId],
-                  ].map(([label, value]) => (
-                    <div key={label} style={{ display:'flex', padding:'8px 0', borderBottom:`1px solid #F1F5F9` }}>
-                      <span style={{ fontSize:12, color:'#6B7280', fontWeight:600, minWidth:130 }}>{label}</span>
-                      <span style={{ fontSize:12, color:'#1E293B', fontWeight:500 }}>{value || '—'}</span>
+                  {[['Email',vendor?.email],['Company ID',vendor?.companyId],['Vendor ID',vendor?.vendorId]].map(([l,v])=>(
+                    <div key={l} style={{ display:'flex', padding:'8px 0', borderBottom:`1px solid #F1F5F9` }}>
+                      <span style={{ fontSize:12, color:'#6B7280', fontWeight:600, minWidth:130 }}>{l}</span>
+                      <span style={{ fontSize:12, color:'#1E293B' }}>{v||'—'}</span>
                     </div>
                   ))}
                 </div>

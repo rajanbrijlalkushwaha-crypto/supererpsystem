@@ -441,18 +441,24 @@ router.get('/purchase-orders', requireVendorAuth, (req, res) => {
       date:         po.poDate || po.date || po.orderDate || '',
       deliveryDate: po.deliveryDate || '',
       paymentTerms: po.paymentTerms || '',
+      siteName:     po.deliveryAddr || po.deliveryAddress || po.shippingAddr || po.deliveryInstructions || '',
+      siteCity:     po.shipFromCity || '',
+      linkedSO:     po.linkedSalesOrderId || '',
       totalAmount:  po.grandTotal || po.totalAmount || po.total || 0,
       subTotal:     po.subTotal || 0,
       totalGST:     po.totalGST || 0,
+      cgst:         po.cgst || 0,
+      sgst:         po.sgst || 0,
+      igst:         po.igst || 0,
       status:       po.status || '',
       items: (po.items || []).map(it => ({
-        itemName:   it.itemName   || '',
-        description:it.description|| '',
-        hsnCode:    it.hsnCode    || '',
-        qty:        parseFloat(it.qty)  || 0,
-        unit:       it.unit       || 'NOS',
-        rate:       parseFloat(it.rate) || 0,
-        gstPercent: parseFloat(it.gstPercent) || 0,
+        itemName:    it.itemName    || '',
+        description: it.description || '',
+        hsnCode:     it.hsnCode     || '',
+        qty:         parseFloat(it.qty)       || 0,
+        unit:        it.unit        || 'NOS',
+        rate:        parseFloat(it.rate)      || 0,
+        gstPercent:  parseFloat(it.gstPercent)|| 0,
       })),
       attachments: (po.attachments || po.documents || []).map(a => ({
         name:     a.name || a.fileName,
@@ -460,10 +466,19 @@ router.get('/purchase-orders', requireVendorAuth, (req, res) => {
         size:     a.size || 0,
       })),
       vendorBills: (po.vendorBills || []).map(b => ({
-        originalName: b.originalName,
-        fileName:     b.fileName,
-        size:         b.size || 0,
-        uploadedAt:   b.uploadedAt,
+        billId:       b.billId,
+        invoiceNo:    b.invoiceNo    || '',
+        invoiceDate:  b.invoiceDate  || '',
+        description:  b.description  || '',
+        netAmount:    b.netAmount    || 0,
+        gstPercent:   b.gstPercent   || 0,
+        gstAmount:    b.gstAmount    || 0,
+        totalAmount:  b.totalAmount  || 0,
+        fileName:     b.fileName     || '',
+        originalName: b.originalName || '',
+        size:         b.size         || 0,
+        submittedAt:  b.submittedAt  || b.uploadedAt || '',
+        status:       b.status       || 'submitted',
       })),
     }));
     res.json(safePos);
@@ -483,26 +498,58 @@ router.get('/purchase-orders/:orderId/attachment/:fileName', authByTokenOrHeader
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* ── POST /api/vendor-portal/purchase-orders/:orderId/upload-bill ── */
-router.post('/purchase-orders/:orderId/upload-bill', requireVendorAuth, billUpload.single('bill'), (req, res) => {
+/* ── POST /api/vendor-portal/purchase-orders/:orderId/create-bill ── */
+router.post('/purchase-orders/:orderId/create-bill', requireVendorAuth, billUpload.single('billFile'), (req, res) => {
   try {
     const { companyId, vendorId } = req.vendor;
     const { orderId } = req.params;
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+    const { invoiceNo, invoiceDate, description, netAmount, gstPercent, notes } = req.body;
+    if (!invoiceNo || !invoiceDate || !netAmount) return res.status(400).json({ error: 'Invoice No, Date and Net Amount are required.' });
 
     const po = jstore.readOne('PurchaseOrder', companyId, orderId);
     if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
 
     const dir = billsPath(companyId, orderId);
     fs.mkdirSync(dir, { recursive: true });
-    const fileName = `${Date.now()}-${req.file.originalname.replace(/[\\/:*?"<>|]/g, '_')}`;
-    fs.writeFileSync(path.join(dir, fileName), req.file.buffer);
 
-    const bill = { originalName: req.file.originalname, fileName, size: req.file.size, uploadedAt: new Date().toISOString() };
+    const net  = parseFloat(netAmount) || 0;
+    const gstP = parseFloat(gstPercent) || 0;
+    const gstA = parseFloat((net * gstP / 100).toFixed(2));
+    const total = parseFloat((net + gstA).toFixed(2));
+    const billId = `BILL-${Date.now()}`;
+    const now  = new Date().toISOString();
+
+    let fileName = '', originalName = '', fileSize = 0;
+    if (req.file) {
+      fileName     = `${Date.now()}-${req.file.originalname.replace(/[\\/:*?"<>|]/g, '_')}`;
+      originalName = req.file.originalname;
+      fileSize     = req.file.size;
+      fs.writeFileSync(path.join(dir, fileName), req.file.buffer);
+    }
+
+    const bill = {
+      billId, invoiceNo, invoiceDate, description: description || '', notes: notes || '',
+      netAmount: net, gstPercent: gstP, gstAmount: gstA, totalAmount: total,
+      fileName, originalName, size: fileSize,
+      submittedAt: now, status: 'submitted',
+    };
     po.vendorBills = [...(po.vendorBills || []), bill];
     saveJson(poJsonPath(companyId, orderId), po);
 
     res.json({ success: true, bill });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── GET /api/vendor-portal/purchase-orders/:orderId/bills/:fileName ── */
+router.get('/purchase-orders/:orderId/bills/:fileName', authByTokenOrHeader, (req, res) => {
+  try {
+    const { companyId, vendorId } = req.vendor;
+    const { orderId, fileName } = req.params;
+    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
+    if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
+    const fp = path.join(billsPath(companyId, orderId), fileName);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found.' });
+    res.download(fp, fileName);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
