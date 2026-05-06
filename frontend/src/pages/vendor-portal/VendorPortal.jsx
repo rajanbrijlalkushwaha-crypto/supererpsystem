@@ -91,10 +91,11 @@ export default function VendorPortal() {
   }, []);
 
   const kpis = {
-    totalPOs:  pos.length,
-    pending:   pos.filter(p => p.status === 'pending' || p.status === 'draft').length,
-    completed: pos.filter(p => p.status === 'completed' || p.status === 'approved').length,
-    totalPaid: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
+    totalPOs:    pos.length,
+    pending:     pos.filter(p => p.status === 'pending' || p.status === 'draft').length,
+    completed:   pos.filter(p => p.status === 'completed' || p.status === 'approved').length,
+    totalPoAmt:  pos.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0),
+    totalPaid:   payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
   };
 
   if (vendor?.pending) return <ActivationPending vendor={vendor} vendorLogout={vendorLogout} />;
@@ -165,16 +166,15 @@ export default function VendorPortal() {
                   <table style={{ width:'100%', borderCollapse:'collapse' }}>
                     <thead>
                       <tr>
-                        {['PO Number','Date','Items','Total Amount','Status'].map(h => <th key={h} style={th}>{h}</th>)}
+                        {['PO Number','Date','Total Amount','Status'].map(h => <th key={h} style={th}>{h}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {pos.map((po, i) => (
                         <tr key={i} style={{ background: i%2===0?'#fff':'#FAFBFC' }}>
-                          <td style={{ ...td, fontWeight:700, color:P }}>{po.poNumber || po.orderId || po.id || '—'}</td>
-                          <td style={td}>{po.date || po.createdAt?.slice(0,10) || '—'}</td>
-                          <td style={td}>{(po.items || po.lineItems || []).length} items</td>
-                          <td style={{ ...td, fontWeight:600 }}>₹ {Number(po.totalAmount || po.total || 0).toLocaleString('en-IN')}</td>
+                          <td style={{ ...td, fontWeight:700, color:P }}>{po.poNumber || po.orderId || '—'}</td>
+                          <td style={td}>{po.date ? po.date.slice(0,10) : '—'}</td>
+                          <td style={{ ...td, fontWeight:700, color:'#059669', fontSize:13 }}>₹ {Number(po.totalAmount || 0).toLocaleString('en-IN')}</td>
                           <td style={td}><StatusBadge status={po.status} /></td>
                         </tr>
                       ))}

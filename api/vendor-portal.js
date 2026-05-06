@@ -406,7 +406,7 @@ router.post('/reject/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-/* ── GET /api/vendor-portal/purchase-orders — vendor sees only their POs ── */
+/* ── GET /api/vendor-portal/purchase-orders — vendor sees only PO number + amount ── */
 router.get('/purchase-orders', requireVendorAuth, (req, res) => {
   try {
     const { companyId, vendorId } = req.vendor;
@@ -415,7 +415,14 @@ router.get('/purchase-orders', requireVendorAuth, (req, res) => {
       String(po.vendorId) === String(vendorId) ||
       String(po.vendorCode) === String(vendorId)
     );
-    res.json(myPOs);
+    const safePos = myPOs.map(po => ({
+      orderId:     po.orderId,
+      poNumber:    po.poNumber || po.orderNo || po.orderId,
+      date:        po.date || po.orderDate || po.createdAt || '',
+      totalAmount: po.grandTotal || po.totalAmount || po.total || 0,
+      status:      po.status || '',
+    }));
+    res.json(safePos);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
