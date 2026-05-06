@@ -503,53 +503,79 @@ router.post('/purchase-orders/:orderId/create-bill', requireVendorAuth, billUplo
   try {
     const { companyId, vendorId } = req.vendor;
     const { orderId } = req.params;
-    const { invoiceNo, invoiceDate, description, netAmount, gstPercent, notes } = req.body;
-    if (!invoiceNo || !invoiceDate || !netAmount) return res.status(400).json({ error: 'Invoice No, Date and Net Amount are required.' });
+    const { invoiceNo, invoiceDate, description, notes } = req.body;
+    if (!invoiceNo || !invoiceDate) return res.status(400).json({ error: 'Invoice No and Date are required.' });
 
     const po = jstore.readOne('PurchaseOrder', companyId, orderId);
     if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
 
+    // Parse bill items from form (JSON string)
+    let billItems = [];
+    try { billItems = JSON.parse(req.body.billItems || '[]'); } catch { billItems = []; }
+    if (!billItems.length) return res.status(400).json({ error: 'At least one item with quantity is required.' });
+
+    // Check already-billed qty per item across all existing bills
+    const billedMap = {};
+    (po.vendorBills || []).forEach(b => {
+      (b.billItems || []).forEach(bi => {
+        const k = (bi.itemName || '').toLowerCase().trim();
+        billedMap[k] = (billedMap[k] || 0) + (parseFloat(bi.billedQty) || 0);
+      });
+    });
+
+    // Check if all PO items already fully billed
+    const poItems = po.items || [];
+    const allFullyCovered = poItems.length > 0 && poItems.every(it => {
+      const k = (it.itemName || '').toLowerCase().trim();
+      return (billedMap[k] || 0) >= (parseFloat(it.qty) || 0);
+    });
+    if (allFullyCovered) return res.status(400).json({ error: 'All PO items have already been fully billed. No further bill can be submitted.' });
+
+    // Calculate totals from billItems
+    let netAmount = 0, gstAmount = 0;
+    const enriched = billItems.map(bi => {
+      const rate    = parseFloat(bi.rate)       || 0;
+      const qty     = parseFloat(bi.billedQty)  || 0;
+      const gstP    = parseFloat(bi.gstPercent) || 0;
+      const lineNet = parseFloat((rate * qty).toFixed(2));
+      const lineGst = parseFloat((lineNet * gstP / 100).toFixed(2));
+      netAmount  += lineNet;
+      gstAmount  += lineGst;
+      return { ...bi, billedQty: qty, lineNet, lineGst, lineTotal: lineNet + lineGst };
+    });
+    netAmount  = parseFloat(netAmount.toFixed(2));
+    gstAmount  = parseFloat(gstAmount.toFixed(2));
+    const totalAmount = parseFloat((netAmount + gstAmount).toFixed(2));
+
     const dir = billsPath(companyId, orderId);
     fs.mkdirSync(dir, { recursive: true });
 
-    const net  = parseFloat(netAmount) || 0;
-    const gstP = parseFloat(gstPercent) || 0;
-    const gstA = parseFloat((net * gstP / 100).toFixed(2));
-    const total = parseFloat((net + gstA).toFixed(2));
     const billId = `BILL-${Date.now()}`;
-    const now  = new Date().toISOString();
+    const now    = new Date().toISOString();
 
     let fileName = '', originalName = '', fileSize = 0;
     if (req.file) {
-      fileName     = `${Date.now()}-${req.file.originalname.replace(/[\\/:*?"<>|]/g, '_')}`;
+      // sanitize: no spaces, no special chars
+      const safe = req.file.originalname.replace(/[\\/:*?"<>|\s]/g, '_');
+      fileName     = `${Date.now()}-${safe}`;
       originalName = req.file.originalname;
       fileSize     = req.file.size;
       fs.writeFileSync(path.join(dir, fileName), req.file.buffer);
     }
 
     const bill = {
-      billId, invoiceNo, invoiceDate, description: description || '', notes: notes || '',
-      netAmount: net, gstPercent: gstP, gstAmount: gstA, totalAmount: total,
+      billId, invoiceNo, invoiceDate,
+      description: description || '', notes: notes || '',
+      billItems: enriched,
+      netAmount, gstAmount, totalAmount,
       fileName, originalName, size: fileSize,
       submittedAt: now, status: 'submitted',
+      uploadedBy: 'vendor',
     };
     po.vendorBills = [...(po.vendorBills || []), bill];
     saveJson(poJsonPath(companyId, orderId), po);
 
     res.json({ success: true, bill });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-/* ── GET /api/vendor-portal/purchase-orders/:orderId/bills/:fileName ── */
-router.get('/purchase-orders/:orderId/bills/:fileName', authByTokenOrHeader, (req, res) => {
-  try {
-    const { companyId, vendorId } = req.vendor;
-    const { orderId, fileName } = req.params;
-    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
-    if (!po || !vendorOwnsPO(po, vendorId)) return res.status(403).json({ error: 'Access denied.' });
-    const fp = path.join(billsPath(companyId, orderId), fileName);
-    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found.' });
-    res.download(fp, fileName);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

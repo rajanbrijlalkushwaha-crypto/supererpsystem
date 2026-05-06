@@ -31,29 +31,77 @@ const fileIcon = n => { const e=(n||'').split('.').pop().toLowerCase(); return e
 
 /* ─── Create Bill Modal ─── */
 function CreateBillModal({ po, token, onClose, onCreated }) {
-  const [form, setForm]   = useState({ invoiceNo:'', invoiceDate:'', description:'', netAmount:'', gstPercent: po.items[0]?.gstPercent ?? 18, notes:'' });
-  const [file, setFile]   = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr]     = useState('');
+  // build already-billed qty map from existing bills
+  const billedMap = {};
+  (po.vendorBills || []).forEach(b => {
+    (b.billItems || []).forEach(bi => {
+      const k = (bi.itemName || '').toLowerCase().trim();
+      billedMap[k] = (billedMap[k] || 0) + (parseFloat(bi.billedQty) || 0);
+    });
+  });
+
+  // initialise rows — one per PO item, pre-filled with remaining qty
+  const initRows = po.items.map(it => {
+    const k = (it.itemName || '').toLowerCase().trim();
+    const alreadyBilled = billedMap[k] || 0;
+    const remaining = Math.max(0, (parseFloat(it.qty) || 0) - alreadyBilled);
+    return { itemName: it.itemName, hsnCode: it.hsnCode || '', poQty: it.qty, unit: it.unit || 'NOS', rate: it.rate, gstPercent: it.gstPercent, alreadyBilled, billedQty: remaining };
+  });
+
+  const allCovered = po.items.length > 0 && po.items.every(it => {
+    const k = (it.itemName || '').toLowerCase().trim();
+    return (billedMap[k] || 0) >= (parseFloat(it.qty) || 0);
+  });
+
+  const [invoiceNo,   setInvoiceNo]   = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [description, setDescription]= useState('');
+  const [notes,       setNotes]       = useState('');
+  const [rows,        setRows]        = useState(initRows);
+  const [file,        setFile]        = useState(null);
+  const [saving,      setSaving]      = useState(false);
+  const [err,         setErr]         = useState('');
   const fileRef = useRef();
 
-  const net   = parseFloat(form.netAmount) || 0;
-  const gstP  = parseFloat(form.gstPercent) || 0;
-  const gstA  = parseFloat((net * gstP / 100).toFixed(2));
-  const total = parseFloat((net + gstA).toFixed(2));
+  const setQty = (i, v) => setRows(p => p.map((r,idx) => idx===i ? {...r, billedQty: v} : r));
 
-  const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // calculate totals from rows
+  const totals = rows.reduce((acc, r) => {
+    const qty  = parseFloat(r.billedQty) || 0;
+    const rate = parseFloat(r.rate)      || 0;
+    const gstP = parseFloat(r.gstPercent)|| 0;
+    const net  = qty * rate;
+    const gst  = net * gstP / 100;
+    acc.net  += net;
+    acc.gst  += gst;
+    acc.total+= net + gst;
+    return acc;
+  }, { net:0, gst:0, total:0 });
 
   const submit = async () => {
-    if (!form.invoiceNo.trim())   { setErr('Invoice number is required.'); return; }
-    if (!form.invoiceDate)        { setErr('Invoice date is required.'); return; }
-    if (!net)                     { setErr('Net amount is required.'); return; }
+    if (!invoiceNo.trim()) { setErr('Invoice number is required.'); return; }
+    if (!invoiceDate)      { setErr('Invoice date is required.'); return; }
+    const hasQty = rows.some(r => parseFloat(r.billedQty) > 0);
+    if (!hasQty) { setErr('Enter qty for at least one item.'); return; }
+    // Validate no item exceeds remaining
+    for (const r of rows) {
+      const max = (parseFloat(r.poQty) || 0) - (r.alreadyBilled || 0);
+      if ((parseFloat(r.billedQty) || 0) > max + 0.0001) {
+        setErr(`Qty for "${r.itemName}" exceeds remaining balance (${max} ${r.unit}).`);
+        return;
+      }
+    }
     setSaving(true); setErr('');
     try {
+      const billItems = rows
+        .filter(r => parseFloat(r.billedQty) > 0)
+        .map(r => ({ itemName:r.itemName, hsnCode:r.hsnCode, billedQty:parseFloat(r.billedQty), unit:r.unit, rate:parseFloat(r.rate)||0, gstPercent:parseFloat(r.gstPercent)||0 }));
       const fd = new FormData();
-      Object.entries(form).forEach(([k,v]) => fd.append(k, v));
-      fd.append('gstAmount', gstA);
-      fd.append('totalAmount', total);
+      fd.append('invoiceNo',   invoiceNo);
+      fd.append('invoiceDate', invoiceDate);
+      fd.append('description', description);
+      fd.append('notes',       notes);
+      fd.append('billItems',   JSON.stringify(billItems));
       if (file) fd.append('billFile', file);
       const r = await fetch(`/api/vendor-portal/purchase-orders/${po.orderId}/create-bill`, {
         method: 'POST',
@@ -61,25 +109,36 @@ function CreateBillModal({ po, token, onClose, onCreated }) {
         body: fd,
       });
       const data = await r.json();
-      if (data.success) { onCreated(data.bill); }
+      if (data.success) onCreated(data.bill);
       else setErr(data.error || 'Failed to submit bill.');
     } catch { setErr('Network error. Please try again.'); }
     setSaving(false);
   };
 
-  const inp = (k, type='text', placeholder='') => (
-    <input type={type} value={form[k]} onChange={e=>setF(k,e.target.value)} placeholder={placeholder}
-      style={{ width:'100%', height:32, padding:'0 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, boxSizing:'border-box', outline:'none' }}
-      onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}
-    />
+  const inpSt = { height:30, padding:'0 8px', border:`1px solid ${BD}`, borderRadius:4, fontSize:12, fontFamily:F, outline:'none', width:'100%', boxSizing:'border-box' };
+  const lbl = (t, req) => <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginBottom:3 }}>{t}{req&&<span style={{color:R}}> *</span>}</div>;
+
+  if (allCovered) return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', width:'100%', maxWidth:440, borderRadius:10, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.35)', fontFamily:F }}>
+        <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>🧾 Create Bill</div>
+          <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', width:28, height:28, borderRadius:6, cursor:'pointer', fontSize:16 }}>✕</button>
+        </div>
+        <div style={{ padding:'28px 24px', textAlign:'center' }}>
+          <div style={{ fontSize:36, marginBottom:12 }}>✅</div>
+          <div style={{ fontSize:14, fontWeight:700, color:'#065F46', marginBottom:8 }}>All Items Fully Billed</div>
+          <div style={{ fontSize:12, color:'#374151', lineHeight:1.7 }}>All quantities for this PO have already been billed. No further bill can be submitted.</div>
+          <button onClick={onClose} style={{ marginTop:18, padding:'8px 24px', background:P, color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:F }}>Close</button>
+        </div>
+      </div>
+    </div>
   );
-  const lbl = (t, req) => <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginBottom:4 }}>{t}{req&&<span style={{color:R}}> *</span>}</div>;
-  const row2 = (children) => <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>{children}</div>;
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', width:'100%', maxWidth:560, borderRadius:10, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.35)', fontFamily:F }}>
-        <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ background:'#fff', width:'100%', maxWidth:680, maxHeight:'92vh', display:'flex', flexDirection:'column', borderRadius:10, overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.35)', fontFamily:F }}>
+        <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, padding:'13px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <div>
             <div style={{ fontSize:14, fontWeight:800, color:'#fff' }}>🧾 Create Bill / Invoice</div>
             <div style={{ fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 }}>for {po.poNumber}</div>
@@ -87,68 +146,95 @@ function CreateBillModal({ po, token, onClose, onCreated }) {
           <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)', color:'#fff', width:28, height:28, borderRadius:6, cursor:'pointer', fontSize:16 }}>✕</button>
         </div>
 
-        <div style={{ padding:'18px 20px', display:'flex', flexDirection:'column', gap:12 }}>
-          {row2(
-            <>
-              <div>{lbl('Invoice No.', true)}{inp('invoiceNo','text','e.g. INV-2026-001')}</div>
-              <div>{lbl('Invoice Date', true)}{inp('invoiceDate','date')}</div>
-            </>
-          )}
-
-          <div>{lbl('Description / Work Done', false)}
-            <textarea value={form.description} onChange={e=>setF('description',e.target.value)} placeholder="Describe the goods / work supplied…" rows={2}
-              style={{ width:'100%', padding:'6px 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}
-              onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}/>
+        <div style={{ flex:1, overflowY:'auto', padding:'16px 20px', display:'flex', flexDirection:'column', gap:12 }}>
+          {/* Invoice header */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div>{lbl('Invoice No.',true)}<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="e.g. INV-2026-001" style={inpSt}/></div>
+            <div>{lbl('Invoice Date',true)}<input type="date" value={invoiceDate} onChange={e=>setInvoiceDate(e.target.value)} style={inpSt}/></div>
           </div>
 
-          {row2(
-            <>
-              <div>{lbl('Net / Taxable Amount (₹)', true)}{inp('netAmount','number','0.00')}</div>
-              <div>
-                {lbl('GST %', false)}
-                <select value={form.gstPercent} onChange={e=>setF('gstPercent',e.target.value)}
-                  style={{ width:'100%', height:32, padding:'0 8px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, outline:'none' }}>
-                  {[0,5,12,18,28].map(g=><option key={g} value={g}>{g}%</option>)}
-                </select>
-              </div>
-            </>
-          )}
-
-          {/* Calculated totals */}
-          {net > 0 && (
-            <div style={{ background:'#F8FAFC', border:`1px solid ${BD}`, borderRadius:6, padding:'10px 14px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
-              {[['Net Amount', fmt(net), '#1E293B'], ['GST ('+gstP+'%)', fmt(gstA), O], ['Total Amount', fmt(total), G]].map(([l,v,c])=>(
-                <div key={l} style={{ textAlign:'center' }}>
-                  <div style={{ fontSize:10, color:'#6B7280', fontWeight:600 }}>{l}</div>
-                  <div style={{ fontSize:13, fontWeight:800, color:c, marginTop:2 }}>{v}</div>
-                </div>
-              ))}
+          {/* Item qty table */}
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:P, marginBottom:6 }}>Item Quantities Being Billed <span style={{color:R}}>*</span></div>
+            <div style={{ border:`1px solid ${BD}`, borderRadius:4, overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                <thead>
+                  <tr style={{ background:P }}>
+                    {['Item','PO Qty','Already Billed','Remaining','Qty to Bill','Unit','Rate','GST%','Amount'].map(h=>(
+                      <th key={h} style={{ padding:'5px 7px', color:'#fff', fontWeight:700, whiteSpace:'nowrap', textAlign:['PO Qty','Already Billed','Remaining','Qty to Bill','Rate','Amount'].includes(h)?'right':'left', borderRight:'1px solid #3B82F6' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r,i)=>{
+                    const qty  = parseFloat(r.billedQty)||0;
+                    const net  = qty*(parseFloat(r.rate)||0);
+                    const gst  = net*(parseFloat(r.gstPercent)||0)/100;
+                    const remaining = Math.max(0,(parseFloat(r.poQty)||0)-(r.alreadyBilled||0));
+                    const overQty = qty > remaining + 0.0001;
+                    return(
+                      <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, fontWeight:600 }}>{r.itemName}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>{r.poQty} {r.unit}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right', color:r.alreadyBilled>0?O:'#9CA3AF' }}>{r.alreadyBilled}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:remaining>0?G:R }}>{remaining}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, width:80 }}>
+                          <input type="number" min="0" max={remaining} step="any" value={r.billedQty}
+                            onChange={e=>setQty(i,e.target.value)}
+                            style={{ width:'100%', height:26, padding:'0 5px', border:`1px solid ${overQty?R:BD}`, borderRadius:3, fontSize:11, fontFamily:F, textAlign:'right', outline:'none', background:overQty?'#FEF2F2':'#fff' }}/>
+                        </td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, color:'#6B7280' }}>{r.unit}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>₹{Number(r.rate||0).toLocaleString('en-IN')}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>{r.gstPercent}%</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:P }}>₹{(net+gst).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background:'#EFF6FF' }}>
+                    <td colSpan={8} style={{ padding:'5px 7px', fontWeight:700, textAlign:'right', fontFamily:F }}>Total</td>
+                    <td style={{ padding:'5px 7px', fontWeight:800, textAlign:'right', color:P, fontFamily:F }}>₹{totals.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          )}
+            {/* Summary */}
+            {totals.net > 0 && (
+              <div style={{ display:'flex', gap:16, marginTop:6, fontSize:11, color:'#374151', fontFamily:F }}>
+                <span>Net: <strong>₹{totals.net.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
+                <span>GST: <strong style={{color:O}}>₹{totals.gst.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
+                <span>Total: <strong style={{color:G}}>₹{totals.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
+              </div>
+            )}
+          </div>
+
+          <div>{lbl('Description / Work Done',false)}
+            <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Describe goods / work supplied…" rows={2}
+              style={{ width:'100%', padding:'5px 8px', border:`1px solid ${BD}`, borderRadius:4, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}/>
+          </div>
 
           <div>
-            {lbl('Attach Invoice PDF / Image (optional)', false)}
+            {lbl('Attach Invoice PDF / Image (optional)',false)}
             <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
-              onChange={e=>setFile(e.target.files[0]||null)}
-              style={{ fontSize:11, fontFamily:F, width:'100%' }}/>
-            {file && <div style={{ fontSize:10, color:G, marginTop:4 }}>Selected: {file.name} ({fmtSz(file.size)})</div>}
+              onChange={e=>setFile(e.target.files[0]||null)} style={{ fontSize:11, fontFamily:F, width:'100%' }}/>
+            {file && <div style={{ fontSize:10, color:G, marginTop:3 }}>✓ {file.name} ({fmtSz(file.size)})</div>}
           </div>
 
-          <div>{lbl('Notes / Remarks', false)}
-            <textarea value={form.notes} onChange={e=>setF('notes',e.target.value)} placeholder="Any remarks for this bill…" rows={2}
-              style={{ width:'100%', padding:'6px 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}
-              onFocus={e=>e.target.style.borderColor=P} onBlur={e=>e.target.style.borderColor=BD}/>
+          <div>{lbl('Notes / Remarks',false)}
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Any remarks…" rows={2}
+              style={{ width:'100%', padding:'5px 8px', border:`1px solid ${BD}`, borderRadius:4, fontSize:12, fontFamily:F, resize:'vertical', outline:'none', boxSizing:'border-box' }}/>
           </div>
 
           {err && <div style={{ padding:'8px 12px', background:'#FEF2F2', border:`1px solid #FCA5A5`, borderRadius:5, fontSize:12, color:R, fontWeight:600 }}>{err}</div>}
+        </div>
 
-          <div style={{ display:'flex', gap:10, justifyContent:'flex-end', paddingTop:4 }}>
-            <button onClick={onClose} style={{ padding:'7px 18px', borderRadius:6, border:`1px solid ${BD}`, background:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>Cancel</button>
-            <button onClick={submit} disabled={saving}
-              style={{ padding:'7px 22px', borderRadius:6, border:'none', background:saving?'#9CA3AF':G, color:'#fff', fontSize:12, fontWeight:700, cursor:saving?'default':'pointer', fontFamily:F }}>
-              {saving ? 'Submitting…' : '✓ Submit Bill'}
-            </button>
-          </div>
+        <div style={{ padding:'10px 20px', borderTop:`1px solid ${BD}`, display:'flex', gap:10, justifyContent:'flex-end', flexShrink:0, background:'#F8FAFC' }}>
+          <button onClick={onClose} style={{ padding:'7px 18px', borderRadius:6, border:`1px solid ${BD}`, background:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F }}>Cancel</button>
+          <button onClick={submit} disabled={saving}
+            style={{ padding:'7px 22px', borderRadius:6, border:'none', background:saving?'#9CA3AF':G, color:'#fff', fontSize:12, fontWeight:700, cursor:saving?'default':'pointer', fontFamily:F }}>
+            {saving?'Submitting…':'✓ Submit Bill'}
+          </button>
         </div>
       </div>
     </div>

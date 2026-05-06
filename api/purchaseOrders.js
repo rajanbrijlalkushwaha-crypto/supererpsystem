@@ -688,4 +688,43 @@ router.get('/:orderId/render-attachment/:fileName', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ── GET /:orderId/vendor-bills — list vendor bills for admin ── */
+router.get('/:orderId/vendor-bills', async (req, res) => {
+  try {
+    const companyId = req.query.companyId;
+    const po = jstore.readOne('PurchaseOrder', companyId, req.params.orderId);
+    if (!po) return res.status(404).json({ error: 'PO not found' });
+    res.json(po.vendorBills || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── PUT /:orderId/vendor-bills/:billId — admin approve / reject vendor bill ── */
+router.put('/:orderId/vendor-bills/:billId', async (req, res) => {
+  try {
+    const { orderId, billId } = req.params;
+    const { status, adminRemarks, companyId: bodyCompanyId } = req.body;
+    const companyId = req.query.companyId || bodyCompanyId;
+    const po = jstore.readOne('PurchaseOrder', companyId, orderId);
+    if (!po) return res.status(404).json({ error: 'PO not found' });
+    const bills = po.vendorBills || [];
+    const idx = bills.findIndex(b => b.billId === billId);
+    if (idx === -1) return res.status(404).json({ error: 'Bill not found' });
+    bills[idx] = { ...bills[idx], status, adminRemarks: adminRemarks || '', reviewedAt: new Date().toISOString() };
+    po.vendorBills = bills;
+    saveJson(poJsonPath(companyId, orderId), po);
+    res.json({ success: true, bill: bills[idx] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── GET /:orderId/vendor-bills/:fileName — admin download vendor bill file ── */
+router.get('/:orderId/vendor-bill-file/:fileName', async (req, res) => {
+  try {
+    const companyId = req.query.companyId;
+    const { orderId, fileName } = req.params;
+    const fp = path.join(ROOT, 'Database', 'Companies', companyId, 'PurchaseOrder', String(orderId), 'vendor-bills', fileName);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found.' });
+    res.download(fp, fileName);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
