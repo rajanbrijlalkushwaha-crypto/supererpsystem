@@ -17,7 +17,7 @@ module.exports = {
       cwd: './frontend',
       watch: false,
       env: {
-        PORT: 80,
+        PORT: 3000,
         BROWSER: 'none',
         DANGEROUSLY_DISABLE_HOST_CHECK: 'true',
         HOST: '0.0.0.0',
