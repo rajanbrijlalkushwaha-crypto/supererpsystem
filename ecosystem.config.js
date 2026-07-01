@@ -12,13 +12,15 @@ module.exports = {
     },
     {
       name: 'epsilon-frontend',
-      script: 'npm.cmd',
+      script: 'node_modules/react-scripts/bin/react-scripts.js',
       args: 'start',
       cwd: './frontend',
       watch: false,
       env: {
         PORT: 80,
         BROWSER: 'none',
+        DANGEROUSLY_DISABLE_HOST_CHECK: 'true',
+        HOST: '0.0.0.0',
       },
     },
   ],
