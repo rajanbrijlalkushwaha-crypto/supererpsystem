@@ -12,7 +12,7 @@ module.exports = {
     },
     {
       name: 'epsilon-frontend',
-      script: 'npm',
+      script: 'npm.cmd',
       args: 'start',
       cwd: './frontend',
       watch: false,
