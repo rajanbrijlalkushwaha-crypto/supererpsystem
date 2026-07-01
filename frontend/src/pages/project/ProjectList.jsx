@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
+import * as XLSX from 'xlsx';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P   = '#1a4a9a';
 const PG  = '#2a6600';
 const BD  = '#c8d4e8';
+
+const getFY = d => { const dt=d?new Date(d):new Date(); const m=dt.getMonth()+1; const y=dt.getFullYear(); const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 
 const fmt   = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const fmtI  = n => { const v=parseFloat(n)||0; return v===0?'0':v.toLocaleString('en-IN'); };
@@ -848,7 +851,7 @@ function OrderModal({ type, order, dueRecord, cid, onClose, onSaved }) {
             {msg && (
               <div style={{ padding:'6px 10px', marginBottom:10, borderRadius:5, fontSize:11,
                 background:msg.startsWith('Error')?'#fee2e2':'#dcfce7',
-                color:msg.startsWith('Error')?'#b91c1c':'#166534',
+                color:msg.startsWith('Error')?'#b91c1c':'#133d80',
                 border:`1px solid ${msg.startsWith('Error')?'#fca5a5':'#86efac'}` }}>
                 {msg}
               </div>
@@ -900,30 +903,35 @@ export default function ProjectList() {
   const [salesOrders,    setSalesOrders]    = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [purchaseBills,  setPurchaseBills]  = useState([]);
+  const [salesBills,     setSalesBills]     = useState([]);
   const [clientDues,     setClientDues]     = useState([]);
   const [vendorDues,     setVendorDues]     = useState([]);
   const [projects,       setProjects]       = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState('');
   const [search,         setSearch]         = useState('');
+  const [fy,             setFy]             = useState(getFY());
   const [view,           setView]           = useState('orders');
   const [modal,          setModal]          = useState(null); // {type:'so'|'po', order}
   const [rowModal,       setRowModal]       = useState(null); // {so, po, poBill, soDue, poDue}
+  const [editingId,      setEditingId]      = useState(null); // { soId, value } — inline order-no edit
 
   const load = useCallback(async () => {
     if (!cid) return;
     setLoading(true); setError('');
     try {
-      const [soR, poR, duesR, prR, pbR] = await Promise.all([
+      const [soR, poR, duesR, prR, pbR, sbR] = await Promise.all([
         axios.get(`/api/sales-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/purchase-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/accounts/dues?companyId=${cid}`).catch(()=>({data:{}})),
         axios.get(`/api/projects?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/bills?companyId=${cid}&type=purchase`).catch(()=>({data:[]})),
+        axios.get(`/api/bills?companyId=${cid}&type=sales`).catch(()=>({data:[]})),
       ]);
       setSalesOrders((soR.data||[]).filter(o => !o.tallyImported && !['draft','rejected'].includes(o.status)));
       setPurchaseOrders(poR.data||[]);
       setPurchaseBills(pbR.data||[]);
+      setSalesBills(sbR.data||[]);
       const { clientDues:cd=[], vendorDues:vd=[] } = duesR.data || {};
       setClientDues(Array.isArray(cd) ? cd : []);
       setVendorDues(Array.isArray(vd) ? vd : []);
@@ -933,6 +941,17 @@ export default function ProjectList() {
   }, [cid]);
 
   useEffect(() => { load(); }, [load]);
+
+  /* ── Save inline order-no edit ── */
+  const saveOrderNo = async (so, newVal) => {
+    setEditingId(null);
+    const trimmed = (newVal||'').trim();
+    if (!trimmed || trimmed === (so.orderNo||'')) return;
+    try {
+      await axios.put(`/api/sales-orders/${so.orderId}`, { ...so, orderNo: trimmed }, { params: { companyId: cid } });
+      load();
+    } catch(e) { alert('Save failed: ' + (e.response?.data?.error || e.message)); }
+  };
 
   /* ── Lookup helpers ── */
   const linkedPOs = soId =>
@@ -952,18 +971,31 @@ export default function ProjectList() {
   const getPOBill = po => po && purchaseBills
     .find(b => String(b.orderId)===String(po.orderId) || b.orderNo===po.poNo || b.orderNo===po.poNumber);
 
+  /* Find the sales bill that references this SO */
+  const getSalesBill = so => so && salesBills
+    .find(b => String(b.orderId)===String(so.orderId));
+
   /* ── Modal lookup ── */
   const modalDue = modal
     ? (modal.type==='so' ? getSODue(modal.order) : getPODue(modal.order))
     : null;
 
   /* ── Filter ── */
-  const filteredSOs = salesOrders.filter(o => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (o.customerName||o.clientName||'').toLowerCase().includes(q) ||
-      String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q);
-  });
+  const fyList = useMemo(() => {
+    const set = new Set(salesOrders.map(o => getFY(o.orderDate||o.date)));
+    return ['all', ...[...set].sort().reverse()];
+  }, [salesOrders]);
+
+  const filteredSOs = useMemo(() => {
+    let list = fy === 'all' ? salesOrders : salesOrders.filter(o => getFY(o.orderDate||o.date) === fy);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(o =>
+        (o.customerName||o.clientName||'').toLowerCase().includes(q) ||
+        String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q));
+    }
+    return list;
+  }, [salesOrders, fy, search]);
 
   /* ── Build flat rows ── */
   const allRows = [];
@@ -982,6 +1014,7 @@ export default function ProjectList() {
     const soDue     = getSODue(so);
     const poDue     = getPODue(firstPO);
     const poBill    = getPOBill(firstPO);
+    const salesBill = getSalesBill(so);
     const receipt   = soDue ? parseFloat(soDue.received||soDue.totalPaid)||0 : 0;
     const soBalance = soDue ? parseFloat(soDue.due||soDue.balance)||0 : 0;
     const payment   = poDue ? parseFloat(poDue.paid||poDue.totalPaid)||0 : 0;
@@ -1016,12 +1049,13 @@ export default function ProjectList() {
       GT.poTotal   += poBase; GT.poTaxable += poTaxable; GT.poGst += poGst; GT.poOV += poOV;
 
       allRows.push({
-        key:`${so.orderId}-${i}`, isFirst:i===0, rowCount,
+        key:`${so.orderId}-${i}`, isFirst:i===0, isLast:i===rowCount-1, rowCount,
         so, soItem:soIt, soBase, soGst, soOV,
         pnf:i===0?pnf:0, transport:i===0?transport:0,
         po:firstPO, poItem:poIt, poBase, poTaxable, poGst, poOV, otherC:i===0?otherC:0,
         receipt, soBalance, payment, poBalance,
         soDue, poDue, poBill: i===0 ? poBill : null,
+        salesBill: i===0 ? salesBill : null,
       });
     }
   }
@@ -1038,8 +1072,8 @@ export default function ProjectList() {
     padding:'2px 5px', fontSize:10, fontFamily:F, border:`1px solid ${BD}`,
     verticalAlign:'middle', textAlign:align, whiteSpace:'nowrap', ...ex,
   });
-  const ptd = (align='left',ex={}) => ({...td(align,ex), background:'rgba(0,80,0,0.03)'});
-  const SOBg = idx => idx%2===0 ? '#eef4ff' : '#f5f8ff';
+  const ptd = (align='left',ex={}) => ({...td(align,ex)});
+  const SOBg = idx => idx%2===0 ? '#ffffff' : '#f9f9f9';
 
   /* ── Projects view ── */
   const fmtDFull = d => {
@@ -1066,13 +1100,132 @@ export default function ProjectList() {
               cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
             {view==='orders' ? '📁 Projects' : '📦 Orders'}
           </button>
-          {view==='projects' && (
-            <button onClick={()=>navigate('/project/create')}
-              style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-                border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-                cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:F }}>
-              + New Project
+          {view==='orders' && (
+            <button onClick={()=>{
+              const co = selectedCompany?.companyName || '';
+              const wb = XLSX.utils.book_new();
+              const soHdr = ['Order ID','Client Name','Order Date','Client PO No','Due Date',
+                'Product','Qty','Rate (₹)','Base Amt (₹)','P&F (₹)','Transport (₹)','Taxable (₹)',
+                'GST %','GST Amt (₹)','Order Value (₹)','Receipt (₹)','Dues (₹)',
+                'Sales Bill No','Sales Bill Date','SO Status'];
+              const poHdr = ['Vendor','PO Date','PO No','PO Product','PO Qty','PO Rate (₹)',
+                'PO Base (₹)','Other Charges (₹)','PO Taxable (₹)','PO GST %','PO GST Amt (₹)',
+                'PO Order Value (₹)','Payment (₹)','PO Dues (₹)',
+                'Bill No','Bill Date','Bill Amount (₹)','GST Type'];
+              const dataRows = allRows.map(row => [
+                row.so?.orderNo || `SO-${row.so?.orderId}` || '',
+                row.so?.customerName || row.so?.clientName || '',
+                row.so?.orderDate || row.so?.date || '',
+                row.so?.customerPO || '',
+                row.so?.dueDate || row.so?.deliveryDate || '',
+                row.soItem?.name || '',
+                row.soItem?.qty || '',
+                row.soItem?.rate || '',
+                parseFloat(row.soBase) || 0,
+                row.pnf || 0,
+                row.transport || 0,
+                parseFloat(row.soBase) || 0,
+                row.soItem?.gst || 0,
+                parseFloat(row.soGst) || 0,
+                parseFloat(row.soOV) || 0,
+                parseFloat(row.receipt) || 0,
+                parseFloat(row.soBalance) || 0,
+                row.salesBill?.billNo || '',
+                row.salesBill?.billDate || '',
+                row.so?.status || '',
+                row.po?.vendorName || '',
+                row.po?.poDate || row.po?.date || '',
+                row.po?.poNo || row.po?.poNumber || '',
+                row.poItem?.name || '',
+                row.poItem?.qty || '',
+                row.poItem?.rate || '',
+                parseFloat(row.poBase) || 0,
+                parseFloat(row.otherC) || 0,
+                parseFloat(row.poTaxable) || 0,
+                row.poItem?.gst || 0,
+                parseFloat(row.poGst) || 0,
+                parseFloat(row.poOV) || 0,
+                parseFloat(row.payment) || 0,
+                parseFloat(row.poBalance) || 0,
+                row.poBill?.billNo || '',
+                row.poBill?.billDate || '',
+                parseFloat(row.poBill?.grandTotal) || 0,
+                row.poBill?.gstType || '',
+              ]);
+              const ws = XLSX.utils.aoa_to_sheet([[...soHdr, ...poHdr], ...dataRows]);
+              // Column widths
+              ws['!cols'] = [...soHdr, ...poHdr].map((_,i) => ({ wch: i < 5 ? 18 : i === 5 || i === 23 ? 30 : 14 }));
+              XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+              XLSX.writeFile(wb, `${co ? co+'_' : ''}Orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+            }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
+              border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
+              cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
+              📊 Excel
             </button>
+          )}
+          {view==='projects' && (
+            <>
+              <button onClick={()=>{
+                const co = selectedCompany?.companyName || '';
+                const wb = XLSX.utils.book_new();
+                const headers = ['ID','Project Name','Client','Start Date','End Date','Budget (₹)','Status'];
+                const rows = projects.map(p => [
+                  p.projectId,
+                  p.projectName || '',
+                  p.clientName || '',
+                  p.startDate || '',
+                  p.endDate || '',
+                  parseFloat(p.budget) || 0,
+                  p.status || '',
+                ]);
+                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                ws['!cols'] = [{ wch:10 },{ wch:30 },{ wch:25 },{ wch:14 },{ wch:14 },{ wch:16 },{ wch:14 }];
+                XLSX.utils.book_append_sheet(wb, ws, 'Projects');
+                XLSX.writeFile(wb, `${co ? co+'_' : ''}Projects_${new Date().toISOString().slice(0,10)}.xlsx`);
+              }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
+                border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
+                cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
+                📊 Excel
+              </button>
+              <button onClick={()=>{
+                const rowsHtml = projects.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f8ff'}">
+                  <td>${p.projectId}</td>
+                  <td style="font-weight:700">${p.projectName||'—'}</td>
+                  <td>${p.clientName||'—'}</td>
+                  <td>${fmtDFull(p.startDate)}</td>
+                  <td>${fmtDFull(p.endDate)}</td>
+                  <td style="text-align:right">${p.budget?'₹'+fmt(p.budget):'—'}</td>
+                  <td>${p.status||'—'}</td>
+                </tr>`).join('');
+                const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Projects</title>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:9.5pt;}
+.hdr{background:#1a4a9a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
+table{width:100%;border-collapse:collapse;font-size:9pt;}
+th{background:#1a4a9a;color:#fff;padding:6px 10px;text-align:left;border:1px solid #0d2d6b;}
+td{padding:5px 10px;border:1px solid #d1d9ed;}
+@media print{@page{size:A4 landscape;margin:8mm;}}</style></head><body>
+<div class="hdr"><div><h1 style="font-size:14pt;font-weight:900">PROJECTS LIST</h1>
+<div style="font-size:9pt;opacity:0.8;margin-top:2px">${selectedCompany?.companyName||''} &nbsp;|&nbsp; ${projects.length} projects</div></div>
+<div style="font-size:9pt;opacity:0.8">Printed: ${new Date().toLocaleDateString('en-IN')}</div></div>
+<table><thead><tr><th>ID</th><th>Project Name</th><th>Client</th><th>Start</th><th>End</th><th style="text-align:right">Budget</th><th>Status</th></tr></thead>
+<tbody>${rowsHtml}</tbody></table>
+<script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+</body></html>`;
+                const w=window.open('','_blank','width=1000,height=800');
+                if(!w){alert('Allow pop-ups.');return;}
+                w.document.write(html);w.document.close();
+              }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
+                border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
+                cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
+                🖨️ PDF
+              </button>
+              <button onClick={()=>navigate('/project/create')}
+                style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
+                  border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
+                  cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:F }}>
+                + New Project
+              </button>
+            </>
           )}
           <button onClick={load}
             style={{ height:26, padding:'0 8px', background:'rgba(255,255,255,0.12)',
@@ -1133,7 +1286,25 @@ export default function ProjectList() {
       ) : (
         /* ── Orders spreadsheet ── */
         <>
-          <div style={{ marginBottom:6, display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ marginBottom:6, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+            {/* FY chips */}
+            {fyList.map(f => {
+              const active = fy === f;
+              return (
+                <button key={f} onClick={() => setFy(f)}
+                  style={{
+                    height:24, padding:'0 10px', fontSize:11, fontWeight: active ? 700 : 500,
+                    fontFamily:F, cursor:'pointer', borderRadius:12, whiteSpace:'nowrap',
+                    border:`1px solid ${active ? P : BD}`,
+                    background: active ? P : '#fff',
+                    color: active ? '#fff' : '#555',
+                    transition:'all 0.12s',
+                  }}>
+                  {f === 'all' ? 'All' : `FY ${f}`}
+                </button>
+              );
+            })}
+            <div style={{ width:1, height:18, background:'#bbb', flexShrink:0 }}/>
             <input value={search} onChange={e=>setSearch(e.target.value)}
               placeholder="Search client / order no…"
               style={{ height:26, padding:'0 8px', border:`1px solid ${BD}`, borderRadius:4,
@@ -1147,7 +1318,7 @@ export default function ProjectList() {
               {filteredSOs.length} SO{filteredSOs.length!==1?'s':''} · {purchaseOrders.length} PO{purchaseOrders.length!==1?'s':''}
             </span>
             <span style={{ fontSize:10, color:'#888', marginLeft:4 }}>
-              (Click Order ID for full detail · Click client name to add receipt · Click vendor name to add payment)
+              (Click order no for full detail · ✎ to edit order no · Click client name to add receipt · Click vendor name to add payment)
             </span>
           </div>
 
@@ -1157,9 +1328,9 @@ export default function ProjectList() {
               No sales orders found.
             </div>
           ) : (
-            <div style={{ overflowX:'auto', border:`1px solid ${BD}`, borderRadius:6 }}>
+            <div style={{ overflow:'auto', maxHeight:'calc(100vh - 200px)', border:`1px solid ${BD}`, borderRadius:6 }}>
               <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, minWidth:1400 }}>
-                <thead>
+                <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
                     <th colSpan={21} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
                       SALES ORDER
@@ -1169,10 +1340,10 @@ export default function ProjectList() {
                     </th>
                   </tr>
                   <tr>
-                    <th style={th('left','70px')}>Order ID</th>
+                    <th style={th('left','80px')}>Order ID ✎</th>
                     <th style={th('left','110px')}>Client Name</th>
                     <th style={th('center','60px')}>Order Date</th>
-                    <th style={th('left','90px')}>Order No</th>
+                    <th style={th('left','90px')}>Client PO No</th>
                     <th style={th('center','60px')}>Due Date</th>
                     <th style={th('left','130px')}>Product</th>
                     <th style={th('right','35px')}>Qty</th>
@@ -1214,34 +1385,67 @@ export default function ProjectList() {
                   {allRows.map(row => {
                     const soIdx = filteredSOs.indexOf(row.so);
                     const bg    = SOBg(soIdx);
-                    const poBg  = row.po ? 'rgba(0,80,0,0.04)' : '#fafafa';
+                    const poBg  = bg;
 
                     return (
-                      <tr key={row.key} style={{ background:bg }}>
+                      <tr key={row.key} style={{
+                        background:bg,
+                        borderTop:    row.isFirst ? '2px solid #1a1a1a' : undefined,
+                        borderBottom: row.isLast  ? '2px solid #1a1a1a' : undefined,
+                      }}>
                         {row.isFirst && (
                           <>
+                            {/* ── Order ID — click to open detail, double-click to edit order no ── */}
                             <td rowSpan={row.rowCount}
-                              onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
-                              style={{ ...td('left'), fontWeight:700, color:'#1a3c6e', background:bg,
-                                borderBottom:`2px solid ${BD}`, cursor:'pointer',
-                                textDecoration:'underline', textUnderlineOffset:2 }}>
-                              {row.so.orderId}
+                              style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a', padding:'2px 4px', borderLeft:'2px solid #1a1a1a' }}>
+                              {editingId?.soId === row.so.orderId ? (
+                                <input
+                                  autoFocus
+                                  defaultValue={editingId.value}
+                                  style={{ width:'100%', height:22, padding:'0 4px', fontSize:10,
+                                    fontFamily:F, border:'1.5px solid #EA580C', borderRadius:3,
+                                    outline:'none', boxSizing:'border-box' }}
+                                  onKeyDown={e => {
+                                    if (e.key==='Enter')  saveOrderNo(row.so, e.target.value);
+                                    if (e.key==='Escape') setEditingId(null);
+                                  }}
+                                  onBlur={e => saveOrderNo(row.so, e.target.value)}
+                                />
+                              ) : (
+                                <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                  <span
+                                    onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
+                                    style={{ fontWeight:700, color:'#111827', cursor:'pointer',
+                                      textDecoration:'underline', textUnderlineOffset:2, fontSize:10 }}>
+                                    {row.so.orderNo || row.so.orderId}
+                                  </span>
+                                  <button
+                                    title="Edit order number"
+                                    onClick={() => setEditingId({ soId:row.so.orderId, value:row.so.orderNo||'' })}
+                                    style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer',
+                                      fontSize:9, color:'#EA580C', padding:'0 2px', lineHeight:1 }}>
+                                    ✎
+                                  </button>
+                                </div>
+                              )}
                             </td>
                             {/* ★ Clickable client name */}
                             <td rowSpan={row.rowCount}
                               onClick={() => setModal({ type:'so', order:row.so })}
-                              style={{ ...td('left'), fontWeight:700, color:P, background:bg,
-                                borderBottom:`2px solid ${BD}`, cursor:'pointer',
+                              style={{ ...td('left'), fontWeight:700, color:'#111827', background:bg,
+                                borderBottom:'2px solid #1a1a1a', cursor:'pointer',
                                 textDecoration:'underline', textUnderlineOffset:2 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.so.orderDate||row.so.date)}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:`2px solid ${BD}` }}>
-                              {row.so.orderNo||'—'}
+                            {/* Client PO No — replaces "Order No" */}
+                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                              color: row.so.customerPO ? '#111' : '#aaa', fontStyle: row.so.customerPO ? 'normal' : 'italic' }}>
+                              {row.so.customerPO || '—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.so.dueDate||row.so.deliveryDate)}
                             </td>
                           </>
@@ -1260,24 +1464,25 @@ export default function ProjectList() {
                         <td style={td('right')}>{row.soBase ? fmt(row.soBase) : '—'}</td>
                         <td style={td('center')}>{row.soItem ? row.soItem.gst+'%' : '—'}</td>
                         <td style={td('right')}>{row.soGst ? fmt(row.soGst) : '—'}</td>
-                        <td style={td('right',{fontWeight:700,color:'#1a3c6e'})}>{row.soOV ? fmt(row.soOV) : '—'}</td>
+                        <td style={td('right',{fontWeight:700,color:'#111827'})}>{row.soOV ? fmt(row.soOV) : '—'}</td>
 
                         {row.isFirst && (
                           <>
-                            <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#2e7d32', fontWeight:600, background:bg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.receipt ? fmt(row.receipt) : '0'}
                             </td>
                             <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:600,
-                              color: row.soBalance>0?'#b71c1c':'#2e7d32', background:bg, borderBottom:`2px solid ${BD}` }}>
+                              color:'#111827', background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmt(row.soBalance)}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:`2px solid ${BD}` }}>
-                              {fmtD(row.so.salesBillDate)}
+                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
+                              {row.salesBill ? fmtD(row.salesBill.billDate) : '—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:`2px solid ${BD}` }}>
-                              {row.so.salesBillNo||'—'}
+                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                              color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>
+                              {row.salesBill ? (row.salesBill.billNo || '—') : '—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`2px solid ${BD}`, background:bg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`2px solid ${BD}`, background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               <StatusBadge s={row.so.status}/>
                             </td>
                           </>
@@ -1288,14 +1493,14 @@ export default function ProjectList() {
                             {/* ★ Clickable vendor name */}
                             <td rowSpan={row.rowCount}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
-                              style={{ ...ptd('left'), background:poBg, borderBottom:`2px solid ${BD}`,
-                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:PG, textDecoration:'underline', textUnderlineOffset:2 } : { color:'#aaa', fontStyle:'italic' }) }}>
+                              style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a', borderLeft:'2px solid #1a1a1a',
+                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#111827', textDecoration:'underline', textUnderlineOffset:2 } : { color:'#aaa', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.po?.poDate||row.po?.date)}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
                             </td>
                           </>
@@ -1316,29 +1521,29 @@ export default function ProjectList() {
 
                         {row.isFirst && (
                           <>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#2e7d32', fontWeight:600, background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.payment ? fmt(row.payment) : '0'}
                             </td>
                             <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:600,
-                              color: row.poBalance>0?'#b71c1c':'#2e7d32', background:poBg, borderBottom:`2px solid ${BD}` }}>
+                              color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmt(row.poBalance)}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.poBill ? fmtD(row.poBill.billDate) : '—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.poBill
-                                ? <span style={{ fontWeight:700, color:PG }}>{row.poBill.billNo}</span>
+                                ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span>
                                 : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#1a5500', background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}
                             </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:`2px solid ${BD}` }}>
+                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a', borderRight:'2px solid #1a1a1a' }}>
                               {row.poBill
                                 ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3,
                                     background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff',
-                                    color:row.poBill.gstType==='intrastate'?'#166534':'#4338ca' }}>
+                                    color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>
                                     {row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}
                                   </span>
                                 : '—'}
@@ -1349,7 +1554,7 @@ export default function ProjectList() {
                     );
                   })}
                 </tbody>
-                <tfoot>
+                <tfoot style={{ position:'sticky', bottom:0, zIndex:10 }}>
                   <tr style={{ background:'#E8EFFF', fontWeight:700, fontSize:10 }}>
                     <td colSpan={5} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'2px solid #9ab0e0' }}>TOTAL</td>
                     <td colSpan={3} style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
@@ -1360,7 +1565,7 @@ export default function ProjectList() {
                     <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soTaxable)}</td>
                     <td style={{ ...td('center'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
                     <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soGst)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#1a3c6e' }}>{fmt(GT.soOV)}</td>
+                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>
                     <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>
                     <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#b71c1c' }}>{fmt(GT.dues)}</td>
                     <td colSpan={3} style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0', borderRight:'2px solid #9ab0e0' }}></td>

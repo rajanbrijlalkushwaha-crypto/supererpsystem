@@ -42,8 +42,20 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   }, []);
 
+  /* ── Refresh current user (call after profile update) ── */
+  const refreshUser = useCallback(async () => {
+    try {
+      const r = await axios.get('/api/auth/me');
+      // Fetch full user to get dashboardPrefs etc.
+      const all = await axios.get('/api/auth/users').catch(() => ({ data: [] }));
+      const full = all.data.find(u => u.id === r.data.userId || u.username === r.data.username);
+      setUser({ ...r.data, ...(full || {}), id: r.data.userId });
+      return r.data;
+    } catch {}
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, isAdmin: user?.role === 'admin', permissions: user?.permissions ?? null }}>
       {children}
     </AuthContext.Provider>
   );

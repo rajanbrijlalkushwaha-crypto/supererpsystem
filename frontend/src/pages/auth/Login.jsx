@@ -173,12 +173,15 @@ export default function Login() {
             </div>
           )}
 
-          {/* Company credentials hint */}
+          {/* Company: forgot password + credentials hint */}
           {!isVendor && (
-            <div style={{ marginTop:24, padding:'12px 16px', borderRadius:10, background:'#F0FDF4', border:'1px solid #BBF7D0', fontSize:12, color:'#16A34A' }}>
-              <div style={{ fontWeight:700, marginBottom:4 }}>Default credentials</div>
-              <div>Username: <strong>admin</strong> &nbsp;·&nbsp; Password: <strong>admin123</strong></div>
-            </div>
+            <>
+              <div style={{ marginTop:16, textAlign:'center' }}>
+                <button type="button" onClick={() => navigate('/forgot-password')} style={{ background:'none', border:'none', color:'#6B7280', fontWeight:500, cursor:'pointer', fontSize:12.5, fontFamily:F, textDecoration:'underline' }}>
+                  Forgot password?
+                </button>
+              </div>
+            </>
           )}
 
           <div style={{ marginTop:20, textAlign:'center', fontSize:12, color:'#9CA3AF' }}>

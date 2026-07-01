@@ -1,7 +1,7 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, upload, saveUploadedFiles, saveJson } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
 const jstore  = require('./json-store');
 
 const poJsonPath = (companyId, orderId) =>
@@ -18,6 +18,36 @@ const parseJ = (v, fb = {}) => {
   try { return JSON.parse(v); } catch { return fb; }
 };
 const toRow = r => ({ ...parseJ(r.data, {}), orderId: r.id, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at });
+
+const soJsonPath = (companyId, orderId) =>
+  path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(orderId), `${orderId}.json`);
+
+// When a PO is linked to an SO, advance the SO status to 'in-progress' (if not already further along)
+const IN_PROGRESS_ELIGIBLE = new Set(['pending','draft','confirmed','approved','active','order-received']);
+async function autoAdvanceSoToInProgress(companyId, linkedSalesOrderId) {
+  if (!linkedSalesOrderId || !companyId) return;
+  const soId = String(linkedSalesOrderId);
+  try {
+    if (db.connected) {
+      const [[row]] = await db.query('SELECT status, data FROM sales_orders WHERE id = ? AND company_id = ?', [soId, companyId]);
+      if (!row) return;
+      const cur = (row.status || '').toLowerCase();
+      if (!IN_PROGRESS_ELIGIBLE.has(cur)) return;
+      const data = parseJ(row.data, {});
+      data.status = 'in-progress';
+      await db.query('UPDATE sales_orders SET status=?, data=? WHERE id=? AND company_id=?',
+        ['in-progress', JSON.stringify(data), soId, companyId]);
+    } else {
+      const soPath = soJsonPath(companyId, soId);
+      if (!fs.existsSync(soPath)) return;
+      const so = parseJ(fs.readFileSync(soPath, 'utf8'), null);
+      if (!so) return;
+      const cur = (so.status || '').toLowerCase();
+      if (!IN_PROGRESS_ELIGIBLE.has(cur)) return;
+      fs.writeFileSync(soPath, JSON.stringify({ ...so, status: 'in-progress', updatedAt: new Date().toISOString() }, null, 2));
+    }
+  } catch (e) { console.error('autoAdvanceSoToInProgress:', e.message); }
+}
 
 // GET - Next ID
 router.get('/next-id', async (req, res) => {
@@ -111,6 +141,8 @@ router.post('/', upload.array('attachmentFiles'), async (req, res) => {
       packingCharges: num('packingCharges'), roundOff: num('roundOff'),
       termsConditions: str('termsConditions'), internalNotes: str('internalNotes'),
       vendorNotes: str('vendorNotes'), notes: str('internalNotes'),
+      clientScope: str('clientScope'), epsilonScope: str('epsilonScope'), vendorScope: str('vendorScope'),
+      scopeItems: jp('scopeItems'),
       items: jp('items'), charges: jp('charges'), attachments: attMeta, documents: attMeta,
     };
 
@@ -122,7 +154,10 @@ router.post('/', upload.array('attachmentFiles'), async (req, res) => {
       );
     }
 
-    saveJson(poJsonPath(companyId, orderId), { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    saveJson(poJsonPath(companyId, orderId), { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      audit: [auditEntry(req, 'created')] });
+
+    await autoAdvanceSoToInProgress(companyId, data.linkedSalesOrderId);
 
     res.json({ success: true, orderId, message: `Purchase Order created with ID: ${orderId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -211,6 +246,10 @@ router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
       internalNotes: str('internalNotes') || ex.internalNotes || '',
       vendorNotes: str('vendorNotes') || ex.vendorNotes || '',
       notes: str('internalNotes') || ex.notes || '',
+      clientScope: str('clientScope') || ex.clientScope || '',
+      epsilonScope: str('epsilonScope') || ex.epsilonScope || '',
+      vendorScope: str('vendorScope') || ex.vendorScope || '',
+      scopeItems: jp('scopeItems', ex.scopeItems || []),
       items: jp('items', ex.items || []),
       charges: jp('charges', ex.charges || []),
       attachments: attMeta, documents: attMeta,
@@ -223,7 +262,16 @@ router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
       );
     }
 
-    saveJson(poJsonPath(companyId, orderId), { ...data, updatedAt: new Date().toISOString() });
+    const poOldStatus = ex.status;
+    const poNewStatus = data.status;
+    const poAction = poNewStatus !== poOldStatus
+      ? (poNewStatus === 'approved' ? 'approved' : poNewStatus === 'rejected' ? 'rejected' : 'status_changed')
+      : 'edited';
+    const poExtra = poNewStatus !== poOldStatus ? { from: poOldStatus, to: poNewStatus } : {};
+    saveJson(poJsonPath(companyId, orderId), { ...data, updatedAt: new Date().toISOString(),
+      audit: pushAudit(ex, req, poAction, poExtra) });
+
+    await autoAdvanceSoToInProgress(companyId, data.linkedSalesOrderId);
 
     res.json({ success: true, message: 'Purchase order updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }

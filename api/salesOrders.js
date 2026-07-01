@@ -1,8 +1,9 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, upload, saveUploadedFiles, saveJson } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
 const jstore  = require('./json-store');
+const { addSystemLog } = require('./communication');
 
 const soJsonPath = (companyId, orderId) =>
   path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(orderId), `${orderId}.json`);
@@ -17,8 +18,30 @@ const parseJ = (v, fb = {}) => {
   if (v && typeof v === 'object') return v;
   try { return JSON.parse(v); } catch { return fb; }
 };
-// Restore full order object from DB row
-const toRow = r => ({ ...parseJ(r.data, {}), id: undefined, orderId: r.id, status: r.status, createdAt: r.created_at, updatedAt: r.updated_at });
+// Restore full order object from DB row — individual columns are fallback when r.data is null/sparse
+const toRow = r => {
+  const d = parseJ(r.data, {});
+  return {
+    ...d,
+    id:            undefined,
+    orderId:       r.id,
+    status:        r.status        || d.status        || '',
+    orderNo:       d.orderNo       || r.order_no       || '',
+    orderDate:     d.orderDate     || r.order_date     || '',
+    customerName:  d.customerName  || r.customer_name  || d.party || '',
+    party:         d.customerName  || r.customer_name  || d.party || '',
+    customerPO:    d.customerPO    || r.customer_po    || '',
+    customerGstin: d.customerGstin || r.customer_gstin || '',
+    customerState: d.customerState || r.customer_state || '',
+    poDate:        d.poDate        || r.po_date        || '',
+    deliveryDate:  d.deliveryDate  || r.delivery_date  || '',
+    dueDate:       d.dueDate       || d.deliveryDate   || r.delivery_date || '',
+    paymentTerms:  d.paymentTerms  || r.payment_terms  || '',
+    grandTotal:    d.grandTotal    || r.grand_total    || 0,
+    createdAt:     r.created_at,
+    updatedAt:     r.updated_at,
+  };
+};
 
 // GET - List all sales orders
 router.get('/', async (req, res) => {
@@ -240,7 +263,14 @@ router.post('/', soUploadFields, async (req, res) => {
       );
     }
 
-    saveJson(soJsonPath(companyId, orderId), { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    saveJson(soJsonPath(companyId, orderId), { ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      audit: [auditEntry(req, 'created')] });
+
+    const fmtAmt = n => Number(n || 0).toLocaleString('en-IN');
+    addSystemLog(companyId, orderId, 'System',
+      `Order received — SO #${orderId}${data.orderNo ? ` (${data.orderNo})` : ''} from ${data.customerName || 'Customer'}` +
+      (data.grandTotal ? ` for ₹${fmtAmt(data.grandTotal)}` : ''),
+      data.orderDate);
 
     res.json({ success: true, orderId, message: `Sales Order created with ID: ${orderId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -353,7 +383,14 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
       );
     }
 
-    saveJson(soJsonPath(companyId, orderId), { ...data, updatedAt: new Date().toISOString() });
+    const oldStatus = ex.status;
+    const newStatus = data.status;
+    const soAction = newStatus !== oldStatus
+      ? (newStatus === 'approved' ? 'approved' : newStatus === 'rejected' ? 'rejected' : 'status_changed')
+      : 'edited';
+    const soExtra = newStatus !== oldStatus ? { from: oldStatus, to: newStatus } : {};
+    saveJson(soJsonPath(companyId, orderId), { ...data, updatedAt: new Date().toISOString(),
+      audit: pushAudit(ex, req, soAction, soExtra) });
 
     res.json({ success: true, message: 'Sales order updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -414,6 +451,12 @@ router.get('/:orderId/render-attachment/:fileName', async (req, res) => {
 
     if (ext === '.txt') {
       return res.json({ kind: 'text', text: fs.readFileSync(fp, 'utf8') });
+    }
+
+    const imgMime = { '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.gif':'image/gif', '.webp':'image/webp', '.bmp':'image/bmp' };
+    if (imgMime[ext]) {
+      const b64 = `data:${imgMime[ext]};base64,${fs.readFileSync(fp).toString('base64')}`;
+      return res.json({ kind: 'image', base64: b64 });
     }
 
     return res.json({ kind: 'unknown' });

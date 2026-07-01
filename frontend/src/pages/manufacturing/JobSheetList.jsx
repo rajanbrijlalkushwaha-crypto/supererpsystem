@@ -4,13 +4,16 @@ import { useCompany } from '../../context/CompanyContext';
 import { printJobSheet } from '../../utils/printJobSheet';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const N = '#2F6FED';
+const N = '#104f4f';
 
 const STATUS_COLORS = {
   pending:     { bg: '#fff3cd', color: '#856404', border: '#ffc107' },
-  'in-progress': { bg: '#cce5ff', color: '#004085', border: '#b8daff' },
+  submitted:   { bg: '#cce5ff', color: '#004085', border: '#b8daff' },
+  approved:    { bg: '#d4edda', color: '#155724', border: '#c3e6cb' },
+  'in-progress': { bg: '#e0f0ff', color: '#0c5460', border: '#bee5eb' },
   completed:   { bg: '#d4edda', color: '#155724', border: '#c3e6cb' },
-  cancelled:   { bg: '#f8d7da', color: '#721c24', border: '#f5c6cb' },
+  rejected:    { bg: '#f8d7da', color: '#721c24', border: '#f5c6cb' },
+  cancelled:   { bg: '#e9ecef', color: '#495057', border: '#dee2e6' },
 };
 
 function StatusBadge({ status }) {
@@ -33,7 +36,7 @@ function StatusBadge({ status }) {
   );
 }
 
-const FILTERS = ['All', 'Pending', 'In Progress', 'Completed'];
+const FILTERS = ['All', 'Pending', 'Submitted', 'Approved', 'In Progress', 'Completed', 'Rejected'];
 
 export default function JobSheetList() {
   const { selectedCompany } = useCompany();
@@ -60,9 +63,42 @@ export default function JobSheetList() {
 
   const filtered = jobSheets.filter(js => {
     if (filter === 'All') return true;
-    const statusMap = { 'Pending': 'pending', 'In Progress': 'in-progress', 'Completed': 'completed' };
+    const statusMap = { 'Pending': 'pending', 'Submitted': 'submitted', 'Approved': 'approved', 'In Progress': 'in-progress', 'Completed': 'completed', 'Rejected': 'rejected' };
     return js.status === statusMap[filter];
   });
+
+  const handleApprove = async (id, jobNo) => {
+    if (!window.confirm(`Approve Job Sheet ${jobNo}?`)) return;
+    try {
+      const r = await fetch(`/api/manufacturing/job-sheets/${id}/approve?companyId=${companyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId, approvedBy: 'Admin' }),
+      });
+      const data = await r.json();
+      if (data.success) setJobSheets(prev => prev.map(j => j.id === id ? { ...j, status: 'approved' } : j));
+      else alert(data.error || 'Approve failed');
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleReject = async (id, jobNo) => {
+    const reason = window.prompt(`Reason for rejecting ${jobNo}:`);
+    if (reason === null) return;
+    try {
+      const r = await fetch(`/api/manufacturing/job-sheets/${id}/reject?companyId=${companyId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId, reason }),
+      });
+      const data = await r.json();
+      if (data.success) setJobSheets(prev => prev.map(j => j.id === id ? { ...j, status: 'rejected' } : j));
+      else alert(data.error || 'Reject failed');
+    } catch (e) {
+      alert(e.message);
+    }
+  };
 
   const handleDelete = async (id, jobNo) => {
     if (!window.confirm(`Delete Job Sheet ${jobNo}?`)) return;
@@ -124,7 +160,7 @@ export default function JobSheetList() {
               padding: '3px 12px', fontSize: 11, fontFamily: F,
               borderRadius: 3, cursor: 'pointer', fontWeight: filter === f ? 700 : 400,
               background: filter === f ? N : '#fff',
-              color: filter === f ? '#fff' : '#2F6FED',
+              color: filter === f ? '#fff' : '#104f4f',
               border: `1px solid ${N}`,
             }}
           >
@@ -186,11 +222,33 @@ export default function JobSheetList() {
                   <td style={tdStyle}>{js.dueDate ? new Date(js.dueDate).toLocaleDateString('en-IN') : '-'}</td>
                   <td style={tdStyle}><StatusBadge status={js.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                    {js.status === 'submitted' && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(js.id, js.jobNo)}
+                          style={{
+                            marginRight: 4, padding: '2px 8px', fontSize: 11, fontFamily: F,
+                            background: '#28a745', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
+                          }}
+                        >
+                          ✅ Approve
+                        </button>
+                        <button
+                          onClick={() => handleReject(js.id, js.jobNo)}
+                          style={{
+                            marginRight: 4, padding: '2px 8px', fontSize: 11, fontFamily: F,
+                            background: '#dc3545', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
+                          }}
+                        >
+                          ✕ Reject
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => navigate(`/manufacturing/job-sheets/edit/${js.id}`)}
                       style={{
                         marginRight: 4, padding: '2px 8px', fontSize: 11, fontFamily: F,
-                        background: '#1a4a7a', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
+                        background: '#0b3d3d', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
                       }}
                     >
                       ✏️ Edit
@@ -199,7 +257,7 @@ export default function JobSheetList() {
                       onClick={() => printJobSheet(js, {})}
                       style={{
                         marginRight: 4, padding: '2px 8px', fontSize: 11, fontFamily: F,
-                        background: '#2F6FED', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
+                        background: '#104f4f', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer',
                       }}
                     >
                       🖨️ Print

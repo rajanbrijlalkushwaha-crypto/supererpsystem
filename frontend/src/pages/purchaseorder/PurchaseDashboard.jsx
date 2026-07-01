@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const N = '#2F6FED';
+const N = '#133d80';
 
 const STATUS_COLORS = {
   draft:    { bg: '#e9ecef', color: '#495057', border: '#dee2e6' },
@@ -95,7 +95,7 @@ export default function PurchaseDashboard() {
         border: `1px solid ${N}`, borderTop: 'none', padding: 16, background: '#f9fafb',
       }}>
         {[
-          { label: 'Total POs',       value: total,    color: '#1a4a7a' },
+          { label: 'Total POs',       value: total,    color: '#0d2d6b' },
           { label: 'Draft',           value: draft,    color: '#6c757d' },
           { label: 'Pending Approval',value: pending,  color: '#856404' },
           { label: 'Approved',        value: approved, color: '#155724' },

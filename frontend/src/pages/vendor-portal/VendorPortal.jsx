@@ -369,7 +369,8 @@ function POCard({ po, token, payments }) {
                     <span style={{ fontSize:18 }}>🧾</span>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:12, fontWeight:700, color:'#065F46' }}>Invoice #{b.invoiceNo} — {fmtD(b.invoiceDate)}</div>
-                      <div style={{ fontSize:11, color:'#374151', marginTop:2 }}>{b.description || '—'}</div>
+                      {b.description && <div style={{ fontSize:11, color:'#374151', marginTop:2 }}>📝 {b.description}</div>}
+                      {b.notes && <div style={{ fontSize:11, color:'#374151', marginTop:2 }}>💬 {b.notes}</div>}
                       <div style={{ fontSize:10, color:'#6B7280', marginTop:1 }}>
                         Net: {fmt(b.netAmount)} · GST {b.gstPercent}%: {fmt(b.gstAmount)} · <strong>Total: {fmt(b.totalAmount)}</strong>
                         {b.submittedAt && ` · Submitted: ${fmtD(b.submittedAt?.slice(0,10))}`}

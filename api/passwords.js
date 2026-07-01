@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const path    = require('path');
 const fs      = require('fs');
+const { exec } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const dir  = cid => path.join(ROOT, 'Database', 'Companies', cid, 'Passwords');
@@ -19,167 +20,40 @@ const write = (cid, data) => {
 };
 
 /* ─────────────────────────────────────────────────────────
-   PUPPETEER AUTO-LOGIN
-   Opens a real visible browser, fills credentials, submits.
-   Browser stays open so user can handle OTP / CAPTCHA.
+   CLIENT-SIDE AUTO-LOGIN
+   Returns credentials to the calling browser so IT opens
+   the tab — not the server. Works from any PC on the network.
 ───────────────────────────────────────────────────────── */
 
-/* Username field selectors — tried in priority order */
-const U_SELECTORS = [
-  'input[type="email"]',
-  'input[autocomplete="username"]',
-  'input[autocomplete="email"]',
-  'input[name="username"]',  'input[id="username"]',
-  'input[name="userId"]',    'input[id="userId"]',
-  'input[name="loginid"]',   'input[id="loginid"]',
-  'input[name="LoginID"]',
-  'input[name="email"]',     'input[id="email"]',
-  'input[name="user"]',      'input[id="user"]',
-  'input[name="login"]',     'input[id="login"]',
-  'input[name="mobile"]',    'input[id="mobile"]',
-  'input[name="phone"]',     'input[id="phone"]',
-  'input[name="mobileNumber"]',
-  'input[name="gstin"]',     'input[id="gstin"]',
-  'input[type="text"]:not([type="hidden"])',
-];
-
-const SUBMIT_SELECTORS = [
-  'button[type="submit"]',
-  'input[type="submit"]',
-  'button[id*="login" i]',   'button[class*="login" i]',
-  'button[id*="signin" i]',  'button[class*="signin" i]',
-  'button[id*="submit" i]',  'button[class*="submit" i]',
-  'button[id*="next" i]',    'button[class*="next" i]',
-  'button[id*="proceed" i]', 'button[class*="proceed" i]',
-];
-
-async function findVisible(page, selectors) {
-  for (const sel of selectors) {
-    try {
-      const els = await page.$$(sel);
-      for (const el of els) {
-        const visible = await page.evaluate(e => {
-          const s = window.getComputedStyle(e);
-          const r = e.getBoundingClientRect();
-          return s.display !== 'none' && s.visibility !== 'hidden' &&
-                 s.opacity !== '0' && r.width > 0 && r.height > 0;
-        }, el);
-        if (visible) return el;
-      }
-    } catch {}
-  }
-  return null;
-}
-
-async function typeInto(el, text, page) {
-  await el.click({ clickCount: 3 });                 // select all existing text
-  await el.press('Backspace');
-  await el.type(text, { delay: 60 });
-}
-
-async function launchAndFill(entry) {
-  let puppeteer;
-  try { puppeteer = require('puppeteer'); }
-  catch { console.error('[Puppeteer] Not installed'); return; }
-
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: false,
-      defaultViewport: null,
-      args: [
-        '--start-maximized',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-      ],
-      ignoreDefaultArgs: ['--enable-automation'],
-    });
-
-    const pages = await browser.pages();
-    const page  = pages[0] || await browser.newPage();
-
-    /* Remove automation flag so sites don't block Puppeteer */
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
-
-    const url = entry.url.startsWith('http') ? entry.url : 'https://' + entry.url;
-    console.log(`[Puppeteer] Navigating to ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-    /* ── Step 1: fill username ── */
-    let userFilled = false;
-    const userEl = await findVisible(page, U_SELECTORS);
-    if (userEl) {
-      await typeInto(userEl, entry.username, page);
-      userFilled = true;
-      console.log('[Puppeteer] Username filled');
-    }
-
-    /* ── Step 2: check if password is already visible or need to click Next ── */
-    let pwdEl = await findVisible(page, ['input[type="password"]']);
-
-    if (!pwdEl && userFilled) {
-      /* Google / GST-style — need to click Next first */
-      const nextEl = await findVisible(page, SUBMIT_SELECTORS);
-      if (nextEl) {
-        await nextEl.click();
-        console.log('[Puppeteer] Clicked Next — waiting for password field…');
-        try {
-          await page.waitForSelector('input[type="password"]', { visible: true, timeout: 10000 });
-          pwdEl = await findVisible(page, ['input[type="password"]']);
-        } catch {
-          console.log('[Puppeteer] Password field did not appear after Next');
-        }
-      }
-    }
-
-    /* ── Step 3: fill password ── */
-    if (pwdEl) {
-      await typeInto(pwdEl, entry.password, page);
-      console.log('[Puppeteer] Password filled');
-
-      /* Short pause so the site registers input */
-      await new Promise(r => setTimeout(r, 400));
-
-      /* ── Step 4: submit ── */
-      const submitEl = await findVisible(page, SUBMIT_SELECTORS);
-      if (submitEl) {
-        await submitEl.click();
-        console.log('[Puppeteer] Submit clicked');
-      } else {
-        await pwdEl.press('Enter');
-        console.log('[Puppeteer] Enter pressed on password field');
-      }
-    } else {
-      console.log('[Puppeteer] Password field not found — browser left open for manual entry');
-    }
-
-    /* Browser stays open — user handles OTP / CAPTCHA / 2FA */
-    console.log('[Puppeteer] Browser left open for user interaction');
-
-  } catch (err) {
-    console.error('[Puppeteer] Error:', err.message);
-    /* Don't close browser on error — user may still see useful state */
-  }
-}
-
-/* POST /api/passwords/launch — respond immediately, run Puppeteer async */
-router.post('/launch', (req, res) => {
-  const { companyId, id } = req.body;
-  if (!companyId || !id) return res.status(400).json({ error: 'companyId and id required' });
-
+/* GET /api/passwords/:id/credentials — returns {url,username,password,siteName} */
+router.get('/:id/credentials', (req, res) => {
+  const { companyId } = req.query;
+  if (!companyId) return res.status(400).json({ error: 'companyId required' });
   const passwords = read(companyId);
-  const entry = passwords.find(p => p.id === id);
+  const entry = passwords.find(p => p.id === req.params.id);
   if (!entry) return res.status(404).json({ error: 'Entry not found' });
   if (!entry.url) return res.status(400).json({ error: 'No login URL saved for this entry' });
+  const url = entry.url.startsWith('http') ? entry.url : 'https://' + entry.url;
+  res.json({ ok: true, url, username: entry.username || '', password: entry.password || '', siteName: entry.siteName || '' });
+});
 
-  /* Respond immediately — Puppeteer runs in background */
-  res.json({ ok: true, message: `Opening browser for ${entry.siteName}…` });
-
-  /* Fire-and-forget */
-  launchAndFill(entry).catch(e => console.error('[Puppeteer] Unhandled:', e.message));
+/* ─────────────────────────────────────────────────────────
+   BROWSER LAUNCH — opens URL in chosen browser on this machine
+   body: { url, browser: 'chrome'|'edge'|'firefox'|'default' }
+───────────────────────────────────────────────────────── */
+router.post('/launch-browser', (req, res) => {
+  const { url, browser = 'default' } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  const safeUrl = url.replace(/"/g, '').replace(/'/g, '');
+  let cmd;
+  if      (browser === 'chrome')  cmd = `start chrome "${safeUrl}"`;
+  else if (browser === 'edge')    cmd = `start msedge "${safeUrl}"`;
+  else if (browser === 'firefox') cmd = `start firefox "${safeUrl}"`;
+  else                            cmd = `start "" "${safeUrl}"`;
+  exec(cmd, err => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ ok: true });
+  });
 });
 
 /* ─────────────────────────────────────────────────────────

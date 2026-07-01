@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
-const P   = '#2F6FED';
+const P   = '#104f4f';
 const BG  = '#F5F7FB';
 const BD  = '#E5EAF2';
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -26,7 +26,7 @@ const DEST_LABEL = {
 const ChallanModal = ({ record, type, company, onClose }) => {
   if (!record) return null;
   const isGRN  = type === 'grn';
-  const accentColor = isGRN ? '#166534' : '#991B1B';
+  const accentColor = isGRN ? '#104f4f' : '#991B1B';
   const accentBg    = isGRN ? '#ECFDF5' : '#FEF2F2';
   const accentBd    = isGRN ? '#A7F3D0' : '#FECACA';
   const docNo  = isGRN ? record.grnNo  : record.gdnNo;
@@ -283,7 +283,7 @@ export default function StockView() {
     if (!window.confirm(`Delete ${selectedGRN.size} selected GRN${selectedGRN.size > 1 ? 's' : ''}? Stock levels will be recalculated. This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await Promise.all([...selectedGRN].map(id => axios.delete(`/api/stock/grn/${id}?companyId=${cid}`)));
+      await Promise.all([...selectedGRN].map(id => axios.delete(`/api/stock/transactions/${id}?companyId=${cid}`)));
       setMessage(`${selectedGRN.size} GRN${selectedGRN.size > 1 ? 's' : ''} deleted.`);
       setSelectedGRN(new Set());
       load();
@@ -296,7 +296,7 @@ export default function StockView() {
     if (!window.confirm(`Delete ${selectedGDN.size} selected GDN${selectedGDN.size > 1 ? 's' : ''}? Stock levels will be recalculated. This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await Promise.all([...selectedGDN].map(id => axios.delete(`/api/stock/gdn/${id}?companyId=${cid}`)));
+      await Promise.all([...selectedGDN].map(id => axios.delete(`/api/stock/transactions/${id}?companyId=${cid}`)));
       setMessage(`${selectedGDN.size} GDN${selectedGDN.size > 1 ? 's' : ''} deleted.`);
       setSelectedGDN(new Set());
       load();
@@ -331,7 +331,7 @@ export default function StockView() {
   const SelectionBar = ({ count, type, onViewChallan, onDelete, onClear, record }) => {
     if (count === 0) return null;
     const isGRN   = type === 'grn';
-    const accent  = isGRN ? '#166534' : '#991B1B';
+    const accent  = isGRN ? '#104f4f' : '#991B1B';
     const accentBg = isGRN ? '#ECFDF5' : '#FEF2F2';
     const accentBd = isGRN ? '#A7F3D0' : '#FECACA';
     return (
@@ -344,7 +344,7 @@ export default function StockView() {
         {count === 1 && (
           <button onClick={onViewChallan} style={{
             padding: '3px 12px', fontSize: 11, fontFamily: F, fontWeight: 700,
-            background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#1D4ED8',
+            background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#104f4f',
             borderRadius: 4, cursor: 'pointer',
           }}>📄 View Delivery Challan</button>
         )}
@@ -561,7 +561,7 @@ export default function StockView() {
                   : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
                       <thead>
                         <tr>
-                          <th style={{ ...th('#166534'), width: 36, textAlign: 'center' }}>
+                          <th style={{ ...th('#104f4f'), width: 36, textAlign: 'center' }}>
                             <input
                               type="checkbox"
                               checked={selectedGRN.size === grns.length && grns.length > 0}
@@ -570,7 +570,7 @@ export default function StockView() {
                             />
                           </th>
                           {['GRN No.', 'Date', 'Source', 'Party', 'PO Ref', 'DC No.', 'Vehicle', 'Items', 'Actions'].map(h => (
-                            <th key={h} style={th('#166534')}>{h}</th>
+                            <th key={h} style={th('#104f4f')}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -589,10 +589,10 @@ export default function StockView() {
                                   type="checkbox"
                                   checked={isSel}
                                   onChange={() => toggleGRN(g.txnId)}
-                                  style={{ cursor: 'pointer', accentColor: '#166534' }}
+                                  style={{ cursor: 'pointer', accentColor: '#104f4f' }}
                                 />
                               </td>
-                              <td style={{ ...td, fontFamily: 'monospace', fontWeight: 700, color: '#166534' }}>{g.grnNo}</td>
+                              <td style={{ ...td, fontFamily: 'monospace', fontWeight: 700, color: '#104f4f' }}>{g.grnNo}</td>
                               <td style={td}>{fmtD(g.date)}</td>
                               <td style={td}>{SOURCE_LABEL[g.sourceType] || g.sourceType}</td>
                               <td style={{ ...td, fontWeight: 600 }}>{g.partyName || '—'}</td>
@@ -602,7 +602,7 @@ export default function StockView() {
                               <td style={{ ...td, textAlign: 'center' }}>
                                 <span
                                   onClick={() => toggle(`grn-${g.txnId}`)}
-                                  style={{ fontWeight: 700, color: '#166534', cursor: 'pointer',
+                                  style={{ fontWeight: 700, color: '#104f4f', cursor: 'pointer',
                                     background: '#ECFDF5', padding: '2px 8px', borderRadius: 12,
                                     border: '1px solid #A7F3D0' }}>
                                   {(g.items || []).length} {expanded[`grn-${g.txnId}`] ? '▼' : '▶'}
@@ -613,7 +613,7 @@ export default function StockView() {
                                   onClick={() => setChallan({ record: g, type: 'grn' })}
                                   style={{
                                     padding: '2px 8px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                                    background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#1D4ED8',
+                                    background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#104f4f',
                                     borderRadius: 4, cursor: 'pointer',
                                   }}>📄 Challan</button>
                               </td>
@@ -626,7 +626,7 @@ export default function StockView() {
                                       <tr style={{ background: '#DCFCE7' }}>
                                         {['Item Code', 'Item Name', 'Qty', 'Unit', 'Location', 'Rate'].map(h => (
                                           <th key={h} style={{ padding: '6px 10px', fontWeight: 700,
-                                            textAlign: 'left', color: '#166534', fontSize: 11 }}>{h}</th>
+                                            textAlign: 'left', color: '#104f4f', fontSize: 11 }}>{h}</th>
                                         ))}
                                       </tr>
                                     </thead>
@@ -727,7 +727,7 @@ export default function StockView() {
                                   onClick={() => setChallan({ record: g, type: 'gdn' })}
                                   style={{
                                     padding: '2px 8px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                                    background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#1D4ED8',
+                                    background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#104f4f',
                                     borderRadius: 4, cursor: 'pointer',
                                   }}>📄 Challan</button>
                               </td>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -17,7 +17,7 @@ const TABS = [
   { id:'delivery', label:'Delivery',    icon:'🚚' },
   { id:'payment',  label:'Payment',     icon:'💳' },
   { id:'specs',    label:'Specs',       icon:'📐' },
-  { id:'matplan',  label:'Material Plan',icon:'🏗️' },
+  { id:'matplan',  label:'Material Plan',icon:'🏗ï¸' },
   { id:'scope',    label:'Scope',       icon:'🎯' },
   { id:'bom',      label:'BOM',         icon:'🔧' },
   { id:'tasks',    label:'Tasks',       icon:'📌' },
@@ -884,7 +884,7 @@ const EditSalesOrder = () => {
                   }}
                   style={{ ...selStyle(true), width:240 }}
                 >
-                  <option value="">＋ Add Spec Group (select item)…</option>
+                  <option value="">ï¼‹ Add Spec Group (select item)…</option>
                   {items.filter(it=>it.itemName||it.material).map((it,i)=>(
                     <option key={i} value={it._id||it.itemCode||it.itemName}>{it.itemName||it.material}</option>
                   ))}
@@ -900,7 +900,7 @@ const EditSalesOrder = () => {
 
               {specSheet.map((grp) => (
                 <div key={grp._id} style={{ ...S.card, marginBottom:14 }}>
-                  <div style={{ background:'#1a3c6e', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
+                  <div style={{ background:'#104f4f', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
                     <span style={{ fontSize:16 }}>📦</span>
                     <span style={{ flex:1, fontWeight:700, color:'#fff', fontSize:13 }}>{grp.itemName || 'General Specifications'}</span>
                     <button type="button" onClick={() => ssAddHdr(grp._id)}
@@ -1016,7 +1016,7 @@ const EditSalesOrder = () => {
                   return (
                     <div key={grp} style={{ ...S.card,marginBottom:12 }}>
                       <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:10 }}>
-                        <div style={{ fontSize:13,fontWeight:700,color:'#1a2d4a' }}>🏗️ {grp}</div>
+                        <div style={{ fontSize:13,fontWeight:700,color:'#1a2d4a' }}>🏗ï¸ {grp}</div>
                         <span style={{ fontSize:11,color:'#6A6D70' }}>{grpItems.length} item(s)</span>
                       </div>
                       {grpItems.map((m,idx)=>(
@@ -1071,7 +1071,7 @@ const EditSalesOrder = () => {
                     </div>
                   );
                 })}
-                {matPlan.length===0 && <div style={{ textAlign:'center',padding:'32px 0',color:'#94A3B8',fontSize:13 }}><div style={{ fontSize:36,marginBottom:8 }}>🏗️</div>No material planning items. Click "+ Add Item".</div>}
+                {matPlan.length===0 && <div style={{ textAlign:'center',padding:'32px 0',color:'#94A3B8',fontSize:13 }}><div style={{ fontSize:36,marginBottom:8 }}>🏗ï¸</div>No material planning items. Click "+ Add Item".</div>}
               </div>
             );
           })()}
@@ -1262,7 +1262,7 @@ const EditSalesOrder = () => {
                             {a.fileName && !a.replaceMode ? (
                               <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:'11px', color:'#188918', fontWeight:600 }}>📎 Attached</span>
-                                <a href={`/api/sales-orders/${orderId}/download/${a.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:P, textDecoration:'underline' }}>⬇️ Download</a>
+                                <a href={`/api/sales-orders/${orderId}/download/${a.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:P, textDecoration:'underline' }}>⬇ï¸ Download</a>
                                 <button type="button" onClick={() => startReplace(i)} style={{ fontSize:'11px', padding:'3px 8px', background:SEC, border:`1px solid ${BD}`, color:P, borderRadius:'3px', cursor:'pointer' }}>Replace</button>
                               </div>
                             ) : a.replaceMode ? (

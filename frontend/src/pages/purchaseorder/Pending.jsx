@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printPurchaseOrder } from '../../utils/printPurchaseOrder';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import AttachmentPreviewModal from '../../components/AttachmentPreviewModal';
+import AuditTrail from '../../components/AuditTrail';
 
 /* ── helpers ── */
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -70,7 +73,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
       }}>
 
         {/* ── Modal Header ── */}
-        <div style={{ background: '#2F6FED', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ background: '#133d80', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 10, color: '#A8C4E0', letterSpacing: '0.8px', textTransform: 'uppercase' }}>Purchase Order — Pending Approval</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', display: 'flex', gap: 10, alignItems: 'center', marginTop: 2 }}>
@@ -92,12 +95,12 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
                 <div style={{ fontSize: 10, color: '#6A6D70' }}>Grand Total</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#2F6FED' }}>{items.length}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#133d80' }}>{items.length}</div>
                 <div style={{ fontSize: 10, color: '#6A6D70' }}>Line Items</div>
               </div>
               {attachments.length > 0 && (
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#2F6FED' }}>{attachments.length}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#133d80' }}>{attachments.length}</div>
                   <div style={{ fontSize: 10, color: '#6A6D70' }}>Attachments</div>
                 </div>
               )}
@@ -183,7 +186,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
-                  <tr style={{ background: '#2F6FED' }}>
+                  <tr style={{ background: '#133d80' }}>
                     {['#','Item','HSN','Qty','Unit','Rate','Discount','GST%','Amount'].map(h => (
                       <th key={h} style={{ padding: '6px 8px', color: '#fff', fontWeight: 600, fontSize: 11, textAlign: h === '#' ? 'center' : h === 'Amount' || h === 'Rate' ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
@@ -238,7 +241,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
                     <span>{row.l}</span><span style={{ fontFamily: 'monospace' }}>{fmt(row.v)}</span>
                   </div>
                 ))}
-                <div style={{ borderTop: '2px solid #2F6FED', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, color: '#2F6FED' }}>
+                <div style={{ borderTop: '2px solid #133d80', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, color: '#133d80' }}>
                   <span>Grand Total</span>
                   <span style={{ color: ACC, fontFamily: 'monospace' }}>{fmt(total)}</span>
                 </div>
@@ -304,6 +307,11 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
               onClose={() => setPreviewAtt(null)}
             />
           )}
+
+          {/* Audit Trail */}
+          <div style={{ marginTop: 16 }}>
+            <AuditTrail audit={order.audit} title="Activity Log" />
+          </div>
         </div>
 
         {/* ── Modal Footer / Actions ── */}
@@ -311,15 +319,15 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onEdit} style={{ background: '#F5F6F7', border: '1px solid #D9D9D9', color: '#32363A', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>✏️ Edit</button>
             <button onClick={onPrint} style={{ background: '#F5F6F7', border: '1px solid #D9D9D9', color: '#32363A', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>🖨️ Print</button>
-            <button onClick={onReject} style={{ background: '#FFEBEB', border: '1px solid #F5B8B8', color: '#BB0000', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>✕ Reject</button>
+            {onReject && <button onClick={onReject} style={{ background: '#FFEBEB', border: '1px solid #F5B8B8', color: '#BB0000', padding: '8px 16px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>✕ Reject</button>}
           </div>
-          <button onClick={onApprove} disabled={approving} style={{
+          {onApprove && <button onClick={onApprove} disabled={approving} style={{
             background: approving ? '#6A6D70' : '#188918', border: 'none', color: '#fff',
             padding: '9px 28px', borderRadius: 4, cursor: approving ? 'not-allowed' : 'pointer',
             fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8,
           }}>
             {approving ? '⏳ Approving…' : '✓ Approve Purchase Order'}
-          </button>
+          </button>}
         </div>
       </div>
     </div>
@@ -330,6 +338,7 @@ function PODetailModal({ order, onClose, onApprove, onReject, onEdit, onPrint, a
    MAIN PAGE
 ══════════════════════════════════════════════════ */
 const PendingPurchaseOrders = () => {
+  const { user } = useAuth();
   const [orders,    setOrders]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [message,   setMessage]   = useState('');
@@ -418,8 +427,8 @@ const PendingPurchaseOrders = () => {
           order={selected}
           approving={approving}
           onClose={() => setSelected(null)}
-          onApprove={() => handleApprove(selected)}
-          onReject={() => handleReject(selected)}
+          onApprove={can(user,'purchaseOrder','approve') ? () => handleApprove(selected) : null}
+          onReject={can(user,'purchaseOrder','approve') ? () => handleReject(selected) : null}
           onEdit={() => { setSelected(null); navigate(`/purchase-order/edit/${selected.orderId}`); }}
           onPrint={() => printPurchaseOrder(selected, selectedCompany)}
         />
@@ -506,10 +515,10 @@ const PendingPurchaseOrders = () => {
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="action-buttons">
-                      <button className="approve-btn" onClick={() => handleApprove(order)}>✓ Approve</button>
+                      {can(user,'purchaseOrder','approve') && <button className="approve-btn" onClick={() => handleApprove(order)}>✓ Approve</button>}
                       <button className="edit-btn"    onClick={() => navigate(`/purchase-order/edit/${order.orderId}`)}>✏️ Edit</button>
                       <button className="print-btn"   onClick={() => printPurchaseOrder(order, selectedCompany)}>🖨️ Print</button>
-                      <button className="delete-btn"  style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleReject(order)}>✕ Reject</button>
+                      {can(user,'purchaseOrder','approve') && <button className="delete-btn"  style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleReject(order)}>✕ Reject</button>}
                     </div>
                   </td>
                 </tr>

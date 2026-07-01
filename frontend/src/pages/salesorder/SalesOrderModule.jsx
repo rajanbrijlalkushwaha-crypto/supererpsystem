@@ -1,15 +1,18 @@
-/**
+﻿/**
  * Sales Order Module — Tab-by-Tab section navigation
  * Outer tabs : Create | View/Edit | Pending
  * Inner tabs  : Order Details → Item Details → Add-on Items →
  *               Additional Charges → Bank Guarantee → Scope of Work →
  *               Warranty → Activities → Attachments
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import { printSalesOrder } from '../../utils/printSalesOrder';
+import PageLoader from '../../components/PageLoader';
 
 /* ── colours ── */
 const N  = '#2563EB';
@@ -24,6 +27,44 @@ const api  = (url, cfg={}) => axios({url, ...cfg});
 const fmt  = n => `₹${(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
+
+/* Financial year: April-March, returns "YY-YY" e.g. "26-27" */
+const getFY = (dateStr) => {
+  const d=dateStr?new Date(dateStr):new Date(); const m=d.getMonth()+1; const y=d.getFullYear();
+  const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`;
+};
+const makeSoNo = (id,dateStr) => `${getFY(dateStr)}/${id}`;
+
+const fmtN = n => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDR = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
+const printReport = (title, subtitle, cols, rows, totalRow) => {
+  const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const rHtml = rows.map(r=>`<tr>${r.map(c=>`<td>${c??'—'}</td>`).join('')}</tr>`).join('');
+  const tHtml = totalRow?`<tr class="tot">${totalRow.map(c=>`<td>${c??''}</td>`).join('')}</tr>`:'';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Times New Roman',Times,serif;font-size:10.5pt;color:#000;background:#fff;}
+.pg{padding:10mm 14mm;}h1{font-size:17pt;font-weight:bold;text-align:center;margin-bottom:3px;}
+.sub{font-size:10pt;text-align:center;color:#555;margin-bottom:10px;border-bottom:1px solid #aaa;padding-bottom:5px;}
+table{width:100%;border-collapse:collapse;margin-top:6px;}
+th{background:#1a2a3a;color:#fff;padding:5px 8px;font-size:9.5pt;font-weight:bold;text-align:left;border:1px solid #444;white-space:nowrap;}
+td{padding:4px 8px;font-size:9.5pt;border:1px solid #ccc;vertical-align:top;}
+tr:nth-child(even) td{background:#f7f7f7;}
+.tot td{font-weight:bold;background:#ddd;border-top:2px solid #555;}
+.foot{margin-top:8px;font-size:8.5pt;color:#666;text-align:right;}
+@media print{@page{margin:10mm;size:A4 landscape;}.pg{padding:0;}}</style>
+</head><body><div class="pg">
+<h1>${title}</h1>
+<div class="sub">${subtitle} &nbsp;·&nbsp; ${rows.length} records &nbsp;·&nbsp; Generated: ${today2}</div>
+<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+<tbody>${rHtml}${tHtml}</tbody></table>
+<div class="foot">Printed: ${today2}</div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+</body></html>`;
+  const w=window.open('','_blank','width=1100,height=750,scrollbars=yes');
+  if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close();
+};
 
 /* ═══════════════════════ PRIMITIVES ═══════════════════════ */
 
@@ -56,7 +97,7 @@ function Sep() {
   return <div style={{width:1,height:16,background:'#aaa',margin:'0 2px',flexShrink:0,alignSelf:'center'}}/>;
 }
 
-function Inp({ value, onChange, type='text', placeholder, readOnly, disabled, style, min, max, onKeyDown }) {
+function Inp({ value, onChange, type='text', placeholder, readOnly, disabled, style, min, max, onKeyDown, onBlur:onBlurExtra }) {
   return (
     <input type={type} value={value??''} onChange={onChange}
       placeholder={placeholder} readOnly={readOnly} disabled={disabled}
@@ -68,7 +109,7 @@ function Inp({ value, onChange, type='text', placeholder, readOnly, disabled, st
         outline:'none', width:'100%', boxSizing:'border-box', ...style,
       }}
       onFocus={e=>{ if(!readOnly&&!disabled) { e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; } }}
-      onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
+      onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; if(onBlurExtra) onBlurExtra(e); }}
     />
   );
 }
@@ -259,7 +300,7 @@ function ClientSearch({ clients, onSelect, onClose }) {
 }
 
 /* ═══════════════════════ TAB 1 — ORDER DETAILS ═══════════════════════ */
-function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
+function TabOrderDetails({ form, setF, showSearch, setShowSearch, checkDupOrderNo, soDupWarn }) {
   return (
     <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:10}}>
 
@@ -301,13 +342,15 @@ function TabOrderDetails({ form, setF, showSearch, setShowSearch }) {
           <PH title="Reference Numbers & Terms" />
           <div style={{padding:'0 6px 6px'}}>
             <FR label="ERP Order ID" w={130} req>
-              <Inp value={form.nextId||''} readOnly style={{width:130,background:'#F0FDF4',fontWeight:700,color:'#166534',border:'1px solid #BBF7D0'}}/>
+              <Inp value={form.nextId||''} readOnly style={{width:130,background:'#F0FDF4',fontWeight:700,color:'#133d80',border:'1px solid #BBF7D0'}}/>
               <span style={{fontSize:10,color:'#888',paddingLeft:4}}>(auto-generated)</span>
             </FR>
             <FR label="Order No." w={130}>
               <Inp value={form.orderNo} onChange={e=>setF('orderNo',e.target.value)}
-                style={{width:190}} placeholder={`SO-${form.nextId||'XXXXX'}`}/>
+                style={{width:190}} placeholder={`SO-${form.nextId||'XXXXX'}`}
+                onBlur={e=>checkDupOrderNo&&checkDupOrderNo(e.target.value)}/>
             </FR>
+            {soDupWarn&&<div style={{marginLeft:138,marginTop:-4,marginBottom:4,fontSize:11,color:'#92400E',background:'#FFFBEB',border:'1px solid #FCD34D',borderRadius:4,padding:'2px 8px',fontFamily:F}}>{soDupWarn}</div>}
             <FR label="Order Date" w={130}>
               <Inp type="date" value={form.companyRefDate} onChange={e=>setF('companyRefDate',e.target.value)} style={{width:150}}/>
             </FR>
@@ -440,7 +483,7 @@ function ItemPickerModal({ companyId, onSelect, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={5} style={{ padding:16,textAlign:'center',color:'#888' }}>Loading…</td></tr>}
+              {loading && <tr><td colSpan={5} style={{ padding:40,textAlign:'center' }}><PageLoader overlay={false} text="Loading orders…"/></td></tr>}
               {!loading && filtered.length===0 && (
                 <tr><td colSpan={5} style={{ padding:16,textAlign:'center',color:'#888' }}>
                   No items found. <a href="/items/create" target="_blank" style={{ color:N }}>Create item →</a>
@@ -453,7 +496,7 @@ function ItemPickerModal({ companyId, onSelect, onClose }) {
                   onMouseEnter={e=>e.currentTarget.style.background='#dbeafe'}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f5f8fc'}
                 >
-                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',fontWeight:700,color:'#1a4a7a' }}>{it.itemCode}</td>
+                  <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',fontWeight:700,color:'#0d2d6b' }}>{it.itemCode}</td>
                   <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee' }}>{it.itemName}</td>
                   <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',textAlign:'center' }}>{it.uom||'—'}</td>
                   <td style={{ padding:'4px 8px',borderBottom:'1px solid #eee',textAlign:'center',fontFamily:'monospace' }}>{it.hsnCode||'—'}</td>
@@ -548,10 +591,10 @@ function TabItemDetails({ items, setItems }) {
                     <td style={{...td(80),textAlign:'center'}}>
                       <div style={{display:'flex',alignItems:'center',gap:3,justifyContent:'center'}}>
                         <button onClick={()=>setPickerFor(it._id)} title="Search from Item Master"
-                          style={{background:'#e8f0ff',color:'#1a4a7a',border:'1px solid #aac',padding:'0 5px',fontSize:10,cursor:'pointer',height:18,fontFamily:F,whiteSpace:'nowrap',flexShrink:0,fontWeight:700}}>
+                          style={{background:'#e8f0ff',color:'#0d2d6b',border:'1px solid #aac',padding:'0 5px',fontSize:10,cursor:'pointer',height:18,fontFamily:F,whiteSpace:'nowrap',flexShrink:0,fontWeight:700}}>
                           📋
                         </button>
-                        <span style={{fontSize:10,color:'#1a4a7a',fontWeight:700}}>
+                        <span style={{fontSize:10,color:'#0d2d6b',fontWeight:700}}>
                           {it.itemCode||'—'}
                         </span>
                       </div>
@@ -1189,7 +1232,7 @@ function RichEditor({ value, onChange }) {
       html += '<tr>';
       for (let c = 0; c < tCols; c++) {
         if (r === 0) {
-          html += '<th style="border:1px solid #aaa;padding:6px 10px;background:#1a3c6e;color:#fff;font-weight:700;min-width:70px">&nbsp;</th>';
+          html += '<th style="border:1px solid #aaa;padding:6px 10px;background:#104f4f;color:#fff;font-weight:700;min-width:70px">&nbsp;</th>';
         } else {
           html += '<td style="border:1px solid #aaa;padding:5px 10px;min-width:70px">&nbsp;</td>';
         }
@@ -1302,7 +1345,7 @@ function RichEditor({ value, onChange }) {
 
         {/* Table */}
         <button onMouseDown={e=>e.preventDefault()} onClick={()=>setTableOpen(o=>!o)}
-          style={{...TB,color:'#1a3c6e',fontWeight:700}} title="Insert Table">⊞ Table</button>
+          style={{...TB,color:'#104f4f',fontWeight:700}} title="Insert Table">⊞ Table</button>
 
         {SEP}
 
@@ -1316,7 +1359,7 @@ function RichEditor({ value, onChange }) {
         <div style={{position:'absolute',top:42,left:0,zIndex:200,background:'#fff',
           border:'1px solid #D1D5DB',borderRadius:6,boxShadow:'0 6px 20px rgba(0,0,0,0.15)',
           padding:'14px 18px',display:'flex',flexDirection:'column',gap:10,minWidth:230}}>
-          <div style={{fontWeight:700,fontSize:13,color:'#1a3c6e'}}>⊞ Insert Table</div>
+          <div style={{fontWeight:700,fontSize:13,color:'#104f4f'}}>⊞ Insert Table</div>
           <div style={{display:'flex',gap:10,alignItems:'center',fontSize:12}}>
             <span>Rows:</span>
             <input type="number" min={1} max={30} value={tRows} onChange={e=>setTRows(+e.target.value)}
@@ -1327,7 +1370,7 @@ function RichEditor({ value, onChange }) {
           </div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={insertTable}
-              style={{background:'#1a3c6e',color:'#fff',border:'none',padding:'5px 16px',
+              style={{background:'#104f4f',color:'#fff',border:'none',padding:'5px 16px',
                 borderRadius:4,fontSize:12,cursor:'pointer',fontWeight:700,fontFamily:F}}>Insert</button>
             <button onClick={()=>setTableOpen(false)}
               style={{background:'#F3F4F6',border:'1px solid #D1D5DB',padding:'5px 14px',
@@ -1345,7 +1388,7 @@ function RichEditor({ value, onChange }) {
         }
         .spec-editor table { border-collapse: collapse; width: 100%; margin: 8px 0; }
         .spec-editor td, .spec-editor th { border: 1px solid #aaa; padding: 5px 10px; min-width: 60px; }
-        .spec-editor th { background: #1a3c6e; color: #fff; font-weight: 700; }
+        .spec-editor th { background: #104f4f; color: #fff; font-weight: 700; }
         .spec-editor h1 { font-size: 1.8em; margin: 8px 0 4px; }
         .spec-editor h2 { font-size: 1.4em; margin: 6px 0 3px; }
         .spec-editor h3 { font-size: 1.15em; margin: 5px 0 2px; }
@@ -1624,8 +1667,48 @@ const MODAL_TABS = [
   { id:'attachments',    label:'Attachments',      icon:'📎' },
 ];
 
-function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
+function AttachViewer({ orderId, companyId, fileName, label, onClose }) {
+  const [state, setState] = useState({ loading:true, kind:null, html:'', base64:'', text:'', err:'' });
+  useEffect(()=>{
+    fetch(`/api/sales-orders/${orderId}/render-attachment/${encodeURIComponent(fileName)}?companyId=${companyId}`)
+      .then(r=>r.json())
+      .then(d=>{ if(d.error) setState({loading:false,kind:'err',err:d.error}); else setState({loading:false,...d}); })
+      .catch(e=>setState({loading:false,kind:'err',err:e.message}));
+  },[orderId,companyId,fileName]);
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:11000,display:'flex',alignItems:'center',justifyContent:'center',padding:12}}>
+      <div style={{background:'#fff',borderRadius:8,width:'88vw',height:'90vh',display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,0.4)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',background:N,color:'#fff',flexShrink:0}}>
+          <span style={{fontWeight:700,fontSize:13,fontFamily:F}}>📄 {label||fileName}</span>
+          <button onClick={onClose} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:18,cursor:'pointer',width:30,height:30,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+        </div>
+        <div style={{flex:1,overflow:'auto',padding:12}}>
+          {state.loading && <div style={{textAlign:'center',padding:60,color:'#888',fontFamily:F}}>Loading document…</div>}
+          {!state.loading && state.kind==='err' && <div style={{padding:20,color:'#cc0000',fontFamily:F}}>Error: {state.err}</div>}
+          {!state.loading && state.kind==='pdf' && (
+            <iframe src={state.base64} title={fileName} style={{width:'100%',height:'100%',minHeight:'70vh',border:'none'}}/>
+          )}
+          {!state.loading && (state.kind==='word'||state.kind==='excel') && (
+            <div style={{fontFamily:'Georgia,serif',fontSize:13,lineHeight:1.7}} dangerouslySetInnerHTML={{__html:state.html}}/>
+          )}
+          {!state.loading && state.kind==='text' && (
+            <pre style={{fontFamily:'monospace',fontSize:12,whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{state.text}</pre>
+          )}
+          {!state.loading && state.kind==='image' && (
+            <div style={{textAlign:'center',padding:8}}>
+              <img src={state.base64} alt={label||fileName} style={{maxWidth:'100%',maxHeight:'75vh',objectFit:'contain',borderRadius:4,boxShadow:'0 2px 12px rgba(0,0,0,0.15)'}}/>
+            </div>
+          )}
+          {!state.loading && state.kind==='unknown' && <div style={{padding:20,color:'#888',fontFamily:F}}>Cannot preview this file type.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) {
   const { selectedCompany } = useCompany();
+  const [viewAttach, setViewAttach] = useState(null);
   if (!order) return null;
   const o          = order;
   const items      = Array.isArray(o.items)       ? o.items       : [];
@@ -1664,6 +1747,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
   const TD = (props) => <td style={{padding:'4px 8px',border:'1px solid #dde4f0',fontSize:11,verticalAlign:'top',textAlign:props.r?'right':props.c?'center':'left',fontWeight:props.bold?700:400,...props.style}}>{props.children}</td>;
 
   return (
+    <>
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:10}}
       onClick={onClose}>
       <div style={{background:'#f4f6fa',width:'100%',maxWidth:1080,maxHeight:'96vh',display:'flex',flexDirection:'column',boxShadow:'0 6px 48px rgba(0,0,0,0.4)',border:'1px solid #c0c8da'}}
@@ -2024,25 +2108,34 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {attachments.map((a,i)=>{
                 const fileName = a.fileName||a.name||'';
-                const isPdf    = fileName.toLowerCase().endsWith('.pdf');
-                const isImg    = /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(fileName);
+                const ext      = fileName.split('.').pop().toLowerCase();
+                const isPdf    = ext==='pdf';
+                const isImg    = /^(png|jpg|jpeg|gif|bmp|webp)$/.test(ext);
+                const isWord   = ext==='docx'||ext==='doc';
+                const isExcel  = ext==='xlsx'||ext==='xls';
+                const isTxt    = ext==='txt';
+                const canView  = isPdf||isImg||isWord||isExcel||isTxt;
                 const dlUrl    = companyId&&o.orderId&&fileName
                   ? `/api/sales-orders/${o.orderId}/download/${encodeURIComponent(fileName)}?companyId=${companyId}`
                   : null;
-                const viewUrl  = dlUrl ? dlUrl + '&inline=1' : null;
+                const viewUrl  = isImg&&dlUrl ? dlUrl+'&inline=1' : null;
+                const fileIcon = isPdf?'📄':isImg?'🖼️':isWord?'📝':isExcel?'📊':isTxt?'📃':'📎';
+                const fileType = isPdf?'PDF':isImg?'Image':isWord?'Word Document':isExcel?'Excel Spreadsheet':isTxt?'Text File':'File';
                 return (
                   <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'#f6f8fc',border:'1px solid #dde4f0',borderLeft:`4px solid ${N}`,borderRadius:4}}>
                     <span style={{background:N,color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{i+1}</span>
-                    <span style={{fontSize:16,flexShrink:0}}>{isPdf?'📄':isImg?'🖼️':'📎'}</span>
+                    <span style={{fontSize:16,flexShrink:0}}>{fileIcon}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:'#1a3a6b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name||fileName||`Document ${i+1}`}</div>
-                      <div style={{fontSize:10,color:'#888',marginTop:1}}>{isPdf?'PDF Document':isImg?'Image':'File'}</div>
+                      <div style={{fontSize:10,color:'#888',marginTop:1}}>{fileType} · {fileName}</div>
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
-                      {viewUrl&&<a href={viewUrl} target="_blank" rel="noopener noreferrer"
-                        style={{background:'#EEF4FF',color:N,padding:'4px 10px',fontSize:10,fontWeight:700,textDecoration:'none',borderRadius:4,border:`1px solid ${N}30`}}>
-                        👁 View
-                      </a>}
+                      {canView&&(
+                        <button onClick={()=>setViewAttach({fileName,label:a.name||fileName})}
+                          style={{background:'#EEF4FF',color:N,padding:'4px 10px',fontSize:10,fontWeight:700,border:`1px solid ${N}30`,borderRadius:4,cursor:'pointer',fontFamily:F}}>
+                          👁 View
+                        </button>
+                      )}
                       {dlUrl&&<a href={dlUrl} download target="_blank" rel="noopener noreferrer"
                         style={{background:N,color:'#fff',padding:'4px 10px',fontSize:10,fontWeight:700,textDecoration:'none',borderRadius:4}}>
                         ⬇ Download
@@ -2061,6 +2154,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
           <span style={{fontSize:10,color:'#888',fontFamily:F}}>Order #{o.orderId} · {o.customerName||o.party||'—'} · {fmt(grandTotal)}</span>
           <div style={{display:'flex',gap:8}}>
             <Btn onClick={()=>printSalesOrder(o, selectedCompany)}>🖨️ Print / PDF</Btn>
+            {onEdit && <Btn v="suc" onClick={()=>{onClose();onEdit(o);}}>✏ Edit</Btn>}
             <Btn onClick={onClose}>Close</Btn>
             {onReject  && <Btn v="dan" onClick={()=>onReject(o.orderId)}>✕ Reject</Btn>}
             {onApprove && <Btn v="suc" onClick={()=>onApprove(o.orderId)}>✔ Approve</Btn>}
@@ -2069,14 +2163,143 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject }) {
 
       </div>
     </div>
+    {viewAttach&&(
+      <AttachViewer
+        orderId={o.orderId} companyId={companyId}
+        fileName={viewAttach.fileName} label={viewAttach.label}
+        onClose={()=>setViewAttach(null)}
+      />
+    )}
+    </>
+  );
+}
+
+/* ── Status config for the dashboard ── */
+const SO_STATUS = {
+  confirmed:         { label:'Confirmed',        bg:'#dcfce7', color:'#15803d', dot:'#16a34a' },
+  approved:          { label:'Approved',         bg:'#dcfce7', color:'#15803d', dot:'#16a34a' },
+  active:            { label:'Active',           bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6' },
+  'in-progress':     { label:'In Progress',      bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6' },
+  'order-received':  { label:'Order Received',   bg:'#e0e7ff', color:'#3730a3', dot:'#6366f1' },
+  'dispatch-pending':{ label:'Dispatch Pending', bg:'#fff7ed', color:'#c2410c', dot:'#f97316' },
+  pending:           { label:'Pending',          bg:'#fef3c7', color:'#92400e', dot:'#f59e0b' },
+  draft:             { label:'Draft',            bg:'#f1f5f9', color:'#475569', dot:'#94a3b8' },
+  completed:         { label:'Completed',        bg:'#dcfce7', color:'#15803d', dot:'#22c55e' },
+  rejected:          { label:'Rejected',         bg:'#fee2e2', color:'#991b1b', dot:'#ef4444' },
+  cancelled:         { label:'Cancelled',        bg:'#f1f5f9', color:'#475569', dot:'#94a3b8' },
+};
+
+function SoBadge({ s }) {
+  const c = SO_STATUS[s?.toLowerCase()] || SO_STATUS.draft;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px',
+      borderRadius:12, fontSize:11, fontWeight:600, background:c.bg, color:c.color,
+      whiteSpace:'nowrap' }}>
+      <span style={{ width:6, height:6, borderRadius:'50%', background:c.dot, flexShrink:0 }}/>
+      {c.label}
+    </span>
+  );
+}
+
+function StatChip({ label, value, color, bg, sub }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 12px',
+      background: bg, borderRadius:20, border:`1px solid ${color}30`, whiteSpace:'nowrap' }}>
+      <span style={{ fontSize:16, fontWeight:800, color, lineHeight:1 }}>{value}</span>
+      <div>
+        <div style={{ fontSize:10, fontWeight:700, color, lineHeight:1.2 }}>{label}</div>
+        {sub && <div style={{ fontSize:9.5, color, opacity:0.65, lineHeight:1 }}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+/* kept for any legacy references */
+function StatCard({ label, value, sub, icon, iconBg, subColor }) {
+  return <StatChip label={label} value={value} sub={sub} color={subColor||'#4f46e5'} bg={iconBg||'#eef2ff'}/>;
+}
+
+/* ── Donut chart (SVG, no library) ── */
+function DonutChart({ data, cx=60, cy=60, r=44, thickness=14, size=120, label, sublabel }) {
+  const total = data.reduce((s,d)=>s+d.value,0);
+  if (!total) return null;
+  const circ = 2*Math.PI*r;
+  let off = 0;
+  const slices = data.map(d=>{
+    const dash = (d.value/total)*circ;
+    const sl = { ...d, dash, off };
+    off += dash;
+    return sl;
+  });
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{overflow:'visible'}}>
+      {/* track */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth={thickness}/>
+      {slices.map((s,i)=>(
+        <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+          stroke={s.color} strokeWidth={thickness}
+          strokeDasharray={`${s.dash} ${circ-s.dash}`}
+          strokeDashoffset={-s.off}
+          style={{transform:'rotate(-90deg)',transformOrigin:`${cx}px ${cy}px`}}/>
+      ))}
+      {label!==undefined&&<text x={cx} y={cy-5} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:18,fontWeight:800,fill:'#0f172a'}}>{label}</text>}
+      {sublabel&&<text x={cx} y={cy+13} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:8.5,fill:'#94a3b8',fontWeight:500}}>{sublabel}</text>}
+    </svg>
+  );
+}
+
+/* ── Mini line/area chart (SVG) ── */
+function TrendChart({ data, width=340, height=110, color='#6366f1' }) {
+  if (!data||data.length<2) return null;
+  const maxV = Math.max(...data.map(d=>d.v));
+  const minV = 0;
+  const padL=32, padR=12, padT=10, padB=24;
+  const W=width-padL-padR, H=height-padT-padB;
+  const px=(i)=>padL+i*(W/(data.length-1));
+  const py=(v)=>padT+H-(((v-minV)/(maxV-minV||1))*H);
+  const pts=data.map((d,i)=>`${px(i)},${py(d.v)}`).join(' ');
+  const area=`M${px(0)},${py(data[0].v)} `+data.map((d,i)=>`L${px(i)},${py(d.v)}`).join(' ')+
+    ` L${px(data.length-1)},${padT+H} L${px(0)},${padT+H} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <defs>
+        <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0.01"/>
+        </linearGradient>
+      </defs>
+      {/* grid lines */}
+      {[0,0.25,0.5,0.75,1].map(t=>{
+        const y=padT+H*t;
+        return <line key={t} x1={padL} y1={y} x2={padL+W} y2={y} stroke="#f1f5f9" strokeWidth={1}/>;
+      })}
+      {/* area fill */}
+      <path d={area} fill="url(#tg)"/>
+      {/* line */}
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round"/>
+      {/* dots */}
+      {data.map((d,i)=>(
+        <circle key={i} cx={px(i)} cy={py(d.v)} r={3.5} fill="#fff" stroke={color} strokeWidth={2}/>
+      ))}
+      {/* x labels */}
+      {data.map((d,i)=>(
+        <text key={i} x={px(i)} y={height-6} textAnchor="middle"
+          style={{fontSize:8.5,fill:'#94a3b8'}}>{d.label}</text>
+      ))}
+      {/* y label at max */}
+      <text x={padL-4} y={padT+4} textAnchor="end" style={{fontSize:8,fill:'#94a3b8'}}>{maxV}</text>
+    </svg>
   );
 }
 
 function ViewTab({ companyId, onEdit }) {
-  const [orders,   setOrders]   = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [q,        setQ]        = useState('');
-  const [selected, setSelected] = useState(null);
+  const [orders,    setOrders]    = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [q,         setQ]         = useState('');
+  const [fy,        setFy]        = useState(getFY());
+  const [statusFlt, setStatusFlt] = useState('all');
+  const [selected,  setSelected]  = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2085,73 +2308,349 @@ function ViewTab({ companyId, onEdit }) {
     setLoading(false);
   },[companyId]);
 
-  const handleDelete = async (orderId) => {
-    if (!window.confirm(`Delete order ${orderId}? This cannot be undone.`)) return;
+  const handleDelete = async (o) => {
+    if (!window.confirm(`Delete SO ${o.orderNo||o.orderId} — ${o.customerName||''}?\nThis cannot be undone.`)) return;
     try {
-      await api(`/api/sales-orders/${orderId}?companyId=${companyId}`, { method: 'DELETE' });
-      load();
+      await api(`/api/sales-orders/${o.orderId}?companyId=${companyId}`, { method: 'DELETE' });
+      setSelected(null); load();
     } catch(e) { alert('Delete failed: ' + e.message); }
   };
 
   useEffect(()=>{ if(companyId) load(); },[load]);
 
-  const filtered = q ? orders.filter(o=>
-    (o.customerName||'').toLowerCase().includes(q.toLowerCase()) ||
-    String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q.toLowerCase()))
-    : orders;
+  const fyList = useMemo(() => {
+    const set = new Set(orders.map(o => getFY(o.orderDate||o.date)));
+    return ['all', ...[...set].sort().reverse()];
+  }, [orders]);
+
+  const filtered = useMemo(() => {
+    let list = fy === 'all' ? orders : orders.filter(o => getFY(o.orderDate||o.date) === fy);
+    if (statusFlt !== 'all') list = list.filter(o => (o.status||'draft').toLowerCase() === statusFlt);
+    if (q) {
+      const lq = q.toLowerCase();
+      list = list.filter(o =>
+        (o.customerName||'').toLowerCase().includes(lq) ||
+        String(o.orderId).includes(lq) ||
+        (o.orderNo||'').toLowerCase().includes(lq) ||
+        (o.customerPO||o.reference||'').toLowerCase().includes(lq) ||
+        (o.items||[]).some(it => (it.description||it.name||it.itemName||'').toLowerCase().includes(lq)));
+    }
+    return list;
+  }, [orders, fy, statusFlt, q]);
+
+  /* stats */
+  const stats = useMemo(() => {
+    const base = fy === 'all' ? orders : orders.filter(o => getFY(o.orderDate||o.date) === fy);
+    const cnt = (s) => base.filter(o=>(o.status||'draft').toLowerCase()===s).length;
+    const confirmed       = cnt('confirmed') + cnt('approved') + cnt('active');
+    const inProg          = cnt('in-progress') + cnt('order-received');
+    const dispatchPending = cnt('dispatch-pending');
+    const dispatched      = cnt('dispatched');
+    const pending         = cnt('pending') + cnt('draft');
+    const completed       = cnt('completed');
+    const pct = (n) => base.length > 0 ? `${((n/base.length)*100).toFixed(1)}%` : '';
+    return { total:base.length, confirmed, inProg, dispatchPending, dispatched, pending, completed, pct };
+  }, [orders, fy]);
+
+  /* expand orders into item rows with rowspan metadata */
+  const tableRows = useMemo(() => {
+    const rows = [];
+    let seq = 0;
+    filtered.forEach(o => {
+      seq++;
+      const items = o.items || [];
+      const otherCharges =
+        (parseFloat(o.packingCharges)||0) +
+        (parseFloat(o.freightCharges)||0) +
+        (o.charges||[]).reduce((s,c) => s+(parseFloat(c.amount)||0), 0);
+      const orderVal = parseFloat(o.grandTotal||o.totalAmount||0);
+      if (items.length === 0) {
+        rows.push({ o, item:null, rowSpan:1, isFirst:true, seq, otherCharges, orderVal });
+      } else {
+        items.forEach((item, idx) => {
+          rows.push({ o, item, rowSpan:idx===0?items.length:0, isFirst:idx===0, seq, otherCharges, orderVal });
+        });
+      }
+    });
+    return rows;
+  }, [filtered]);
+
+  /* footer totals */
+  const totals = useMemo(() => ({
+    qty:      tableRows.reduce((s,r) => s+(parseFloat(r.item?.qty||r.item?.quantity)||0), 0),
+    taxable:  tableRows.reduce((s,r) => {
+                if (!r.item) return s;
+                return s + (parseFloat(r.item.taxable) ||
+                  (parseFloat(r.item.qty||r.item.quantity||0)*parseFloat(r.item.rate||r.item.unitPrice||0)));
+              }, 0),
+    orderVal: filtered.reduce((s,o) => s+(parseFloat(o.grandTotal||o.totalAmount)||0), 0),
+    otherCh:  filtered.reduce((s,o) =>
+                s+(parseFloat(o.packingCharges)||0)+(parseFloat(o.freightCharges)||0)+
+                (o.charges||[]).reduce((ss,c)=>ss+(parseFloat(c.amount)||0),0), 0),
+  }), [tableRows, filtered]);
+
+  const TH = ({children, right, style:sx={}}) => (
+    <th style={{ padding:'7px 9px', background:'#1e293b', color:'#f1f5f9', fontWeight:700,
+      fontSize:10.5, textAlign:right?'right':'left', whiteSpace:'nowrap',
+      borderRight:'1px solid #374151', borderBottom:'2px solid #0f172a',
+      position:'sticky', top:0, zIndex:2, ...sx }}>
+      {children}
+    </th>
+  );
 
   return (
-    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-      {selected && <OrderModal order={selected} companyId={companyId} onClose={()=>setSelected(null)} />}
-      <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,padding:'4px 8px',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',border:'1px solid #888',background:W,height:24,padding:'0 6px',gap:4}}>
-          <span style={{fontSize:11,color:'#555'}}>🔍</span>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search order / client…"
-            style={{border:'none',outline:'none',fontSize:11,fontFamily:F,width:200,background:'transparent'}}/>
-          {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#888'}}>✕</button>}
+    <div style={{display:'flex',flexDirection:'column',gap:0,background:'#f8fafc',minHeight:'100%'}}>
+
+      {selected && (
+        <OrderModal order={selected} companyId={companyId}
+          onClose={()=>setSelected(null)}
+          onEdit={o=>{setSelected(null);onEdit(o);}}/>
+      )}
+
+      <div style={{padding:'10px 12px 0'}}>
+
+        {/* ── Stats Bar (compact single line) ── */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10,
+          background:'#fff', borderRadius:8, border:'1px solid #e5e7eb',
+          padding:'6px 14px', flexWrap:'wrap',
+          boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+          <span style={{ fontSize:11, color:'#94a3b8', fontWeight:700, marginRight:2, whiteSpace:'nowrap' }}>
+            FY {fy==='all'?'All':fy}
+          </span>
+          <div style={{ width:1, height:18, background:'#e5e7eb', margin:'0 4px' }}/>
+          <StatChip label="Total Orders"     value={stats.total}           color="#4f46e5" bg="#eef2ff"/>
+          <StatChip label="Confirmed"        value={stats.confirmed}       color="#16a34a" bg="#dcfce7" sub={stats.pct(stats.confirmed)}/>
+          <StatChip label="In Progress"      value={stats.inProg}          color="#f97316" bg="#fff7ed" sub={stats.pct(stats.inProg)}/>
+          <StatChip label="Dispatch Pending" value={stats.dispatchPending} color="#7c3aed" bg="#ede9fe" sub={stats.pct(stats.dispatchPending)}/>
+          <StatChip label="Dispatched"       value={stats.dispatched}      color="#059669" bg="#ecfdf5" sub={stats.pct(stats.dispatched)}/>
+          <StatChip label="Completed"        value={stats.completed}       color="#15803d" bg="#f0fdf4" sub={stats.pct(stats.completed)}/>
         </div>
-        <Btn onClick={load}>🔄 Refresh</Btn>
-        <span style={{marginLeft:'auto',fontSize:10,color:'#555'}}>{filtered.length} order{filtered.length!==1?'s':''}</span>
-      </div>
-      <div style={{flex:1,overflow:'auto',background:W}}>
-        {loading
-          ? <div style={{padding:20,textAlign:'center',color:N,fontSize:12,fontFamily:F}}>Loading orders…</div>
-          : (
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
-            <thead style={{position:'sticky',top:0,zIndex:2}}>
-              <tr style={{background:'#eef2ff'}}>
-                {['Order ID','Order No.','Date','Customer','Client PO','Status','Total ₹','Actions'].map((h,i)=>(
-                  <th key={i} style={{padding:'4px 8px',color:N,fontWeight:700,fontSize:10,textAlign:'left',borderRight:`1px solid #D1D5DB`,whiteSpace:'nowrap',borderBottom:`2px solid #D1D5DB`}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length===0 && (
-                <tr><td colSpan={8} style={{padding:'18px',textAlign:'center',color:'#666',fontFamily:F}}>No orders found</td></tr>
-              )}
-              {filtered.map((o,i)=>(
-                <tr key={o.orderId} style={{background:i%2===0?W:'#f5f8fc',cursor:'pointer'}}
-                  onMouseEnter={e=>(e.currentTarget.style.background='#d0e4f8')}
-                  onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?W:'#f5f8fc')}>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.orderId}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>{o.orderNo||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{o.orderDate||o.date||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700}}>{o.customerName||o.party||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>{o.customerPO||o.reference||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}><Badge s={o.status}/></td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',textAlign:'right',fontWeight:700,color:'#005500'}}>{fmt(o.grandTotal)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>
-                    <div style={{display:'flex',gap:4}}>
-                      <Btn small onClick={()=>setSelected(o)}>👁 View</Btn>
-                      <Btn small onClick={()=>onEdit(o)}>✏ Edit</Btn>
-                      <Btn v="dan" small onClick={()=>handleDelete(o.orderId)}>🗑 Delete</Btn>
-                    </div>
-                  </td>
+
+        {/* ── Filter Bar ── */}
+        <div style={{background:'#fff',borderRadius:8,border:'1px solid #e5e7eb',
+          padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:14,
+          boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
+
+          <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,
+            background:'#f9fafb',height:34,padding:'0 10px',gap:6,flex:1,minWidth:200,maxWidth:320}}>
+            <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
+            <input value={q} onChange={e=>setQ(e.target.value)}
+              placeholder="Search order, client, product…"
+              style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
+            {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af',lineHeight:1}}>×</button>}
+          </div>
+
+          <div style={{display:'flex',alignItems:'center',gap:5}}>
+            <span style={{fontSize:11,color:'#6b7280',fontWeight:600,whiteSpace:'nowrap'}}>Status</span>
+            <select value={statusFlt} onChange={e=>setStatusFlt(e.target.value)}
+              style={{height:34,padding:'0 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12,
+                fontFamily:F,color:'#374151',background:'#f9fafb',outline:'none',cursor:'pointer'}}>
+              <option value="all">All</option>
+              {Object.entries(SO_STATUS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+
+          <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+            {fyList.map(f => {
+              const active = fy === f;
+              return (
+                <button key={f} onClick={()=>setFy(f)}
+                  style={{ height:30, padding:'0 10px', fontSize:11, fontWeight:active?700:500,
+                    fontFamily:F, cursor:'pointer', borderRadius:6,
+                    border:`1px solid ${active?'#6366f1':'#d1d5db'}`,
+                    background:active?'#6366f1':'#fff',
+                    color:active?'#fff':'#374151', whiteSpace:'nowrap', transition:'all 0.1s' }}>
+                  {f==='all'?'All FY':`FY ${f}`}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+            <button onClick={load}
+              style={{height:34,padding:'0 12px',fontSize:12,fontFamily:F,cursor:'pointer',
+                borderRadius:6,border:'1px solid #d1d5db',background:'#fff',color:'#374151',fontWeight:600}}>
+              ↺ Refresh
+            </button>
+            <button onClick={()=>{
+              const fyLabel=fy==='all'?'All Financial Years':`FY ${fy}`;
+              const cols=['#','Order ID','Order No','Client Name','Order Date','Cust PO No','Due Date','Product/Description','Qty','Rate (₹)','Taxable (₹)','GST%','Other Charges (₹)','Order Value (₹)','Status'];
+              const rows=tableRows.map((r,i)=>[
+                i+1, r.o.orderId, r.o.orderNo||'—', r.o.customerName||'—',
+                fmtDR(r.o.orderDate||r.o.date), r.o.customerPO||r.o.reference||'—',
+                fmtDR(r.o.dueDate||r.o.deliveryDate),
+                r.item?.description||r.item?.name||r.item?.itemName||'—',
+                r.item?.qty||r.item?.quantity||'',
+                fmtN(r.item?.rate||r.item?.unitPrice||0),
+                fmtN(r.item?.taxable||((parseFloat(r.item?.qty||r.item?.quantity)||0)*(parseFloat(r.item?.rate||r.item?.unitPrice)||0))),
+                r.item?.gstPct||r.item?.gst||0,
+                r.isFirst?fmtN(r.otherCharges):'',
+                r.isFirst?fmtN(r.orderVal):'',
+                r.isFirst?r.o.status||'—':'',
+              ]);
+              const tot=['','','','','','','','',totals.qty.toFixed(2),'',
+                '₹'+totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2}),'',
+                '₹'+totals.otherCh.toLocaleString('en-IN',{minimumFractionDigits:2}),
+                '₹'+totals.orderVal.toLocaleString('en-IN',{minimumFractionDigits:2}),''];
+              printReport('Sales Orders Report',fyLabel,cols,rows,tot);
+            }}
+              style={{height:34,padding:'0 12px',fontSize:12,fontFamily:F,cursor:'pointer',
+                borderRadius:6,border:'1px solid #6366f1',background:'#6366f1',color:'#fff',fontWeight:600}}>
+              ↓ Export
+            </button>
+          </div>
+        </div>
+
+        {/* ── Table ── */}
+        <div style={{background:'#fff',borderRadius:10,border:'1px solid #d1d5db',
+          overflow:'auto',maxHeight:'calc(100vh - 280px)',
+          boxShadow:'0 1px 4px rgba(0,0,0,0.05)',marginBottom:14}}>
+
+          {loading ? (
+            <div style={{padding:40,textAlign:'center',color:'#6b7280',fontSize:13,fontFamily:F}}>
+              Loading orders…
+            </div>
+          ) : (
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:1080}}>
+              <thead>
+                <tr>
+                  <TH>#</TH>
+                  <TH>Order No</TH>
+                  <TH>Client Name</TH>
+                  <TH>Order Date</TH>
+                  <TH>Cust PO No</TH>
+                  <TH>Due Date</TH>
+                  <TH>Product / Description</TH>
+                  <TH right>Qty</TH>
+                  <TH right>Rate (₹)</TH>
+                  <TH right>Taxable (₹)</TH>
+                  <TH right>GST%</TH>
+                  <TH right>Other Charges (₹)</TH>
+                  <TH right>Order Value (₹)</TH>
+                  <TH>Status</TH>
+                  <TH style={{borderRight:'none'}}>Actions</TH>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {tableRows.length === 0 && (
+                  <tr><td colSpan={15} style={{padding:'40px',textAlign:'center',color:'#9ca3af',fontFamily:F,fontSize:13}}>
+                    No orders found
+                  </td></tr>
+                )}
+                {tableRows.map((r, ridx) => {
+                  const { o, item, rowSpan, isFirst, seq, otherCharges, orderVal } = r;
+                  const bg = seq%2===0 ? '#fff' : '#f8fbff';
+                  const txAmt = item
+                    ? (parseFloat(item.taxable) || (parseFloat(item.qty||item.quantity||0)*parseFloat(item.rate||item.unitPrice||0)))
+                    : 0;
+                  const C = (content, right=false, extra={}) => rowSpan > 0 ? (
+                    <td rowSpan={rowSpan} style={{
+                      padding:'5px 8px', borderRight:'1px solid #d1d5db',
+                      borderBottom:'1px solid #d1d5db', background:bg,
+                      textAlign:right?'right':'left', verticalAlign:'middle',
+                      ...extra }}>
+                      {content}
+                    </td>
+                  ) : null;
+
+                  return (
+                    <tr key={`${o.orderId}-${ridx}`}>
+                      {C(<span style={{color:'#9ca3af',fontSize:11}}>{seq}</span>)}
+                      {C(<span style={{fontWeight:700,color:'#1e293b'}}>{o.orderNo||'—'}</span>)}
+                      {C(
+                        <div>
+                          <div style={{fontWeight:600,color:'#111827'}}>{o.customerName||'—'}</div>
+                        </div>
+                      )}
+                      {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.orderDate||o.date)}</span>)}
+                      {C(<span style={{color:'#6b7280'}}>{o.customerPO||o.reference||'—'}</span>)}
+                      {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.dueDate||o.deliveryDate)||'—'}</span>)}
+
+                      {/* item-level cells */}
+                      <td style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151'}}>
+                        {item
+                          ? <div>
+                              <div style={{fontSize:11}}>{item.description||item.name||item.itemName||'—'}</div>
+                            </div>
+                          : <span style={{color:'#9ca3af',fontStyle:'italic',fontSize:11}}>No items</span>}
+                      </td>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,whiteSpace:'nowrap'}}>
+                        {item ? `${parseFloat(item.qty||item.quantity||0).toFixed(2)} ${item.unit||''}`.trim() : '—'}
+                      </td>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11}}>
+                        {item ? fmtN(item.rate||item.unitPrice||0) : '—'}
+                      </td>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,fontWeight:600,color:'#1e293b',fontSize:11}}>
+                        {item ? fmtN(txAmt) : '—'}
+                      </td>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',fontSize:11}}>
+                        {item ? `${item.gstPct||item.gst||0}%` : '—'}
+                      </td>
+
+                      {/* order-level cols with rowspan */}
+                      {rowSpan > 0 ? (
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
+                          borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',verticalAlign:'middle',fontSize:11}}>
+                          {otherCharges > 0 ? fmtN(otherCharges) : '—'}
+                        </td>
+                      ) : null}
+                      {rowSpan > 0 ? (
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
+                          borderBottom:'1px solid #d1d5db',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'middle',whiteSpace:'nowrap',fontSize:11}}>
+                          ₹{orderVal.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                        </td>
+                      ) : null}
+                      {rowSpan > 0 ? (
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',
+                          borderBottom:'1px solid #d1d5db',background:bg,verticalAlign:'middle'}}>
+                          <SoBadge s={o.status}/>
+                        </td>
+                      ) : null}
+                      {rowSpan > 0 ? (
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',borderBottom:'1px solid #d1d5db',background:bg,verticalAlign:'middle'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:3}}>
+                            <button title="View" onClick={()=>setSelected(o)}
+                              style={{width:24,height:24,borderRadius:5,border:'1px solid #d1d5db',background:'#f8fafc',
+                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>👁</button>
+                            <button title="Edit" onClick={()=>onEdit(o)}
+                              style={{width:24,height:24,borderRadius:5,border:'1px solid #d1d5db',background:'#f8fafc',
+                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>✏</button>
+                            <button title="Delete" onClick={()=>handleDelete(o)}
+                              style={{width:24,height:24,borderRadius:5,border:'1px solid #fecaca',background:'#fff5f5',
+                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>🗑</button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {tableRows.length > 0 && (
+                <tfoot>
+                  <tr style={{background:'#eef2ff',position:'sticky',bottom:0,zIndex:2}}>
+                    <td colSpan={8} style={{padding:'7px 10px',borderTop:'2px solid #818cf8',color:'#4f46e5',fontWeight:700,fontSize:11,borderRight:'1px solid #c7d2fe'}}>
+                      TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line item{tableRows.length!==1?'s':''}
+                    </td>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>{totals.qty.toFixed(2)}</td>
+                    <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
+                      ₹{totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                    </td>
+                    <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
+                      ₹{totals.otherCh.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                    </td>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#4f46e5',fontWeight:800,fontSize:12}}>
+                      ₹{totals.orderVal.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                    </td>
+                    <td colSpan={2} style={{borderTop:'2px solid #818cf8'}}/>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          )}
+        </div>
+
       </div>
     </div>
   );
@@ -2159,6 +2658,7 @@ function ViewTab({ companyId, onEdit }) {
 
 /* ═══════════════════════ PENDING TAB ═══════════════════════ */
 function PendingTab({ companyId }) {
+  const { user } = useAuth();
   const [orders,   setOrders]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [msg,      setMsg]      = useState('');
@@ -2192,14 +2692,16 @@ function PendingTab({ companyId }) {
 
   return (
     <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
-      {selected && <OrderModal order={selected} companyId={companyId} onClose={()=>setSelected(null)} onApprove={handleApprove} onReject={handleReject} />}
+      {selected && <OrderModal order={selected} companyId={companyId} onClose={()=>setSelected(null)}
+        onApprove={can(user,'salesOrder','approve') ? handleApprove : null}
+        onReject={can(user,'salesOrder','approve') ? handleReject : null} />}
       <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,padding:'4px 8px',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
         <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>Pending / Draft Sales Orders — Approval Queue</span>
         <Btn onClick={load} style={{marginLeft:'auto'}}>🔄 Refresh</Btn>
       </div>
       {msg && <div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
-      <div style={{flex:1,overflow:'auto',background:W}}>
-        {loading ? <div style={{padding:20,textAlign:'center',color:N,fontSize:12,fontFamily:F}}>Loading…</div> : (
+      <div style={{flex:1,overflow:'auto',background:W,position:'relative'}}>
+        {loading ? <PageLoader text="Loading orders…"/> : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
             <thead style={{position:'sticky',top:0,zIndex:2}}>
               <tr style={{background:N}}>
@@ -2224,8 +2726,8 @@ function PendingTab({ companyId }) {
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}} onClick={e=>e.stopPropagation()}>
                     <div style={{display:'flex',gap:4}}>
                       <Btn small onClick={()=>setSelected(o)}>👁 View</Btn>
-                      <Btn v="suc" small onClick={()=>action(o.orderId,'approved')}>✔ Approve</Btn>
-                      <Btn v="dan" small onClick={()=>action(o.orderId,'rejected')}>✕ Reject</Btn>
+                      {can(user,'salesOrder','approve') && <Btn v="suc" small onClick={()=>action(o.orderId,'approved')}>✔ Approve</Btn>}
+                      {can(user,'salesOrder','approve') && <Btn v="dan" small onClick={()=>action(o.orderId,'rejected')}>✕ Reject</Btn>}
                     </div>
                   </td>
                 </tr>
@@ -2243,6 +2745,7 @@ function PendingTab({ companyId }) {
 ════════════════════════════════════════════════════════════ */
 export default function SalesOrderModule() {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const cid = selectedCompany?.companyId || '';
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -2253,6 +2756,20 @@ export default function SalesOrderModule() {
             : 'create';
 
   const [editOrder, setEditOrder] = useState(null);
+  const [soDupWarn, setSoDupWarn] = useState('');
+
+  /* check if orderNo is already used */
+  const checkDupOrderNo = async (val) => {
+    if (!val?.trim() || !cid) { setSoDupWarn(''); return; }
+    try {
+      const r = await api(`/api/sales-orders?companyId=${cid}`);
+      const dup = (r.data||[]).find(o =>
+        (o.orderNo||'').trim().toLowerCase() === val.trim().toLowerCase() &&
+        String(o.orderId) !== String(editOrder?.orderId)
+      );
+      setSoDupWarn(dup ? `⚠ Order No already used by SO #${dup.orderId} (${dup.orderNo})` : '');
+    } catch { setSoDupWarn(''); }
+  };
 
   /* inner section tab */
   const [secTab, setSecTab] = useState('order-details');
@@ -2307,9 +2824,16 @@ export default function SalesOrderModule() {
   /* load next ID + clients */
   useEffect(()=>{
     if (!cid) return;
-    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>setF('nextId',r.data.nextId)).catch(()=>{});
+    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{const nid=r.data.nextId;setF('nextId',nid);setF('orderNo',makeSoNo(nid,today()));}).catch(()=>{});
     api(`/api/clients?companyId=${cid}`).then(r=>setClients(r.data||[])).catch(()=>{});
   },[cid]);
+
+  /* auto-update orderNo when order date changes for new SOs */
+  useEffect(()=>{
+    if(!editOrder&&form.nextId&&form.companyRefDate){
+      setF('orderNo',makeSoNo(form.nextId,form.companyRefDate));
+    }
+  },[form.companyRefDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
     setForm(blankForm()); setItems([]); setAddons([]); setCharges([]);
@@ -2317,7 +2841,7 @@ export default function SalesOrderModule() {
     setWarranty({}); setActivities([]); setAttachments([]);
     setSpecMode('freewrite'); setSpecHtml(''); setSpecGroups([]); setSpecFileList([]);
     setError(''); setOk(''); setSecTab('order-details');
-    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>setF('nextId',r.data.nextId)).catch(()=>{});
+    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{const nid=r.data.nextId;setF('nextId',nid);setF('orderNo',makeSoNo(nid,today()));}).catch(()=>{});
   };
 
   const loadEdit = (o) => {
@@ -2452,11 +2976,13 @@ export default function SalesOrderModule() {
       if (editOrder) {
         await api(`/api/sales-orders/${editOrder.orderId}?companyId=${cid}`,{method:'PUT',data:fd});
         setOk(`Order ${editOrder.orderId} updated successfully`);
-        setEditOrder(null);
+        /* keep editOrder set — prevents accidental re-submit from creating a duplicate */
       } else {
         const res = await api(`/api/sales-orders?companyId=${cid}`,{method:'POST',data:fd});
-        setOk(`Sales Order ${res.data.orderId} created successfully`);
-        resetForm();
+        const newId = res.data.orderId;
+        setOk(`Sales Order ${newId} created successfully`);
+        /* set editOrder with new id so any immediate re-submit is a PUT, not a new POST */
+        setEditOrder({ orderId: newId });
       }
     } catch(e) { setError(e.response?.data?.error||e.message); }
     setSaving(false);
@@ -2471,7 +2997,14 @@ export default function SalesOrderModule() {
 
   /* ─── RENDER ─── */
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#fff',fontFamily:F,overflow:'hidden'}}>
+    <div style={{
+      display:'flex', flexDirection:'column', fontFamily:F, background:'#fff',
+      /* create tab: fixed height + overflow:hidden so bottom action bar stays sticky */
+      /* view/pending tabs: min-height only — scrolling handled by parent .content-area */
+      ...(tab==='create'
+        ? { height:'100%', overflow:'hidden' }
+        : { minHeight:'100%' }),
+    }}>
 
 
       {/* ══ CREATE / EDIT TAB ══ */}
@@ -2489,7 +3022,7 @@ export default function SalesOrderModule() {
           {/* Section Content */}
           <div style={{flex:1,overflowY:'auto',background:'#F5F7FA'}}>
 
-            {secTab==='order-details'   && <TabOrderDetails   form={form} setF={setF} showSearch={showSearch} setShowSearch={setShowSearch}/>}
+            {secTab==='order-details'   && <TabOrderDetails   form={form} setF={setF} showSearch={showSearch} setShowSearch={setShowSearch} checkDupOrderNo={checkDupOrderNo} soDupWarn={soDupWarn}/>}
             {secTab==='item-details'    && <TabItemDetails    items={items} setItems={setItems}/>}
             {secTab==='addon-items'     && <TabAddonItems     addons={addons} setAddons={setAddons}/>}
             {secTab==='charges'         && <TabCharges        charges={charges} setCharges={setCharges}/>}
@@ -2542,6 +3075,7 @@ export default function SalesOrderModule() {
                 fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
               📤 Submit for Approval
             </button>
+            {can(user,'salesOrder','approve') && (
             <button onClick={()=>submit('approved')} disabled={saving}
               style={{background:'#16A34A',color:'#fff',border:'none',
                 padding:'0 18px',fontSize:12,cursor:saving?'default':'pointer',
@@ -2549,6 +3083,7 @@ export default function SalesOrderModule() {
                 boxShadow:'0 2px 6px rgba(22,163,74,0.3)'}}>
               {saving?'Saving…':'✓ Save & Approve'}
             </button>
+            )}
             <Sep/>
             <button onClick={resetForm} disabled={saving}
               style={{background:saving?'#F9FAFB':'#DC2626',color:saving?'#9CA3AF':'#fff',border:'none',

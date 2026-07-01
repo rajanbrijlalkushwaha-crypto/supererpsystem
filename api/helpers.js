@@ -76,4 +76,28 @@ const deleteJson = (filePath) => {
   try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
 };
 
-module.exports = { ROOT, upload, getCompanyPath, saveUploadedFiles, generateSequentialId, readAllRecords, saveJson, deleteJson };
+/* ── Audit trail helpers ── */
+const SESSIONS = require('./sessions');
+
+const resolveUser = (req) => {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
+  if (!token) return null;
+  const sess = SESSIONS.get(token);
+  if (!sess || sess.expiresAt < Date.now()) return null;
+  return { id: sess.userId, username: sess.username, name: sess.name, role: sess.role };
+};
+
+const auditEntry = (req, action, extra = {}) => ({
+  action,
+  by: resolveUser(req) || { name: 'System' },
+  at: new Date().toISOString(),
+  ...extra,
+});
+
+const pushAudit = (existing, req, action, extra = {}) => {
+  const trail = Array.isArray(existing.audit) ? existing.audit : [];
+  trail.push(auditEntry(req, action, extra));
+  return trail;
+};
+
+module.exports = { ROOT, upload, getCompanyPath, saveUploadedFiles, generateSequentialId, readAllRecords, saveJson, deleteJson, resolveUser, auditEntry, pushAudit };

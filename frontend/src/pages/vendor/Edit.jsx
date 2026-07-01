@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -60,7 +60,7 @@ const validators = {
    STYLES (identical to Create)
 ═══════════════════════════════════════════════════ */
 const F      = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const HDR    = '#2F6FED';
+const HDR    = '#133d80';
 const BD     = '#E5EAF2';
 const TAB_BG = '#F5F7FB';
 

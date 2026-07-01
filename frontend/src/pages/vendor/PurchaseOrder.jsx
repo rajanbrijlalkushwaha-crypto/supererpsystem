@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
 const F      = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const HDR    = '#2F6FED';
+const HDR    = '#133d80';
 const BD     = '#E5EAF2';
 const TAB_BG = '#F5F7FB';
 

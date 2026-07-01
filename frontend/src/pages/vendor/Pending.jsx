@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 
 const F      = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const HDR    = '#2F6FED';
+const HDR    = '#104f4f';
 const BD     = '#E5EAF2';
 const TAB_BG = '#F5F7FB';
 
 const PendingVendors = () => {
+  const { user } = useAuth();
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -206,25 +209,25 @@ const PendingVendors = () => {
                       <td style={{ padding: '7px 10px', color: '#475569', fontFamily: 'monospace', fontSize: 11 }}>{v.gstin || '—'}</td>
                       <td style={{ padding: '7px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
-                          <button onClick={() => handleApprove(v.vendorId)} disabled={isBusy} style={{
+                          {can(user,'vendor','approve') && <button onClick={() => handleApprove(v.vendorId)} disabled={isBusy} style={{
                             padding: '3px 12px', fontSize: 11, fontFamily: F, fontWeight: 700,
                             background: '#D1FAE5', border: '1px solid #6EE7B7', color: '#065F46',
                             borderRadius: 2, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
                           }}>
                             {busy[v.vendorId] === 'approving' ? '…' : '✓ Approve'}
-                          </button>
+                          </button>}
                           <button onClick={() => navigate(`/vendor/edit/${v.vendorId}`)} disabled={isBusy} style={{
                             padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
                             background: '#EBF0F5', border: `1px solid ${BD}`, color: HDR,
                             borderRadius: 2, cursor: 'pointer',
                           }}>✏ Edit</button>
-                          <button onClick={() => handleReject(v.vendorId)} disabled={isBusy} style={{
+                          {can(user,'vendor','approve') && <button onClick={() => handleReject(v.vendorId)} disabled={isBusy} style={{
                             padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
                             background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
                             borderRadius: 2, cursor: isBusy ? 'not-allowed' : 'pointer', opacity: isBusy ? 0.6 : 1,
                           }}>
                             {busy[v.vendorId] === 'rejecting' ? '…' : '✕ Reject'}
-                          </button>
+                          </button>}
                         </div>
                       </td>
                     </tr>

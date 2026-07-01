@@ -3,9 +3,9 @@ import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const HDR = '#2F6FED';
+const HDR = '#104f4f';
 const BD  = '#E5EAF2';
-const P   = '#2563EB';
+const P   = '#104f4f';
 
 const STATUS_STYLE = {
   'self-registered': { bg:'#FFFBEB', color:'#D97706', label:'Pending Review' },
@@ -401,7 +401,7 @@ export default function SelfRegistrations() {
                           <button onClick={() => setEditTarget(r)} style={{ padding:'3px 9px', fontSize:11, fontFamily:F, fontWeight:600, background:'#EBF0F5', border:`1px solid ${BD}`, color:HDR, borderRadius:4, cursor:'pointer' }}>
                             {r.status === 'approved' ? '👁 View' : '✏️ Edit'}
                           </button>
-                          <button onClick={() => setQueryTarget(r)} style={{ padding:'3px 9px', fontSize:11, fontFamily:F, fontWeight:600, background:'#EFF6FF', border:'1px solid #BFDBFE', color:'#1D4ED8', borderRadius:4, cursor:'pointer' }}>
+                          <button onClick={() => setQueryTarget(r)} style={{ padding:'3px 9px', fontSize:11, fontFamily:F, fontWeight:600, background:'#EFF6FF', border:'1px solid #BFDBFE', color:'#104f4f', borderRadius:4, cursor:'pointer' }}>
                             📧 Query
                           </button>
                           {r.status === 'self-registered' && (

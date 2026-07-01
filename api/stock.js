@@ -127,14 +127,17 @@ router.post('/grn', (req, res) => {
     if (!companyId) return res.status(400).json({ error: 'companyId required' });
 
     const { date, sourceType, partyType, partyId, partyName,
-            poRef, dcNo, vehicleNo, notes, items } = req.body;
+            poRef, dcNo, vehicleNo, notes, items,
+            clientId, clientName, soId, soNo, poId, poNo, withoutPO,
+            vendorId, vendorName, vendorInvoiceNo, vendorInvoiceDate,
+            receiveLocationType, receiveAt, receiveDetails, receivedBy } = req.body;
 
     if (!Array.isArray(items) || items.length === 0)
       return res.status(400).json({ error: 'At least one item is required' });
 
-    const validItems = items.filter(it => it.itemCode && parseFloat(it.qty) > 0);
+    const validItems = items.filter(it => (it.itemCode || it.itemName) && parseFloat(it.qty) > 0);
     if (validItems.length === 0)
-      return res.status(400).json({ error: 'All items must have itemCode and qty > 0' });
+      return res.status(400).json({ error: 'All items must have a name/code and qty > 0' });
 
     const dir = stockDir(companyId);
     ensureDir(dir);
@@ -144,21 +147,42 @@ router.post('/grn', (req, res) => {
       txnId, type: 'grn',
       grnNo: `GRN-${txnId}`,
       date: date || now.slice(0, 10),
+      /* SO / PO references */
+      clientId:   clientId   || '',
+      clientName: clientName || '',
+      soId:       soId       || '',
+      soNo:       soNo       || '',
+      poId:       poId       || '',
+      poNo:       poNo       || '',
+      withoutPO:  !!withoutPO,
+      /* vendor */
+      vendorId:           vendorId           || partyId   || '',
+      vendorName:         vendorName         || partyName || '',
+      vendorInvoiceNo:    vendorInvoiceNo    || '',
+      vendorInvoiceDate:  vendorInvoiceDate  || '',
+      /* legacy / compat */
       sourceType: sourceType || 'purchase',
-      partyType: partyType || 'vendor',
-      partyId: partyId || '',
-      partyName: partyName || '',
-      poRef: poRef || '',
-      dcNo: dcNo || '',
-      vehicleNo: vehicleNo || '',
+      partyType:  partyType  || 'vendor',
+      partyId:    vendorId   || partyId   || '',
+      partyName:  vendorName || partyName || '',
+      poRef:      poNo       || poRef     || '',
+      dcNo:       dcNo       || '',
+      vehicleNo:  vehicleNo  || '',
+      /* location */
+      receiveLocationType: receiveLocationType || 'warehouse',
+      receiveAt:    receiveAt    || '',
+      receiveDetails: receiveDetails || '',
+      receivedBy:   receivedBy   || '',
       notes: notes || '',
       items: validItems.map(it => ({
-        itemCode: it.itemCode,
+        itemCode: it.itemCode || '',
         itemName: it.itemName || '',
-        qty: parseFloat(it.qty),
-        unit: it.unit || '',
-        location: it.location || 'Default',
-        rate: parseFloat(it.rate) || 0,
+        hsnCode:  it.hsnCode  || '',
+        qty:      parseFloat(it.qty),
+        unit:     it.unit     || '',
+        location: it.location || receiveAt || 'Default',
+        rate:     parseFloat(it.rate) || 0,
+        remarks:  it.remarks  || '',
       })),
       companyId, createdAt: now,
     };

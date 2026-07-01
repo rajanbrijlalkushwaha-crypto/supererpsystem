@@ -3,8 +3,8 @@ import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
-const P  = '#2F6FED';
-const PD = '#1A56D6';
+const P  = '#104f4f';
+const PD = '#0b3d3d';
 const BG = '#F5F7FB';
 const BD = '#E5EAF2';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";

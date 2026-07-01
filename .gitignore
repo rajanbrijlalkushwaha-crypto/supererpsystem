@@ -4,8 +4,6 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-Database/Client/*
-!Database/Client/.gitkeep
 build/
 dist/
 .vscode/
@@ -13,4 +11,17 @@ dist/
 *.swp
 *.rar
 *.zip
-Database/email-config.json
+server.log
+
+# Exclude all database data — keep folder skeletons via .gitkeep files
+Database/**
+!Database/.gitkeep
+!Database/Accounts/.gitkeep
+!Database/Accounts/Banks/.gitkeep
+!Database/Client/.gitkeep
+!Database/Companies/.gitkeep
+!Database/Companies/logos/.gitkeep
+!Database/PurchaseOrder/.gitkeep
+!Database/SalesOrder/.gitkeep
+!Database/TallyImport/.gitkeep
+!Database/Vendor/.gitkeep

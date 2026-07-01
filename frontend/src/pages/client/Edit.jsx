@@ -64,7 +64,7 @@ const validators = {
 ═══════════════════════════════════════════════════ */
 const css = {
   card:    { background:'#fff', border:'1px solid #E5E5E5', borderRadius:'6px', padding:'20px 22px', marginBottom:'16px', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' },
-  secHead: { fontSize:'11px', fontWeight:700, color:'#2F6FED', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #0070F2', paddingBottom:'5px', marginBottom:'16px' },
+  secHead: { fontSize:'11px', fontWeight:700, color:'#104f4f', textTransform:'uppercase', letterSpacing:'0.7px', borderBottom:'2px solid #104f4f', paddingBottom:'5px', marginBottom:'16px' },
   lbl:     { fontSize:'12px', fontWeight:600, color:'#32363A', marginBottom:'4px', display:'block' },
   req:     { color:'#BB0000', marginLeft:'2px' },
   err:     { fontSize:'11px', color:'#BB0000', marginTop:'3px', fontWeight:600 },
@@ -76,7 +76,7 @@ const css = {
 function inp(err, foc) {
   return {
     width:'100%', padding:'7px 10px',
-    border:`1px solid ${err?'#BB0000':foc?'#0070F2':'#BBBCBD'}`,
+    border:`1px solid ${err?'#BB0000':foc?'#104f4f':'#BBBCBD'}`,
     borderRadius:'4px', fontSize:'13px', fontFamily:'inherit',
     background: foc?'#fff':'#FAFAFA', color:'#32363A', outline:'none',
     boxShadow: err?'0 0 0 2px rgba(187,0,0,0.08)':foc?'0 0 0 2px rgba(0,112,242,0.12)':'none',
@@ -136,11 +136,11 @@ function FTextarea({ label, req, value, onChange, placeholder, rows=4, err }) {
 function Toggle({ id, checked, onChange }) {
   return (
     <label htmlFor={id} style={{ display:'inline-flex', alignItems:'center', gap:'10px', cursor:'pointer' }}>
-      <div style={{ position:'relative', width:'42px', height:'22px', background: checked?'#0070F2':'#BBBCBD', borderRadius:'11px', transition:'background 0.2s', flexShrink:0 }}>
+      <div style={{ position:'relative', width:'42px', height:'22px', background: checked?'#104f4f':'#BBBCBD', borderRadius:'11px', transition:'background 0.2s', flexShrink:0 }}>
         <input id={id} type="checkbox" checked={checked} onChange={onChange} style={{ position:'absolute', opacity:0, width:0, height:0 }} />
         <div style={{ position:'absolute', top:'3px', left: checked?'22px':'3px', width:'16px', height:'16px', background:'white', borderRadius:'50%', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }} />
       </div>
-      <span style={{ fontSize:'13px', color: checked?'#0070F2':'#6A6D70', fontWeight: checked?600:400 }}>{checked?'Yes':'No'}</span>
+      <span style={{ fontSize:'13px', color: checked?'#104f4f':'#6A6D70', fontWeight: checked?600:400 }}>{checked?'Yes':'No'}</span>
     </label>
   );
 }
@@ -154,9 +154,9 @@ function MultiCheck({ options, selected, onChange }) {
         return (
           <button key={opt} type="button" onClick={() => toggle(opt)} style={{
             padding:'5px 14px', borderRadius:'16px',
-            border:`1px solid ${on?'#0070F2':'#D9D9D9'}`,
+            border:`1px solid ${on?'#104f4f':'#D9D9D9'}`,
             background: on?'#EAF1FB':'#FAFAFA',
-            color: on?'#0070F2':'#6A6D70',
+            color: on?'#104f4f':'#6A6D70',
             fontSize:'12px', fontWeight: on?600:400,
             cursor:'pointer', fontFamily:'inherit', transition:'all 0.12s',
           }}>{opt}</button>
@@ -408,7 +408,7 @@ const EditClient = () => {
   if (loading) {
     return (
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', flexDirection:'column', gap:'12px', fontFamily:'inherit' }}>
-        <div style={{ width:'36px', height:'36px', border:'3px solid #E5E5E5', borderTopColor:'#0070F2', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+        <div style={{ width:'36px', height:'36px', border:'3px solid #E5E5E5', borderTopColor:'#104f4f', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
         <div style={{ fontSize:'13px', color:'#6A6D70' }}>Loading client data…</div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -423,7 +423,7 @@ const EditClient = () => {
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
 
       {/* ── Header ── */}
-      <div style={{ background:'#2F6FED', borderRadius:'6px 6px 0 0', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ background:'#104f4f', borderRadius:'6px 6px 0 0', padding:'10px 20px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <div>
           <div style={{ fontSize:'11px', color:'#A8C4E0', letterSpacing:'0.6px', marginBottom:'2px' }}>CLIENT MASTER MANAGEMENT</div>
           <div style={{ fontSize:'16px', fontWeight:700, color:'#fff' }}>
@@ -437,7 +437,7 @@ const EditClient = () => {
           <button onClick={() => handleSave('draft')} disabled={saving} style={{ background:'#6A6D70', border:'none', color:'white', padding:'7px 18px', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>
             {saving ? '...' : '💾 Save Draft'}
           </button>
-          <button onClick={() => handleSave('approved')} disabled={saving} style={{ background:'#0070F2', border:'none', color:'white', padding:'7px 20px', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:'6px' }}>
+          <button onClick={() => handleSave('approved')} disabled={saving} style={{ background:'#104f4f', border:'none', color:'white', padding:'7px 20px', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:'6px' }}>
             {saving ? 'Updating…' : '✅ Update Client'}
           </button>
         </div>
@@ -452,9 +452,9 @@ const EditClient = () => {
             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
               display:'flex', alignItems:'center', gap:'7px', padding:'10px 16px',
               cursor:'pointer', background: active?'#fff':'#F5F6F7',
-              border:'none', borderBottom: active?'3px solid #0070F2':'3px solid transparent',
+              border:'none', borderBottom: active?'3px solid #104f4f':'3px solid transparent',
               borderRight:'1px solid #E5E5E5',
-              color: hasErr?'#BB0000': active?'#0070F2':'#6A6D70',
+              color: hasErr?'#BB0000': active?'#104f4f':'#6A6D70',
               fontSize:'13px', fontWeight: active?600:400, fontFamily:'inherit',
               whiteSpace:'nowrap', marginBottom:'-2px', position:'relative',
             }}>
@@ -478,7 +478,7 @@ const EditClient = () => {
                 <FInput label="Client Name" req value={form.clientName} onChange={v => set('clientName',v)} placeholder="e.g. ABC Pvt Ltd" err={errs.clientName} />
                 <div>
                   <label style={css.lbl}>Client ID</label>
-                  <input value={form.clientCode} readOnly style={{ ...inp(false,false), fontFamily:'monospace', letterSpacing:'2px', fontWeight:700, fontSize:'15px', background:'#F0F4F8', color:'#0070F2', cursor:'default' }} />
+                  <input value={form.clientCode} readOnly style={{ ...inp(false,false), fontFamily:'monospace', letterSpacing:'2px', fontWeight:700, fontSize:'15px', background:'#F0F4F8', color:'#104f4f', cursor:'default' }} />
                   <div style={css.hint}>System-assigned ID — cannot be changed</div>
                 </div>
                 <FSelect label="Business Type" req value={form.businessType} onChange={v => set('businessType',v)} err={errs.businessType}
@@ -535,7 +535,7 @@ const EditClient = () => {
             <div style={css.card}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
                 <div style={css.secHead}>Shipping Address</div>
-                <button type="button" onClick={() => set('shippingAddr', form.billingAddr)} style={{ fontSize:'12px', color:'#0070F2', background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'4px', padding:'4px 12px', cursor:'pointer', fontWeight:600, fontFamily:'inherit' }}>📋 Copy from Billing</button>
+                <button type="button" onClick={() => set('shippingAddr', form.billingAddr)} style={{ fontSize:'12px', color:'#104f4f', background:'#EAF1FB', border:'1px solid #A9CBF4', borderRadius:'4px', padding:'4px 12px', cursor:'pointer', fontWeight:600, fontFamily:'inherit' }}>📋 Copy from Billing</button>
               </div>
               <FTextarea label="Shipping Address" value={form.shippingAddr} onChange={v => set('shippingAddr',v)} placeholder="Leave blank if same as billing…" />
             </div>
@@ -547,8 +547,8 @@ const EditClient = () => {
           <div style={css.card}>
             <div style={css.secHead}>GST & Compliance Settings</div>
             <div style={{ display:'flex', flexDirection:'column', gap:'18px', maxWidth:'620px' }}>
-              <div style={{ padding:'14px 16px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #0070F2', borderRadius:'4px' }}>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>GST Registration</div>
+              <div style={{ padding:'14px 16px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #104f4f', borderRadius:'4px' }}>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#104f4f', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>GST Registration</div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
                   <span style={{ fontSize:'13px' }}>GST Registered</span>
                   <Toggle id="gstReg" checked={form.gstRegistered} onChange={e => set('gstRegistered', e.target.checked)} />
@@ -558,8 +558,8 @@ const EditClient = () => {
                     <label style={{ ...css.lbl, marginBottom:'8px' }}>GST Type</label>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
                       {['Regular','Composition','Unregistered','Consumer','SEZ'].map(t => (
-                        <label key={t} style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'13px', padding:'5px 12px', border:`1px solid ${form.gstType===t?'#0070F2':'#D9D9D9'}`, borderRadius:'4px', background: form.gstType===t?'#EAF1FB':'#FAFAFA', color: form.gstType===t?'#0070F2':'#6A6D70', fontWeight: form.gstType===t?600:400 }}>
-                          <input type="radio" name="gstType" value={t} checked={form.gstType===t} onChange={() => set('gstType',t)} style={{ accentColor:'#0070F2' }} />
+                        <label key={t} style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'13px', padding:'5px 12px', border:`1px solid ${form.gstType===t?'#104f4f':'#D9D9D9'}`, borderRadius:'4px', background: form.gstType===t?'#EAF1FB':'#FAFAFA', color: form.gstType===t?'#104f4f':'#6A6D70', fontWeight: form.gstType===t?600:400 }}>
+                          <input type="radio" name="gstType" value={t} checked={form.gstType===t} onChange={() => set('gstType',t)} style={{ accentColor:'#104f4f' }} />
                           {t}
                         </label>
                       ))}
@@ -568,7 +568,7 @@ const EditClient = () => {
                 )}
               </div>
               <div style={{ padding:'14px 16px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #E9730C', borderRadius:'4px' }}>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>TDS Applicability</div>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#104f4f', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>TDS Applicability</div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   <span style={{ fontSize:'13px' }}>TDS Applicable</span>
                   <Toggle id="tds" checked={form.tdsApplicable} onChange={e => set('tdsApplicable', e.target.checked)} />
@@ -577,10 +577,10 @@ const EditClient = () => {
 
               {/* Existing documents */}
               <div>
-                <div style={{ fontSize:'12px', fontWeight:700, color:'#2F6FED', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>Documents</div>
+                <div style={{ fontSize:'12px', fontWeight:700, color:'#104f4f', marginBottom:'10px', textTransform:'uppercase', letterSpacing:'0.5px' }}>Documents</div>
                 {documents.length === 0 && <div style={{ fontSize:'12px', color:'#94A3B8', marginBottom:'10px' }}>No documents attached.</div>}
                 {documents.map((doc, i) => (
-                  <div key={i} style={{ display:'flex', gap:'10px', marginBottom:'8px', alignItems:'flex-end', flexWrap:'wrap', padding:'10px 12px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #0070F2', borderRadius:'4px' }}>
+                  <div key={i} style={{ display:'flex', gap:'10px', marginBottom:'8px', alignItems:'flex-end', flexWrap:'wrap', padding:'10px 12px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderLeft:'3px solid #104f4f', borderRadius:'4px' }}>
                     <div style={{ flex:'0 0 180px' }}>
                       <label style={css.lbl}>Document Name</label>
                       <input value={doc.name} onChange={e => setDocuments(d => d.map((x,j)=>j===i?{...x,name:e.target.value}:x))} style={inp(false,false)} />
@@ -589,8 +589,8 @@ const EditClient = () => {
                       {doc.fileName && !doc.replaceMode ? (
                         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
                           <span style={{ fontSize:'12px', color:'#188918', fontWeight:600 }}>📎 File attached</span>
-                          <a href={`/api/clients/${clientId}/download/${doc.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:'#0070F2', textDecoration:'underline' }}>⬇️ Download</a>
-                          <button type="button" onClick={() => setDocuments(d => d.map((x,j)=>j===i?{...x,replaceMode:true,newFile:null}:x))} style={{ fontSize:'11px', padding:'3px 8px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#0070F2', borderRadius:'3px', cursor:'pointer' }}>Replace</button>
+                          <a href={`/api/clients/${clientId}/download/${doc.fileName}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'11px', color:'#104f4f', textDecoration:'underline' }}>⬇️ Download</a>
+                          <button type="button" onClick={() => setDocuments(d => d.map((x,j)=>j===i?{...x,replaceMode:true,newFile:null}:x))} style={{ fontSize:'11px', padding:'3px 8px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#104f4f', borderRadius:'3px', cursor:'pointer' }}>Replace</button>
                         </div>
                       ) : doc.replaceMode ? (
                         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
@@ -605,7 +605,7 @@ const EditClient = () => {
                     <button type="button" onClick={() => setDocuments(d => d.filter((_,j)=>j!==i))} style={{ padding:'6px 10px', background:'#FFEBEB', border:'1px solid #F5B8B8', color:'#BB0000', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600 }}>Remove</button>
                   </div>
                 ))}
-                <button type="button" onClick={() => setDocuments(d => [...d, { name:'', fileName:null, newFile:null, replaceMode:false }])} style={{ padding:'6px 14px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#0070F2', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Document</button>
+                <button type="button" onClick={() => setDocuments(d => [...d, { name:'', fileName:null, newFile:null, replaceMode:false }])} style={{ padding:'6px 14px', background:'#EAF1FB', border:'1px solid #A9CBF4', color:'#104f4f', borderRadius:'4px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>+ Add Document</button>
               </div>
             </div>
           </div>
@@ -650,7 +650,7 @@ const EditClient = () => {
               <div>
                 <label style={css.lbl}>Credit Limit ({form.currency})</label>
                 <div style={{ display:'flex', alignItems:'center', border:'1px solid #BBBCBD', borderRadius:'4px', overflow:'hidden', background:'#FAFAFA' }}>
-                  <span style={{ padding:'7px 10px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'13px', color:'#2F6FED', fontWeight:600 }}>₹</span>
+                  <span style={{ padding:'7px 10px', background:'#EEF3F8', borderRight:'1px solid #E5E5E5', fontSize:'13px', color:'#104f4f', fontWeight:600 }}>₹</span>
                   <input value={form.creditLimit} onChange={e => set('creditLimit',e.target.value.replace(/\D/,''))} placeholder="0" style={{ flex:1, padding:'7px 10px', border:'none', outline:'none', background:'transparent', fontSize:'13px', fontFamily:'inherit' }} />
                 </div>
               </div>
@@ -672,7 +672,7 @@ const EditClient = () => {
                 <label style={css.lbl}>Client Category</label>
                 <div style={{ display:'flex', gap:'8px' }}>
                   {[
-                    { val:'Regular',     color:'#0070F2', bg:'#EAF1FB', border:'#A9CBF4' },
+                    { val:'Regular',     color:'#104f4f', bg:'#EAF1FB', border:'#A9CBF4' },
                     { val:'VIP',         color:'#E9730C', bg:'#FEF3E2', border:'#F6C244' },
                     { val:'Blacklisted', color:'#BB0000', bg:'#FFEBEB', border:'#F5B8B8' },
                   ].map(opt => (
@@ -688,7 +688,7 @@ const EditClient = () => {
 
             {/* Quick Review */}
             <div style={{ marginTop:'20px', padding:'14px', background:'#F5F8FC', border:'1px solid #CBE0F5', borderRadius:'4px' }}>
-              <div style={{ fontSize:'11px', fontWeight:700, color:'#2F6FED', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'12px' }}>Quick Review</div>
+              <div style={{ fontSize:'11px', fontWeight:700, color:'#104f4f', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'12px' }}>Quick Review</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
                 <SummaryCell label="Client Name"   value={form.clientName} />
                 <SummaryCell label="Client ID"     value={form.clientCode} />
@@ -709,7 +709,7 @@ const EditClient = () => {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', background:'#F5F6F7', border:'1px solid #E5E5E5', borderTop:'none', borderRadius:'0 0 6px 6px' }}>
         <div style={{ display:'flex', gap:'5px', alignItems:'center' }}>
           {TABS.map(t => (
-            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} title={t.label} style={{ width:'28px', height:'5px', borderRadius:'3px', border:'none', cursor:'pointer', background: activeTab===t.id?'#0070F2':'#D9D9D9', transition:'background 0.15s' }} />
+            <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} title={t.label} style={{ width:'28px', height:'5px', borderRadius:'3px', border:'none', cursor:'pointer', background: activeTab===t.id?'#104f4f':'#D9D9D9', transition:'background 0.15s' }} />
           ))}
         </div>
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
@@ -718,9 +718,9 @@ const EditClient = () => {
             <button type="button" onClick={() => setActiveTab(TABS[tabIdx-1].id)} style={{ padding:'7px 14px', background:'#fff', border:'1px solid #D9D9D9', color:'#32363A', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>← Prev</button>
           )}
           {tabIdx < TABS.length-1 ? (
-            <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)} style={{ padding:'7px 14px', background:'#0070F2', border:'none', color:'white', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
+            <button type="button" onClick={() => setActiveTab(TABS[tabIdx+1].id)} style={{ padding:'7px 14px', background:'#104f4f', border:'none', color:'white', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>Next →</button>
           ) : (
-            <button type="button" onClick={() => handleSave('approved')} disabled={saving} style={{ padding:'7px 20px', background:'#0070F2', border:'none', color:'white', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>
+            <button type="button" onClick={() => handleSave('approved')} disabled={saving} style={{ padding:'7px 20px', background:'#104f4f', border:'none', color:'white', borderRadius:'4px', cursor:'pointer', fontSize:'13px', fontWeight:600, fontFamily:'inherit' }}>
               ✅ Update Client
             </button>
           )}

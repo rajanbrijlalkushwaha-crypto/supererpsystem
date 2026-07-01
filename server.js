@@ -33,8 +33,17 @@ app.use('/api/tally',           require('./api/tally'));
 app.use('/api/manufacturing',   require('./api/manufacturing'));
 app.use('/api/stock',           require('./api/stock'));
 app.use('/api/projects',        require('./api/projects'));
-app.use('/api/bills',           require('./api/bills'));
+app.use('/api/bills',               require('./api/bills'));
+app.use('/api/delivery-challans',   require('./api/deliveryChallans'));
+app.use('/api/grn',                 require('./api/grn'));
+app.use('/api/gdn',                 require('./api/gdn'));
 app.use('/api/passwords',       require('./api/passwords'));
+app.use('/api/crm',             require('./api/crm'));
+app.use('/api/deposits',        require('./api/deposits'));
+app.use('/api/approvals',       require('./api/approvals'));
+app.use('/api/ledger',          require('./api/ledger'));
+app.use('/api/communication',   require('./api/communication').router);
+app.use('/api/financial-docs',  require('./api/financial-docs'));
 
 // ── Vendor Portal (self-registration, vendor login) ──
 app.use('/api/vendor-portal', require('./api/vendor-portal').router);

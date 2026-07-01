@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { useNavigate } from 'react-router-dom';
@@ -127,8 +127,8 @@ const Pending = () => {
         ].map(({ key, label }) => (
           <button key={key} onClick={() => { setFilter(key); setSelectedIds(new Set()); }}
             style={{ padding: '5px 14px', borderRadius: 20, border: '1px solid', cursor: 'pointer', fontSize: 13,
-              borderColor: filter === key ? '#1a3c6e' : '#e2e8f0',
-              background: filter === key ? '#1a3c6e' : '#fff',
+              borderColor: filter === key ? '#104f4f' : '#e2e8f0',
+              background: filter === key ? '#104f4f' : '#fff',
               color: filter === key ? '#fff' : '#374151', fontWeight: filter === key ? 600 : 400 }}>
             {label}
           </button>
@@ -190,7 +190,7 @@ const Pending = () => {
                     </td>
                     <td>
                       <span className={`status-badge ${item.changeType === 'new' ? 'status-approved' : 'status-pending'}`}>
-                        {item.changeType === 'new' ? '🆕 New' : '✏️ Modified'}
+                        {item.changeType === 'new' ? '🆕 New' : '✏ï¸ Modified'}
                       </span>
                     </td>
                     <td><strong>{item.data.companyName}</strong></td>

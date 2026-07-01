@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
-const N = '#2F6FED';
+const N = '#104f4f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const TYPE_COLOR = {
   'Ready Product': { bg: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' },
   'Raw Material':  { bg: '#fff3e0', color: '#e65100', border: '#ffcc80' },
-  'Service':       { bg: '#e3f2fd', color: '#1565c0', border: '#90caf9' },
+  'Service':       { bg: '#e3f2fd', color: '#104f4f', border: '#90caf9' },
 };
 
 export default function ViewItems() {
@@ -53,7 +53,7 @@ export default function ViewItems() {
     }
   };
 
-  const th = { padding: '5px 8px', background: N, color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: '1px solid #2a5a8a' };
+  const th = { padding: '5px 8px', background: N, color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: '1px solid #0b3d3d' };
   const td = { padding: '4px 8px', fontSize: 11, fontFamily: F, border: '1px solid #dde', verticalAlign: 'middle' };
 
   return (
@@ -114,7 +114,7 @@ export default function ViewItems() {
               const tc = TYPE_COLOR[it.itemType] || TYPE_COLOR['Raw Material'];
               return (
                 <tr key={it.itemCode} style={{ background: i % 2 === 0 ? '#fff' : '#f7f9fc' }}>
-                  <td style={{ ...td, fontWeight: 700, color: '#1a4a7a' }}>{it.itemCode}</td>
+                  <td style={{ ...td, fontWeight: 700, color: '#0d2d6b' }}>{it.itemCode}</td>
                   <td style={{ ...td, fontWeight: 600 }}>{it.itemName}</td>
                   <td style={{ ...td, textAlign: 'center' }}>{it.uom || '—'}</td>
                   <td style={{ ...td, textAlign: 'center', fontFamily: 'monospace', letterSpacing: 0.5 }}>{it.hsnCode || '—'}</td>
@@ -129,7 +129,7 @@ export default function ViewItems() {
                   <td style={{ ...td, textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       <button onClick={() => navigate(`/items/edit/${it.itemCode}`)}
-                        style={{ padding: '1px 10px', fontSize: 10, cursor: 'pointer', background: '#e8f0ff', color: '#1a4a7a', border: '1px solid #aac', fontFamily: F, fontWeight: 600 }}>
+                        style={{ padding: '1px 10px', fontSize: 10, cursor: 'pointer', background: '#e8f0ff', color: '#0d2d6b', border: '1px solid #aac', fontFamily: F, fontWeight: 600 }}>
                         Edit
                       </button>
                       <button onClick={() => handleDelete(it.itemCode)}

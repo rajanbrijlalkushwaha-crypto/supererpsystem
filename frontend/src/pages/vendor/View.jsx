@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { printVendorDetails } from '../../utils/printVendor';
+import ActivityDrawer from '../../components/ActivityDrawer';
 
 const F      = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const HDR    = '#2F6FED';
+const HDR    = '#104f4f';
 const BD     = '#E5EAF2';
 const TAB_BG = '#F5F7FB';
+const getFY = d => { if(!d) return null; const dt=new Date(d); if(isNaN(dt)) return null; const y=dt.getFullYear(),m=dt.getMonth()+1,s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
+const fmtD2 = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:`${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 
 const STATUS_STYLE = {
   approved: { background: '#D1FAE5', color: '#065F46', border: '1px solid #6EE7B7' },
@@ -43,7 +46,7 @@ const VendorDetailModal = ({ vendor, company, onClose, onEdit }) => {
 
         {/* Header */}
         <div style={{
-          background: 'linear-gradient(135deg, #2F6FED, #1A56D6)',
+          background: 'linear-gradient(135deg, #104f4f, #0b3d3d)',
           padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div>
@@ -111,7 +114,7 @@ const VendorDetailModal = ({ vendor, company, onClose, onEdit }) => {
           }}>Close</button>
           <button onClick={() => printVendorDetails(vendor, company)} style={{
             padding: '6px 16px', fontSize: 12, fontFamily: F, fontWeight: 600,
-            background: '#F0FDF4', border: '1px solid #86EFAC', color: '#166534',
+            background: '#F0FDF4', border: '1px solid #86EFAC', color: '#104f4f',
             borderRadius: 6, cursor: 'pointer',
           }}>🖨 Print</button>
           <button onClick={onEdit} style={{
@@ -136,6 +139,9 @@ const ViewVendors = () => {
   const [selected,   setSelected]   = useState(new Set());
   const [viewVendor, setViewVendor] = useState(null);
   const [deleting,   setDeleting]   = useState(false);
+  const [hoveredId,  setHoveredId]  = useState(null);
+  const [activityRec, setActivityRec] = useState(null);
+  const [fy,         setFy]         = useState('all');
   const navigate = useNavigate();
   const { selectedCompany } = useCompany();
 
@@ -199,16 +205,25 @@ const ViewVendors = () => {
     else { setSortCol(col); setSortDir('asc'); }
   };
 
+  const fyList = useMemo(() => {
+    const set = new Set();
+    vendors.forEach(v => { const f = getFY(v.createdAt); if (f) set.add(f); });
+    return Array.from(set).sort().reverse();
+  }, [vendors]);
+
   const filtered = vendors
     .filter(v => {
       const q = search.toLowerCase();
-      return (
+      const matchQ = (
         String(v.vendorId).includes(q) ||
         (v.vendorName || '').toLowerCase().includes(q) ||
+        (v.gstin || '').toLowerCase().includes(q) ||
         (v.city || '').toLowerCase().includes(q) ||
         (v.state || '').toLowerCase().includes(q) ||
         (v.contactPerson || v.contactPersons?.[0]?.name || '').toLowerCase().includes(q)
       );
+      const matchFY = fy === 'all' || getFY(v.createdAt) === fy;
+      return matchQ && matchFY;
     })
     .sort((a, b) => {
       const va = String(a[sortCol] || '').toLowerCase();
@@ -216,19 +231,21 @@ const ViewVendors = () => {
       return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
-  const SortTh = ({ col, children }) => (
+  const SortTh = ({ col, children, style = {} }) => (
     <th onClick={() => toggleSort(col)} style={{
       padding: '7px 10px', fontSize: 11, fontWeight: 700, color: '#fff',
-      background: sortCol === col ? '#1A56D6' : HDR,
+      background: sortCol === col ? '#0b3d3d' : HDR,
       textAlign: 'left', cursor: 'pointer', whiteSpace: 'nowrap',
       borderRight: `1px solid rgba(255,255,255,0.12)`, userSelect: 'none',
-      fontFamily: F,
+      fontFamily: F, ...style,
     }}>
       {children} {sortCol === col ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ opacity: 0.3 }}>⇅</span>}
     </th>
   );
 
   const allSelected = filtered.length > 0 && selected.size === filtered.length;
+  const selCount = selected.size;
+  const selOne = selCount === 1 ? vendors.find(v => v.vendorId === [...selected][0]) : null;
 
   return (
     <div style={{ fontFamily: F, display: 'flex', flexDirection: 'column', height: '100%', background: '#EBF0F5' }}>
@@ -247,7 +264,7 @@ const ViewVendors = () => {
       <div style={{
         background: HDR, padding: '8px 16px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: `2px solid ${BD}`, flexShrink: 0,
+        borderBottom: `2px solid ${BD}`, flexShrink: 0, flexWrap: 'wrap', gap: 6,
       }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
@@ -257,44 +274,63 @@ const ViewVendors = () => {
             {vendors.length} vendor{vendors.length !== 1 ? 's' : ''} registered
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 
-          {/* Selection action bar */}
-          {selected.size > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+
+          {/* ── Selection Action Bar (appears at top when rows are selected) ── */}
+          {selCount > 0 && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: 6, padding: '3px 10px',
+              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.35)',
+              borderRadius: 8, padding: '4px 10px',
+              animation: 'fadeIn 0.15s ease',
             }}>
-              <span style={{ fontSize: 11, color: '#fff', fontWeight: 700 }}>
-                {selected.size} selected
+              <span style={{ fontSize: 11, color: '#fff', fontWeight: 800, marginRight: 4 }}>
+                {selCount} selected
               </span>
-              {selected.size === 1 && (
-                <button
-                  onClick={() => {
-                    const id = [...selected][0];
-                    navigate(`/vendor/edit/${id}`);
-                  }}
-                  style={{
-                    padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
+
+              {selOne && (
+                <>
+                  <button onClick={() => setViewVendor(selOne)} style={{
+                    padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
+                    background: '#EEF4FF', border: '1px solid #BFDBFE', color: '#104f4f',
+                    borderRadius: 5, cursor: 'pointer',
+                  }}>👁 View</button>
+                  <button onClick={() => navigate(`/vendor/edit/${selOne.vendorId}`)} style={{
+                    padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
                     background: '#ECFDF5', border: '1px solid #6EE7B7', color: '#065F46',
-                    borderRadius: 4, cursor: 'pointer',
+                    borderRadius: 5, cursor: 'pointer',
                   }}>✏ Edit</button>
+                  <button onClick={() => printVendorDetails(selOne, selectedCompany)} style={{
+                    padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
+                    background: '#F0FDF4', border: '1px solid #86EFAC', color: '#104f4f',
+                    borderRadius: 5, cursor: 'pointer',
+                  }}>🖨 Print</button>
+                </>
               )}
-              <button
-                onClick={handleDeleteSelected}
-                disabled={deleting}
-                style={{
-                  padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
-                  background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
-                  borderRadius: 4, cursor: 'pointer',
-                }}>🗑 Delete {selected.size > 1 ? `${selected.size} vendors` : 'vendor'}</button>
-              <button
-                onClick={() => setSelected(new Set())}
-                style={{
-                  background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)',
-                  cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1,
-                }}>✕</button>
+
+              <button onClick={handleDeleteSelected} disabled={deleting} style={{
+                padding: '3px 10px', fontSize: 11, fontFamily: F, fontWeight: 700,
+                background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
+                borderRadius: 5, cursor: 'pointer',
+              }}>🗑 Delete{selCount > 1 ? ` (${selCount})` : ''}</button>
+
+              <button onClick={() => setSelected(new Set())} style={{
+                background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer', fontSize: 15, padding: '0 2px', lineHeight: 1,
+              }}>✕</button>
+            </div>
+          )}
+
+          {/* FY Filter */}
+          {fyList.length > 0 && (
+            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+              {['all', ...fyList].map(f => (
+                <button key={f} onClick={() => setFy(f)}
+                  style={{ height:26, padding:'0 9px', borderRadius:6, border:`1px solid ${fy===f ? '#fff' : 'rgba(255,255,255,0.3)'}`, background: fy===f ? '#fff' : 'rgba(255,255,255,0.12)', color: fy===f ? HDR : '#fff', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+                  {f === 'all' ? 'All FY' : `FY ${f}`}
+                </button>
+              ))}
             </div>
           )}
 
@@ -302,7 +338,7 @@ const ViewVendors = () => {
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>🔍</span>
             <input
-              type="text" value={search} placeholder="Search vendors…"
+              type="text" value={search} placeholder="Search vendors, GSTIN…"
               onChange={e => setSearch(e.target.value)}
               style={{
                 height: 28, padding: '0 28px 0 28px', background: 'rgba(255,255,255,0.12)',
@@ -361,7 +397,6 @@ const ViewVendors = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
               <thead>
                 <tr>
-                  {/* Select-all checkbox */}
                   <th style={{ padding: '7px 10px', background: HDR, width: 36, textAlign: 'center', borderRight: `1px solid rgba(255,255,255,0.12)` }}>
                     <input
                       type="checkbox"
@@ -373,25 +408,31 @@ const ViewVendors = () => {
                   <SortTh col="vendorId">Vendor ID</SortTh>
                   <SortTh col="vendorName">Vendor Name</SortTh>
                   <SortTh col="businessType">Type</SortTh>
-                  <SortTh col="city">City / State</SortTh>
+                  <SortTh col="gstin">GSTIN</SortTh>
+                  <SortTh col="city">City</SortTh>
+                  <SortTh col="state">State</SortTh>
                   <th style={{ padding: '7px 10px', fontSize: 11, fontWeight: 700, color: '#fff', background: HDR, textAlign: 'left', borderRight: `1px solid rgba(255,255,255,0.12)`, fontFamily: F }}>Contact</th>
+                  <SortTh col="createdAt">Reg. Date</SortTh>
                   <SortTh col="status">Status</SortTh>
-                  <th style={{ padding: '7px 10px', fontSize: 11, fontWeight: 700, color: '#fff', background: HDR, textAlign: 'center', fontFamily: F }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((v, i) => {
-                  const contact  = v.contactPersons?.[0] || {};
-                  const st       = v.status || 'draft';
-                  const badge    = STATUS_STYLE[st] || STATUS_STYLE.draft;
+                  const contact    = v.contactPersons?.[0] || {};
+                  const st         = v.status || 'draft';
+                  const badge      = STATUS_STYLE[st] || STATUS_STYLE.draft;
                   const isSelected = selected.has(v.vendorId);
-                  const rowBg    = isSelected ? '#EEF4FF' : (i % 2 === 0 ? '#fff' : '#F8FAFC');
+                  const isHovered  = hoveredId === v.vendorId;
+                  const rowBg      = isSelected ? '#EEF4FF' : isHovered ? '#EBF0F5' : (i % 2 === 0 ? '#fff' : '#F8FAFC');
+
                   return (
-                    <tr key={v.vendorId}
-                      style={{ background: rowBg, borderBottom: `1px solid #EEF0F2`, cursor: 'pointer' }}
+                    <tr
+                      key={v.vendorId}
+                      style={{ background: rowBg, borderBottom: `1px solid #EEF0F2`, cursor: 'pointer', transition: 'background 0.1s' }}
+                      onClick={() => setActivityRec(v)}
                       onDoubleClick={() => setViewVendor(v)}
-                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#EBF0F5'; }}
-                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = rowBg; }}
+                      onMouseEnter={() => setHoveredId(v.vendorId)}
+                      onMouseLeave={() => setHoveredId(null)}
                     >
                       {/* Checkbox */}
                       <td style={{ padding: '6px 10px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
@@ -405,39 +446,20 @@ const ViewVendors = () => {
                       <td style={{ padding: '6px 10px', fontWeight: 700, color: HDR, whiteSpace: 'nowrap' }}>{v.vendorId}</td>
                       <td style={{ padding: '6px 10px', fontWeight: 600, color: '#1E293B' }}>{v.vendorName || '—'}</td>
                       <td style={{ padding: '6px 10px', color: '#475569' }}>{v.businessType || '—'}</td>
-                      <td style={{ padding: '6px 10px', color: '#475569' }}>{[v.city, v.state].filter(Boolean).join(', ') || '—'}</td>
+                      <td style={{ padding: '6px 10px', color: '#374151', fontWeight: 500, fontFamily: 'monospace', fontSize: 11 }}>
+                        {v.gstin || <span style={{ color: '#CBD5E1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '6px 10px', color: '#475569' }}>{v.city || '—'}</td>
+                      <td style={{ padding: '6px 10px', color: '#475569' }}>{v.state || '—'}</td>
                       <td style={{ padding: '6px 10px', color: '#475569' }}>
                         <div>{contact.name || v.contactPerson || '—'}</div>
                         <div style={{ fontSize: 10, color: '#94A3B8' }}>{contact.mobileNumber || v.mobile || ''}</div>
                       </td>
+                      <td style={{ padding: '6px 10px', color: '#475569', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtD2(v.createdAt)}</td>
                       <td style={{ padding: '6px 10px' }}>
                         <span style={{ ...badge, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
                           {st}
                         </span>
-                      </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          <button onClick={() => navigate(`/vendor/edit/${v.vendorId}`)} style={{
-                            padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                            background: '#ECFDF5', border: '1px solid #6EE7B7', color: '#065F46',
-                            borderRadius: 4, cursor: 'pointer',
-                          }}>✏ Edit</button>
-                          <button onClick={() => setViewVendor(v)} style={{
-                            padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                            background: '#EEF4FF', border: `1px solid #BFDBFE`, color: '#1D4ED8',
-                            borderRadius: 4, cursor: 'pointer',
-                          }}>👁 View</button>
-                          <button onClick={() => printVendorDetails(v, selectedCompany)} style={{
-                            padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                            background: '#F0FDF4', border: '1px solid #86EFAC', color: '#166534',
-                            borderRadius: 4, cursor: 'pointer',
-                          }}>🖨</button>
-                          <button onClick={() => handleDelete(v.vendorId)} style={{
-                            padding: '2px 10px', fontSize: 11, fontFamily: F, fontWeight: 600,
-                            background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B',
-                            borderRadius: 4, cursor: 'pointer',
-                          }}>🗑 Del</button>
-                        </div>
                       </td>
                     </tr>
                   );
@@ -450,13 +472,16 @@ const ViewVendors = () => {
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span>Showing {filtered.length} of {vendors.length} vendors</span>
-              {selected.size > 0 && (
-                <span style={{ color: HDR, fontWeight: 700 }}>{selected.size} vendor{selected.size > 1 ? 's' : ''} selected</span>
-              )}
+              {selCount > 0
+                ? <span style={{ color: HDR, fontWeight: 700 }}>{selCount} vendor{selCount > 1 ? 's' : ''} selected — use action bar above</span>
+                : <span style={{ color: '#94A3B8' }}>Click to select · Double-click to view</span>
+              }
             </div>
           </div>
         )}
       </div>
+
+      <ActivityDrawer record={activityRec} recordType="vendor" onClose={() => setActivityRec(null)} />
     </div>
   );
 };

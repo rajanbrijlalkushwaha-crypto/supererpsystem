@@ -3,13 +3,13 @@ import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P   = '#2F6FED';
+const P   = '#104f4f';
 const BD  = '#E5EAF2';
 const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const fmtD = d => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 
 const TYPE_META = {
-  so:  { label:'Sales Order',    abbr:'SO',  color:'#1565c0', bg:'#e3f2fd', border:'#90caf9',  icon:'📦' },
+  so:  { label:'Sales Order',    abbr:'SO',  color:'#104f4f', bg:'#e3f2fd', border:'#90caf9',  icon:'📦' },
   po:  { label:'Purchase Order', abbr:'PO',  color:'#2e7d32', bg:'#e8f5e9', border:'#a5d6a7',  icon:'🛒' },
   exp: { label:'Expense',        abbr:'EXP', color:'#b06000', bg:'#fff3e0', border:'#ffcc80',  icon:'🧾' },
 };
@@ -287,7 +287,7 @@ export default function OrderTracker() {
                     <td style={{ padding:'4px 8px', borderBottom:'1px solid #f0f0f0', maxWidth:220 }}>
                       <ItemList items={row.items} type={row.type} />
                     </td>
-                    <td style={{ padding:'4px 8px', borderBottom:'1px solid #f0f0f0', textAlign:'right', fontWeight:700, color: row.isSoHeader ? '#1565c0' : m.color, fontSize: row.isSoHeader ? 12 : 11 }}>
+                    <td style={{ padding:'4px 8px', borderBottom:'1px solid #f0f0f0', textAlign:'right', fontWeight:700, color: row.isSoHeader ? '#104f4f' : m.color, fontSize: row.isSoHeader ? 12 : 11 }}>
                       ₹{fmt(row.amount)}
                     </td>
                     <td style={{ padding:'4px 8px', borderBottom:'1px solid #f0f0f0' }}>

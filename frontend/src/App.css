@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    EPSILON ENTERPRISE — Premium Design System v6.0
-   Theme : Soft Blue Corporate SaaS  (SAP Fiori × Stripe × Linear)
+   Theme : Professional Warm Orange  (Enterprise Edition)
    Author: Senior UI/UX × Frontend Architecture
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -8,22 +8,23 @@
 
 /* SubNav scrollable tab strip — hide scrollbar on all browsers */
 .subnav-tabs::-webkit-scrollbar { display: none; }
+.subnav-tabs { scrollbar-width: none; }
 
 /* ════════════════════════════════════════════════════════════════════
    § 1  CSS CUSTOM PROPERTIES — Complete Token System
    ════════════════════════════════════════════════════════════════════ */
 :root {
 
-  /* ── Brand: Soft Cerulean Blue ─────────────────────────────────── */
-  --primary:           #4A90E2;
-  --primary-dark:      #2F74CC;
-  --primary-darker:    #1B5FAF;
-  --primary-light:     #74B0EC;
-  --primary-lighter:   #A8CFEF;
-  --primary-bg:        #EBF3FD;
-  --primary-bg-hover:  #DCE9F9;
-  --primary-border:    #BEDAF7;
-  --primary-glow:      rgba(74,144,226,0.22);
+  /* ── Brand: Professional Warm Orange ───────────────────────────── */
+  --primary:           #EA580C;
+  --primary-dark:      #C2410C;
+  --primary-darker:    #9A3412;
+  --primary-light:     #FB923C;
+  --primary-lighter:   #FDBA74;
+  --primary-bg:        #FFF7ED;
+  --primary-bg-hover:  #FFEDD5;
+  --primary-border:    #FED7AA;
+  --primary-glow:      rgba(234,88,12,0.22);
 
   /* ── Secondary: Slate / Cool Grey ─────────────────────────────── */
   --secondary:         #64748B;
@@ -70,14 +71,14 @@
   --surface-2:         #F7F9FC;
   --surface-3:         #EFF3FA;
   --surface-glass:     rgba(255,255,255,0.78);
-  --surface-dark:      #1E2840;
-  --surface-dark-2:    #28354F;
-  --surface-dark-3:    #334060;
+  --surface-dark:      #431407;
+  --surface-dark-2:    #7C2D12;
+  --surface-dark-3:    #9A3412;
 
   /* ── Border ─────────────────────────────────────────────────────── */
-  --border:            rgba(74,144,226,0.13);
-  --border-light:      rgba(74,144,226,0.08);
-  --border-strong:     #C8D6E8;
+  --border:            rgba(234,88,12,0.10);
+  --border-light:      rgba(234,88,12,0.06);
+  --border-strong:     #D6C4B8;
   --border-dark:       rgba(255,255,255,0.09);
 
   /* ── Text ────────────────────────────────────────────────────────── */
@@ -90,10 +91,10 @@
   --text-on-dark-muted:rgba(255,255,255,0.52);
 
   /* ── Sidebar Specific ───────────────────────────────────────────── */
-  --sidebar-bg:        #1E2840;
-  --sidebar-bg-2:      #253050;
-  --sidebar-active:    rgba(74,144,226,0.18);
-  --sidebar-border:    rgba(255,255,255,0.07);
+  --sidebar-bg:        #0f172a;
+  --sidebar-bg-2:      #1e293b;
+  --sidebar-active:    rgba(99,102,241,0.15);
+  --sidebar-border:    rgba(99,102,241,0.25);
 
   /* ── Typography ──────────────────────────────────────────────────── */
   --font:        'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -135,9 +136,9 @@
   --sh-md:  0 8px 20px rgba(15,23,42,0.10), 0 3px 8px rgba(15,23,42,0.05);
   --sh-lg:  0 16px 36px rgba(15,23,42,0.12), 0 6px 14px rgba(15,23,42,0.06);
   --sh-xl:  0 28px 60px rgba(15,23,42,0.16), 0 10px 24px rgba(15,23,42,0.08);
-  --sh-blue-sm: 0 2px 8px rgba(74,144,226,0.22);
-  --sh-blue:    0 4px 16px rgba(74,144,226,0.28), 0 2px 6px rgba(74,144,226,0.14);
-  --sh-blue-lg: 0 8px 28px rgba(74,144,226,0.36), 0 3px 10px rgba(74,144,226,0.18);
+  --sh-blue-sm: 0 2px 8px rgba(234,88,12,0.20);
+  --sh-blue:    0 4px 16px rgba(234,88,12,0.26), 0 2px 6px rgba(234,88,12,0.13);
+  --sh-blue-lg: 0 8px 28px rgba(234,88,12,0.34), 0 3px 10px rgba(234,88,12,0.17);
   --sh-green:   0 3px 12px rgba(39,174,96,0.28);
   --sh-red:     0 3px 12px rgba(231,76,60,0.25);
   --sh-glass:   0 8px 32px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8);
@@ -151,7 +152,7 @@
   --shadow-xl: var(--sh-xl);
 
   /* ── Focus Ring ──────────────────────────────────────────────────── */
-  --focus-ring:       0 0 0 3px rgba(74,144,226,0.25);
+  --focus-ring:       0 0 0 3px rgba(234,88,12,0.25);
   --focus-ring-err:   0 0 0 3px rgba(231,76,60,0.20);
   --focus-ring-green: 0 0 0 3px rgba(39,174,96,0.22);
 
@@ -186,11 +187,19 @@ body {
 }
 
 /* ── Custom Scrollbar ── */
-::-webkit-scrollbar               { width: 5px; height: 5px; }
-::-webkit-scrollbar-track         { background: transparent; }
-::-webkit-scrollbar-thumb         { background: #CBD5E1; border-radius: var(--r-full); }
-::-webkit-scrollbar-thumb:hover   { background: #94A3B8; }
-::-webkit-scrollbar-corner        { background: transparent; }
+::-webkit-scrollbar               { width: 8px; height: 20px; }
+::-webkit-scrollbar-track         { background: #0b1e40; border-radius: 0; }
+::-webkit-scrollbar-thumb         { background: #2a5298; border-radius: 0; border: 2px solid #0b1e40; }
+::-webkit-scrollbar-thumb:hover   { background: #60A5FA; }
+::-webkit-scrollbar-corner        { background: #0b1e40; }
+* { scrollbar-width: auto; scrollbar-color: #2a5298 #0b1e40; }
+
+/* ── Thick horizontal scrollbar for Project Dashboard tables ── */
+.thick-scroll::-webkit-scrollbar         { height: 20px; width: 8px; }
+.thick-scroll::-webkit-scrollbar-track   { background: #0b1e40; border-radius: 0; }
+.thick-scroll::-webkit-scrollbar-thumb   { background: #2a5298; border-radius: 0; border: 2px solid #0b1e40; }
+.thick-scroll::-webkit-scrollbar-thumb:hover { background: #60A5FA; }
+.thick-scroll { scrollbar-width: auto; scrollbar-color: #2a5298 #0b1e40; }
 
 /* ── Focus ── */
 input:focus, select:focus, textarea:focus { outline: none; }
@@ -201,9 +210,13 @@ a { color: inherit; }
    § 3  LAYOUT SHELL
    ════════════════════════════════════════════════════════════════════ */
 .app-container {
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: row;
   height: 100vh; overflow: hidden;
   background: var(--bg);
+}
+.app-right {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; min-width: 0;
 }
 .main-content {
   display: flex; flex: 1; overflow: hidden;
@@ -227,8 +240,8 @@ a { color: inherit; }
   flex-shrink: 0;
   height: 54px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 var(--border), var(--sh-xs);
+  border-bottom: 2px solid var(--primary-border);
+  box-shadow: 0 2px 8px rgba(234,88,12,0.08);
   display: flex; align-items: center;
   padding: 0 var(--sp-5);
   gap: var(--sp-3);
@@ -287,16 +300,16 @@ a { color: inherit; }
 .sub-nav {
   display: flex; align-items: center;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--primary-border);
   padding: 0 var(--sp-5);
   height: 40px; flex-shrink: 0;
   gap: 0; overflow-x: auto;
-  box-shadow: var(--sh-xs);
+  box-shadow: 0 1px 4px rgba(234,88,12,0.06);
 }
 .sub-nav-label {
   display: flex; align-items: center;
   padding-right: var(--sp-4); margin-right: var(--sp-2);
-  border-right: 1px solid var(--border-strong);
+  border-right: 1px solid var(--primary-border);
   font-size: 10px; font-weight: 700;
   color: var(--primary); text-transform: uppercase; letter-spacing: 1.2px;
   white-space: nowrap; flex-shrink: 0;

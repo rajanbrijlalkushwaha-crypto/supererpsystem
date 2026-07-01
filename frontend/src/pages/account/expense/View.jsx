@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P   = '#2F6FED';
+const P   = '#104f4f';
 const BD  = '#E5EAF2';
 const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 const fmtD = d => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
@@ -34,7 +34,7 @@ const DetailRow = ({ exp }) => {
               <thead>
                 <tr style={{ background:'#E3EAFF' }}>
                   {['#','Product','Description','Qty','Rate (₹)','GST %','Amount (₹)'].map((h,i) => (
-                    <th key={i} style={{ padding:'4px 8px', textAlign:i>=3?'right':'left', fontWeight:700, fontSize:10, color:'#1a3c6e' }}>{h}</th>
+                    <th key={i} style={{ padding:'4px 8px', textAlign:i>=3?'right':'left', fontWeight:700, fontSize:10, color:'#104f4f' }}>{h}</th>
                   ))}
                 </tr>
               </thead>

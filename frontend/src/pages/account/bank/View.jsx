@@ -3,8 +3,8 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 
-const P  = '#2F6FED';
-const PD = '#1A56D6';
+const P  = '#104f4f';
+const PD = '#0b3d3d';
 const BG = '#F5F7FB';
 const BD = '#E5EAF2';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -151,7 +151,7 @@ const ViewBanks = () => {
                       <td style={{ ...td, fontFamily:'monospace', fontSize:11, color:'#6B7280' }}>{r.ifscCode || '—'}</td>
                       <td style={td}>
                         <span style={{ fontSize:11, padding:'2px 9px', borderRadius:20,
-                          background:'#EFF6FF', color:'#2563EB', fontWeight:700, border:'1px solid #BFDBFE' }}>
+                          background:'#EFF6FF', color:'#104f4f', fontWeight:700, border:'1px solid #BFDBFE' }}>
                           {r.accountType}
                         </span>
                       </td>

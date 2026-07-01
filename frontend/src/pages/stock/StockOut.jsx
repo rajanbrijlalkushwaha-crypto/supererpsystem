@@ -19,12 +19,12 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
-const P   = '#2F6FED';
-const PD  = '#1A56D6';
+const P   = '#104f4f';
+const PD  = '#0b3d3d';
 const BG  = '#F5F7FB';
 const BD  = '#E5EAF2';
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const GH  = '#166534';   /* FROM green header */
+const GH  = '#104f4f';   /* FROM green header */
 const BH  = '#1E40AF';   /* TO  blue header  */
 const fmt = n => (parseFloat(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 });
 
@@ -297,7 +297,7 @@ export default function StockOut() {
     axios.get(`/api/stock/gdn?companyId=${cid}`).then(r => {
       const all = r.data || [];
       setAllGDNs(all);
-      setRecentGDNs(all.slice(0, 10));
+      setRecentGDNs(all);
     }).catch(() => {});
   };
   useEffect(() => { loadAll(); }, [cid]);
@@ -466,6 +466,12 @@ export default function StockOut() {
     setOrderType('so'); setSelectedOrder(null);
     setDcNo(''); setRefDate(''); setVehicleNo(''); setNotes('');
     setRows([blankRow()]); setMessage({ text: '', ok: true });
+  };
+
+  const handleDeleteGDN = async (g) => {
+    if (!window.confirm(`Delete GDN ${g.gdnNo}?\nThis will reverse the stock entry. Cannot be undone.`)) return;
+    await axios.delete(`/api/stock/transactions/${g.txnId}?companyId=${cid}`).catch(() => {});
+    loadAll();
   };
 
   const orderLabel = (o) => {
@@ -902,7 +908,7 @@ export default function StockOut() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
                 <thead>
                   <tr style={{ background: '#F5F3FF' }}>
-                    {['GDN No.', 'Date', 'From', 'Destination', 'Party', 'Order Ref', 'DC No.', 'Items', 'Vehicle'].map((h, i) => (
+                    {['GDN No.', 'Date', 'From', 'Destination', 'Party', 'Order Ref', 'DC No.', 'Items', 'Vehicle', ''].map((h, i) => (
                       <th key={i} style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'left',
                         borderBottom: `2px solid #DDD6FE`, whiteSpace: 'nowrap', fontSize: 11,
                         color: '#5B21B6' }}>{h}</th>
@@ -935,6 +941,15 @@ export default function StockOut() {
                           border: '1px solid #DDD6FE' }}>{(g.items || []).length}</span>
                       </td>
                       <td style={{ padding: '7px 10px', color: '#374151' }}>{g.vehicleNo || '—'}</td>
+                      <td style={{ padding: '5px 8px' }}>
+                        <button onClick={() => handleDeleteGDN(g)}
+                          style={{ padding: '2px 9px', fontSize: 10, cursor: 'pointer',
+                            background: '#FEF2F2', color: '#DC2626',
+                            border: '1px solid #FECACA', borderRadius: 4,
+                            fontFamily: F, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          🗑 Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -3,7 +3,7 @@ const path    = require('path');
 const fs      = require('fs');
 const multer  = require('multer');
 const XLSX    = require('xlsx');
-const { ROOT, upload, saveUploadedFiles, saveJson } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
 const jstore  = require('./json-store');
 
 /* ── multer for Excel upload (memory storage) ── */
@@ -304,6 +304,7 @@ router.post('/', upload.array('documents'), async (req, res) => {
       vendorId, vendorName, address, city, state, pincode, gstin, gstType,
       contactPersons: contactList, documents: docList, status, ...extra,
       createdAt: now, updatedAt: now,
+      audit: [auditEntry(req, 'created')],
     });
 
     res.json({ success: true, vendorId, message: `Vendor created with ID: ${vendorId}` });
@@ -393,11 +394,18 @@ router.put('/:vendorId', upload.array('newFiles'), async (req, res) => {
         .forEach(f => { try { fs.unlinkSync(path.join(vendorDir, f)); } catch {} });
     }
 
+    const vOldStatus = existingRecord.status;
+    const vNewStatus = status;
+    const vAction = vNewStatus !== vOldStatus
+      ? (vNewStatus === 'approved' ? 'approved' : vNewStatus === 'rejected' ? 'rejected' : 'status_changed')
+      : 'edited';
+    const vExtra = vNewStatus !== vOldStatus ? { from: vOldStatus, to: vNewStatus } : {};
     saveJson(vendorJsonPath(companyId, vendorId, vendorName), {
       ...existingRecord,
       vendorId: parseInt(vendorId), vendorName, address, city, state, pincode, gstin, gstType,
       contactPersons: contactList, documents: docList, status, ...extra,
       createdAt: existingCreatedAt, updatedAt: new Date().toISOString(),
+      audit: pushAudit(existingRecord, req, vAction, vExtra),
     });
 
     res.json({ success: true, message: 'Vendor updated successfully' });

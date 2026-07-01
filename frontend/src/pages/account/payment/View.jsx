@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import ActivityDrawer from '../../../components/ActivityDrawer';
 
 const fmt = (n) => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
 const ViewPayments = () => {
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [message, setMessage] = useState('');
+  const [records,     setRecords]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [filter,      setFilter]      = useState('all');
+  const [message,     setMessage]     = useState('');
+  const [activityRec, setActivityRec] = useState(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -73,7 +75,7 @@ const ViewPayments = () => {
           <div style={{ fontSize: 18, fontWeight: 'bold', color: '#b71c1c' }}>₹{fmt(totalOut)}</div>
         </div>
         <div style={{ background: '#e3f2fd', border: '1px solid #1e88e5', borderRadius: 6, padding: '8px 20px', flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, color: '#1565c0' }}>Net Balance</div>
+          <div style={{ fontSize: 12, color: '#104f4f' }}>Net Balance</div>
           <div style={{ fontSize: 18, fontWeight: 'bold', color: totalIn - totalOut >= 0 ? '#1b5e20' : '#b71c1c' }}>₹{fmt(totalIn - totalOut)}</div>
         </div>
       </div>
@@ -98,7 +100,7 @@ const ViewPayments = () => {
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.paymentId}>
+                <tr key={r.paymentId} onClick={() => setActivityRec(r)} style={{ cursor: 'pointer' }}>
                   <td><strong>{r.paymentId}</strong></td>
                   <td>{r.date}</td>
                   <td>
@@ -116,7 +118,7 @@ const ViewPayments = () => {
                   </td>
                   <td>
                     {r.orderId ? (
-                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1a3c6e' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#104f4f' }}>
                         {r.orderType === 'purchase' ? 'PO' : 'SO'} #{r.orderId}
                       </span>
                     ) : '—'}
@@ -125,7 +127,7 @@ const ViewPayments = () => {
                   <td>{r.paymentMode}</td>
                   <td>{r.referenceNo || '—'}</td>
                   <td>
-                    <button className="delete-btn" onClick={() => handleDelete(r.paymentId)}>🗑️ Delete</button>
+                    <button className="delete-btn" onClick={e => { e.stopPropagation(); handleDelete(r.paymentId); }}>🗑ï¸ Delete</button>
                   </td>
                 </tr>
               ))}
@@ -134,6 +136,8 @@ const ViewPayments = () => {
           <div className="table-footer">{filtered.length} transactions</div>
         </div>
       )}
+
+      <ActivityDrawer record={activityRec} recordType={activityRec?.type === 'receipt' ? 'rcpt' : 'pay'} onClose={() => setActivityRec(null)} />
     </div>
   );
 };

@@ -1,36 +1,63 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
-const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const BLUE = '#2F6FED';
+const F    = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const ORG  = '#EA580C';
+const ORG2 = '#C2410C';
+const BD   = '#e2e8f0';
+
 const fmtN = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtD = v => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
 const normName = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const namesMatch = (a, b) => { const x=normName(a), y=normName(b); if(!x||!y) return false; return x===y||x.includes(y)||y.includes(x); };
+const getFY = d => { const dt=d?new Date(d):new Date(); const m=dt.getMonth()+1; const y=dt.getFullYear(); const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 
-/* Match a PO item name against an SO item name (fuzzy) */
-const namesMatch = (poName, soName) => {
-  const a = normName(poName), b = normName(soName);
-  if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
+/* ── Print flat table ── */
+const printTrackingReport = (title, subtitle, rows) => {
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const cols = ['#','Order No','Client Name','Material / Item','SO Qty','Unit','Vendor Name','PO Date','PO No','Rate (₹)','GST%','Taxable (₹)','Amount (₹)','PO Status'];
+  const rHtml = rows.map((r,i) => `<tr class="${i%2===0?'':'alt'}">${r.map((c,ci)=>`<td class="${ci>=9?'r':''}">${c??'—'}</td>`).join('')}</tr>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;font-size:8.5pt;color:#000;}
+.pg{padding:8mm 10mm;}
+h1{font-size:13pt;font-weight:bold;text-align:center;margin-bottom:2px;}
+.sub{font-size:9pt;text-align:center;color:#444;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #ea580c;}
+table{width:100%;border-collapse:collapse;border:1.5px solid #000;}
+th{background:#1a2a3a;color:#fff;padding:5px 7px;font-size:8pt;font-weight:bold;text-align:left;border:1px solid #000;white-space:nowrap;}
+td{padding:4px 7px;font-size:8.5pt;border:1px solid #ccc;vertical-align:middle;}
+.alt td{background:#f5f7fb;}td.r{text-align:right;}
+.foot{margin-top:5px;font-size:7.5pt;color:#555;text-align:right;}
+@media print{@page{margin:7mm;size:A3 landscape;}.pg{padding:0;}}</style>
+</head><body><div class="pg">
+<h1>${title}</h1><div class="sub">${subtitle} · ${rows.length} item rows · Printed: ${today}</div>
+<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+<tbody>${rHtml}</tbody></table>
+<div class="foot">Generated: ${today}</div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script></body></html>`;
+  const w = window.open('','_blank','width=1400,height=900');
+  if (!w) { alert('Allow pop-ups to print.'); return; }
+  w.document.write(html); w.document.close();
 };
 
-/* Pill badge */
-function Pill({ label, bg, color, border }) {
+/* ── Status badge ── */
+const STATUS_MAP = {
+  approved:  { bg:'#d1fae5', color:'#065f46', bd:'#6ee7b7' },
+  pending:   { bg:'#fef3c7', color:'#92400e', bd:'#fcd34d' },
+  draft:     { bg:'#f1f5f9', color:'#475569', bd:'#cbd5e1' },
+  rejected:  { bg:'#fee2e2', color:'#991b1b', bd:'#fca5a5' },
+  'in progress':{ bg:'#ede9fe',color:'#4c1d95',bd:'#c4b5fd'},
+  confirmed: { bg:'#dbeafe', color:'#1e40af', bd:'#93c5fd' },
+  completed: { bg:'#d1fae5', color:'#065f46', bd:'#6ee7b7' },
+};
+function StatusBadge({ label }) {
+  const c = STATUS_MAP[String(label||'').toLowerCase()] || STATUS_MAP.draft;
   return (
-    <span style={{
-      padding: '2px 9px', borderRadius: 30, fontSize: 10, fontWeight: 700,
-      background: bg, color, border: `1px solid ${border}`,
-      fontFamily: F, whiteSpace: 'nowrap', letterSpacing: 0.3,
-    }}>
-      {label}
-    </span>
+    <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:10,
+      fontSize:9.5, fontWeight:700, background:c.bg, color:c.color,
+      border:`1px solid ${c.bd}`, whiteSpace:'nowrap' }}>{label||'—'}</span>
   );
-}
-
-function PendingPill({ qty }) {
-  if (qty <= 0) return <Pill label="✓ Covered" bg="#d4edda" color="#155724" border="#c3e6cb" />;
-  return <Pill label={`${qty} Pending`} bg="#fff3cd" color="#856404" border="#ffc107" />;
 }
 
 export default function POTrackingView() {
@@ -38,391 +65,469 @@ export default function POTrackingView() {
   const navigate = useNavigate();
   const cid = selectedCompany?.companyId;
 
-  const [salesOrders, setSalesOrders] = useState([]);
+  const [salesOrders,    setSalesOrders]    = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState({});
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState('all');
+  const [search,   setSearch]   = useState('');
+  const [fy,       setFy]       = useState(getFY());
 
   const load = useCallback(async () => {
     if (!cid) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [soRes, poRes] = await Promise.all([
-        fetch(`/api/sales-orders?companyId=${cid}`),
-        fetch(`/api/purchase-orders?companyId=${cid}`),
+      const [soData, poData] = await Promise.all([
+        fetch(`/api/sales-orders?companyId=${cid}`).then(r => r.json()),
+        fetch(`/api/purchase-orders?companyId=${cid}`).then(r => r.json()),
       ]);
-      const sos = await soRes.json();
-      const pos = await poRes.json();
-      const soArr = Array.isArray(sos) ? sos : [];
-      setSalesOrders(soArr);
-      setPurchaseOrders(Array.isArray(pos) ? pos : []);
-      /* expand all rows by default */
-      const allExpanded = {};
-      soArr.forEach(s => { allExpanded[s.orderId] = true; });
-      setExpanded(allExpanded);
-    } catch { }
+      setSalesOrders(Array.isArray(soData) ? soData : []);
+      setPurchaseOrders(Array.isArray(poData) ? poData : []);
+    } catch {}
     setLoading(false);
   }, [cid]);
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleExpand = id => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  const fyList = useMemo(() => {
+    const s = new Set(salesOrders.map(o => getFY(o.orderDate||o.date)));
+    return ['all', ...[...s].sort().reverse()];
+  }, [salesOrders]);
 
-  /* ── Build tracking rows ── */
-  const trackingData = salesOrders.map(so => {
+  /* ── Build per-SO tracking (same as before, adds poDate+gst to hits) ── */
+  const trackingData = useMemo(() => salesOrders.map(so => {
     const soId = so.orderId;
     const linkedPOs = purchaseOrders.filter(po =>
       po.linkedSalesOrderId === soId || po.linkedSalesOrderId === String(soId)
     );
-
-    const soMaterials = (so.items || []).map(it => ({
-      name:  it.material || it.itemName || it.description || '—',
-      code:  it.itemCode || it.code || '',
-      qty:   parseFloat(it.qty || it.requiredQty || it.quantity) || 0,
-      unit:  it.unit || '',
-      hsn:   it.hsnCode || '',
-      type:  'material',
-    }));
-
-    const soAddons = (so.addons || []).map(a => ({
-      name:  a.itemName || a.description || a.name || '—',
-      code:  a.itemCode || '',
-      qty:   parseFloat(a.qty) || 0,
-      unit:  a.unit || '',
-      hsn:   a.hsnCode || '',
-      type:  'addon',
-    }));
-
-    const allItems = [...soMaterials, ...soAddons];
-
-    const rows = allItems.map(item => {
-      /* Find matching PO items across all linked POs */
+    const allItems = [
+      ...(so.items || []).map(it => ({ ...it, _isAddon: false })),
+      ...(so.addons || []).map(a  => ({ ...a, _isAddon: true })),
+    ];
+    const rows = allItems.map(it => {
+      const name   = it.material || it.itemName || it.description || '—';
+      const code   = it.itemCode || it.code || '';
+      const qty    = parseFloat(it.qty || it.requiredQty || it.quantity) || 0;
+      const unit   = it.unit || '';
+      const hsn    = it.hsnCode || '';
+      const isAddon = it._isAddon || false;
       const poHits = [];
       linkedPOs.forEach(po => {
         (po.items || []).forEach(poi => {
           const poName = poi.itemName || poi.description || '';
-          if (namesMatch(poName, item.name) || namesMatch(poi.itemCode || '', item.code)) {
+          const codeMatch = code && namesMatch(poi.itemCode || '', code);
+          const nameMatch = namesMatch(poName, name);
+          const addonMatch = isAddon && poi.isAddon && namesMatch(poName, name);
+          if (codeMatch || nameMatch || addonMatch) {
             poHits.push({
               poId:       po.orderId,
               poNo:       po.poNumber || po.poNo || po.voucherNumber || po.orderId,
+              poDate:     po.poDate || po.date || '',
               poStatus:   po.status || 'draft',
               vendorName: po.vendorName || '—',
-              vendorCode: po.vendorCode || '',
-              rate:       parseFloat(poi.rate) || 0,
-              qty:        parseFloat(poi.qty) || 0,
-              unit:       poi.unit || item.unit,
+              rate: parseFloat(poi.rate) || 0,
+              qty:  parseFloat(poi.qty)  || 0,
+              unit: poi.unit || unit,
+              gst:  parseFloat(poi.gst || poi.gstPercent || poi.gstPct || 0),
             });
           }
         });
       });
-
       const issuedQty  = poHits.reduce((s, p) => s + p.qty, 0);
-      const pendingQty = Math.max(0, item.qty - issuedQty);
-
-      return { ...item, poHits, issuedQty, pendingQty };
+      const pendingQty = Math.max(0, qty - issuedQty);
+      return { name, code, qty, unit, hsn, isAddon, poHits, issuedQty, pendingQty };
     });
-
-    const totalPending = rows.reduce((s, r) => s + r.pendingQty, 0);
-    const coveredCount = rows.filter(r => r.pendingQty <= 0 && r.qty > 0).length;
+    const hasPending  = rows.some(r => r.pendingQty > 0 && r.qty > 0);
     const itemsWithQty = rows.filter(r => r.qty > 0).length;
-
     return {
-      soId,
-      orderNo:      so.orderNo || so.voucherNumber || soId,
+      soId, orderNo: so.orderNo || soId,
       customerName: so.customerName || so.party || '—',
-      orderDate:    so.orderDate || so.date || '',
-      linkedPOs,
-      rows,
-      totalPending,
-      coveredCount,
-      itemsWithQty,
-      hasPending: totalPending > 0,
+      orderDate: so.orderDate || so.date || '',
+      linkedPOs, rows, hasPending, itemsWithQty,
     };
-  });
+  }), [salesOrders, purchaseOrders]);
 
-  /* Apply filter + search */
-  const visible = trackingData
+  /* ── Filter visible SOs ── */
+  const visible = useMemo(() => trackingData
+    .filter(d => fy === 'all' || getFY(d.orderDate) === fy)
     .filter(d => {
-      if (filter === 'pending')  return d.hasPending;
-      if (filter === 'covered')  return !d.hasPending && d.itemsWithQty > 0;
+      if (filter === 'pending') return d.hasPending;
+      if (filter === 'covered') return !d.hasPending && d.itemsWithQty > 0;
       return true;
     })
     .filter(d => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return d.orderNo.toLowerCase().includes(q) || d.customerName.toLowerCase().includes(q);
+    })
+  , [trackingData, fy, filter, search]);
+
+  /* ── Build flat rows for rendering (rowspan logic) ── */
+  const flatRows = useMemo(() => {
+    const result = [];
+    visible.forEach((so, soSeq) => {
+      if (so.rows.length === 0) {
+        result.push({ so, soSeq: soSeq+1, item: null, hit: null, isItemFirst: true, itemRowSpan: 1, soRowSpan: 1 });
+        return;
+      }
+      const soStart = result.length;
+      so.rows.forEach(item => {
+        const hitList = item.poHits.length > 0 ? item.poHits : [null];
+        hitList.forEach((hit, hi) => {
+          result.push({
+            so, soSeq: soSeq+1,
+            item, hit,
+            isItemFirst: hi === 0,
+            itemRowSpan: hi === 0 ? hitList.length : 0,
+            soRowSpan: 0,
+          });
+        });
+      });
+      const soCount = result.length - soStart;
+      result[soStart].soRowSpan = soCount;
     });
+    return result;
+  }, [visible]);
+
+  /* ── Totals ── */
+  const totals = useMemo(() => ({
+    taxable: flatRows.reduce((s,r) => s + (r.hit ? (r.hit.qty||0)*(r.hit.rate||0) : 0), 0),
+    amount:  flatRows.reduce((s,r) => {
+      if (!r.hit) return s;
+      const tx = (r.hit.qty||0)*(r.hit.rate||0);
+      return s + tx + tx*(r.hit.gst||0)/100;
+    }, 0),
+  }), [flatRows]);
 
   const totalPendingAll = trackingData.filter(d => d.hasPending).length;
   const totalCoveredAll = trackingData.filter(d => !d.hasPending && d.itemsWithQty > 0).length;
 
+  /* ── Print rows ── */
+  const doPrint = () => {
+    const fyLabel = fy==='all'?'All Financial Years':`FY ${fy}`;
+    const rows = flatRows.map(r => [
+      r.soSeq,
+      r.so.orderNo,
+      r.so.customerName,
+      r.item?.name || '—',
+      r.item ? `${r.item.qty} ${r.item.unit}`.trim() : '—',
+      r.item?.unit || '—',
+      r.hit?.vendorName || '',
+      r.hit ? fmtD(r.hit.poDate) : '',
+      r.hit?.poNo || '',
+      r.hit ? fmtN(r.hit.rate) : '',
+      r.hit ? `${r.hit.gst}%` : '',
+      r.hit ? fmtN((r.hit.qty||0)*(r.hit.rate||0)) : '',
+      r.hit ? fmtN((r.hit.qty||0)*(r.hit.rate||0)*(1+(r.hit.gst||0)/100)) : '',
+      r.hit?.poStatus || 'No PO',
+    ]);
+    printTrackingReport('PO Tracking Report', fyLabel, rows);
+  };
+
   /* ── Styles ── */
-  const th = (align = 'left') => ({
-    background: BLUE, color: '#fff', fontFamily: F, fontSize: 11,
-    fontWeight: 600, padding: '6px 10px', textAlign: align,
-    borderRight: '1px solid rgba(255,255,255,0.18)', whiteSpace: 'nowrap',
-  });
-  const td = (align = 'left', extra = {}) => ({
-    fontFamily: F, fontSize: 12, padding: '5px 10px', color: '#222',
-    verticalAlign: 'middle', textAlign: align, ...extra,
-  });
-  const subTh = (align = 'left') => ({
-    background: '#e8f0fb', color: '#1a3c6e', fontFamily: F, fontSize: 10,
-    fontWeight: 700, padding: '4px 10px', textAlign: align,
-    borderRight: '1px solid #c8d8f0', whiteSpace: 'nowrap',
-  });
-  const subTd = (align = 'left', extra = {}) => ({
-    fontFamily: F, fontSize: 11, padding: '4px 10px', color: '#333',
-    verticalAlign: 'middle', textAlign: align, ...extra,
-  });
-  const poDetailTh = (align = 'left') => ({
-    background: '#f0f4f8', color: '#555', fontFamily: F, fontSize: 10,
-    fontWeight: 600, padding: '3px 8px', textAlign: align,
-    borderRight: '1px solid #dde', whiteSpace: 'nowrap',
-  });
-  const poDetailTd = (align = 'left') => ({
-    fontFamily: F, fontSize: 10, padding: '3px 8px', color: '#333',
-    verticalAlign: 'middle', textAlign: align,
+  const TH = ({ children, right, center, w, style:sx={} }) => (
+    <th style={{ padding:'7px 9px', background:'#1e293b', color:'#f1f5f9', fontWeight:700,
+      fontSize:10.5, textAlign:right?'right':center?'center':'left', whiteSpace:'nowrap',
+      borderRight:'1px solid #374151', borderBottom:'2px solid #0f172a',
+      position:'sticky', top:0, zIndex:2, width:w||undefined, ...sx }}>
+      {children}
+    </th>
+  );
+
+  const filterBtn = active => ({
+    padding:'4px 13px', fontSize:11, fontWeight:600, fontFamily:F,
+    background: active ? ORG : '#fff', color: active ? '#fff' : '#57534E',
+    border:`1.5px solid ${active ? ORG2 : '#D6D3D1'}`, borderRadius:4, cursor:'pointer',
+    transition:'all 0.13s',
   });
 
   return (
-    <div style={{ fontFamily: F, padding: '16px 20px', maxWidth: 1400 }}>
+    <div style={{ fontFamily:F, background:'#fff' }}
+      onClick={() => {}}>
 
-      {/* ── Header bar ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: BLUE, color: '#fff', padding: '8px 14px', borderRadius: '4px 4px 0 0',
-      }}>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>PO Tracking — Sales Order Material Status</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={load} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 3, padding: '3px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: F }}>
-            ↺ Refresh
-          </button>
-          <button onClick={() => navigate('/purchase-order/create')} style={{ background: '#fff', color: BLUE, border: 'none', borderRadius: 3, padding: '4px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: F }}>
-            + Create PO
-          </button>
+      {/* ══ STICKY TOP ══ */}
+      <div style={{ position:'sticky', top:0, zIndex:20, background:'#fff' }}>
+
+        {/* Title bar */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+          background:ORG, color:'#fff', padding:'0 14px', height:36 }}>
+          <span style={{ fontSize:12, fontWeight:700 }}>PO Tracking — Sales Order Material Status</span>
+          <div style={{ display:'flex', gap:7 }}>
+            <button onClick={load} style={{ background:'rgba(255,255,255,0.15)', color:'#fff',
+              border:'1px solid rgba(255,255,255,0.35)', borderRadius:4,
+              padding:'3px 11px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+              ↺ Refresh
+            </button>
+            <button onClick={doPrint} style={{ background:'rgba(255,255,255,0.15)', color:'#fff',
+              border:'1px solid rgba(255,255,255,0.35)', borderRadius:4,
+              padding:'3px 11px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+              🖨 Print
+            </button>
+            <button onClick={() => navigate('/purchase-order/create')} style={{ background:'#fff', color:ORG,
+              border:'none', borderRadius:4, padding:'3px 13px', fontSize:11,
+              fontWeight:700, cursor:'pointer', fontFamily:F }}>
+              + Create PO
+            </button>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, background:'#FFF7ED',
+          borderBottom:'1px solid #FED7AA', padding:'0 14px', height:44, flexWrap:'wrap' }}>
+          {[
+            { label:'Total SOs',     val:trackingData.length,       color:'#9A3412' },
+            { label:'PO Pending',    val:totalPendingAll,            color:'#92400e' },
+            { label:'Fully Covered', val:totalCoveredAll,            color:'#104f4f' },
+            { label:'Total POs',     val:purchaseOrders.length,      color:'#9A3412' },
+            { label:'Showing',       val:`${visible.length} SO${visible.length!==1?'s':''}`, color:'#374151' },
+          ].map((s,i) => (
+            <div key={s.label} style={{ display:'flex', alignItems:'center', gap:5,
+              paddingRight:12, borderRight: i<4 ? '1px solid #FED7AA' : 'none', marginRight: i<4 ? 4 : 0 }}>
+              <span style={{ fontSize:18, fontWeight:800, color:s.color }}>{s.val}</span>
+              <span style={{ fontSize:9.5, fontWeight:600, color:'#A16207', textTransform:'uppercase', lineHeight:1.2, whiteSpace:'nowrap' }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* FY + Filter + Search */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'0 12px',
+          height:36, borderBottom:'1.5px solid #FED7AA', background:'#FFFBF8', flexWrap:'wrap' }}>
+          <span style={{ fontSize:10, fontWeight:700, color:'#92400E' }}>FY:</span>
+          {fyList.map(f => {
+            const active = fy === f;
+            return (
+              <button key={f} onClick={() => setFy(f)} style={{
+                height:24, padding:'0 11px', fontSize:10.5, fontWeight:active?700:500,
+                fontFamily:F, cursor:'pointer', borderRadius:12,
+                border:`1.5px solid ${active?ORG2:'#D6D3D1'}`,
+                background:active?ORG:'#fff', color:active?'#fff':'#57534E',
+                whiteSpace:'nowrap', transition:'all 0.12s' }}>
+                {f==='all'?'All Years':`FY ${f}`}
+              </button>
+            );
+          })}
+
+          <div style={{ width:1, height:20, background:'#E7E5E4', margin:'0 4px' }}/>
+
+          {[
+            { key:'all',     label:`All` },
+            { key:'pending', label:`PO Pending` },
+            { key:'covered', label:`Covered` },
+          ].map(tab => (
+            <button key={tab.key} onClick={() => setFilter(tab.key)} style={filterBtn(filter===tab.key)}>
+              {tab.label}
+            </button>
+          ))}
+
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search SO No or Client…"
+            style={{ marginLeft:'auto', padding:'4px 10px', fontSize:11, fontFamily:F,
+              border:'1.5px solid #D6D3D1', borderRadius:4, width:200, outline:'none' }}
+            onFocus={e => e.target.style.borderColor = ORG}
+            onBlur={e => e.target.style.borderColor = '#D6D3D1'}
+          />
         </div>
       </div>
 
-      {/* ── Summary stats ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, border: `1px solid ${BLUE}`, borderTop: 'none', padding: 14, background: '#f9fafb' }}>
-        {[
-          { label: 'Total Sales Orders', value: trackingData.length,  color: '#1a4a7a' },
-          { label: 'PO Pending',         value: totalPendingAll,       color: '#856404' },
-          { label: 'Fully Covered',      value: totalCoveredAll,       color: '#155724' },
-          { label: 'Total POs Issued',   value: purchaseOrders.length, color: '#0a4a8a' },
-        ].map(s => (
-          <div key={s.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 4, padding: '10px 14px' }}>
-            <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 }}>{s.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Filter + Search bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${BLUE}`, borderTop: 'none', padding: '8px 14px', background: '#fff' }}>
-        {[
-          { key: 'all',     label: `All (${trackingData.length})` },
-          { key: 'pending', label: `PO Pending (${totalPendingAll})` },
-          { key: 'covered', label: `Fully Covered (${totalCoveredAll})` },
-        ].map(tab => (
-          <button key={tab.key} onClick={() => setFilter(tab.key)} style={{
-            padding: '3px 12px', fontSize: 11, fontWeight: 600, fontFamily: F,
-            background: filter === tab.key ? BLUE : '#f0f4f8',
-            color: filter === tab.key ? '#fff' : '#333',
-            border: `1px solid ${filter === tab.key ? BLUE : '#dde'}`,
-            borderRadius: 3, cursor: 'pointer',
-          }}>
-            {tab.label}
-          </button>
-        ))}
-        <button
-          onClick={() => {
-            const allOpen = visible.every(d => expanded[d.soId]);
-            const next = {};
-            visible.forEach(d => { next[d.soId] = !allOpen; });
-            setExpanded(p => ({ ...p, ...next }));
-          }}
-          style={{ padding: '3px 10px', fontSize: 11, fontFamily: F, background: '#f0f4f8', color: '#333', border: '1px solid #dde', borderRadius: 3, cursor: 'pointer' }}
-        >
-          {visible.every(d => expanded[d.soId]) ? '▴ Collapse All' : '▾ Expand All'}
-        </button>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search SO No or Client…"
-          style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 11, fontFamily: F, border: '1px solid #ccc', borderRadius: 3, width: 220, outline: 'none' }}
-        />
-      </div>
-
-      {/* ── Main table ── */}
-      <div style={{ border: `1px solid ${BLUE}`, borderTop: 'none', background: '#fff' }}>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading…</div>
-        ) : visible.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>No records match current filter.</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* ══ FLAT TABLE ══ */}
+      {loading ? (
+        <div style={{ padding:40, textAlign:'center', color:'#888', fontSize:13 }}>Loading…</div>
+      ) : flatRows.length === 0 ? (
+        <div style={{ padding:40, textAlign:'center', color:'#888', fontSize:13 }}>No records match current filter.</div>
+      ) : (
+        <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'calc(100vh - 210px)' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1200 }}>
             <thead>
               <tr>
-                <th style={{ ...th(), width: 28 }}></th>
-                <th style={th()}>SO No</th>
-                <th style={th()}>Client</th>
-                <th style={th()}>Order Date</th>
-                <th style={th('center')}>Items</th>
-                <th style={th('center')}>POs Issued</th>
-                <th style={th('center')}>Status</th>
-                <th style={{ ...th('center'), width: 70 }}>Action</th>
+                <TH w={30}>#</TH>
+                <TH>Order No</TH>
+                <TH>Client Name</TH>
+                <TH>Material / Item</TH>
+                <TH center w={60}>SO Qty</TH>
+                <TH>Unit</TH>
+                <TH>Vendor Name</TH>
+                <TH>PO Date</TH>
+                <TH>PO No</TH>
+                <TH right>Rate (₹)</TH>
+                <TH right w={50}>GST%</TH>
+                <TH right>Taxable (₹)</TH>
+                <TH right>Amount (₹)</TH>
+                <TH center>PO Status</TH>
+                <TH center w={60}>Action</TH>
               </tr>
             </thead>
             <tbody>
-              {visible.map((so, idx) => {
-                const isOpen = !!expanded[so.soId];
-                const rowBg = idx % 2 === 0 ? '#fff' : '#fafbfc';
-                return [
-                  /* SO header row */
-                  <tr
-                    key={so.soId}
-                    style={{ background: rowBg, cursor: 'pointer', borderBottom: '1px solid #e8eaed' }}
-                    onClick={() => toggleExpand(so.soId)}
-                  >
-                    <td style={{ ...td('center'), fontSize: 16, color: BLUE, fontWeight: 700 }}>
-                      {isOpen ? '▾' : '▸'}
-                    </td>
-                    <td style={{ ...td(), fontWeight: 700, color: BLUE }}>{so.orderNo}</td>
-                    <td style={td()}>{so.customerName}</td>
-                    <td style={td()}>{fmtD(so.orderDate)}</td>
-                    <td style={td('center')}>{so.rows.length}</td>
-                    <td style={td('center')}>
-                      {so.linkedPOs.length > 0
-                        ? <span style={{ fontWeight: 700, color: '#155724' }}>{so.linkedPOs.length} PO{so.linkedPOs.length > 1 ? 's' : ''}</span>
-                        : <span style={{ color: '#999', fontStyle: 'italic', fontSize: 11 }}>None</span>
-                      }
-                    </td>
-                    <td style={{ ...td('center') }}>
-                      <PendingPill qty={so.totalPending} />
-                    </td>
-                    <td style={{ ...td('center') }} onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => navigate('/purchase-order/create', { state: { linkedSalesOrderId: so.soId } })}
-                        style={{ padding: '2px 8px', fontSize: 10, fontFamily: F, background: BLUE, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
-                      >
-                        + PO
-                      </button>
-                    </td>
-                  </tr>,
+              {flatRows.map((r, ridx) => {
+                const noPO   = r.hit === null;
+                const rowBg  = r.soSeq % 2 === 0 ? '#f8fbff' : '#fff';
+                const noPObg = noPO ? '#fffbf0' : rowBg;
+                const txAmt  = r.hit ? (r.hit.qty||0)*(r.hit.rate||0) : 0;
+                const totAmt = txAmt * (1 + (r.hit?.gst||0)/100);
 
-                  /* Expanded detail rows */
-                  isOpen && (
-                    <tr key={`${so.soId}-detail`}>
-                      <td colSpan={8} style={{ padding: '0 0 6px 32px', background: '#f5f8ff', borderBottom: '2px solid #c8d8f0' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-                          <thead>
-                            <tr>
-                              <th style={subTh()}>Material / Item</th>
-                              <th style={subTh()}>Type</th>
-                              <th style={subTh()}>HSN</th>
-                              <th style={subTh('center')}>SO Qty</th>
-                              <th style={subTh('center')}>PO Issued</th>
-                              <th style={subTh('center')}>Pending</th>
-                              <th style={subTh()}>PO Details</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {so.rows.length === 0 ? (
-                              <tr>
-                                <td colSpan={7} style={{ ...subTd('center'), color: '#aaa', fontStyle: 'italic', padding: '10px' }}>
-                                  No items in this Sales Order
-                                </td>
-                              </tr>
-                            ) : so.rows.map((row, ri) => {
-                              const rowPending = row.pendingQty > 0;
-                              return (
-                                <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#f0f4fb', borderBottom: '1px solid #dde8f8' }}>
-                                  <td style={{ ...subTd(), fontWeight: 600 }}>
-                                    {row.name}
-                                    {row.code ? <span style={{ fontSize: 10, color: '#888', marginLeft: 5 }}>({row.code})</span> : null}
-                                  </td>
-                                  <td style={subTd()}>
-                                    {row.type === 'addon'
-                                      ? <Pill label="Add-On" bg="#e8f0fe" color="#1a56db" border="#c7d7fc" />
-                                      : <Pill label="Material" bg="#f0fdf4" color="#166534" border="#bbf7d0" />
-                                    }
-                                  </td>
-                                  <td style={{ ...subTd(), color: '#666' }}>{row.hsn || '—'}</td>
-                                  <td style={{ ...subTd('center'), fontWeight: 700 }}>
-                                    {row.qty} {row.unit}
-                                  </td>
-                                  <td style={{ ...subTd('center'), color: row.issuedQty > 0 ? '#155724' : '#999' }}>
-                                    {row.issuedQty > 0 ? `${row.issuedQty} ${row.unit}` : '—'}
-                                  </td>
-                                  <td style={{ ...subTd('center') }}>
-                                    {row.qty === 0 ? (
-                                      <span style={{ color: '#aaa', fontSize: 10 }}>N/A</span>
-                                    ) : rowPending ? (
-                                      <span style={{ fontWeight: 700, color: '#856404' }}>{row.pendingQty} {row.unit}</span>
-                                    ) : (
-                                      <span style={{ color: '#155724', fontWeight: 700 }}>✓</span>
-                                    )}
-                                  </td>
-                                  <td style={subTd()}>
-                                    {row.poHits.length === 0 ? (
-                                      <span style={{ color: '#e53e3e', fontSize: 10, fontStyle: 'italic' }}>No PO raised</span>
-                                    ) : (
-                                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                        <thead>
-                                          <tr>
-                                            <th style={poDetailTh()}>PO No</th>
-                                            <th style={poDetailTh()}>Vendor</th>
-                                            <th style={poDetailTh('right')}>Rate</th>
-                                            <th style={poDetailTh('right')}>Qty</th>
-                                            <th style={poDetailTh()}>Status</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {row.poHits.map((p, pi) => (
-                                            <tr key={pi} style={{ borderBottom: '1px solid #eee' }}>
-                                              <td style={{ ...poDetailTd(), color: BLUE, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
-                                                onClick={() => navigate(`/purchase-order/edit/${p.poId}`)}>
-                                                {p.poNo}
-                                              </td>
-                                              <td style={poDetailTd()}>{p.vendorName}</td>
-                                              <td style={poDetailTd('right')}>₹ {fmtN(p.rate)}</td>
-                                              <td style={{ ...poDetailTd('right'), fontWeight: 700 }}>{p.qty} {p.unit}</td>
-                                              <td style={poDetailTd()}>
-                                                <Pill
-                                                  label={p.poStatus}
-                                                  bg={p.poStatus === 'approved' ? '#d4edda' : p.poStatus === 'pending' ? '#fff3cd' : '#e9ecef'}
-                                                  color={p.poStatus === 'approved' ? '#155724' : p.poStatus === 'pending' ? '#856404' : '#495057'}
-                                                  border={p.poStatus === 'approved' ? '#c3e6cb' : p.poStatus === 'pending' ? '#ffc107' : '#dee2e6'}
-                                                />
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                /* top separator only at the first row of each new SO */
+                const soSep = r.soRowSpan > 0 ? { borderTop:'2px solid #9ca3af' } : {};
+
+                const soTD  = (content, extra={}) => r.soRowSpan > 0 ? (
+                  <td rowSpan={r.soRowSpan} style={{ padding:'6px 9px',
+                    border:`1px solid ${BD}`, borderTop:'2px solid #9ca3af',
+                    background:rowBg, verticalAlign:'top', ...extra }}>
+                    {content}
+                  </td>
+                ) : null;
+
+                const itemTD = (content, extra={}) => r.itemRowSpan > 0 ? (
+                  <td rowSpan={r.itemRowSpan} style={{ padding:'6px 9px',
+                    border:`1px solid ${BD}`, ...soSep,
+                    background:noPObg, verticalAlign:'middle', ...extra }}>
+                    {content}
+                  </td>
+                ) : null;
+
+                const cell = (content, right=false, extra={}) => (
+                  <td style={{ padding:'6px 9px',
+                    border:`1px solid ${BD}`, ...soSep,
+                    background:noPObg,
+                    textAlign:right?'right':'left', verticalAlign:'middle', ...extra }}>
+                    {content}
+                  </td>
+                );
+
+                return (
+                  <tr key={ridx}>
+                    {/* SO-level cells (rowspan = entire SO) */}
+                    {soTD(
+                      <span style={{ fontSize:10.5, color:'#94a3b8', fontWeight:700 }}>{r.soSeq}</span>
+                    )}
+                    {soTD(
+                      <span style={{ fontWeight:800, color:'#1e293b', fontSize:12 }}>{r.so.orderNo}</span>
+                    )}
+                    {soTD(
+                      <div>
+                        <div style={{ fontWeight:600, color:'#1e293b', fontSize:11 }}>{r.so.customerName}</div>
+                        <div style={{ fontSize:9.5, color:'#94a3b8', marginTop:1 }}>{fmtD(r.so.orderDate)}</div>
+                      </div>
+                    )}
+
+                    {/* Item-level cells (rowspan = PO hit count for this item) */}
+                    {itemTD(
+                      r.item
+                        ? <div>
+                            <div style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'wrap' }}>
+                              <span style={{ fontWeight:600, color:'#1e293b' }}>{r.item.name}</span>
+                              {r.item.isAddon && (
+                                <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:3,
+                                  background:'#fff3e0', color:'#b45309', border:'1px solid #fbbf24',
+                                  whiteSpace:'nowrap' }}>Add-on</span>
+                              )}
+                            </div>
+                            {r.item.code && <div style={{ fontSize:9.5, color:'#94a3b8', marginTop:1 }}>{r.item.code}</div>}
+                            {r.item.hsn  && <div style={{ fontSize:9.5, color:'#94a3b8' }}>HSN: {r.item.hsn}</div>}
+                          </div>
+                        : <span style={{ color:'#aaa', fontStyle:'italic' }}>No items</span>
+                    )}
+                    {itemTD(
+                      <span style={{ fontWeight:700, color:'#1e293b' }}>
+                        {r.item ? r.item.qty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}
+                      </span>,
+                      { textAlign:'center' }
+                    )}
+                    {itemTD(
+                      <span style={{ color:'#6b7280' }}>{r.item?.unit || '—'}</span>,
+                      { textAlign:'center' }
+                    )}
+
+                    {/* PO-level cells — blank if no PO */}
+                    {cell(
+                      noPO
+                        ? <span style={{ color:'#94a3b8', fontStyle:'italic', fontSize:10 }}>—</span>
+                        : <span style={{ fontWeight:600, color:'#1e293b' }}>{r.hit.vendorName}</span>
+                    )}
+                    {cell(
+                      noPO ? '' : fmtD(r.hit.poDate),
+                      false,
+                      { color:'#6b7280', whiteSpace:'nowrap' }
+                    )}
+                    {cell(
+                      noPO
+                        ? ''
+                        : <span style={{ fontWeight:700, color:'#1e293b', cursor:'pointer', textDecoration:'underline' }}
+                            onClick={() => navigate(`/purchase-order/edit/${r.hit.poId}`)}>
+                            {r.hit.poNo}
+                          </span>
+                    )}
+                    {cell(
+                      noPO ? '' : fmtN(r.hit.rate),
+                      true,
+                      { fontWeight: noPO?400:600, color:'#374151' }
+                    )}
+                    {cell(
+                      noPO ? '' : `${r.hit.gst}%`,
+                      true,
+                      { color:'#6b7280' }
+                    )}
+                    {cell(
+                      noPO ? '' : fmtN(txAmt),
+                      true,
+                      { fontWeight:600, color:'#1e293b' }
+                    )}
+                    {cell(
+                      noPO ? '' : fmtN(totAmt),
+                      true,
+                      { fontWeight:700, color:'#104f4f' }
+                    )}
+                    {cell(
+                      noPO
+                        ? <span style={{ background:'#fee2e2', color:'#991b1b', padding:'2px 8px',
+                            borderRadius:10, fontSize:9.5, fontWeight:700, border:'1px solid #fca5a5', whiteSpace:'nowrap' }}>
+                            No PO
+                          </span>
+                        : <StatusBadge label={r.hit.poStatus} />,
+                      false,
+                      { textAlign:'center' }
+                    )}
+                    {/* Action — only on first row of SO */}
+                    {r.soRowSpan > 0 ? (
+                      <td rowSpan={r.soRowSpan} style={{ padding:'6px 8px',
+                        border:`1px solid ${BD}`, borderTop:'2px solid #9ca3af',
+                        background:rowBg, textAlign:'center', verticalAlign:'middle' }}>
+                        <button onClick={() => navigate('/purchase-order/create', { state: { linkedSalesOrderId: r.so.soId } })}
+                          style={{ padding:'4px 10px', background:'#1e293b', color:'#fff', border:'none',
+                            borderRadius:5, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:F,
+                            whiteSpace:'nowrap' }}>
+                          + PO
+                        </button>
                       </td>
-                    </tr>
-                  ),
-                ];
+                    ) : null}
+                  </tr>
+                );
               })}
             </tbody>
-          </table>
-        )}
-      </div>
 
-      {/* Footer note */}
-      <div style={{ fontSize: 10, color: '#aaa', fontFamily: F, padding: '6px 2px' }}>
-        * Item matching is based on item name. PO qty shown is from approved + pending POs linked to each SO.
+            {/* ── Totals Footer ── */}
+            {flatRows.length > 0 && (
+              <tfoot>
+                <tr style={{ background:'#eef2ff' }}>
+                  <td colSpan={11} style={{ padding:'7px 10px', borderTop:'2px solid #818cf8',
+                    color:'#4f46e5', fontWeight:700, fontSize:11, borderRight:`1px solid ${BD}` }}>
+                    TOTAL — {visible.length} SO{visible.length!==1?'s':''}, {flatRows.filter(r=>r.hit).length} PO item row{flatRows.filter(r=>r.hit).length!==1?'s':''}
+                  </td>
+                  <td style={{ padding:'7px 9px', textAlign:'right', borderTop:'2px solid #818cf8',
+                    borderRight:`1px solid ${BD}`, fontWeight:700, color:'#1e293b', fontSize:11 }}>
+                    ₹{totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                  </td>
+                  <td style={{ padding:'7px 9px', textAlign:'right', borderTop:'2px solid #818cf8',
+                    borderRight:`1px solid ${BD}`, fontWeight:800, color:'#4f46e5', fontSize:12 }}>
+                    ₹{totals.amount.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                  </td>
+                  <td colSpan={2} style={{ borderTop:'2px solid #818cf8' }}/>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+
+      <div style={{ fontSize:10, color:'#A8A29E', fontFamily:F, padding:'5px 14px 8px' }}>
+        * Item matching is based on item name/code. PO rows appear once per matching PO. If no PO raised for an item, PO columns are blank.
       </div>
     </div>
   );

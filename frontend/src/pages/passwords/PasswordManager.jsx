@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P = '#1a3a8a';
+const P = '#104f4f';
 
 const CATEGORIES = ['Banking', 'Government', 'Vendor Portal', 'Email', 'ERP / Software', 'Social Media', 'Other'];
 const CAT_COLOR  = {
@@ -15,6 +15,13 @@ const CAT_COLOR  = {
   'Social Media':   '#AD1457',
   'Other':          '#546E7A',
 };
+
+const BROWSERS = [
+  { id: 'same',    label: 'This Browser', icon: '🌐' },
+  { id: 'chrome',  label: 'Chrome',       icon: '🟡' },
+  { id: 'edge',    label: 'Edge',         icon: '🔵' },
+  { id: 'firefox', label: 'Firefox',      icon: '🟠' },
+];
 
 const Lbl = ({ children }) => (
   <div style={{ fontSize:10.5, fontWeight:600, color:'#374151', marginBottom:3, fontFamily:F }}>{children}</div>
@@ -34,10 +41,17 @@ export default function PasswordManager() {
   const [modal,     setModal]     = useState(null);
   const [showPwd,   setShowPwd]   = useState({});
   const [copied,    setCopied]    = useState({});
-  const [launching, setLaunching] = useState({}); // { id: 'idle'|'launching'|'done'|'error' }
-  const [launchMsg, setLaunchMsg] = useState({}); // { id: string }
+  const [launching, setLaunching] = useState({});
+  const [launchMsg, setLaunchMsg] = useState({});
+  const [quickFill, setQuickFill] = useState(null);
   const [saving,    setSaving]    = useState(false);
   const [form,      setForm]      = useState(blank());
+
+  /* browser preference — persisted to localStorage */
+  const [browser, setBrowser] = useState(() => localStorage.getItem('pm_browser') || 'same');
+  const selectBrowser = (b) => { setBrowser(b); localStorage.setItem('pm_browser', b); };
+
+  const countdownRef = useRef(null);
 
   function blank() {
     return { siteName:'', url:'', username:'', password:'', category:'Other', notes:'' };
@@ -53,6 +67,9 @@ export default function PasswordManager() {
   }, [cid]);
 
   useEffect(() => { load(); }, [load]);
+
+  /* clear countdown on unmount */
+  useEffect(() => () => { if (countdownRef.current) clearInterval(countdownRef.current); }, []);
 
   const copy = async (text, key) => {
     try {
@@ -88,19 +105,48 @@ export default function PasswordManager() {
     load();
   };
 
-  /* ── Puppeteer auto-launch ── */
+  /* ── Auto-launch with browser selection + auto-copy sequence ── */
   const handleLaunch = async (e) => {
     if (!e.url) {
       alert('No login URL saved for this entry. Please edit and add the URL first.');
       return;
     }
+    if (countdownRef.current) clearInterval(countdownRef.current);
+
     setLaunching(s => ({ ...s, [e.id]: 'launching' }));
-    setLaunchMsg(s => ({ ...s, [e.id]: 'Opening browser…' }));
+    setLaunchMsg(s => ({ ...s, [e.id]: 'Opening…' }));
     try {
-      const r = await axios.post('/api/passwords/launch', { companyId: cid, id: e.id });
+      const r = await axios.get(`/api/passwords/${e.id}/credentials?companyId=${cid}`);
+      const { url, username, password, siteName } = r.data;
+
+      /* open in chosen browser */
+      if (browser === 'same') {
+        window.open(url, '_blank', 'noopener');
+      } else {
+        await axios.post('/api/passwords/launch-browser', { url, browser });
+      }
+
+      /* Step 1 — copy username immediately */
+      try { await navigator.clipboard.writeText(username); } catch {}
+
+      const DELAY = 6; // seconds before auto-copying password
+      setQuickFill({ siteName, url, username, password, step: 1, countdown: DELAY });
       setLaunching(s => ({ ...s, [e.id]: 'done' }));
-      setLaunchMsg(s => ({ ...s, [e.id]: r.data.message || 'Browser launched!' }));
+      setLaunchMsg(s => ({ ...s, [e.id]: '✅ Opened — username copied, paste it now!' }));
       setTimeout(() => setLaunching(s => ({ ...s, [e.id]: 'idle' })), 5000);
+
+      /* Countdown then auto-copy password */
+      let count = DELAY;
+      countdownRef.current = setInterval(async () => {
+        count--;
+        setQuickFill(qf => qf ? { ...qf, countdown: count } : null);
+        if (count <= 0) {
+          clearInterval(countdownRef.current);
+          try { await navigator.clipboard.writeText(password); } catch {}
+          setQuickFill(qf => qf ? { ...qf, step: 2, countdown: 0 } : null);
+        }
+      }, 1000);
+
     } catch (err) {
       setLaunching(s => ({ ...s, [e.id]: 'error' }));
       setLaunchMsg(s => ({ ...s, [e.id]: err.response?.data?.error || err.message }));
@@ -125,7 +171,6 @@ export default function PasswordManager() {
     verticalAlign:'middle', ...ex,
   });
 
-  /* button colour based on launch state */
   const launchBtnStyle = (id) => {
     const state = launching[id] || 'idle';
     const bg = state==='launching' ? '#6b7280'
@@ -142,8 +187,8 @@ export default function PasswordManager() {
 
   const launchBtnLabel = (id) => {
     const state = launching[id] || 'idle';
-    if (state === 'launching') return '⏳ Launching…';
-    if (state === 'done')      return '✅ Browser Opened';
+    if (state === 'launching') return '⏳ Opening…';
+    if (state === 'done')      return '✅ Opened';
     if (state === 'error')     return '❌ Error';
     return '🚀 Auto Login';
   };
@@ -151,31 +196,144 @@ export default function PasswordManager() {
   return (
     <div style={{ fontFamily:F, padding:10, fontSize:12, maxWidth:1200, margin:'0 auto' }}>
 
+      {/* ── Quick Fill floating card ── */}
+      {quickFill && (
+        <div style={{
+          position:'fixed', bottom:24, right:24, zIndex:9999,
+          background:'#1E293B', borderRadius:10, padding:'14px 18px',
+          boxShadow:'0 8px 32px rgba(0,0,0,0.45)',
+          minWidth:300, maxWidth:360, fontFamily:F,
+          border:'2px solid #2563EB',
+        }}>
+          {/* Header */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <span style={{fontSize:13,fontWeight:700,color:'#fff'}}>🔑 Quick Fill — {quickFill.siteName}</span>
+            <button onClick={()=>{ if (countdownRef.current) clearInterval(countdownRef.current); setQuickFill(null); }}
+              style={{background:'none',border:'none',color:'#94A3B8',fontSize:16,cursor:'pointer',lineHeight:1,padding:0}}>✕</button>
+          </div>
+
+          {/* Step indicator */}
+          <div style={{display:'flex',gap:6,marginBottom:12}}>
+            {[
+              { n:1, label:'Paste Username', done: quickFill.step >= 1 },
+              { n:2, label:'Paste Password', done: quickFill.step >= 2 },
+            ].map(s => (
+              <div key={s.n} style={{flex:1,padding:'6px 8px',borderRadius:6,textAlign:'center',
+                background: s.done ? '#104f4f' : '#334155',
+                border: `1px solid ${s.done ? '#22c55e' : '#475569'}`,
+                fontSize:10,fontWeight:700,color: s.done ? '#86efac' : '#94A3B8',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                {s.done ? '✓' : s.n}  {s.label}
+              </div>
+            ))}
+          </div>
+
+          {/* Current instruction */}
+          {quickFill.step === 1 && (
+            <div style={{background:'#0F172A',borderRadius:6,padding:'8px 12px',marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#38BDF8',marginBottom:4}}>
+                Step 1: Username copied to clipboard
+              </div>
+              <div style={{fontSize:11,color:'#E2E8F0'}}>
+                Switch to the new tab → click the Username field → press <kbd style={{background:'#1E293B',color:'#93C5FD',padding:'1px 5px',borderRadius:3,fontFamily:'monospace',border:'1px solid #475569'}}>Ctrl+V</kbd>
+              </div>
+              {quickFill.countdown > 0 && (
+                <div style={{marginTop:6,fontSize:10,color:'#94A3B8'}}>
+                  Password auto-copies in <span style={{color:'#FCD34D',fontWeight:700}}>{quickFill.countdown}s</span>…
+                </div>
+              )}
+            </div>
+          )}
+          {quickFill.step === 2 && (
+            <div style={{background:'#0F172A',borderRadius:6,padding:'8px 12px',marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#4ADE80',marginBottom:4}}>
+                Step 2: Password copied to clipboard!
+              </div>
+              <div style={{fontSize:11,color:'#E2E8F0'}}>
+                Click the Password field → press <kbd style={{background:'#1E293B',color:'#93C5FD',padding:'1px 5px',borderRadius:3,fontFamily:'monospace',border:'1px solid #475569'}}>Ctrl+V</kbd> → Submit
+              </div>
+            </div>
+          )}
+
+          {/* Manual copy buttons */}
+          {[
+            {label:'Username', value:quickFill.username, key:'qf-user'},
+            {label:'Password', value:quickFill.password, key:'qf-pass', secret:true},
+          ].map(({label,value,key,secret})=>(
+            <div key={key} style={{marginBottom:6}}>
+              <div style={{fontSize:9.5,color:'#64748B',marginBottom:3}}>{label}</div>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <div style={{flex:1,background:'#0F172A',border:'1px solid #334155',borderRadius:5,
+                  padding:'4px 8px',fontSize:11.5,color:'#E2E8F0',fontFamily:'monospace',
+                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                  letterSpacing:secret&&!showPwd[key]?'0.2em':'normal'}}>
+                  {secret&&!showPwd[key]?'••••••••':value}
+                </div>
+                {secret&&(
+                  <button onClick={()=>setShowPwd(s=>({...s,[key]:!s[key]}))}
+                    style={{background:'#334155',border:'none',color:'#94A3B8',borderRadius:4,
+                      padding:'4px 7px',cursor:'pointer',fontSize:11}}>
+                    {showPwd[key]?'🙈':'👁'}
+                  </button>
+                )}
+                <button onClick={()=>copy(value,key)}
+                  style={{background:copied[key]?'#16A34A':'#2563EB',border:'none',color:'#fff',
+                    borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700,
+                    whiteSpace:'nowrap'}}>
+                  {copied[key]?'✓':'Copy'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{ background:'linear-gradient(135deg,#1a3a8a,#2563eb)', color:'#fff',
+      <div style={{ background:'linear-gradient(135deg,#104f4f,#2563eb)', color:'#fff',
         padding:'10px 16px', borderRadius:'8px 8px 0 0',
-        display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
         <div>
           <div style={{ fontSize:9, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'1px' }}>
-            Powered by Puppeteer · Chromium auto-fill
+            Auto-copies credentials · Step-by-step fill guide
           </div>
           <div style={{ fontSize:16, fontWeight:800, marginTop:1 }}>🔐 Password Manager</div>
         </div>
-        <button onClick={openAdd}
-          style={{ height:30, padding:'0 14px', background:'rgba(255,255,255,0.18)',
-            border:'1px solid rgba(255,255,255,0.4)', color:'#fff', borderRadius:6,
-            cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:F }}>
-          + Add Login
-        </button>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          {/* Browser selector */}
+          <div style={{ display:'flex', alignItems:'center', gap:4, background:'rgba(0,0,0,0.2)',
+            borderRadius:6, padding:'3px 4px' }}>
+            <span style={{ fontSize:9, color:'rgba(255,255,255,0.6)', marginRight:2, whiteSpace:'nowrap' }}>Open in:</span>
+            {BROWSERS.map(b => (
+              <button key={b.id} onClick={() => selectBrowser(b.id)}
+                title={b.label}
+                style={{
+                  height:24, padding:'0 8px', borderRadius:4, border:'none', cursor:'pointer',
+                  fontSize:10, fontWeight:700, fontFamily:F, whiteSpace:'nowrap',
+                  background: browser === b.id ? '#fff' : 'transparent',
+                  color: browser === b.id ? '#104f4f' : 'rgba(255,255,255,0.75)',
+                  transition:'all 0.15s',
+                }}>
+                {b.icon} {b.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={openAdd}
+            style={{ height:30, padding:'0 14px', background:'rgba(255,255,255,0.18)',
+              border:'1px solid rgba(255,255,255,0.4)', color:'#fff', borderRadius:6,
+              cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:F }}>
+            + Add Login
+          </button>
+        </div>
       </div>
 
       {/* How it works strip */}
       <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderTop:'none',
-        padding:'9px 16px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
-        <span style={{ fontSize:11, color:'#14532d', fontWeight:700 }}>⚡ How it works:</span>
-        <span style={{ fontSize:10.5, color:'#166534', lineHeight:1.5 }}>
-          Click <strong>🚀 Auto Login</strong> → a real Chromium browser opens, username & password are filled automatically, form is submitted.
-          &nbsp;·&nbsp; If OTP or CAPTCHA appears, type it in that browser window manually — you stay logged in after.
+        padding:'8px 16px', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <span style={{ fontSize:11, color:'#14532d', fontWeight:700, whiteSpace:'nowrap' }}>⚡ How it works:</span>
+        <span style={{ fontSize:10.5, color:'#104f4f', lineHeight:1.6 }}>
+          Click <strong>🚀 Auto Login</strong> → browser opens &amp; <strong>username is auto-copied</strong>.
+          Switch to the tab → paste (<kbd style={{fontFamily:'monospace',background:'#bbf7d0',padding:'0 3px',borderRadius:2}}>Ctrl+V</kbd>) in Username field.
+          &nbsp;After <strong>6 seconds</strong>, password is <strong>auto-copied</strong> — paste it in the Password field &amp; login.
         </span>
       </div>
 
@@ -200,7 +358,7 @@ export default function PasswordManager() {
       </div>
 
       {/* Table */}
-      <div style={{ border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', overflow:'hidden' }}>
+      <div style={{ border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', overflow:'auto' }}>
         {loading ? (
           <div style={{ padding:40, textAlign:'center', color:'#888' }}>Loading…</div>
         ) : filtered.length === 0 ? (
@@ -299,8 +457,7 @@ export default function PasswordManager() {
 
                     {/* Actions */}
                     <td style={{ ...td(), whiteSpace:'nowrap' }}>
-                      <div style={{ display:'flex', gap:5, alignItems:'center' }}>
-                        {/* Auto-login via Puppeteer */}
+                      <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
                         <div>
                           <button onClick={() => handleLaunch(e)}
                             disabled={state === 'launching'}
@@ -310,12 +467,11 @@ export default function PasswordManager() {
                           {state !== 'idle' && launchMsg[e.id] && (
                             <div style={{ fontSize:9, marginTop:2,
                               color: state==='error' ? '#dc2626' : state==='done' ? '#16a34a' : '#6b7280',
-                              maxWidth:150, whiteSpace:'normal', lineHeight:1.3 }}>
+                              maxWidth:160, whiteSpace:'normal', lineHeight:1.3 }}>
                               {launchMsg[e.id]}
                             </div>
                           )}
                         </div>
-
                         <button onClick={() => openEdit(e)}
                           style={{ height:28, padding:'0 9px', background:'#f9fafb',
                             border:'1px solid #d1d5db', color:'#374151', borderRadius:5,
@@ -342,7 +498,7 @@ export default function PasswordManager() {
           <div style={{ background:'#fff', borderRadius:10, width:500, maxWidth:'96vw',
             fontFamily:F, boxShadow:'0 24px 80px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
-            <div style={{ background:'linear-gradient(135deg,#1a3a8a,#2563eb)', color:'#fff',
+            <div style={{ background:'linear-gradient(135deg,#104f4f,#2563eb)', color:'#fff',
               padding:'11px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div style={{ fontWeight:800, fontSize:13 }}>
                 {modal.mode === 'add' ? '+ Add New Login' : '✎ Edit Saved Login'}
@@ -370,9 +526,9 @@ export default function PasswordManager() {
                 </div>
               </div>
               <div style={{ marginBottom:12 }}>
-                <Lbl>Login URL *</Lbl>
+                <Lbl>Login URL</Lbl>
                 <Inp value={form.url} onChange={e=>set('url',e.target.value)}
-                  placeholder="e.g. https://gst.gov.in/login  (full URL of the login page)" />
+                  placeholder="e.g. https://gst.gov.in/login" />
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
                 <div>
@@ -383,20 +539,14 @@ export default function PasswordManager() {
                 <div>
                   <Lbl>Password *</Lbl>
                   <Inp value={form.password} onChange={e=>set('password',e.target.value)}
-                    placeholder="password" autoComplete="off" style={{ fontFamily:'monospace' }} />
+                    placeholder="password" autoComplete="off" type="text"
+                    style={{ fontFamily:'monospace' }} />
                 </div>
               </div>
               <div style={{ marginBottom:16 }}>
                 <Lbl>Notes (optional)</Lbl>
                 <Inp value={form.notes} onChange={e=>set('notes',e.target.value)}
                   placeholder="e.g. admin account, shared, 2FA enabled" />
-              </div>
-
-              {/* Tip */}
-              <div style={{ padding:'8px 12px', background:'#f0fdf4', border:'1px solid #bbf7d0',
-                borderRadius:6, fontSize:10, color:'#166534', marginBottom:14, lineHeight:1.5 }}>
-                💡 <strong>Tip:</strong> Use the exact login page URL (e.g. <em>https://gst.gov.in/login</em>), not the home page.
-                Puppeteer will open this URL, detect the username/password fields automatically, type credentials, and submit.
               </div>
 
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>

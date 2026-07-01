@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const N = '#2F6FED';
+const N = '#133d80';
 
 const BD = '#E5EAF2';
 const btnStyle = (bg = '#12B76A', disabled) => ({

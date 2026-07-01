@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -7,7 +7,7 @@ import { useCompany } from '../../context/CompanyContext';
    COLOR PALETTE
 ═══════════════════════════════════ */
 const C = {
-  shell:    '#2F6FED',
+  shell:    '#133d80',
   accent:   '#0070F2',
   bg:       '#F0F2F5',
   white:    '#ffffff',
@@ -148,10 +148,11 @@ const ProjectDashboard = () => {
   const { selectedCompany } = useCompany();
   const companyId = selectedCompany?.companyId;
 
-  const [order,   setOrder]   = useState(null);
-  const [balance, setBalance] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [order,     setOrder]     = useState(null);
+  const [balance,   setBalance]   = useState(null);
+  const [jobSheets, setJobSheets] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
 
   useEffect(() => {
     if (!orderId) return;
@@ -159,10 +160,14 @@ const ProjectDashboard = () => {
     Promise.all([
       axios.get(`/api/sales-orders/${orderId}`, { params: { companyId } }),
       axios.get(`/api/sales-orders/${orderId}/material-balance`, { params: { companyId } })
-        .catch(() => ({ data: null }))
-    ]).then(([r1, r2]) => {
+        .catch(() => ({ data: null })),
+      fetch(`/api/manufacturing/job-sheets?companyId=${companyId}`)
+        .then(r => r.json()).catch(() => []),
+    ]).then(([r1, r2, jsAll]) => {
       setOrder(r1.data);
       setBalance(r2.data);
+      const all = Array.isArray(jsAll) ? jsAll : [];
+      setJobSheets(all.filter(j => String(j.soId) === String(orderId)));
     }).catch(err => {
       setError('Failed to load project: ' + (err.response?.data?.error || err.message));
     }).finally(() => setLoading(false));
@@ -365,7 +370,7 @@ const ProjectDashboard = () => {
                   }}>
                     🏢 {grp}
                   </div>
-                  <div style={{ overflowX:'auto' }}>
+                  <div className="thick-scroll" style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                       <thead>
                         <tr style={{ background:C.shell }}>
@@ -429,7 +434,7 @@ const ProjectDashboard = () => {
           {balItems.length === 0 ? (
             <EmptyState msg="No purchase data available. Link this SO to a Purchase Order to see status." />
           ) : (
-            <div style={{ overflowX:'auto' }}>
+            <div className="thick-scroll" style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr style={{ background:C.shell }}>
@@ -491,7 +496,62 @@ const ProjectDashboard = () => {
           )}
         </Section>
 
-        {/* ── SECTION 4: Tasks ─────────── */}
+        {/* ── SECTION 4: Manufacturing Job Sheets ── */}
+        <Section title="Manufacturing Job Sheets" icon="🔧" theme={C.purple} count={jobSheets.length} defaultOpen={jobSheets.length > 0}>
+          {jobSheets.length === 0 ? (
+            <EmptyState msg="No manufacturing job sheets linked. Create one from PO Tracking." />
+          ) : (
+            <div className="thick-scroll" style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:C.shell }}>
+                    {['#','Job No','Factory / Location','Items','Qty','Due Date','Status'].map(h => (
+                      <th key={h} style={{ padding:'6px 10px', color:'#fff', fontWeight:600, fontSize:11, textAlign:'left', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobSheets.map((js, i) => {
+                    const sc = { submitted:{ bg:'#cce5ff', color:'#004085', border:'#b8daff' }, approved:{ bg:'#d4edda', color:'#155724', border:'#c3e6cb' }, rejected:{ bg:'#f8d7da', color:'#721c24', border:'#f5c6cb' }, pending:{ bg:'#fff3cd', color:'#856404', border:'#ffc107' }, 'in-progress':{ bg:'#e0f0ff', color:'#0c5460', border:'#bee5eb' }, completed:{ bg:'#d4edda', color:'#155724', border:'#c3e6cb' } };
+                    const s = sc[js.status] || { bg:'#e9ecef', color:'#495057', border:'#dee2e6' };
+                    const items = js.outputItems?.length ? js.outputItems : (js.itemName ? [{ itemName: js.itemName, qty: js.qtyRequired, uom: js.uom }] : []);
+                    return (
+                      <tr key={js.id}
+                        onClick={() => navigate(`/manufacturing/job-sheets/edit/${js.id}`)}
+                        style={{ background:i%2===0?'#fff':'#F9FAFB', borderBottom:`1px solid ${C.border}`, cursor:'pointer' }}
+                      >
+                        <td style={{ padding:'6px 10px', color:C.muted }}>{i+1}</td>
+                        <td style={{ padding:'6px 10px', fontWeight:700, color:'#133d80' }}>{js.jobNo}</td>
+                        <td style={{ padding:'6px 10px', fontWeight:600 }}>
+                          🏭 {js.locationName || '—'}
+                        </td>
+                        <td style={{ padding:'6px 10px' }}>
+                          {items.map((it,j) => (
+                            <div key={j} style={{ fontSize:11, color:C.text }}>{it.itemName || '—'}</div>
+                          ))}
+                        </td>
+                        <td style={{ padding:'6px 10px', textAlign:'right' }}>
+                          {items.map((it,j) => (
+                            <div key={j} style={{ fontSize:11 }}>{it.qty || 0} {it.uom || ''}</div>
+                          ))}
+                        </td>
+                        <td style={{ padding:'6px 10px', color:C.muted }}>{fmtDate(js.dueDate)}</td>
+                        <td style={{ padding:'6px 10px' }}>
+                          <Badge label={js.status || 'pending'} bg={s.bg} color={s.color} border={s.border} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{ marginTop:8, fontSize:11, color:C.muted }}>
+                💡 Manufacturing is in-house — cost shown as <strong>₹0</strong> in purchase value.
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ── SECTION 5: Tasks ─────────── */}
         <Section title="Task / Execution Tracking" icon="📌" theme={C.purple} count={tasks.length}>
           {tasks.length === 0 ? (
             <EmptyState msg="No tasks defined" />
@@ -562,7 +622,7 @@ const ProjectDashboard = () => {
         {/* ── BOM Section (if has BOM items) ── */}
         {bomItems.length > 0 && (
           <Section title="Bill of Materials (Formal BOM)" icon="🔧" theme={C.purple} count={bomItems.length} defaultOpen={false}>
-            <div style={{ overflowX:'auto' }}>
+            <div className="thick-scroll" style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr style={{ background:C.shell }}>
@@ -607,6 +667,12 @@ const ProjectDashboard = () => {
           style={{ padding:'8px 18px', background:'#E67E00', border:'none', color:'#fff', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}
         >
           🛒 Create Purchase Order
+        </button>
+        <button
+          onClick={() => navigate('/manufacturing/job-sheets/create', { state: { linkedSalesOrderId: orderId, soNumber: soNo, customerName: client } })}
+          style={{ padding:'8px 18px', background:'#133d80', border:'none', color:'#fff', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700, fontFamily:'inherit' }}
+        >
+          🔧 Create Job Sheet
         </button>
         <button
           onClick={() => navigate(`/sales-order/edit/${orderId}?tab=tasks`)}

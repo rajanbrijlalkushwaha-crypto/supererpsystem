@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -67,7 +67,7 @@ const newItem = () => ({
    STYLE ATOMS  — Modern SaaS / SAP Fiori theme
 ═══════════════════════════════════════════════════ */
 /* ─── Design Tokens — aligned to App.css v5.0 ─── */
-const P    = '#2F6FED';   /* primary blue        */
+const P    = '#133d80';   /* primary blue        */
 const SEC  = '#EEF4FF';   /* section header band */
 const BG   = '#F5F7FB';   /* page background     */
 const BD   = '#E5EAF2';   /* border colour       */
@@ -1105,7 +1105,7 @@ const CreateSalesOrder = () => {
                 <div>
                   <label style={S.lbl}>Credit Limit (₹)</label>
                   <div style={{ display:'flex', alignItems:'center', border:`1px solid ${BD}`, borderRadius:'6px', overflow:'hidden', background:'#FAFCFF' }}>
-                    <span style={{ padding:'6px 9px', background:SEC, borderRight:`1px solid ${BD}`, fontSize:'12px', color:'#2F6FED', fontWeight:600 }}>₹</span>
+                    <span style={{ padding:'6px 9px', background:SEC, borderRight:`1px solid ${BD}`, fontSize:'12px', color:'#133d80', fontWeight:600 }}>₹</span>
                     <input type="number" value={pay.creditLimit} onChange={e => setPay(p=>({...p,creditLimit:e.target.value}))} placeholder="0" style={{ flex:1, padding:'6px 9px', border:'none', outline:'none', background:'transparent', fontSize:'12px', fontFamily:'inherit' }} />
                   </div>
                 </div>
@@ -1113,7 +1113,7 @@ const CreateSalesOrder = () => {
               </div>
               {/* Grand Total reminder */}
               <div style={{ marginTop:'14px', padding:'12px 16px', background:SEC, border:`1px solid ${BD}`, borderLeft:`4px solid ${P}`, borderRadius:'8px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:'12px', color:'#2F6FED', fontWeight:600 }}>Order Grand Total</span>
+                <span style={{ fontSize:'12px', color:'#133d80', fontWeight:600 }}>Order Grand Total</span>
                 <span style={{ fontSize:'16px', fontWeight:700, color:P, fontFamily:'monospace' }}>₹{grandTotal.toFixed(2)}</span>
               </div>
               </div>{/* end S.body */}
@@ -1159,7 +1159,7 @@ const CreateSalesOrder = () => {
               {specSheet.map((grp) => (
                 <div key={grp._id} style={{ ...S.card, marginBottom:14 }}>
                   {/* Group header */}
-                  <div style={{ background:'#1a3c6e', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
+                  <div style={{ background:'#104f4f', padding:'8px 14px', display:'flex', alignItems:'center', gap:10, borderRadius:'8px 8px 0 0' }}>
                     <span style={{ fontSize:16 }}>📦</span>
                     <span style={{ flex:1, fontWeight:700, color:'#fff', fontSize:13 }}>{grp.itemName || 'General Specifications'}</span>
                     <button type="button" onClick={() => ssAddHdr(grp._id)}
@@ -1290,7 +1290,7 @@ const CreateSalesOrder = () => {
                 {/* Summary pills */}
                 <div style={{ display:'flex', gap:10, marginBottom:12 }}>
                   {[
-                    { label:'Total Items', val:matPlan.length, color:'#2F6FED' },
+                    { label:'Total Items', val:matPlan.length, color:'#133d80' },
                     { label:'Purchase',    val:purchaseCount,  color:'#0070F2' },
                     { label:'Manufactured',val:mfgCount,       color:'#188918' },
                     { label:'Units/Cabins',val:groups.length,  color:'#E9730C' },
@@ -1525,7 +1525,7 @@ const CreateSalesOrder = () => {
                       })}
                     </tbody>
                   </table>
-                  <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, fontSize:12, color:'#2F6FED', fontWeight:600 }}>
+                  <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8, fontSize:12, color:'#133d80', fontWeight:600 }}>
                     Total: {bomItems.reduce((s,b)=>s+(parseFloat(b.qty)||0),0).toFixed(2)} units across {bomItems.length} material line(s)
                   </div>
                 </div>
@@ -1565,7 +1565,7 @@ const CreateSalesOrder = () => {
                     return (
                       <div style={{ marginBottom:12, padding:'8px 14px', background:SEC, border:`1px solid ${BD}`, borderRadius:6, display:'flex', alignItems:'center', gap:16 }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#2F6FED', fontWeight:600 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4, color:'#133d80', fontWeight:600 }}>
                             <span>Project Progress</span><span>{pct}% ({done}/{tasks.length} tasks)</span>
                           </div>
                           <div style={{ height:8, background:'#DBEAFE', borderRadius:4, overflow:'hidden' }}>

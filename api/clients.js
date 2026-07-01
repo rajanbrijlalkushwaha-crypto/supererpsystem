@@ -3,7 +3,7 @@ const path     = require('path');
 const fs       = require('fs');
 const multer   = require('multer');
 const XLSX     = require('xlsx');
-const { ROOT, upload, saveUploadedFiles, saveJson, deleteJson } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, deleteJson, auditEntry, pushAudit } = require('./helpers');
 const jstore   = require('./json-store');
 
 /* ── multer for Excel upload (memory storage) ── */
@@ -351,6 +351,7 @@ router.post('/', upload.array('documents'), async (req, res) => {
       category: str('category') || 'Regular',
       salesPerson: str('salesPerson'), remarks: str('remarks'),
       documents: docList, createdAt: now, updatedAt: now,
+      audit: [auditEntry(req, 'created')],
     };
     saveJson(clientJsonPath(companyId, clientId, clientName), fullData);
 
@@ -469,6 +470,13 @@ router.put('/:clientId', upload.array('newFiles'), async (req, res) => {
       createdAt: existing.createdAt || existing.created_at || now,
       updatedAt: now,
     };
+    const clOldStatus = existing.status;
+    const clNewStatus = fullData.status;
+    const clAction = clNewStatus !== clOldStatus
+      ? (clNewStatus === 'approved' ? 'approved' : clNewStatus === 'rejected' ? 'rejected' : 'status_changed')
+      : 'edited';
+    const clExtra = clNewStatus !== clOldStatus ? { from: clOldStatus, to: clNewStatus } : {};
+    fullData.audit = pushAudit(existing, req, clAction, clExtra);
     saveJson(clientJsonPath(companyId, clientId, resolvedName), fullData);
 
     res.json({ success: true, message: 'Client updated successfully' });

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printSalesOrder } from '../../utils/printSalesOrder';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
+import AuditTrail from '../../components/AuditTrail';
 
 /* ── helpers ── */
 const fmt   = (n) => `₹${(parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -42,7 +45,7 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
 
         {/* ── Header ── */}
         <div style={{
-          background: 'linear-gradient(135deg,#1a3c6e,#2563eb)', color: '#fff',
+          background: 'linear-gradient(135deg,#104f4f,#2563eb)', color: '#fff',
           padding: '16px 24px', borderRadius: '10px 10px 0 0',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexShrink: 0,
@@ -94,7 +97,7 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
 
           {/* Items Table */}
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#1a3c6e' }}>Line Items</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#104f4f' }}>Line Items</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -145,7 +148,7 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
                   <span>{l}</span><span>{v}</span>
                 </div>
               ))}
-              <div style={{ borderTop: '2px solid #cbd5e1', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, color: '#1a3c6e' }}>
+              <div style={{ borderTop: '2px solid #cbd5e1', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, color: '#104f4f' }}>
                 <span>Grand Total</span><span>{fmt(total)}</span>
               </div>
             </div>
@@ -162,10 +165,15 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
           {/* Terms */}
           {order.termsConditions && (
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: 4, color: '#166534' }}>Terms & Conditions</div>
+              <div style={{ fontWeight: 600, marginBottom: 4, color: '#104f4f' }}>Terms & Conditions</div>
               <div style={{ color: '#15803d', whiteSpace: 'pre-wrap' }}>{order.termsConditions}</div>
             </div>
           )}
+
+          {/* Audit Trail */}
+          <div style={{ marginTop: 16 }}>
+            <AuditTrail audit={order.audit} title="Activity Log" />
+          </div>
         </div>
 
         {/* ── Footer ── */}
@@ -202,6 +210,7 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
 
 /* ── Main Component ── */
 const PendingSalesOrders = () => {
+  const { user } = useAuth();
   const [orders,    setOrders]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [message,   setMessage]   = useState('');
@@ -276,8 +285,9 @@ const PendingSalesOrders = () => {
           order={selected}
           company={selectedCompany}
           onClose={() => setSelected(null)}
-          onApprove={doApprove}
-          onReject={doReject}
+          onApprove={can(user,'salesOrder','approve') ? doApprove : null}
+          onReject={can(user,'salesOrder','approve') ? doReject : null}
+          readOnly={!can(user,'salesOrder','approve')}
         />
       )}
 
@@ -333,7 +343,7 @@ const PendingSalesOrders = () => {
                   <td onClick={e => e.stopPropagation()}>
                     <div className="action-buttons">
                       <button className="view-btn"   onClick={() => setSelected(order)}>👁️ View</button>
-                      <button className="approve-btn" onClick={() => doApprove(order.orderId)}>✓ Approve</button>
+                      {can(user,'salesOrder','approve') && <button className="approve-btn" onClick={() => doApprove(order.orderId)}>✓ Approve</button>}
                       <button className="edit-btn"    onClick={() => navigate(`/sales-order/edit/${order.orderId}`)}>✏️ Edit</button>
                       <button className="print-btn"   onClick={() => printSalesOrder(order)}>🖨️ Print</button>
                     </div>

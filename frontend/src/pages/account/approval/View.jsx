@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../../context/CompanyContext';
 
-const P   = '#2F6FED';
+const P   = '#104f4f';
 const BG  = '#F5F7FB';
 const BD  = '#E5EAF2';
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";

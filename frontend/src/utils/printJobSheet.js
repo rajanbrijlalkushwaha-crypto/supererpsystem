@@ -14,9 +14,12 @@ const v   = x => esc(x) || '—';
 function statusStyle(s) {
   const m = {
     pending:      'background:#fff3cd;color:#856404;border:1px solid #ffc107',
-    'in-progress':'background:#cce5ff;color:#004085;border:1px solid #b8daff',
+    submitted:    'background:#cce5ff;color:#004085;border:1px solid #b8daff',
+    approved:     'background:#d4edda;color:#155724;border:1px solid #c3e6cb',
+    'in-progress':'background:#e0f0ff;color:#0c5460;border:1px solid #bee5eb',
     completed:    'background:#d4edda;color:#155724;border:1px solid #c3e6cb',
-    cancelled:    'background:#f8d7da;color:#721c24;border:1px solid #f5c6cb',
+    rejected:     'background:#f8d7da;color:#721c24;border:1px solid #f5c6cb',
+    cancelled:    'background:#e9ecef;color:#495057;border:1px solid #dee2e6',
   };
   return m[s] || 'background:#e9ecef;color:#495057;border:1px solid #dee2e6';
 }
@@ -37,7 +40,10 @@ export const printJobSheet = (js, company = {}) => {
     ? o.outputItems
     : (o.itemName ? [{ itemName: o.itemName, itemCode: o.itemCode, qty: o.qtyRequired, uom: o.uom }] : []);
 
-  const bom = Array.isArray(o.bom) ? o.bom : [];
+  const bom         = Array.isArray(o.bom) ? o.bom : [];
+  const specs       = esc(o.specifications);
+  const workInstr   = esc(o.workInstructions);
+  const attachments = Array.isArray(o.attachments) ? o.attachments.filter(a => a.fileName || a.name) : [];
 
   const outputRows = outputItems.map((it, i) => `
     <tr>
@@ -162,7 +168,20 @@ export const printJobSheet = (js, company = {}) => {
     </tbody>
   </table>
 
-  ${notes ? `<div class="sec-head">Notes / Instructions</div>
+  ${specs ? `<div class="sec-head">Specifications</div>
+  <div style="border:1px solid #ddd;padding:10px 12px;font-size:12px;color:#444;background:#fafafa;white-space:pre-wrap;margin-bottom:14px">${specs}</div>` : ''}
+
+  ${workInstr ? `<div class="sec-head">Work Instructions</div>
+  <div style="border:1px solid #ddd;padding:10px 12px;font-size:12px;color:#444;background:#fafafa;white-space:pre-wrap;margin-bottom:14px">${workInstr}</div>` : ''}
+
+  ${attachments.length ? `<div class="sec-head">Reference Documents / Attachments</div>
+  <div style="border:1px solid #ddd;padding:8px 12px;margin-bottom:14px">
+    ${attachments.map((a, i) => `<div style="padding:3px 0;font-size:12px;border-bottom:1px solid #f0f0f0;color:#333">
+      ${i + 1}. ${esc(a.name || a.fileName)}${a.fileName ? ` <span style="color:#888;font-size:11px">(${esc(a.fileName)})</span>` : ''}
+    </div>`).join('')}
+  </div>` : ''}
+
+  ${notes ? `<div class="sec-head">Notes</div>
   <div style="border:1px solid #ddd;padding:10px 12px;font-size:12px;color:#444;background:#fafafa;white-space:pre-wrap;margin-bottom:14px">${notes}</div>` : ''}
 
   <!-- Signatures -->

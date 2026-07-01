@@ -23,12 +23,19 @@ const readAll = (module, companyId) => {
     .sort((a, b) => parseInt(b, 10) - parseInt(a, 10)) // newest first
     .map(d => {
       const subdir = path.join(dir, d);
-      // Only read the MOST RECENTLY MODIFIED json file in each ID folder
-      // (prevents duplicates when a record is renamed and old file isn't cleaned up)
+      // Always prefer the canonical record file {id}.json first.
+      // This avoids picking up side-car files like communication-logs.json
+      // that live in the same folder.
+      const canonical = path.join(subdir, `${d}.json`);
+      if (fs.existsSync(canonical)) {
+        try { return JSON.parse(fs.readFileSync(canonical, 'utf-8')); }
+        catch { return null; }
+      }
+      // Fallback: most recently modified json (legacy behaviour for renamed records)
       const jsonFiles = fs.readdirSync(subdir)
         .filter(f => f.endsWith('.json'))
         .map(f => ({ f, mtime: fs.statSync(path.join(subdir, f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime); // newest first
+        .sort((a, b) => b.mtime - a.mtime);
       if (!jsonFiles.length) return null;
       try { return JSON.parse(fs.readFileSync(path.join(subdir, jsonFiles[0].f), 'utf-8')); }
       catch { return null; }
@@ -52,6 +59,11 @@ const nextId = (module, companyId, base) => {
 const readOne = (module, companyId, id) => {
   const dir = path.join(companyBase(companyId, module), String(id));
   if (!fs.existsSync(dir)) return null;
+  // Prefer canonical {id}.json
+  const canonical = path.join(dir, `${id}.json`);
+  if (fs.existsSync(canonical)) {
+    try { return JSON.parse(fs.readFileSync(canonical, 'utf-8')); } catch { return null; }
+  }
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
   if (!files.length) return null;
   try { return JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf-8')); }

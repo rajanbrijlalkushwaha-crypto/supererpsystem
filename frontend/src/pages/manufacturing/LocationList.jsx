@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useCompany } from '../../context/CompanyContext';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const N = '#2F6FED';
+const N = '#104f4f';
 
 const TYPES = ['Factory', 'Workshop', 'Warehouse', 'Assembly Unit', 'Others'];
 

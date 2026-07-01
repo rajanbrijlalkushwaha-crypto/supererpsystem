@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printPurchaseOrder } from '../../utils/printPurchaseOrder';
 import { useCompany } from '../../context/CompanyContext';
 import AttachmentPreviewModal from '../../components/AttachmentPreviewModal';
+import ActivityDrawer from '../../components/ActivityDrawer';
 
-const P   = '#2F6FED';
+const P   = '#133d80';
 const PD  = '#1A56D6';
 const BG  = '#F5F7FB';
 const BD  = '#E5EAF2';
@@ -31,7 +32,16 @@ const StatusBadge = ({ status }) => {
 
 /* ── Full-detail popup modal ── */
 const POViewModal = ({ order, onClose, onEdit, onPrint, onDelete, selectedCompany }) => {
-  const [previewAtt, setPreviewAtt] = useState(null);
+  const [previewAtt,  setPreviewAtt]  = useState(null);
+  const [linkedClient, setLinkedClient] = useState('');
+
+  useEffect(() => {
+    if (!order?.linkedSalesOrderId) { setLinkedClient(''); return; }
+    const cid = order.companyId || selectedCompany?.companyId || '';
+    axios.get(`/api/sales-orders/${order.linkedSalesOrderId}?companyId=${cid}`)
+      .then(r => setLinkedClient(r.data?.customerName || r.data?.clientName || ''))
+      .catch(() => setLinkedClient(''));
+  }, [order?.linkedSalesOrderId]); // eslint-disable-line
   const items   = order.items || [];
   const allDocs = order.attachments || order.documents || [];
   const attUrl  = (a) => `/api/purchase-orders/${order.orderId}/download/${encodeURIComponent(a.fileName)}?companyId=${order.companyId || ''}`;
@@ -90,6 +100,7 @@ const POViewModal = ({ order, onClose, onEdit, onPrint, onDelete, selectedCompan
             </div>
             <div style={{ fontSize:12, opacity:0.7, marginTop:3 }}>
               {order.vendorName || 'No Vendor'} · {fmtD(rawDate)}
+              {linkedClient && <span style={{ marginLeft:10, background:'rgba(255,255,255,0.18)', borderRadius:4, padding:'1px 8px', fontWeight:700 }}>👤 {linkedClient}</span>}
             </div>
           </div>
           <button onClick={onClose}
@@ -123,6 +134,12 @@ const POViewModal = ({ order, onClose, onEdit, onPrint, onDelete, selectedCompan
                 <Row label="PO Type"         value={order.poType || 'Standard'} />
                 <Row label="PO Date"         value={fmtD(rawDate)} />
                 <Row label="Linked SO"       value={order.linkedSalesOrderId ? `SO #${order.linkedSalesOrderId}` : null} />
+                {linkedClient && (
+                  <div style={{ display:'flex', gap:8, marginBottom:6, fontSize:13, fontFamily:F }}>
+                    <span style={{ color:'#6B7280', minWidth:148, fontSize:12, fontWeight:500 }}>Client Name</span>
+                    <span style={{ fontWeight:700, color:P, flex:1 }}>👤 {linkedClient}</span>
+                  </div>
+                )}
                 <Row label="Purchase Person" value={order.purchasePerson} />
                 <Row label="Enquiry Ref"     value={order.enquiryRef} />
               </Section>
@@ -288,22 +305,35 @@ const POViewModal = ({ order, onClose, onEdit, onPrint, onDelete, selectedCompan
 
 /* ── Main list page ── */
 const ViewPurchaseOrders = () => {
-  const [orders,        setOrders]        = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [message,       setMessage]       = useState('');
-  const [search,        setSearch]        = useState('');
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [filter,        setFilter]        = useState('all');
+  const [orders,      setOrders]      = useState([]);
+  const [soClientMap, setSoClientMap] = useState({});
+  const [loading,     setLoading]     = useState(true);
+  const [message,     setMessage]     = useState('');
+  const [search,      setSearch]      = useState('');
+  const [poModal,     setPoModal]     = useState(null);
+  const [selPO,       setSelPO]       = useState(null);
+  const [activityRec, setActivityRec] = useState(null);
+  const [filter,      setFilter]      = useState('all');
+  const [fy,          setFy]          = useState('all');
   const navigate = useNavigate();
   const { selectedCompany } = useCompany();
 
-  useEffect(() => { fetchOrders(); }, []); // eslint-disable-line
+  useEffect(() => { fetchOrders(); }, [selectedCompany]); // eslint-disable-line
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('/api/purchase-orders');
-      setOrders(res.data);
+      const cid = selectedCompany?.companyId || '';
+      const [poRes, soRes] = await Promise.all([
+        axios.get(`/api/purchase-orders${cid ? `?companyId=${cid}` : ''}`),
+        axios.get(`/api/sales-orders?companyId=${cid}`).catch(() => ({ data: [] })),
+      ]);
+      setOrders(poRes.data);
+      const map = {};
+      (soRes.data || []).forEach(so => {
+        map[String(so.orderId)] = so.customerName || so.clientName || '';
+      });
+      setSoClientMap(map);
     } catch (err) { setMessage('Error: ' + err.message); }
     finally { setLoading(false); }
   };
@@ -314,7 +344,7 @@ const ViewPurchaseOrders = () => {
     try {
       await axios.delete(`/api/purchase-orders/${orderId}`);
       setMessage('Purchase order deleted');
-      if (selectedOrder?.orderId === orderId) setSelectedOrder(null);
+      if (selPO?.orderId === orderId) setSelPO(null);
       fetchOrders();
     } catch (err) { setMessage('Error: ' + err.message); }
   };
@@ -333,17 +363,27 @@ const ViewPurchaseOrders = () => {
 
   const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
   const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+  const getFY = d => { if(!d) return null; const dt=new Date(d); if(isNaN(dt)) return null; const y=dt.getFullYear(),m=dt.getMonth()+1,s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
+
+  const fyList = useMemo(() => {
+    const set = new Set();
+    orders.forEach(o => { const f = getFY(o.poDate||o.orderDate); if(f) set.add(f); });
+    return Array.from(set).sort().reverse();
+  }, [orders]);
 
   const filtered = orders.filter(o => {
     const q = search.toLowerCase();
+    const clientName = soClientMap[String(o.linkedSalesOrderId)] || '';
     const matchQ = !q ||
       String(o.orderId).includes(q) ||
       (o.poNo||'').toLowerCase().includes(q) ||
       (o.vendorName||'').toLowerCase().includes(q) ||
       (o.linkedSalesOrderId||'').toString().includes(q) ||
+      clientName.toLowerCase().includes(q) ||
       (o.poDate||o.orderDate||'').includes(q);
     const matchF = filter === 'all' || (o.status || 'draft') === filter;
-    return matchQ && matchF;
+    const matchFY = fy === 'all' || getFY(o.poDate||o.orderDate) === fy;
+    return matchQ && matchF && matchFY;
   });
 
   const kpis = {
@@ -366,16 +406,17 @@ const ViewPurchaseOrders = () => {
   return (
     <div style={{ background:BG, minHeight:'100%', fontFamily:F }}>
 
-      {selectedOrder && (
+      {poModal && (
         <POViewModal
-          order={selectedOrder}
+          order={poModal}
           selectedCompany={selectedCompany}
-          onClose={() => setSelectedOrder(null)}
-          onEdit={() => { setSelectedOrder(null); navigate(`/purchase-order/edit/${selectedOrder.orderId}`); }}
-          onPrint={() => printPurchaseOrder(selectedOrder, selectedCompany)}
-          onDelete={() => { handleDelete(selectedOrder.orderId); setSelectedOrder(null); }}
+          onClose={() => setPoModal(null)}
+          onEdit={() => { setPoModal(null); navigate(`/purchase-order/edit/${poModal.orderId}`); }}
+          onPrint={() => printPurchaseOrder(poModal, selectedCompany)}
+          onDelete={() => { handleDelete(poModal.orderId); setPoModal(null); }}
         />
       )}
+      <ActivityDrawer record={activityRec} recordType="po" onClose={()=>setActivityRec(null)} />
 
       {/* Page Header */}
       <div style={{ background:P, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -418,8 +459,8 @@ const ViewPurchaseOrders = () => {
       </div>
 
       {/* Toolbar */}
-      <div style={{ padding:'12px 16px', background:'#fff', borderBottom:`1px solid ${BD}`, display:'flex', gap:8, alignItems:'center' }}>
-        <div style={{ position:'relative', flex:1, maxWidth:340 }}>
+      <div style={{ padding:'10px 16px', background:'#fff', borderBottom:`1px solid ${BD}`, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+        <div style={{ position:'relative', flex:1, maxWidth:320 }}>
           <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', fontSize:13, color:'#9CA3AF' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search PO No., vendor, linked SO…"
@@ -432,6 +473,16 @@ const ViewPurchaseOrders = () => {
                 background:'none', border:'none', cursor:'pointer', color:'#9CA3AF', fontSize:14, padding:0 }}>✕</button>
           )}
         </div>
+        {fyList.length > 0 && (
+          <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap' }}>
+            {['all', ...fyList].map(f => (
+              <button key={f} onClick={() => setFy(f)}
+                style={{ height:30, padding:'0 10px', borderRadius:6, border:`1px solid ${fy===f ? P : BD}`, background: fy===f ? P : '#fff', color: fy===f ? '#fff' : '#374151', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
+                {f === 'all' ? 'All FY' : `FY ${f}`}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ marginLeft:'auto', fontSize:11, color:'#6B7280', fontWeight:500 }}>
           {filtered.length} of {orders.length} orders
         </div>
@@ -444,6 +495,29 @@ const ViewPurchaseOrders = () => {
           border:`1px solid ${message.includes('Error') ? '#FECACA' : '#A7F3D0'}`,
           borderRadius:6 }}>
           {message}
+        </div>
+      )}
+
+      {/* ── Contextual Action Bar ── */}
+      {selPO && (
+        <div style={{ margin:'8px 16px 0', background:'linear-gradient(90deg,#1D4ED8,#2563EB)', borderRadius:7, padding:'5px 12px', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:'rgba(255,255,255,0.8)' }}>▶</span>
+          <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {selPO.poNo || selPO.orderId} · {selPO.vendorName || ''}
+          </span>
+          {[
+            { label:'👁 View',   fn:()=>setPoModal(selPO) },
+            { label:'✏️ Edit',   fn:()=>navigate(`/purchase-order/edit/${selPO.orderId}`) },
+            { label:'🖨️ Print',  fn:()=>printPurchaseOrder(selPO, selectedCompany) },
+            { label:'🗑️ Delete', fn:()=>handleDelete(selPO.orderId), danger:true },
+          ].map(btn => (
+            <button key={btn.label} onClick={btn.fn}
+              style={{ height:26, padding:'0 11px', fontSize:11, cursor:'pointer', fontFamily:F, fontWeight:700, borderRadius:5, whiteSpace:'nowrap', border:'none', background: btn.danger ? 'rgba(220,38,38,0.35)' : 'rgba(255,255,255,0.18)', color:'#fff' }}>
+              {btn.label}
+            </button>
+          ))}
+          <button onClick={()=>setSelPO(null)}
+            style={{ height:26, width:26, background:'rgba(255,255,255,0.15)', border:'none', color:'#fff', borderRadius:5, cursor:'pointer', fontSize:13 }}>✕</button>
         </div>
       )}
 
@@ -460,94 +534,105 @@ const ViewPurchaseOrders = () => {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
               <thead>
                 <tr>
-                  <th style={th}>PO No.</th>
-                  <th style={th}>PO Type</th>
-                  <th style={th}>Vendor</th>
-                  <th style={th}>Linked SO</th>
+                  <th style={{ ...th, textAlign:'center', width:36 }}>#</th>
+                  <th style={th}>SO No.</th>
+                  <th style={th}>Client Name</th>
+                  <th style={th}>Vendor Name</th>
                   <th style={{ ...th, textAlign:'center' }}>PO Date</th>
-                  <th style={{ ...th, textAlign:'center' }}>Delivery</th>
-                  <th style={{ ...th, textAlign:'center' }}>Items</th>
-                  <th style={{ ...th, textAlign:'right' }}>Grand Total</th>
+                  <th style={th}>PO No.</th>
+                  <th style={th}>Product / Qty</th>
+                  <th style={{ ...th, textAlign:'right' }}>Total Amount</th>
                   <th style={{ ...th, textAlign:'center' }}>Status</th>
-                  <th style={{ ...th, textAlign:'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order, i) => (
+                {filtered.map((order, i) => {
+                  const isSel = selPO?.orderId === order.orderId;
+                  const rowBg = isSel ? '#EEF4FF' : i % 2 === 0 ? '#fff' : '#FAFBFC';
+                  return (
                   <tr key={order.orderId}
-                    onClick={() => setSelectedOrder(order)}
-                    style={{ cursor:'pointer', background: i % 2 === 0 ? '#fff' : '#FAFBFC',
-                      transition:'background 0.12s' }}
-                    onMouseEnter={e => e.currentTarget.style.background='#EEF4FF'}
-                    onMouseLeave={e => e.currentTarget.style.background= i % 2 === 0 ? '#fff' : '#FAFBFC'}>
+                    onClick={() => setActivityRec(order)}
+                    style={{ cursor:'pointer', background: rowBg, transition:'background 0.12s', outline: isSel ? `2px solid ${P}` : 'none', outlineOffset:'-2px' }}
+                    onMouseEnter={e => { if(!isSel) e.currentTarget.style.background='#EEF4FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background=rowBg; }}>
 
-                    <td style={td}>
-                      <div style={{ fontWeight:800, color:P, fontSize:12.5 }}>{order.poNo || order.orderId}</div>
-                      {order.poNo && order.poNo !== String(order.orderId) && (
-                        <div style={{ fontSize:10, color:'#9CA3AF' }}>ID: {order.orderId}</div>
-                      )}
+                    {/* # select */}
+                    <td style={{ ...td, textAlign:'center', cursor:'pointer', fontWeight:700, color: isSel ? '#fff' : '#9CA3AF', background: isSel ? P : 'transparent', fontSize:11 }}
+                      onClick={e => { e.stopPropagation(); setSelPO(s => s?.orderId===order.orderId ? null : order); }}>
+                      {isSel ? '✓' : i+1}
                     </td>
+
+                    {/* SO No */}
                     <td style={td}>
-                      <span style={{ fontSize:11, padding:'2px 9px', borderRadius:20, background:'#EFF6FF',
-                        color:'#2563EB', fontWeight:700, border:'1px solid #BFDBFE' }}>
-                        {order.poType || 'Standard'}
-                      </span>
-                    </td>
-                    <td style={td}>
-                      <div style={{ fontWeight:600, color:'#111827' }}>{order.vendorName || '—'}</div>
-                      {order.vendorCode && <div style={{ fontSize:10, color:'#9CA3AF' }}>{order.vendorCode}</div>}
-                    </td>
-                    <td style={{ ...td, textAlign:'center' }}>
                       {order.linkedSalesOrderId
                         ? <span style={{ fontSize:11, padding:'2px 9px', borderRadius:20, background:'#F0FFF4',
                             color:'#059669', fontWeight:700, border:'1px solid #A7F3D0' }}>
-                            SO #{order.linkedSalesOrderId}
+                            {order.linkedSalesOrderId}
                           </span>
                         : <span style={{ color:'#D1D5DB' }}>—</span>}
                     </td>
+
+                    {/* Client Name */}
+                    <td style={td}>
+                      <div style={{ fontWeight:600, color:'#111827' }}>
+                        {soClientMap[String(order.linkedSalesOrderId)] || <span style={{ color:'#D1D5DB' }}>—</span>}
+                      </div>
+                    </td>
+
+                    {/* Vendor Name */}
+                    <td style={td}>
+                      <div style={{ fontWeight:600, color:'#374151' }}>{order.vendorName || '—'}</div>
+                      {order.vendorCode && <div style={{ fontSize:10, color:'#9CA3AF' }}>{order.vendorCode}</div>}
+                    </td>
+
+                    {/* PO Date */}
                     <td style={{ ...td, textAlign:'center', color:'#4B5563', whiteSpace:'nowrap' }}>
                       {fmtD(order.poDate || order.orderDate)}
                     </td>
-                    <td style={{ ...td, textAlign:'center', color:'#4B5563', whiteSpace:'nowrap' }}>
-                      {fmtD(order.deliveryDate)}
+
+                    {/* PO No */}
+                    <td style={td}>
+                      <div style={{ fontWeight:800, color:P, fontSize:12.5 }}>{order.poNo || order.orderId}</div>
                     </td>
-                    <td style={{ ...td, textAlign:'center', fontWeight:700, color:'#374151' }}>
-                      {(order.items || []).length}
+
+                    {/* Product / Qty */}
+                    <td style={{ ...td, maxWidth:220 }}>
+                      {(order.items || []).length === 0
+                        ? <span style={{ color:'#D1D5DB' }}>—</span>
+                        : (order.items || []).map((it, idx) => (
+                          <div key={idx} style={{ display:'flex', justifyContent:'space-between', gap:8,
+                            fontSize:11, color:'#374151', borderBottom: idx < order.items.length-1 ? '1px solid #F3F4F6' : 'none',
+                            padding:'1px 0' }}>
+                            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+                              {it.itemName || it.description || '—'}
+                            </span>
+                            <span style={{ fontWeight:700, color:P, whiteSpace:'nowrap' }}>
+                              {it.qty || it.quantity || '—'} {it.unit || ''}
+                            </span>
+                          </div>
+                        ))
+                      }
                     </td>
+
+                    {/* Total Amount */}
                     <td style={{ ...td, textAlign:'right', fontWeight:800, color:P, fontSize:13 }}>
                       {fmt(grandTotal(order))}
                     </td>
+
+                    {/* Status */}
                     <td style={{ ...td, textAlign:'center' }}>
                       <StatusBadge status={order.status} />
                     </td>
-                    <td style={{ ...td, textAlign:'center' }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
-                        <button onClick={() => navigate(`/purchase-order/edit/${order.orderId}`)}
-                          style={{ padding:'4px 10px', fontSize:11, cursor:'pointer', fontFamily:F, fontWeight:600,
-                            background:'#F0FFF4', color:'#059669', border:'1px solid #A7F3D0', borderRadius:5 }}>
-                          ✏️ Edit
-                        </button>
-                        <button onClick={() => printPurchaseOrder(order, selectedCompany)}
-                          style={{ padding:'4px 10px', fontSize:11, cursor:'pointer', fontFamily:F, fontWeight:600,
-                            background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', borderRadius:5 }}>
-                          🖨️
-                        </button>
-                        <button onClick={(e) => handleDelete(order.orderId, e)}
-                          style={{ padding:'4px 10px', fontSize:11, cursor:'pointer', fontFamily:F, fontWeight:600,
-                            background:'#FEF2F2', color:'#DC2626', border:'1px solid #FECACA', borderRadius:5 }}>
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
+
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
 
             <div style={{ padding:'10px 16px', borderTop:`1px solid ${BD}`, fontSize:11, color:'#9CA3AF',
               fontFamily:F, display:'flex', justifyContent:'space-between', background:'#FAFBFC' }}>
               <span>Showing {filtered.length} of {orders.length} purchase orders</span>
-              <span>Click any row to view full details</span>
+              <span>Click # to select · Click row to view activity</span>
             </div>
           </div>
         )}

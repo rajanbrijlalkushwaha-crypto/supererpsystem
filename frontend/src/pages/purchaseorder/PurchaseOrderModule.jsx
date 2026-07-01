@@ -2,15 +2,18 @@
  * Purchase Order Module — unified Create / View / Pending
  * Side-nav tabs mirror SalesOrderModule pattern.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import { printPurchaseOrder, buildPurchaseOrderHtml } from '../../utils/printPurchaseOrder';
+import PageLoader from '../../components/PageLoader';
 
 /* ── colour / font constants ── */
-const N = '#2563EB';
-const ND = '#1D4ED8';
+const N = '#104f4f';
+const ND = '#0b3d3d';
 const W = '#ffffff';
 const B = '#D1D5DB';
 const R = '#DC2626';
@@ -21,14 +24,48 @@ const api  = (url, cfg={}) => axios({ url, ...cfg });
 const fmt  = n => `₹${(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
+
+const SCOPE_DEFAULTS = ['Air Conditioning (AC)','Electrical Work','Civil Work','Transport / Logistics',
+  'Installation & Commissioning','Loading / Unloading','Documentation','Procurement','Testing & Inspection','Training','Other'];
 const fmtD = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:`${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 
-/* Tally-style PO number */
-const getFY = () => {
-  const now=new Date(); const m=now.getMonth()+1; const y=now.getFullYear();
-  const s=m>=4?y:y-1; return `${s}-${String(s+1).slice(2)}`;
+/* Financial year: April-March, returns "YY-YY" e.g. "26-27" */
+const getFY = (dateStr) => {
+  const d=dateStr?new Date(dateStr):new Date(); const m=d.getMonth()+1; const y=d.getFullYear();
+  const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`;
 };
-const makeTallyPoNo = seq => `PO/${getFY()}/${String(seq).padStart(3,'0')}`;
+const makePoNo = (id,dateStr) => `${getFY(dateStr)}/${id}`;
+
+const fmtNR = n => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDR = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
+const printReport = (title, subtitle, cols, rows, totalRow) => {
+  const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const rHtml = rows.map(r=>`<tr>${r.map(c=>`<td>${c??'—'}</td>`).join('')}</tr>`).join('');
+  const tHtml = totalRow?`<tr class="tot">${totalRow.map(c=>`<td>${c??''}</td>`).join('')}</tr>`:'';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Times New Roman',Times,serif;font-size:10.5pt;color:#000;background:#fff;}
+.pg{padding:10mm 14mm;}h1{font-size:17pt;font-weight:bold;text-align:center;margin-bottom:3px;}
+.sub{font-size:10pt;text-align:center;color:#555;margin-bottom:10px;border-bottom:1px solid #aaa;padding-bottom:5px;}
+table{width:100%;border-collapse:collapse;margin-top:6px;}
+th{background:#1a2a3a;color:#fff;padding:5px 8px;font-size:9.5pt;font-weight:bold;text-align:left;border:1px solid #444;white-space:nowrap;}
+td{padding:4px 8px;font-size:9.5pt;border:1px solid #ccc;vertical-align:top;}
+tr:nth-child(even) td{background:#f7f7f7;}
+.tot td{font-weight:bold;background:#ddd;border-top:2px solid #555;}
+.foot{margin-top:8px;font-size:8.5pt;color:#666;text-align:right;}
+@media print{@page{margin:10mm;size:A4 landscape;}.pg{padding:0;}}</style>
+</head><body><div class="pg">
+<h1>${title}</h1>
+<div class="sub">${subtitle} &nbsp;·&nbsp; ${rows.length} records &nbsp;·&nbsp; Generated: ${today2}</div>
+<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+<tbody>${rHtml}${tHtml}</tbody></table>
+<div class="foot">Printed: ${today2}</div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+</body></html>`;
+  const w=window.open('','_blank','width=1100,height=750,scrollbars=yes');
+  if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close();
+};
 
 /* calc row */
 const calcRow = it => {
@@ -60,7 +97,7 @@ function Btn({children,onClick,v='def',disabled,type,small}){
   );
 }
 
-function Inp({value,onChange,type='text',placeholder,readOnly,disabled,style,onKeyDown}){
+function Inp({value,onChange,type='text',placeholder,readOnly,disabled,style,onKeyDown,onBlur:onBlurExtra}){
   return(
     <input type={type} value={value??''} onChange={onChange}
       placeholder={placeholder} readOnly={readOnly} disabled={disabled} onKeyDown={onKeyDown}
@@ -69,7 +106,60 @@ function Inp({value,onChange,type='text',placeholder,readOnly,disabled,style,onK
         background:readOnly?'#F9FAFB':disabled?'#F3F4F6':W,
         outline:'none',width:'100%',boxSizing:'border-box',...style}}
       onFocus={e=>{ if(!readOnly&&!disabled){e.target.style.borderColor=N;e.target.style.boxShadow='0 0 0 2px rgba(37,99,235,0.15)';} }}
-      onBlur={e=>{ e.target.style.borderColor='#9CA3AF';e.target.style.boxShadow='none'; }}
+      onBlur={e=>{ e.target.style.borderColor='#9CA3AF';e.target.style.boxShadow='none'; if(onBlurExtra) onBlurExtra(e); }}
+    />
+  );
+}
+
+/* DD-MM-YYYY text input that stores/emits YYYY-MM-DD */
+function DateInp({value,onChange,style}){
+  const toDisp=iso=>{
+    if(!iso) return '';
+    const [y,m,d]=(iso||'').split('-');
+    return(d&&m&&y&&y.length===4)?`${d}-${m}-${y}`:'';
+  };
+  const [raw,setRaw]=useState(toDisp(value));
+  useEffect(()=>{ setRaw(toDisp(value)); },[value]);
+
+  const handleChange=e=>{
+    let v=e.target.value.replace(/[^0-9\-]/g,'');
+    /* auto-insert dashes after DD and MM */
+    const digits=v.replace(/-/g,'');
+    if(digits.length<=2) v=digits;
+    else if(digits.length<=4) v=digits.slice(0,2)+'-'+digits.slice(2);
+    else v=digits.slice(0,2)+'-'+digits.slice(2,4)+'-'+digits.slice(4,8);
+    setRaw(v);
+    /* emit ISO only when full 8 digits entered */
+    if(digits.length===8){
+      const iso=`${digits.slice(4,8)}-${digits.slice(2,4)}-${digits.slice(0,2)}`;
+      const d=new Date(iso);
+      if(!isNaN(d.getTime())) onChange({target:{value:iso}});
+    } else if(digits.length===0){
+      onChange({target:{value:''}});
+    }
+  };
+  const handleBlur=e=>{
+    const digits=raw.replace(/-/g,'');
+    if(digits.length===8){
+      const iso=`${digits.slice(4,8)}-${digits.slice(2,4)}-${digits.slice(0,2)}`;
+      const d=new Date(iso);
+      if(!isNaN(d.getTime())){
+        setRaw(toDisp(iso));
+        onChange({target:{value:iso}});
+        return;
+      }
+    }
+    /* invalid or empty — reset display to current value */
+    setRaw(toDisp(value));
+    e.target.style.borderColor='#9CA3AF'; e.target.style.boxShadow='none';
+  };
+  return(
+    <input type="text" value={raw} onChange={handleChange} onBlur={handleBlur}
+      placeholder="DD-MM-YYYY" maxLength={10}
+      style={{height:28,padding:'0 8px',border:'1px solid #9CA3AF',borderRadius:4,
+        fontSize:12,fontFamily:F,color:'#111827',background:W,
+        outline:'none',width:'100%',boxSizing:'border-box',...style}}
+      onFocus={e=>{e.target.style.borderColor=N;e.target.style.boxShadow='0 0 0 2px rgba(37,99,235,0.15)';}}
     />
   );
 }
@@ -90,7 +180,7 @@ function Sel({value,onChange,options=[],disabled,style}){
 
 function Txt({value,onChange,placeholder,rows=3}){
   return(
-    <textarea value={value??''} onChange={onChange} placeholder={placeholder} rows={rows}
+    <textarea value={value??''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
       style={{width:'100%',padding:'5px 8px',border:'1px solid #9CA3AF',borderRadius:4,
         fontSize:12,fontFamily:F,color:'#111827',background:W,
         resize:'vertical',outline:'none',boxSizing:'border-box',lineHeight:1.5}}
@@ -146,6 +236,7 @@ const INNER_TABS=[
   {id:'delivery',      label:'Delivery',         icon:'🚚'},
   {id:'payment',       label:'Payment Terms',    icon:'💳'},
   {id:'notes',         label:'Notes & Terms',    icon:'📝'},
+  {id:'scope',         label:'Scope of Work',    icon:'🎯'},
   {id:'attachments',   label:'Attachments',      icon:'📎'},
 ];
 
@@ -223,7 +314,7 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
     setImporting(true);
     /* 1. item rows */
     const rows=items.filter(it=>sel[it.itemName]>0).map(it=>({
-      _id:uid(), itemName:it.itemName,
+      _id:uid(), itemCode:it.itemCode||'', itemName:it.itemName,
       description:it.specs||'',
       hsnCode:it.hsnCode||'', qty:parseFloat(sel[it.itemName])||0,
       unit:it.unit||'NOS', rate:'', discount:0, discountType:'%', gstPercent:18,
@@ -270,7 +361,7 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
 
         <div style={{flex:1,overflowY:'auto'}}>
           {loading?(
-            <div style={{padding:32,textAlign:'center',fontSize:12,fontFamily:F,color:'#666'}}>Loading…</div>
+            <PageLoader overlay={false} text="Loading orders…"/>
           ):(
             <>
               {/* ── ITEMS SECTION ── */}
@@ -287,7 +378,7 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
                   <thead>
                     <tr style={{background:'#e8f0fb'}}>
                       {['#','Item Name','Specs','HSN','SO Qty','PO\'d','Balance','✓','Qty'].map((h,i)=>(
-                        <th key={i} style={{padding:'4px 7px',color:'#1a3c6e',fontWeight:700,fontSize:10,
+                        <th key={i} style={{padding:'4px 7px',color:'#104f4f',fontWeight:700,fontSize:10,
                           textAlign:(i>=4&&i<=6)?'right':'left',borderRight:'1px solid #c8d8f0',whiteSpace:'nowrap'}}>{h}</th>
                       ))}
                     </tr>
@@ -489,7 +580,8 @@ function VendorBillsSection({order,companyId}){
               {/* Footer: remarks + actions */}
               <div style={{padding:'6px 10px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',borderTop:'1px solid #eeeeee',background:W}}>
                 <div style={{flex:1,fontSize:11,color:'#555',fontFamily:F}}>
-                  {b.description&&<span>📝 {b.description} · </span>}
+                  {b.description&&<div>📝 {b.description}</div>}
+                  {b.notes&&<div style={{marginBottom:2}}>💬 {b.notes}</div>}
                   Net: {fmt2(b.netAmount)} · GST: {fmt2(b.gstAmount)} · <strong>Total: {fmt2(b.totalAmount)}</strong>
                   {b.adminRemarks&&<span style={{color:'#DC2626'}}> · Admin: {b.adminRemarks}</span>}
                   {b.reviewedAt&&<span style={{color:'#888'}}> · Reviewed: {fmtD2(b.reviewedAt?.slice(0,10))}</span>}
@@ -517,7 +609,7 @@ function VendorBillsSection({order,companyId}){
 }
 
 /* ═══════════════════════ PO VIEW MODAL ═══════════════════════ */
-function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,companyId}){
+function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,companyId,soMap}){
   const o=order||{};
   const items=o.items||[];
   const atts=o.attachments||o.documents||[];
@@ -568,7 +660,7 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
           {o.linkedSalesOrderId&&(
             <div style={{fontSize:11,background:'#d8f0d8',color:'#005500',
               padding:'2px 8px',border:'1px solid #44aa44',fontFamily:F,fontWeight:700}}>
-              SO #{o.linkedSalesOrderId}
+              {soMap?.[String(o.linkedSalesOrderId)]?.orderNo || ('SO #'+o.linkedSalesOrderId)}
             </div>
           )}
         </div>
@@ -582,7 +674,7 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
               {row('PO Date', fmtD(o.poDate||o.orderDate))}
               {row('PO Type', o.poType)}
               {row('Purchase Person', o.purchasePerson)}
-              {row('Linked SO', o.linkedSalesOrderId?`SO #${o.linkedSalesOrderId}`:null)}
+              {row('Linked SO', o.linkedSalesOrderId?(soMap?.[String(o.linkedSalesOrderId)]?.orderNo||('SO #'+o.linkedSalesOrderId)):null)}
               {row('Delivery Date', fmtD(o.deliveryDate))}
               {row('Incoterms', o.incoterms)}
               {row('Vendor Ref', o.vendorRef)}
@@ -656,6 +748,43 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
             </>
           )}
 
+          {/* scope of work */}
+          {(o.scopeItems?.length>0)&&(
+            <>
+              <PH title={`Scope of Work (${o.scopeItems.length} items)`}/>
+              <div style={{marginBottom:10,border:'1px solid #CBD5E1',borderRadius:4,overflow:'hidden'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
+                  <thead>
+                    <tr style={{background:'#104f4f'}}>
+                      {['#','Scope Item / Activity','Client','Our Scope','Vendor','Remarks'].map((h,i)=>(
+                        <th key={i} style={{padding:'5px 8px',color:'#fff',fontWeight:700,fontSize:10,
+                          textAlign:[2,3,4].includes(i)?'center':'left',borderRight:'1px solid #2a5a8a'}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {o.scopeItems.map((s,i)=>(
+                      <tr key={i} style={{background:i%2===0?'#fff':'#F8FAFC'}}>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',width:28,textAlign:'center',color:'#888'}}>{i+1}</td>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',fontWeight:500}}>{s.item}</td>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',width:70,textAlign:'center'}}>
+                          {s.clientScope?<span style={{color:'#1a5c1a',fontWeight:900,fontSize:14}}>✔</span>:<span style={{color:'#ccc'}}>—</span>}
+                        </td>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',width:80,textAlign:'center'}}>
+                          {s.ourScope?<span style={{color:'#1a3a6b',fontWeight:900,fontSize:14}}>✔</span>:<span style={{color:'#ccc'}}>—</span>}
+                        </td>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',width:70,textAlign:'center'}}>
+                          {s.vendorScope?<span style={{color:'#7c2d12',fontWeight:900,fontSize:14}}>✔</span>:<span style={{color:'#ccc'}}>—</span>}
+                        </td>
+                        <td style={{padding:'4px 7px',border:'1px solid #e0e0e0',color:'#555'}}>{s.remarks||'—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
           {/* attachments */}
           {atts.length>0&&(
             <>
@@ -683,8 +812,8 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
           display:'flex',justifyContent:'space-between',alignItems:'center',
           flexShrink:0,background:'#f8f8f8'}}>
           <div style={{display:'flex',gap:6}}>
-            <Btn onClick={onEdit}>✏️ Edit</Btn>
-            <Btn onClick={onPrint}>🖨️ Print</Btn>
+            <Btn onClick={onEdit}>✏ï¸ Edit</Btn>
+            <Btn onClick={onPrint}>🖨ï¸ Print</Btn>
             {o.status!=='approved'&&<Btn v="dan" onClick={onReject}>✕ Reject</Btn>}
           </div>
           <div style={{display:'flex',gap:6}}>
@@ -779,7 +908,7 @@ Thank you for your cooperation.`;
         boxShadow:'0 12px 48px rgba(0,0,0,0.35)',overflow:'hidden'}}>
 
         {/* Header */}
-        <div style={{background:'linear-gradient(135deg,#1a3c6e 0%,#2563EB 100%)',color:W,
+        <div style={{background:'linear-gradient(135deg,#104f4f 0%,#2563EB 100%)',color:W,
           padding:'14px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
           <div>
             <div style={{fontSize:15,fontWeight:700,fontFamily:F}}>📧 Send Purchase Order</div>
@@ -869,7 +998,7 @@ Thank you for your cooperation.`;
           justifyContent:'flex-end',gap:8,flexShrink:0,background:'#f8f8f8'}}>
           <Btn onClick={onClose}>Cancel</Btn>
           <button onClick={send} disabled={sending}
-            style={{height:30,padding:'0 20px',background:sending?'#475569':'linear-gradient(135deg,#1a3c6e,#2563EB)',
+            style={{height:30,padding:'0 20px',background:sending?'#475569':'linear-gradient(135deg,#104f4f,#2563EB)',
               border:'none',color:W,fontSize:12,fontWeight:700,fontFamily:F,borderRadius:4,cursor:sending?'default':'pointer',
               opacity:sending?0.7:1}}>
             {sending?'Sending…':'📧 Send Email'}
@@ -1017,7 +1146,7 @@ function VendorSearch({vendors,onSelect,onClose}){
   );
 }
 
-function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoaded,showVendorSearch,setShowVendorSearch}){
+function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoaded,showVendorSearch,setShowVendorSearch,checkDupPoNo,poDupWarn}){
   const [showSOSearch,setShowSOSearch]=useState(false);
 
   const selectVendor=v=>{
@@ -1106,11 +1235,13 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
               <span style={{fontSize:10,color:'#888',fontFamily:F}}>(auto)</span>
             </FR>
             <FR label="PO Number" req w={120}>
-              <Inp value={form.poNo} onChange={e=>setF('poNo',e.target.value)}/>
+              <Inp value={form.poNo} onChange={e=>setF('poNo',e.target.value)}
+                onBlur={e=>checkDupPoNo&&checkDupPoNo(e.target.value)}/>
               {!poNumberLoaded&&<span style={{fontSize:10,color:'#888',fontFamily:F,whiteSpace:'nowrap'}}>…</span>}
             </FR>
+            {poDupWarn&&<div style={{marginLeft:128,marginTop:-4,marginBottom:4,fontSize:11,color:'#92400E',background:'#FFFBEB',border:'1px solid #FCD34D',borderRadius:4,padding:'2px 8px',fontFamily:F}}>{poDupWarn}</div>}
             <FR label="PO Date" w={120}>
-              <Inp type="date" value={form.poDate} onChange={e=>setF('poDate',e.target.value)} style={{width:140}}/>
+              <DateInp value={form.poDate} onChange={e=>setF('poDate',e.target.value)} style={{width:140}}/>
             </FR>
             <FR label="PO Type" w={120}>
               <Sel value={form.poType} onChange={e=>setF('poType',e.target.value)}
@@ -1120,7 +1251,7 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
               <Inp value={form.quotationRef} onChange={e=>setF('quotationRef',e.target.value)}/>
             </FR>
             <FR label="Quote Date" w={120}>
-              <Inp type="date" value={form.quoteDate||''} onChange={e=>setF('quoteDate',e.target.value)} style={{width:140}}/>
+              <DateInp value={form.quoteDate||''} onChange={e=>setF('quoteDate',e.target.value)} style={{width:140}}/>
             </FR>
             <FR label="ERO No." w={120}>
               <Inp value={form.eroNo||''} onChange={e=>setF('eroNo',e.target.value)}/>
@@ -1132,7 +1263,7 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
               <Inp value={form.vendorRef} onChange={e=>setF('vendorRef',e.target.value)}/>
             </FR>
             <FR label="Delivery Date" w={120}>
-              <Inp type="date" value={form.deliveryDate} onChange={e=>setF('deliveryDate',e.target.value)} style={{width:140}}/>
+              <DateInp value={form.deliveryDate} onChange={e=>setF('deliveryDate',e.target.value)} style={{width:140}}/>
             </FR>
             <FR label="Incoterms" w={120}>
               <Inp value={form.incoterms} onChange={e=>setF('incoterms',e.target.value)} style={{width:180}}/>
@@ -1140,14 +1271,31 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
             <FR label="Purchase Person" w={120}>
               <Inp value={form.purchasePerson} onChange={e=>setF('purchasePerson',e.target.value)}/>
             </FR>
+            {/* ── Client info row derived from linked SO ── */}
+            {(()=>{
+              const so=form.linkedSalesOrderId
+                ?salesOrders.find(s=>String(s.orderId)===String(form.linkedSalesOrderId))
+                :null;
+              if(!so) return null;
+              return(
+                <div style={{margin:'6px 4px 2px',padding:'6px 8px',background:'#f0f7ff',
+                  border:'1px solid #b8d4f0',borderRadius:5}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#104f4f',marginBottom:4,
+                    textTransform:'uppercase',letterSpacing:'0.4px'}}>Bill To — Client</div>
+                  <div style={{fontSize:12,fontWeight:700,color:'#003070',marginBottom:2}}>{so.customerName||so.party||'—'}</div>
+                  {so.customerGstin&&<div style={{fontSize:10,color:'#555',fontFamily:'monospace'}}>GSTIN: {so.customerGstin}</div>}
+                  {(so.customerCity||so.customerState)&&
+                    <div style={{fontSize:10,color:'#555'}}>{[so.customerCity,so.customerState].filter(Boolean).join(', ')}</div>}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
-        {/* RIGHT: Vendor Bill From */}
+        {/* RIGHT: Bill From — Vendor Details (editable) */}
         <div style={{border:`1px solid ${B}`,background:W,borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden'}}>
           <PH title="Bill From — Vendor Details"/>
           <div style={{padding:'0 6px 6px'}}>
-            {/* Vendor Name + 🔍 */}
             <div style={{display:'flex',alignItems:'center',minHeight:24,borderBottom:'1px solid #ebebeb',padding:'2px 4px'}}>
               <label style={{fontSize:11,fontWeight:700,color:'#333',minWidth:120,padding:'0 8px 0 0',textAlign:'right',flexShrink:0}}>
                 Vendor Name<span style={{color:R}}>*</span>
@@ -1175,8 +1323,6 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
 
       {/* ── Row 2: Ship From + Contact POC ── */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-
-        {/* Ship From */}
         <div style={{border:`1px solid ${B}`,background:W,borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden'}}>
           <PH title="Ship From (Dispatch Address)"/>
           <div style={{padding:'0 6px 6px'}}>
@@ -1186,8 +1332,6 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
             <FR label="Pincode" w={120}><Inp value={form.shipFromPincode||''} onChange={e=>setF('shipFromPincode',e.target.value)} style={{width:90}}/></FR>
           </div>
         </div>
-
-        {/* Contact POC */}
         <div style={{border:`1px solid ${B}`,background:W,borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden'}}>
           <PH title="Contact Persons (POC)"/>
           <div style={{padding:'0 6px 6px'}}>
@@ -1224,7 +1368,7 @@ function TabItems({items,setItems,form,openSOPicker}){
     <div style={{padding:'4px 0'}}>
       <div style={{display:'flex',gap:6,padding:'4px 6px',background:'#f0f4ff',
         borderBottom:'1px solid #dde',marginBottom:4,alignItems:'center'}}>
-        <Btn small v="pri" onClick={add}>＋ Add Row</Btn>
+        <Btn small v="pri" onClick={add}>ï¼‹ Add Row</Btn>
         {form.linkedSalesOrderId&&(
           <Btn small v="war" onClick={openSOPicker}>📦 Load from SO #{form.linkedSalesOrderId}</Btn>
         )}
@@ -1247,7 +1391,7 @@ function TabItems({items,setItems,form,openSOPicker}){
           <tbody>
             {items.length===0&&(
               <tr><td colSpan={11} style={{padding:16,textAlign:'center',color:'#888',fontStyle:'italic',fontFamily:F}}>
-                No items. Click "＋ Add Row" or load from SO.
+                No items. Click "ï¼‹ Add Row" or load from SO.
               </td></tr>
             )}
             {items.map((it,i)=>{
@@ -1378,7 +1522,7 @@ function TabCharges({form,setF,items,charges,setCharges}){
         </table>
       </div>
       <div style={{padding:'4px 6px'}}>
-        <Btn small onClick={()=>setCharges(p=>[...p,newCharge()])}>＋ Add Charge</Btn>
+        <Btn small onClick={()=>setCharges(p=>[...p,newCharge()])}>ï¼‹ Add Charge</Btn>
       </div>
 
       <PH title="Freight / Packing / Discount"/>
@@ -1475,7 +1619,7 @@ function TabPayment({form,setF}){
           options={['','NEFT','RTGS','Cheque','Cash','LC','DD']}/>
       </FR>
       <FR label="Due Date" w={150}>
-        <Inp type="date" value={form.dueDate} onChange={e=>setF('dueDate',e.target.value)} style={{width:150}}/>
+        <DateInp value={form.dueDate} onChange={e=>setF('dueDate',e.target.value)} style={{width:150}}/>
         <span style={{fontSize:10,color:'#888',fontFamily:F}}>(auto from PO date + terms)</span>
       </FR>
       <FR label="Credit Limit (₹)" w={150}>
@@ -1503,6 +1647,90 @@ function TabNotes({form,setF}){
       <div style={{padding:'4px 8px'}}>
         <label style={{fontSize:11,fontWeight:700,color:'#333',fontFamily:F,display:'block',marginBottom:3}}>Notes to Vendor</label>
         <Txt value={form.vendorNotes} onChange={v=>setF('vendorNotes',v)} placeholder="Visible to vendor…" rows={3}/>
+      </div>
+    </div>
+  );
+}
+
+function TabScopeOfWork({scopeItems,setScopeItems,linkedSO}){
+  const add  = ()=>setScopeItems(p=>[...p,{_id:uid(),item:'',clientScope:false,ourScope:false,vendorScope:true,remarks:''}]);
+  const upd  = (id,k,v)=>setScopeItems(p=>p.map(r=>r._id===id?{...r,[k]:v}:r));
+  const del  = (id)=>setScopeItems(p=>p.filter(r=>r._id!==id));
+  const quick= (s)=>setScopeItems(p=>[...p,{_id:uid(),item:s,clientScope:false,ourScope:false,vendorScope:true,remarks:''}]);
+
+  return(
+    <div style={{padding:'8px 10px'}}>
+      {/* info banner */}
+      <div style={{margin:'0 0 8px',background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'8px 12px',display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:13}}>ℹï¸</span>
+        <span style={{fontSize:11,color:'#1E40AF',fontFamily:F}}>
+          {linkedSO
+            ? `Scope of Work imported from SO #${linkedSO}. You can add/edit rows and mark vendor responsibility.`
+            : 'Link a Sales Order to auto-import scope items, or add rows manually.'}
+        </span>
+      </div>
+
+      {/* header + add */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:700,color:'#104f4f',fontFamily:F}}>Scope of Work</span>
+        <Btn v="suc" onClick={add}>+ Add Row</Btn>
+      </div>
+
+      {/* quick-add chips */}
+      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8,padding:'6px 8px',background:'#f0f7ff',border:'1px solid #cce'}}>
+        <span style={{fontSize:10,color:'#555',alignSelf:'center',marginRight:2,fontWeight:700,fontFamily:F}}>Quick Add:</span>
+        {SCOPE_DEFAULTS.map((s,i)=>(
+          <button key={i} onClick={()=>quick(s)}
+            style={{background:'#d8eeff',color:'#003875',border:'1px solid #88aacc',
+              padding:'2px 8px',fontSize:10,cursor:'pointer',height:20,fontFamily:F}}>
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {/* table */}
+      <div style={{border:'1px solid #CBD5E1',borderRadius:4,overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
+          <thead>
+            <tr style={{background:'#104f4f'}}>
+              {['#','Scope Item / Activity','Client Scope','Our Scope','Vendor Scope','Remarks',''].map((h,i)=>(
+                <th key={i} style={{padding:'5px 7px',color:'#fff',fontWeight:700,fontSize:10,
+                  textAlign:[2,3,4].includes(i)?'center':'left',
+                  borderRight:'1px solid #2a5a8a',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {scopeItems.length===0?(
+              <tr><td colSpan={7} style={{padding:'18px',textAlign:'center',color:'#888',background:'#fafafa',fontSize:11,fontFamily:F}}>
+                Link a Sales Order or use Quick Add / + Add Row
+              </td></tr>
+            ):scopeItems.map((s,i)=>(
+              <tr key={s._id} style={{background:i%2===0?'#fff':'#F8FAFC'}}>
+                <td style={{padding:'3px 5px',border:'1px solid #e0e0e0',width:28,textAlign:'center',color:'#888'}}>{i+1}</td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0'}}>
+                  <Inp value={s.item} onChange={e=>upd(s._id,'item',e.target.value)} placeholder="e.g. AC, Transport, Installation…"/>
+                </td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0',width:90,textAlign:'center'}}>
+                  <input type="checkbox" checked={!!s.clientScope} onChange={e=>upd(s._id,'clientScope',e.target.checked)}/>
+                </td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0',width:90,textAlign:'center'}}>
+                  <input type="checkbox" checked={!!s.ourScope} onChange={e=>upd(s._id,'ourScope',e.target.checked)}/>
+                </td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0',width:90,textAlign:'center'}}>
+                  <input type="checkbox" checked={!!s.vendorScope} onChange={e=>upd(s._id,'vendorScope',e.target.checked)}/>
+                </td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0'}}>
+                  <Inp value={s.remarks||''} onChange={e=>upd(s._id,'remarks',e.target.value)} placeholder="Notes…"/>
+                </td>
+                <td style={{padding:'2px 4px',border:'1px solid #e0e0e0',width:30,textAlign:'center'}}>
+                  <button onClick={()=>del(s._id)}
+                    style={{background:'#ffe0e0',color:'#DC2626',border:'1px solid #cc8888',padding:'0 4px',fontSize:10,cursor:'pointer',height:18}}>✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1566,21 +1794,33 @@ function TabAttachments({attachments,setAttachments}){
 
 /* ═══════════════════════ LIST VIEW (All POs) ═══════════════════════ */
 function ListAll({companyId,onEdit,selectedCompany}){
+  const { user } = useAuth();
   const [orders,setOrders]=useState([]);
+  const [salesOrders,setSalesOrders]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
+  const [vendorFlt,setVendorFlt]=useState('all');
+  const [fy,setFy]=useState('all');
   const [selected,setSelected]=useState(null);
+  const [activeRow,setActiveRow]=useState(null);
   const [emailOrder,setEmailOrder]=useState(null);
   const [msg,setMsg]=useState('');
 
   const load=useCallback(()=>{
     if(!companyId){setLoading(false);return;}
     setLoading(true);
-    api(`/api/purchase-orders?companyId=${companyId}`)
-      .then(r=>setOrders(r.data||[]))
+    Promise.all([
+      api(`/api/purchase-orders?companyId=${companyId}`),
+      api(`/api/sales-orders?companyId=${companyId}`),
+    ])
+      .then(([pr,sr])=>{setOrders(pr.data||[]); setSalesOrders(sr.data||[]);})
       .catch(()=>{})
       .finally(()=>setLoading(false));
   },[companyId]);
+
+  const soMap=useMemo(()=>{
+    const m={}; salesOrders.forEach(s=>{m[String(s.orderId)]=s;}); return m;
+  },[salesOrders]);
 
   useEffect(()=>{load();},[load]);
 
@@ -1608,24 +1848,38 @@ function ListAll({companyId,onEdit,selectedCompany}){
     }catch(e){setMsg('Error: '+e.message);}
   };
 
+  const vendorList=useMemo(()=>{
+    const set=new Set(orders.map(o=>o.vendorName).filter(Boolean));
+    return ['all',...[...set].sort()];
+  },[orders]);
+
+  const fyList=useMemo(()=>{
+    const set=new Set(orders.map(o=>getFY(o.date||o.poDate||o.createdAt)).filter(Boolean));
+    return [...set].sort().reverse();
+  },[orders]);
+
   const q=search.toLowerCase();
-  const filtered=q?orders.filter(o=>
+  let filtered=vendorFlt==='all'?orders:orders.filter(o=>o.vendorName===vendorFlt);
+  if(fy!=='all') filtered=filtered.filter(o=>getFY(o.date||o.poDate||o.createdAt)===fy);
+  if(q) filtered=filtered.filter(o=>
     String(o.orderId).includes(q)||
     (o.poNo||'').toLowerCase().includes(q)||
     (o.vendorName||'').toLowerCase().includes(q)||
     String(o.linkedSalesOrderId||'').includes(q)||
+    (soMap[String(o.linkedSalesOrderId)]?.customerName||'').toLowerCase().includes(q)||
+    (soMap[String(o.linkedSalesOrderId)]?.orderNo||'').toLowerCase().includes(q)||
     (o.status||'').includes(q)
-  ):orders;
+  );
 
   if(loading) return <div style={{padding:20,textAlign:'center',fontSize:12,fontFamily:F,color:'#666'}}>Loading purchase orders…</div>;
 
   return(
     <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
       {selected&&(
-        <POModal order={selected} companyId={companyId}
+        <POModal order={selected} companyId={companyId} soMap={soMap}
           onClose={()=>setSelected(null)}
-          onApprove={()=>handleApprove(selected)}
-          onReject={()=>handleReject(selected)}
+          onApprove={can(user,'purchaseOrder','approve') ? ()=>handleApprove(selected) : null}
+          onReject={can(user,'purchaseOrder','approve') ? ()=>handleReject(selected) : null}
           onEdit={()=>{setSelected(null);onEdit(selected.orderId);}}
           onPrint={()=>printPurchaseOrder(selected,selectedCompany)}
           onEmail={()=>setEmailOrder(selected)}
@@ -1636,18 +1890,97 @@ function ListAll({companyId,onEdit,selectedCompany}){
       )}
       {/* toolbar */}
       <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,
-        padding:'4px 8px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-        <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>All Purchase Orders</span>
-        <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:8,flex:1,maxWidth:300}}>
+        padding:'4px 8px',display:'flex',alignItems:'center',gap:8,flexShrink:0,flexWrap:'wrap'}}>
+        <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>
+          {vendorFlt==='all'?'All Purchase Orders':`Vendor: ${vendorFlt}`}
+        </span>
+        <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:8,flex:1,maxWidth:280,minWidth:140}}>
           <span style={{fontSize:11,fontFamily:F,color:'#666'}}>🔍</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search PO, vendor, SO…"
             style={{flex:1,height:20,padding:'0 4px',border:'1px solid #888',fontSize:11,fontFamily:F,outline:'none'}}/>
           {search&&<button onClick={()=>setSearch('')} style={{border:'none',background:'none',cursor:'pointer',fontSize:13,color:'#888'}}>✕</button>}
         </div>
+        <div style={{display:'flex',alignItems:'center',gap:4}}>
+          <span style={{fontSize:10,fontFamily:F,color:'#666',fontWeight:700}}>FY</span>
+          <select value={fy} onChange={e=>setFy(e.target.value)}
+            style={{height:20,padding:'0 4px',border:'1px solid #888',fontSize:11,fontFamily:F,outline:'none',background:W}}>
+            <option value="all">All FY</option>
+            {fyList.map(f=><option key={f} value={f}>FY {f}</option>)}
+          </select>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:4}}>
+          <span style={{fontSize:10,fontFamily:F,color:'#666',fontWeight:700}}>Vendor</span>
+          <select value={vendorFlt} onChange={e=>setVendorFlt(e.target.value)}
+            style={{height:20,padding:'0 4px',border:'1px solid #888',fontSize:11,fontFamily:F,outline:'none',
+              background:W,maxWidth:160}}>
+            <option value="all">All Vendors</option>
+            {vendorList.filter(v=>v!=='all').map(v=><option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
         <span style={{fontSize:11,color:'#666',fontFamily:F,marginLeft:'auto'}}>{filtered.length} orders</span>
+        <Btn small onClick={()=>{
+          const cols=['#','PO No','PO Date','Vendor','Linked SO','Product / Description','Qty','Rate (₹)','Taxable (₹)','GST%','PO Value (₹)','Status'];
+          const rows=[];
+          filtered.forEach((o,oi)=>{
+            const items=o.items||[];
+            const poVal=parseFloat(o.grandTotal||o.totalAmount||0);
+            const soLabel=soMap[String(o.linkedSalesOrderId)]?.orderNo||(o.linkedSalesOrderId?`SO#${o.linkedSalesOrderId}`:'—');
+            if(items.length===0){
+              rows.push([oi+1,o.poNo||o.orderId,fmtDR(o.date||o.poDate),o.vendorName||'—',soLabel,
+                '—','—','—','—','—','₹ '+fmtNR(poVal),o.status||'—']);
+            } else {
+              items.forEach((it,ii)=>{
+                const qty=parseFloat(it.qty||it.quantity)||0, rate=parseFloat(it.rate)||0;
+                const taxable=qty*rate; const gst=parseFloat(it.gstPercent||it.gstPct)||0;
+                rows.push([
+                  ii===0?oi+1:'', ii===0?(o.poNo||o.orderId):'', ii===0?fmtDR(o.date||o.poDate):'',
+                  ii===0?(o.vendorName||'—'):'', ii===0?soLabel:'',
+                  it.itemName||it.description||'—', `${qty} ${it.unit||''}`.trim(), fmtNR(rate), fmtNR(taxable), `${gst}%`,
+                  ii===0?'₹ '+fmtNR(poVal):'', ii===0?(o.status||'—'):'',
+                ]);
+              });
+            }
+          });
+          const tot=filtered.reduce((s,o)=>s+(parseFloat(o.grandTotal||o.totalAmount)||0),0);
+          const totalRow=['','','','','','','','','','',`Total (${filtered.length} POs): ₹ ${fmtNR(tot)}`,''];
+          const subtitle=vendorFlt==='all'?'All Purchase Orders':`Vendor: ${vendorFlt}`;
+          printReport('Purchase Orders Report',subtitle,cols,rows,totalRow);
+        }}>🖨 {vendorFlt==='all'?'Print':'Print Vendor POs'}</Btn>
         <Btn small onClick={load}>🔄</Btn>
       </div>
-      {msg&&<div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
+            {msg&&<div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
+
+      {/* ── Action bar: appears when a row is selected ── */}
+      <div style={{
+        minHeight:36,flexShrink:0,
+        background:activeRow?'#f0f7ff':'#fafafa',
+        borderBottom:activeRow?'1px solid #bcd4f0':'1px solid '+B,
+        display:'flex',alignItems:'center',gap:8,padding:'0 10px',
+        transition:'background 0.15s',
+      }}>
+        {activeRow?(
+          <>
+            <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F,marginRight:4}}>
+              PO: {activeRow.poNo||activeRow.orderId}
+            </span>
+            <span style={{fontSize:10,color:'#666',fontFamily:F,marginRight:8}}>
+              {activeRow.vendorName||''}{activeRow.grandTotal?' · '+fmt(activeRow.grandTotal):''}
+            </span>
+            <Btn small onClick={()=>setSelected(activeRow)}>👁 View</Btn>
+            <Btn small onClick={()=>onEdit(activeRow.orderId)}>✏️ Edit</Btn>
+            <Btn small onClick={()=>printPurchaseOrder(activeRow,selectedCompany)}>🖨️ Print</Btn>
+            <Btn small onClick={()=>setEmailOrder(activeRow)}>📧 Email</Btn>
+            <Btn small v="dan" onClick={()=>handleDelete(activeRow.orderId)}>🗑️ Delete</Btn>
+            <button onClick={()=>setActiveRow(null)}
+              style={{marginLeft:'auto',border:'none',background:'none',cursor:'pointer',fontSize:14,color:'#888',padding:'0 4px'}}>✕</button>
+          </>
+        ):(
+          <span style={{fontSize:11,color:'#aaa',fontFamily:F,fontStyle:'italic'}}>
+            Click a row to select — actions will appear here
+          </span>
+        )}
+      </div>
+
       <div style={{flex:1,overflow:'auto',background:W}}>
         {filtered.length===0?(
           <div style={{padding:20,textAlign:'center',color:'#888',fontSize:12,fontFamily:F}}>
@@ -1657,40 +1990,55 @@ function ListAll({companyId,onEdit,selectedCompany}){
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
             <thead style={{position:'sticky',top:0,zIndex:2}}>
               <tr style={{background:N}}>
-                {['PO No','Vendor','Linked SO','PO Date','Delivery','Items','Total ₹','Status','Actions'].map((h,i)=>(
+                {['SO No.','Client Name','Vendor Name','PO Date','PO No.','Product / Qty','Total ₹','Status'].map((h,i)=>(
                   <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,fontSize:10,
                     textAlign:'left',borderRight:'1px solid #4a6a7a',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o,i)=>(
-                <tr key={o.orderId} style={{background:i%2===0?W:'#f5f8fc',cursor:'pointer'}}
-                  onClick={()=>setSelected(o)}
-                  onMouseEnter={e=>e.currentTarget.style.background='#d0e4f8'}
-                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?W:'#f5f8fc'}>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.poNo||o.orderId}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600}}>{o.vendorName||'—'}</td>
+              {filtered.map((o,i)=>{
+                const so=soMap[String(o.linkedSalesOrderId)];
+                const isAct=activeRow?.orderId===o.orderId;
+                return(
+                <tr key={o.orderId}
+                  style={{background:isAct?'#dbeafe':i%2===0?W:'#f5f8fc',cursor:'pointer'}}
+                  onClick={()=>setActiveRow(isAct?null:o)}
+                  onMouseEnter={e=>{ if(!isAct) e.currentTarget.style.background='#e8f0fe'; }}
+                  onMouseLeave={e=>{ if(!isAct) e.currentTarget.style.background=i%2===0?W:'#f5f8fc'; }}>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>
                     {o.linkedSalesOrderId
-                      ?<span style={{background:'#d8f0d8',color:'#005500',padding:'1px 5px',border:'1px solid #44aa44',fontSize:10,fontWeight:700}}>SO#{o.linkedSalesOrderId}</span>
+                      ?<span style={{background:'#d8f0d8',color:'#005500',padding:'1px 5px',border:'1px solid #44aa44',fontSize:10,fontWeight:700}}>
+                        {so?.orderNo||('SO#'+o.linkedSalesOrderId)}
+                      </span>
                       :<span style={{color:'#aaa'}}>—</span>}
                   </td>
+                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600,color:'#111'}}>
+                    {so?.customerName||so?.clientName||<span style={{color:'#aaa'}}>—</span>}
+                  </td>
+                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600}}>{o.vendorName||'—'}</td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{fmtD(o.poDate||o.orderDate||o.date)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{fmtD(o.deliveryDate)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',textAlign:'center'}}>{(o.items||[]).length}</td>
+                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.poNo||o.orderId}</td>
+                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',maxWidth:200}}>
+                    {(o.items||[]).length===0
+                      ?<span style={{color:'#aaa'}}>—</span>
+                      :(o.items||[]).map((it,idx)=>(
+                        <div key={idx} style={{display:'flex',justifyContent:'space-between',gap:6,
+                          fontSize:10,borderBottom:idx<o.items.length-1?'1px solid #f0f0f0':'none',padding:'1px 0'}}>
+                          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
+                            {it.itemName||it.description||'—'}
+                          </span>
+                          <span style={{fontWeight:700,color:N,whiteSpace:'nowrap'}}>
+                            {it.qty||it.quantity||'—'} {it.unit||''}
+                          </span>
+                        </div>
+                      ))
+                    }
+                  </td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',textAlign:'right',fontWeight:700}}>{fmt(o.grandTotal)}</td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}><Badge s={o.status}/></td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}} onClick={e=>e.stopPropagation()}>
-                    <div style={{display:'flex',gap:3}}>
-                      <Btn small onClick={()=>setSelected(o)}>👁</Btn>
-                      <Btn small onClick={()=>onEdit(o.orderId)}>✏️</Btn>
-                      <Btn small onClick={()=>printPurchaseOrder(o,selectedCompany)}>🖨️</Btn>
-                      <Btn small v="dan" onClick={()=>handleDelete(o.orderId)}>🗑️</Btn>
-                    </div>
-                  </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         )}
@@ -1701,7 +2049,9 @@ function ListAll({companyId,onEdit,selectedCompany}){
 
 /* ═══════════════════════ LIST PENDING ═══════════════════════ */
 function ListPending({companyId,onEdit,selectedCompany}){
+  const { user } = useAuth();
   const [orders,setOrders]=useState([]);
+  const [salesOrders,setSalesOrders]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState('');
   const [selected,setSelected]=useState(null);
@@ -1711,11 +2061,21 @@ function ListPending({companyId,onEdit,selectedCompany}){
   const load=useCallback(()=>{
     if(!companyId){setLoading(false);return;}
     setLoading(true);
-    api(`/api/purchase-orders?companyId=${companyId}`)
-      .then(r=>setOrders((r.data||[]).filter(o=>o.status==='pending'||o.status==='draft')))
+    Promise.all([
+      api(`/api/purchase-orders?companyId=${companyId}`),
+      api(`/api/sales-orders?companyId=${companyId}`),
+    ])
+      .then(([pr,sr])=>{
+        setOrders((pr.data||[]).filter(o=>o.status==='pending'||o.status==='draft'));
+        setSalesOrders(sr.data||[]);
+      })
       .catch(()=>{})
       .finally(()=>setLoading(false));
   },[companyId]);
+
+  const soMap=useMemo(()=>{
+    const m={}; salesOrders.forEach(s=>{m[String(s.orderId)]=s;}); return m;
+  },[salesOrders]);
 
   useEffect(()=>{load();},[load]);
 
@@ -1742,15 +2102,19 @@ function ListPending({companyId,onEdit,selectedCompany}){
     (o.vendorName||'').toLowerCase().includes(q)||String(o.linkedSalesOrderId||'').includes(q)
   ):orders;
 
-  if(loading) return <div style={{padding:20,textAlign:'center',fontSize:12,fontFamily:F,color:'#666'}}>Loading…</div>;
+  if(loading) return (
+    <div style={{position:'relative',flex:1,minHeight:300}}>
+      <PageLoader text="Loading purchase orders…"/>
+    </div>
+  );
 
   return(
     <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
       {selected&&(
-        <POModal order={selected} companyId={companyId}
+        <POModal order={selected} companyId={companyId} soMap={soMap}
           onClose={()=>setSelected(null)}
-          onApprove={()=>approve(selected)}
-          onReject={()=>reject(selected)}
+          onApprove={can(user,'purchaseOrder','approve') ? ()=>approve(selected) : null}
+          onReject={can(user,'purchaseOrder','approve') ? ()=>reject(selected) : null}
           onEdit={()=>{setSelected(null);onEdit(selected.orderId);}}
           onPrint={()=>printPurchaseOrder(selected,selectedCompany)}
           onEmail={()=>setEmailOrder(selected)}
@@ -1769,6 +2133,13 @@ function ListPending({companyId,onEdit,selectedCompany}){
           {search&&<button onClick={()=>setSearch('')} style={{border:'none',background:'none',cursor:'pointer',fontSize:13,color:'#888'}}>✕</button>}
         </div>
         <span style={{fontSize:11,color:'#666',fontFamily:F,marginLeft:'auto'}}>{filtered.length} pending</span>
+        <Btn small onClick={()=>{
+          const cols=['#','PO No','Vendor','Linked SO','Date','Amount (₹)','Status'];
+          const rows=filtered.map((o,i)=>[i+1,o.poNo||o.orderId,o.vendorName||'—',soMap[String(o.linkedSalesOrderId)]?.orderNo||(o.linkedSalesOrderId?`SO#${o.linkedSalesOrderId}`:'—'),fmtDR(o.date||o.poDate),'₹ '+fmtNR(o.grandTotal||o.totalAmount||0),o.status||'—']);
+          const tot=filtered.reduce((s,o)=>s+(parseFloat(o.grandTotal||o.totalAmount)||0),0);
+          const totalRow=['','','','',`Total: ${filtered.length}`,'₹ '+fmtNR(tot),''];
+          printReport('Pending Purchase Orders Report','Pending / Draft — Approval Queue',cols,rows,totalRow);
+        }}>🖨 Print</Btn>
         <Btn small onClick={load}>🔄</Btn>
       </div>
       {msg&&<div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
@@ -1795,7 +2166,9 @@ function ListPending({companyId,onEdit,selectedCompany}){
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600}}>{o.vendorName||'—'}</td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>
                     {o.linkedSalesOrderId
-                      ?<span style={{background:'#d8f0d8',color:'#005500',padding:'1px 5px',border:'1px solid #44aa44',fontSize:10,fontWeight:700}}>SO#{o.linkedSalesOrderId}</span>
+                      ?<span style={{background:'#d8f0d8',color:'#005500',padding:'1px 5px',border:'1px solid #44aa44',fontSize:10,fontWeight:700}}>
+                        {soMap[String(o.linkedSalesOrderId)]?.orderNo || ('SO#'+o.linkedSalesOrderId)}
+                      </span>
                       :<span style={{color:'#aaa'}}>—</span>}
                   </td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{fmtD(o.poDate||o.orderDate)}</td>
@@ -1806,7 +2179,7 @@ function ListPending({companyId,onEdit,selectedCompany}){
                       <Btn small onClick={()=>setSelected(o)}>👁 View</Btn>
                       <Btn small v="suc" onClick={()=>approve(o)}>✔ Approve</Btn>
                       <Btn small v="dan" onClick={()=>reject(o)}>✕ Reject</Btn>
-                      <Btn small onClick={()=>onEdit(o.orderId)}>✏️</Btn>
+                      <Btn small onClick={()=>onEdit(o.orderId)}>✏ï¸</Btn>
                     </div>
                   </td>
                 </tr>
@@ -1822,6 +2195,7 @@ function ListPending({companyId,onEdit,selectedCompany}){
 /* ═══════════════════════ MAIN MODULE ═══════════════════════ */
 export default function PurchaseOrderModule(){
   const {selectedCompany}=useCompany();
+  const { user } = useAuth();
   const cid=selectedCompany?.companyId||'';
   const {pathname,state:locState}=useLocation();
   const navigate=useNavigate();
@@ -1841,6 +2215,19 @@ export default function PurchaseOrderModule(){
   const [vendors,setVendors]=useState([]);
   const [editOrder,setEditOrder]=useState(null);
   const [poNumberLoaded,setPoNumberLoaded]=useState(false);
+  const [poDupWarn,setPoDupWarn]=useState('');
+
+  const checkDupPoNo=async(val)=>{
+    if(!val?.trim()||!cid){setPoDupWarn('');return;}
+    try{
+      const r=await api(`/api/purchase-orders?companyId=${cid}`);
+      const dup=(r.data||[]).find(o=>
+        (o.poNo||'').trim().toLowerCase()===val.trim().toLowerCase()&&
+        String(o.orderId)!==String(editOrder?.orderId)
+      );
+      setPoDupWarn(dup?`⚠ PO Number already used by PO #${dup.orderId} (${dup.poNo})`:'');
+    }catch{setPoDupWarn('');}
+  };
 
   /* SO item picker */
   const [showSOPicker,setShowSOPicker]=useState(false);
@@ -1867,12 +2254,14 @@ export default function PurchaseOrderModule(){
     paymentTerms:'Net 30', paymentMode:'NEFT', billingTerms:'', creditLimit:'', dueDate:'',
     overallDiscount:0, freightCharges:0, packingCharges:0, roundOff:0,
     termsConditions:'', internalNotes:'', vendorNotes:'',
+    clientScope:'', epsilonScope:'', vendorScope:'',
   });
 
   const [form,setForm]=useState(blankForm());
   const [items,setItems]=useState([]);
   const [charges,setCharges]=useState([]);
   const [attachments,setAttachments]=useState([]);
+  const [poScopeItems,setPoScopeItems]=useState([]);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   const [ok,setOk]=useState('');
@@ -1899,6 +2288,29 @@ export default function PurchaseOrderModule(){
       .catch(()=>{});
   },[cid]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* auto-populate scope items from linked SO's scopeItems */
+  useEffect(()=>{
+    if(!form.linkedSalesOrderId||!cid) return;
+    api(`/api/sales-orders/${form.linkedSalesOrderId}?companyId=${cid}`)
+      .then(r=>{
+        const soScopes=(r.data?.scopeItems||[]).filter(s=>s.item);
+        if(soScopes.length===0) return;
+        // Only pre-fill if currently empty (don't overwrite user edits)
+        setPoScopeItems(prev=>{
+          if(prev.length>0) return prev;
+          return soScopes.map(s=>({
+            _id:uid(),
+            item:s.item||'',
+            clientScope:!!s.clientScope,
+            ourScope:!!s.ourScope,
+            vendorScope:false,  // vendor responsibility set by user
+            remarks:s.remarks||'',
+          }));
+        });
+      })
+      .catch(()=>{});
+  },[form.linkedSalesOrderId,cid]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* load next ID on mount (for new PO) */
   const loadNextId=useCallback(()=>{
     if(!cid) return;
@@ -1906,11 +2318,28 @@ export default function PurchaseOrderModule(){
       .then(r=>{
         const nid=r.data.nextId||400001;
         setF('nextId',nid);
-        setF('poNo',makeTallyPoNo(nid-400000));
+        setF('poNo',makePoNo(nid,today()));
         setPoNumberLoaded(true);
       })
       .catch(()=>setPoNumberLoaded(true));
   },[cid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* keep linkedSODisplay in sync once salesOrders list loads (handles race on edit load) */
+  useEffect(()=>{
+    if(!form.linkedSalesOrderId||!salesOrders.length) return;
+    const so=salesOrders.find(s=>String(s.orderId)===String(form.linkedSalesOrderId));
+    if(!so) return;
+    const name=so.customerName||so.party||'';
+    const want=`SO#${form.linkedSalesOrderId}${name?' | '+name:''}`;
+    if(form.linkedSODisplay!==want) setF('linkedSODisplay',want);
+  },[salesOrders,form.linkedSalesOrderId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* auto-update poNo when poDate changes for new POs */
+  useEffect(()=>{
+    if(!editOrder&&form.nextId&&form.poDate){
+      setF('poNo',makePoNo(form.nextId,form.poDate));
+    }
+  },[form.poDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* load order for editing */
   const loadEdit=useCallback(async(id)=>{
@@ -1922,7 +2351,7 @@ export default function PurchaseOrderModule(){
         nextId:o.orderId, poNo:o.poNo||String(o.orderId), poDate:o.poDate||o.orderDate||today(),
         poType:o.poType||'Standard', purchasePerson:o.purchasePerson||'',
         linkedSalesOrderId:String(o.linkedSalesOrderId||''),
-        linkedSODisplay:o.linkedSalesOrderId?`SO#${o.linkedSalesOrderId} | ${o.vendorName||''}`:'' ,
+        linkedSODisplay:o.linkedSalesOrderId?(()=>{const ms=salesOrders.find(s=>String(s.orderId)===String(o.linkedSalesOrderId));return `SO#${o.linkedSalesOrderId} | ${ms?.customerName||ms?.party||'—'}`;})():'',
         vendorId:String(o.vendorCode||o.vendorId||''),
         vendorName:o.vendorName||'', vendorCode:o.vendorCode||'',
         vendorGstin:o.vendorGstin||'', vendorState:o.vendorState||'',
@@ -1945,12 +2374,15 @@ export default function PurchaseOrderModule(){
         dueDate:o.dueDate||'',
         overallDiscount:o.overallDiscount||0, freightCharges:o.freightCharges||0,
         packingCharges:o.packingCharges||0, roundOff:o.roundOff||0,
-        termsConditions:o.termsConditions||'',
-        internalNotes:o.internalNotes||'', vendorNotes:o.vendorNotes||'',
+        termsConditions:typeof o.termsConditions==='string'&&o.termsConditions!=='[object Object]'?o.termsConditions:'',
+        internalNotes:typeof o.internalNotes==='string'&&o.internalNotes!=='[object Object]'?o.internalNotes:'',
+        vendorNotes:typeof o.vendorNotes==='string'&&o.vendorNotes!=='[object Object]'?o.vendorNotes:'',
+        clientScope:o.clientScope||'', epsilonScope:o.epsilonScope||'', vendorScope:o.vendorScope||'',
       });
       setItems((o.items||[]).map(it=>({...it,_id:uid()})));
       setCharges((o.charges||[]).map(c=>({...c,_id:uid()})));
       setAttachments((o.attachments||o.documents||[]).map(a=>({...a,_id:uid(),file:null})));
+      setPoScopeItems((o.scopeItems||[]).map(s=>({...s,_id:s._id||uid()})));
       setSecTab('order-details');
       setPoNumberLoaded(true);
     }catch(e){setError('Error loading order: '+e.message);}
@@ -1958,18 +2390,15 @@ export default function PurchaseOrderModule(){
 
   useEffect(()=>{
     if(editIdFromUrl&&cid){
+      /* Load the PO for editing. Stay on the edit URL so state isn't lost on navigation. */
       loadEdit(editIdFromUrl);
-      if(pathname.includes('/edit/')){
-        // navigate to create tab visually
-        navigate('/purchase-order/create',{replace:true});
-      }
     } else if(!editOrder){
       loadNextId();
     }
   },[editIdFromUrl,cid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm=()=>{
-    setForm(blankForm()); setItems([]); setCharges([]); setAttachments([]);
+    setForm(blankForm()); setItems([]); setCharges([]); setAttachments([]); setPoScopeItems([]);
     setEditOrder(null); setError(''); setOk(''); setSecTab('order-details');
     setPoNumberLoaded(false); loadNextId();
   };
@@ -2024,22 +2453,28 @@ export default function PurchaseOrderModule(){
        ['cgst',cgst.toFixed(2)],['sgst',sgst.toFixed(2)],['igst',igst.toFixed(2)],
        ['termsConditions',form.termsConditions],
        ['internalNotes',form.internalNotes],['vendorNotes',form.vendorNotes],
+       ['clientScope',form.clientScope||''],
+       ['epsilonScope',form.epsilonScope||''],
+       ['vendorScope',form.vendorScope||''],
        ['status',status],
       ].forEach(([k,v])=>fd.append(k,v??''));
 
       fd.append('items',JSON.stringify(items.map(({_id,...r})=>r)));
       fd.append('charges',JSON.stringify(charges.map(({_id,...r})=>r)));
+      fd.append('scopeItems',JSON.stringify(poScopeItems.map(({_id,...r})=>r)));
       attachments.forEach(a=>{if(a.file) fd.append('attachmentFiles',a.file);});
       fd.append('attachments',JSON.stringify(attachments.map(({_id,file,...r})=>({...r,fileName:file?.name||r.fileName||''}))));
 
       if(editOrder){
         await api(`/api/purchase-orders/${editOrder.orderId}?companyId=${cid}`,{method:'PUT',data:fd});
         setOk(`PO ${form.poNo} updated successfully`);
-        setEditOrder(null);
+        /* keep editOrder set — prevents accidental re-submit from creating a duplicate */
       } else {
         const res=await api(`/api/purchase-orders?companyId=${cid}`,{method:'POST',data:fd});
-        setOk(`Purchase Order ${res.data.orderId} (${form.poNo}) created`);
-        resetForm();
+        const newId=res.data.orderId;
+        setOk(`Purchase Order ${newId} (${form.poNo}) created`);
+        /* set editOrder with new id so any immediate re-submit is a PUT, not a new POST */
+        setEditOrder({orderId:newId});
       }
     }catch(e){setError(e.response?.data?.error||e.message);}
     setSaving(false);
@@ -2091,13 +2526,13 @@ export default function PurchaseOrderModule(){
       {tab==='view'&&(
         <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
           <ListAll companyId={cid} selectedCompany={selectedCompany}
-            onEdit={id=>{loadEdit(id);navigate('/purchase-order/create');}}/>
+            onEdit={id=>navigate(`/purchase-order/edit/${id}`)}/>
         </div>
       )}
       {tab==='pending'&&(
         <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
           <ListPending companyId={cid} selectedCompany={selectedCompany}
-            onEdit={id=>{loadEdit(id);navigate('/purchase-order/create');}}/>
+            onEdit={id=>navigate(`/purchase-order/edit/${id}`)}/>
         </div>
       )}
 
@@ -2126,7 +2561,8 @@ export default function PurchaseOrderModule(){
               <TabOrderDetails form={form} setF={setF} salesOrders={salesOrders}
                 vendors={vendors} openSOPicker={()=>setShowSOPicker(true)}
                 poNumberLoaded={poNumberLoaded}
-                showVendorSearch={showVendorSearch} setShowVendorSearch={setShowVendorSearch}/>
+                showVendorSearch={showVendorSearch} setShowVendorSearch={setShowVendorSearch}
+                checkDupPoNo={checkDupPoNo} poDupWarn={poDupWarn}/>
             )}
             {secTab==='items'&&(
               <TabItems items={items} setItems={setItems} form={form}
@@ -2144,6 +2580,9 @@ export default function PurchaseOrderModule(){
             )}
             {secTab==='notes'&&(
               <TabNotes form={form} setF={setF}/>
+            )}
+            {secTab==='scope'&&(
+              <TabScopeOfWork scopeItems={poScopeItems} setScopeItems={setPoScopeItems} linkedSO={form.linkedSalesOrderId}/>
             )}
             {secTab==='attachments'&&(
               <TabAttachments attachments={attachments} setAttachments={setAttachments}/>
@@ -2180,14 +2619,14 @@ export default function PurchaseOrderModule(){
               {editOrder&&(
                 <>
                   <button onClick={()=>setShowEmailModal(true)}
-                    style={{height:30,padding:'0 12px',background:'#2563EB',border:'none',color:W,
+                    style={{height:30,padding:'0 12px',background:'#104f4f',border:'none',color:W,
                       fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:'pointer'}}>
                     📧 Send Email
                   </button>
-                  <button onClick={()=>printPurchaseOrder({...editOrder,...form,items,charges},selectedCompany)}
+                  <button onClick={()=>printPurchaseOrder({...editOrder,...form,items,charges,scopeItems:poScopeItems},selectedCompany)}
                     style={{height:30,padding:'0 12px',background:'#475569',border:'none',color:W,
                       fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:'pointer'}}>
-                    🖨️ Print
+                    🖨ï¸ Print
                   </button>
                   <button onClick={resetForm}
                     style={{height:30,padding:'0 12px',background:'#DC2626',border:'none',color:W,
@@ -2206,11 +2645,13 @@ export default function PurchaseOrderModule(){
                   fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:saving?'default':'pointer'}}>
                 📤 Submit for Approval
               </button>
+              {can(user,'purchaseOrder','approve') && (
               <button onClick={()=>submit('approved')} disabled={saving}
                 style={{height:30,padding:'0 14px',background:saving?'#475569':'#16A34A',border:'none',color:W,
                   fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:saving?'default':'pointer'}}>
                 ✔ Approve &amp; Save
               </button>
+              )}
             </div>
           </div>
         </div>

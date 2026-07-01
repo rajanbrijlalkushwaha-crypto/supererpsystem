@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const N = '#2F6FED';
+const N = '#133d80';
 
 const STATUS_COLORS = {
   pending:       { bg: '#fff3cd', color: '#856404', border: '#ffc107' },
@@ -98,7 +98,7 @@ export default function ManufacturingDashboard() {
           <div style={{ color: '#666', fontSize: 13, padding: 12 }}>Loading...</div>
         ) : (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-            <StatCard label="Total Job Sheets" value={total} bg="#f0f4ff" color="#1a4a7a" />
+            <StatCard label="Total Job Sheets" value={total} bg="#f0f4ff" color="#0d2d6b" />
             <StatCard label="Pending" value={pending} bg="#fff8e1" color="#c77700" />
             <StatCard label="In Progress" value={inProgress} bg="#e3f2fd" color="#1565c0" />
             <StatCard label="Completed" value={completed} bg="#e8f5e9" color="#2e7d32" />

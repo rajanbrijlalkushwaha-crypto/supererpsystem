@@ -62,7 +62,7 @@ function buildNestedTable(cols, headerWidths, bodyRows, footRows) {
   cols.forEach((c, i) => {
     const w = headerWidths[i] ? `width:${headerWidths[i]};` : '';
     const s = `border-top:none;border-bottom:${B};border-left:${i===0?'none':B};border-right:none;`;
-    thead += `<th style="${s}${w}font-weight:bold;text-align:center;font-size:8.5pt;padding:3px 5px;white-space:nowrap;">${c}</th>`;
+    thead += `<th style="${s}${w}font-weight:bold;text-align:center;font-size:11.5pt;padding:3px 5px;white-space:nowrap;">${c}</th>`;
   });
   thead += `</tr></thead>`;
 
@@ -72,34 +72,27 @@ function buildNestedTable(cols, headerWidths, bodyRows, footRows) {
     tbody += `<tr>`;
     row.forEach((cell, ci) => {
       const s = `border-top:none;border-bottom:none;border-left:${ci===0?'none':B};border-right:none;`;
-      tbody += `<td style="${cell.style||''}${s}padding:3px 5px;font-size:9pt;vertical-align:middle;">${cell.text}</td>`;
+      tbody += `<td style="${cell.style||''}${s}padding:3px 5px;font-size:11pt;vertical-align:middle;">${cell.text}</td>`;
     });
     tbody += `</tr>`;
   });
-  tbody += `</tbody>`;
 
-  /* Footer rows: top border on first row only (separator from body), then left borders per column.
-     cell.style comes first so that the explicit border sides in s override any border:none shorthand
-     that expandRow() puts on placeholder cells. */
-  let tfoot = '';
+  /* Footer rows go inside tbody (not tfoot) so they don't repeat on every printed page. */
   if (hasfoot) {
-    tfoot = `<tfoot>`;
     footRows.forEach((row, ri) => {
-      tfoot += `<tr>`;
+      tbody += `<tr>`;
       row.forEach((cell, ci) => {
-        /* Keep colspan intact — do NOT pre-expand footer rows.
-           Left border only on non-first cells (vertical separator before amount). */
         const span = cell.colspan || 1;
         const colAttr = span > 1 ? ` colspan="${span}"` : '';
         const s = `border-top:${ri===0?B:'none'};border-bottom:none;border-left:${ci===0?'none':B};border-right:none;`;
-        tfoot += `<td${colAttr} style="${cell.style||''}${s}padding:4px 8px;font-size:9.5pt;">${cell.text}</td>`;
+        tbody += `<td${colAttr} style="${cell.style||''}${s}padding:4px 8px;font-size:11.5pt;">${cell.text}</td>`;
       });
-      tfoot += `</tr>`;
+      tbody += `</tr>`;
     });
-    tfoot += `</tfoot>`;
   }
+  tbody += `</tbody>`;
 
-  return `<table style="width:100%;border-collapse:collapse;border:${B};">${thead}${tbody}${tfoot}</table>`;
+  return `<table style="width:100%;border-collapse:collapse;border:${B};">${thead}${tbody}</table>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -180,22 +173,22 @@ export const printSalesOrder = async (order, company = {}) => {
   const SECL = '1.5px solid #555';  // section separator line
 
   /* Data cells — NO border; just padding */
-  const oc    = `border:none;padding:3px 8px;vertical-align:top;font-size:9.5pt;`;
+  const oc    = `border:none;padding:3px 8px;vertical-align:top;font-size:11.5pt;`;
   const lbl   = `${oc}white-space:nowrap;width:130px;font-weight:normal;`;
   const sep   = `${oc}width:12px;text-align:center;`;
   const val   = oc;
 
   /* Section header — line ABOVE and BELOW, no fill */
-  const secHdr= `border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:10.5pt;font-weight:bold;background:none;padding:6px 8px;`;
+  const secHdr= `border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:11.5pt;font-weight:bold;background:none;padding:6px 8px;`;
 
   /* Sub-header (e.g. "Client Details | Tax Identity") — bold underline, no border */
-  const subHdr= `border:none;padding:7px 8px 2px;font-weight:bold;font-size:10pt;text-decoration:underline;`;
+  const subHdr= `border:none;padding:7px 8px 2px;font-weight:bold;font-size:11pt;text-decoration:underline;`;
 
   /* Company logo/name cell */
   const coCell= `border:none;text-align:center;padding:12px 14px;`;
 
   /* "Sales Order" title — line ABOVE and BELOW (like ─── SALES ORDER ───) */
-  const ttlCell=`border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:15pt;font-weight:bold;letter-spacing:3px;padding:9px;`;
+  const ttlCell=`border-top:${SECL};border-bottom:${SECL};border-left:none;border-right:none;text-align:center;font-size:17pt;font-weight:bold;letter-spacing:3px;padding:9px;`;
 
   /* Nested table wrapper — no outer border (table itself carries its own frame) */
   const ndWrap= `border:none;padding:2px 0 8px;`;
@@ -241,7 +234,7 @@ export const printSalesOrder = async (order, company = {}) => {
   validChg.forEach(c => {
     const a = parseFloat(c.amount)||0;
     footRowsRaw.push([
-      {text:dv(c.chargeType||c.description||'Additional Charge'), style:R, colspan:8},
+      {text:[dv(c.chargeType),dv(c.description)].filter(Boolean).join(' — ')||'Additional Charge', style:R, colspan:8},
       {text:fmtN(a), style:R},
     ]);
   });
@@ -344,6 +337,46 @@ export const printSalesOrder = async (order, company = {}) => {
   const scopeTable = buildNestedTable(scopeCols, scopeWidths,
     scope.length?scopeBody:[expandRow(scopeBody[0],5)], []);
 
+  /* ══ SPECIFICATIONS ══ */
+  let spec = {};
+  try { spec = JSON.parse(o.specSheet || '{}'); } catch {}
+  let specHTML = '';
+  if (spec.mode === 'freewrite' && spec.html && spec.html.trim()) {
+    specHTML = `<div style="font-family:'Times New Roman',Times,serif;font-size:11.5pt;line-height:1.6;padding:4px 8px;">${spec.html}</div>`;
+  } else if (spec.mode === 'structured' && Array.isArray(spec.groups) && spec.groups.some(g => g.itemName || (g.headers||[]).length)) {
+    specHTML = spec.groups.map(group => {
+      let g = `<div style="margin-bottom:14px;">`;
+      if (group.itemName) g += `<div style="font-weight:bold;font-size:13pt;border-bottom:1.5px solid #555;padding-bottom:3px;margin-bottom:8px;">${esc(group.itemName)}</div>`;
+      (group.headers||[]).forEach(hdr => {
+        if (hdr.title) g += `<div style="font-weight:bold;font-size:11.5pt;text-decoration:underline;margin-bottom:4px;margin-top:4px;">${esc(hdr.title)}</div>`;
+        (hdr.subHeaders||[]).forEach(sub => {
+          if (sub.title) g += `<div style="font-size:11pt;font-weight:bold;margin-bottom:3px;margin-top:6px;">${esc(sub.title)}</div>`;
+          const rows = (sub.rows||[]).filter(r => r.description||r.srNo||r.qty||r.remarks);
+          if (rows.length) {
+            g += `<table style="width:100%;border-collapse:collapse;font-size:11pt;margin-bottom:6px;">
+              <thead><tr>
+                <th style="border:${B};padding:3px 6px;width:36px;text-align:center;">Sr</th>
+                <th style="border:${B};padding:3px 6px;">Description</th>
+                <th style="border:${B};padding:3px 6px;width:56px;text-align:center;">Qty</th>
+                <th style="border:${B};padding:3px 6px;">Remarks</th>
+              </tr></thead><tbody>`;
+            rows.forEach(r => {
+              g += `<tr>
+                <td style="border:${B};padding:3px 6px;text-align:center;">${esc(r.srNo)}</td>
+                <td style="border:${B};padding:3px 6px;">${esc(r.description)}</td>
+                <td style="border:${B};padding:3px 6px;text-align:center;">${esc(r.qty)}</td>
+                <td style="border:${B};padding:3px 6px;">${esc(r.remarks)}</td>
+              </tr>`;
+            });
+            g += `</tbody></table>`;
+          }
+        });
+      });
+      g += `</div>`;
+      return g;
+    }).join('');
+  }
+
   /* ══ ACTIVITY TABLE ══ */
   const actCols   = ['#','Task / Activity','Assigned To','Start Date','End Date','Status','Remarks'];
   const actWidths = ['30px','','100px','75px','75px','80px',''];
@@ -369,40 +402,48 @@ export const printSalesOrder = async (order, company = {}) => {
     processedAtts.forEach((att,i) => {
       const label = att.name||att.fileName||`Document ${i+1}`;
       let content = '';
-      if (att.kind==='pdf') {
-        content = `<div class="pdf-render" data-pdf-url="${att.pdfUrl||''}" style="width:100%;min-height:40px;background:#f9f9f9;"></div>`;
-      } else if (att.kind==='excel') {
-        content = `<div style="overflow-x:auto;padding:6px;font-size:8.5pt;">${att.html||''}</div>`;
-      } else if (att.kind==='word') {
-        content = `<div style="padding:10px;font-size:9.5pt;line-height:1.6;">${att.html||''}</div>`;
-      } else if (att.kind==='text') {
-        const safe=(att.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        content = `<pre style="padding:10px;font-family:monospace;font-size:8.5pt;white-space:pre-wrap;background:#f8f8f8;">${safe}</pre>`;
+      const isPdf = att.kind==='pdf';
+      if (isPdf) {
+        /* PDF: each attachment starts on its own fresh page — no mid-page blank gap */
+        content = `<div class="pdf-render" data-pdf-url="${att.pdfUrl||''}" style="width:100%;"></div>`;
+        attHTML += `<div style="page-break-before:always;break-before:page;">
+          <div style="background:#2a4a7a;color:#fff;font-weight:bold;font-size:11.5pt;padding:4px 10px;margin-bottom:4px;">${i+1}. ${dv(label)}</div>
+          ${content}
+        </div>`;
       } else {
-        const ext=(att.fileName||'').split('.').pop().toUpperCase();
-        content = `<div style="padding:12px;text-align:center;color:#888;font-style:italic;">.${ext} file — cannot render inline</div>`;
+        if (att.kind==='excel') {
+          content = `<div style="overflow-x:auto;padding:6px;font-size:11.5pt;">${att.html||''}</div>`;
+        } else if (att.kind==='word') {
+          content = `<div style="padding:10px;font-size:11.5pt;line-height:1.6;">${att.html||''}</div>`;
+        } else if (att.kind==='text') {
+          const safe=(att.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          content = `<pre style="padding:10px;font-family:monospace;font-size:11.5pt;white-space:pre-wrap;background:#f8f8f8;">${safe}</pre>`;
+        } else {
+          const ext=(att.fileName||'').split('.').pop().toUpperCase();
+          content = `<div style="padding:12px;text-align:center;color:#888;font-style:italic;">.${ext} file — cannot render inline</div>`;
+        }
+        attHTML += `<div class="att-block" style="border:1px solid #555;${i>0?'border-top:none;':''}">
+          <div style="background:#2a4a7a;color:#fff;font-weight:bold;font-size:11.5pt;padding:4px 10px;">${i+1}. ${dv(label)}</div>
+          ${content}
+        </div>`;
       }
-      attHTML += `<div class="att-block" style="border:1px solid #555;${i>0?'border-top:none;':''}">
-        <div style="background:#2a4a7a;color:#fff;font-weight:bold;font-size:9.5pt;padding:4px 10px;">${i+1}. ${dv(label)}</div>
-        ${content}
-      </div>`;
     });
   }
 
   /* ══ CSS ══ */
   const css = `
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    body{font-family:'Times New Roman',Times,serif;font-size:11.5pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .page{padding:8mm 12mm;}
     .embed-excel table{border-collapse:collapse;width:100%;}
-    .embed-excel td,.embed-excel th{border:1px solid #ccc;padding:2px 5px;font-size:8pt;}
-    .att-block{page-break-inside:avoid;break-inside:avoid;}
-    .sig-row{page-break-before:avoid;break-before:avoid;}
+    .embed-excel td,.embed-excel th{border:1px solid #ccc;padding:2px 5px;font-size:9pt;}
+    .att-block{page-break-inside:auto;break-inside:auto;margin-bottom:0;}
+    .sig-row{page-break-before:avoid;break-before:avoid;page-break-inside:avoid;break-inside:avoid;}
     @media print{
       @page{
         margin:10mm 10mm 14mm;
         size:A4 portrait;
-        @bottom-center{content:"Page " counter(page) " of " counter(pages);font-size:8pt;font-family:Arial,sans-serif;color:#555;}
+        @bottom-center{content:"Page " counter(page) " of " counter(pages);font-size:9pt;font-family:'Times New Roman',Times,serif;color:#555;}
       }
       .page{padding:0;}
       canvas{max-width:100%;display:block;}
@@ -428,9 +469,9 @@ export const printSalesOrder = async (order, company = {}) => {
 <tr><td colspan="6" style="${coCell}">
   <div style="text-align:center;">
     ${logoTag?`<div style="margin-bottom:6px;">${logoTag}</div>`:''}
-    <div style="font-size:22pt;font-weight:bold;line-height:1.2;letter-spacing:1px;">${coName}</div>
-    ${coAddr?`<div style="font-size:8.5pt;color:#444;margin-top:3px;">${coAddr}</div>`:''}
-    ${company?.gstin||company?.phone||company?.email?`<div style="font-size:8.5pt;margin-top:2px;">${[company?.gstin?'GSTIN: '+dv(company.gstin):'',company?.phone?'Ph: '+dv(company.phone):'',company?.email?'Email: '+dv(company.email):''].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>`:''}
+    <div style="font-size:24pt;font-weight:bold;line-height:1.2;letter-spacing:1px;">${coName}</div>
+    ${coAddr?`<div style="font-size:11.5pt;color:#444;margin-top:3px;">${coAddr}</div>`:''}
+    ${company?.gstin||company?.phone||company?.email?`<div style="font-size:11.5pt;margin-top:2px;">${[company?.gstin?'GSTIN: '+dv(company.gstin):'',company?.phone?'Ph: '+dv(company.phone):'',company?.email?'Email: '+dv(company.email):''].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>`:''}
   </div>
 </td></tr>
 
@@ -480,27 +521,29 @@ ${fr('Pincode', dv(o.customerPincode),                 'Pincode', dv(o.shipToPin
 
 <!-- ITEM DESCRIPTION -->
 <tr><td colspan="6" style="${secHdr}">Item Description</td></tr>
-<tr><td colspan="6" style="${ndWrap}">${itemTable}</td></tr>
-<tr><td colspan="6" style="border:none;padding:4px 8px 8px;font-size:9.5pt;">
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${ndWrap}">${itemTable}</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="border:none;padding:4px 8px 8px;font-size:11.5pt;">
   <strong>Amount in Words:</strong>&nbsp;${numWords(grand)}
 </td></tr>
 
+${addons.length > 0 ? `
 <!-- ADD ON ITEM -->
 <tr><td colspan="6" style="${secHdr}">Add On Item</td></tr>
-<tr><td colspan="6" style="${ndWrap}">${addonTable}</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${ndWrap}">${addonTable}</td></tr>
+` : ''}
 
+${bg.applicable ? `
 <!-- BANK GUARANTEE -->
 <tr><td colspan="6" style="${secHdr}">Bank Guarantee</td></tr>
-${fr('Applicable', bg.applicable?'Yes':'No', 'Bank Name', dv(bg.bankName))}
-${bg.applicable?`
+${fr('Applicable', 'Yes', 'Bank Name', dv(bg.bankName))}
 ${fr('Basis',      dv(bg.basis),                    'BG No',      dv(bg.bgNo))}
 ${fr('Percentage', bg.pct?bg.pct+'%':'',            'Expiry Date',fmtD(bg.expiry))}
 ${fr('BG Amount',  bg.pct&&grand?'₹ '+fmtN(grand*(parseFloat(bg.pct)||0)/100):'', 'Remarks', dv(bg.remarks))}
-`:''}
+` : ''}
 
 <!-- SCOPE OF WORK -->
 <tr><td colspan="6" style="${secHdr}">Scope of Work</td></tr>
-<tr><td colspan="6" style="${ndWrap}">${scopeTable}</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${ndWrap}">${scopeTable}</td></tr>
 
 <!-- WARRANTY PERIOD -->
 <tr><td colspan="6" style="${secHdr}">Warranty Period</td></tr>
@@ -509,45 +552,57 @@ ${fr('Type',            dv(wty.type),            'Issued By',      dv(wty.issued
 ${fr('Start Date',      fmtD(wty.startDate),    'Terms',          dv(wty.terms))}
 ${fr('End Date',        fmtD(wty.endDate),       'Exclusions',     dv(wty.exclusions))}
 
+${tasks.length > 0 ? `
 <!-- ACTIVITIES -->
 <tr><td colspan="6" style="${secHdr}">Activities</td></tr>
-<tr><td colspan="6" style="${ndWrap}">${actTable}</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${ndWrap}">${actTable}</td></tr>
+` : ''}
 
-<!-- ALL ATTACHMENTS -->
-<tr><td colspan="6" style="${secHdr}">All Attachment</td></tr>
-<tr><td colspan="6" style="${ndWrap}">
-  ${attHTML||`<div style="padding:14px;text-align:center;color:#888;font-style:italic;">No attachments</div>`}
+${specHTML ? `
+<!-- SPECIFICATIONS -->
+<tr><td colspan="6" style="${secHdr}">Specifications</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${ndWrap}">
+  ${specHTML}
 </td></tr>
+` : ''}
 
 ${(o.termsConditions||o.customerNotes)?`
 <!-- TERMS -->
 <tr><td colspan="6" style="${secHdr}">Terms &amp; Conditions</td></tr>
-<tr><td colspan="6" style="${oc}font-size:9pt;line-height:1.5;white-space:pre-wrap;">${esc(o.termsConditions||o.customerNotes)}</td></tr>
+<tr style="page-break-inside:auto;break-inside:auto;"><td colspan="6" style="${oc}font-size:11pt;line-height:1.5;white-space:pre-wrap;">${esc(o.termsConditions||o.customerNotes)}</td></tr>
 `:''}
 
-<!-- SIGNATURE -->
+<!-- SIGNATURE — always on the last page of the main order content -->
 <tr class="sig-row">
-  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+  <td colspan="2" style="border:none;text-align:center;padding:22px 10px 8px;">
     <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;">
-      <strong>Prepared By</strong><br><span style="font-size:9pt;">${dv(o.salesPerson)||'&nbsp;'}</span>
+      <strong>Prepared By</strong><br><span style="font-size:11pt;">${dv(o.salesPerson)||'&nbsp;'}</span>
     </div>
   </td>
-  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+  <td colspan="2" style="border:none;text-align:center;padding:22px 10px 8px;">
     <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;"><strong>Checked By</strong></div>
   </td>
-  <td colspan="2" style="border:none;text-align:center;padding:44px 10px 8px;">
+  <td colspan="2" style="border:none;text-align:center;padding:22px 10px 8px;">
     <div style="border-top:1px solid #000;margin:0 8px;padding-top:4px;">
-      <strong>Authorised Signatory</strong><br><span style="font-size:9pt;">For ${coName}</span>
+      <strong>Authorised Signatory</strong><br><span style="font-size:11pt;">For ${coName}</span>
     </div>
   </td>
 </tr>
-<tr><td colspan="6" style="border-top:${SECL};border-left:none;border-right:none;border-bottom:none;text-align:right;font-size:8pt;color:#666;background:#f5f5f5;padding:3px 8px;">
+<tr><td colspan="6" style="border-top:${SECL};border-left:none;border-right:none;border-bottom:none;text-align:right;font-size:9pt;color:#666;background:#f5f5f5;padding:3px 8px;">
   Printed: ${today}
 </td></tr>
 
 </tbody>
 </table>
 </div>
+
+${processedAtts.length > 0 ? `
+<!-- ALL ATTACHMENTS — outside main table; each PDF starts on its own fresh page -->
+<div style="page-break-before:always;break-before:page;font-family:'Times New Roman',Times,serif;padding:0 12mm;">
+  <div style="text-align:center;font-size:13pt;font-weight:bold;border-top:1.5px solid #555;border-bottom:1.5px solid #555;padding:6px;margin-bottom:0;">All Attachments</div>
+  ${attHTML}
+</div>
+` : ''}
 
 ${hasPdfs?`
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"><\/script>
