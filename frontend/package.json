@@ -13,7 +13,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build"
+    "build": "cross-env DISABLE_ESLINT_PLUGIN=true CI=false react-scripts build"
   },
   "eslintConfig": {
     "extends": [
@@ -33,6 +33,7 @@
     ]
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "react-scripts": "5.0.1"
   }
 }
