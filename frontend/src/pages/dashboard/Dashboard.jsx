@@ -598,6 +598,52 @@ export default function Dashboard() {
         {tab==='summary' && (
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
+            {/* ── Receivables & Payables Quick Cards ── */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+              {/* Receivables Card */}
+              <div style={{ background:'linear-gradient(135deg,#0b3d3d 0%,#104f4f 100%)', borderRadius:12, padding:'16px 20px', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', textTransform:'uppercase', letterSpacing:'.6px', marginBottom:12 }}>💰 Receivables from Clients</div>
+                <div style={{ display:'flex' }}>
+                  <div style={{ flex:1, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Total Receivable</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>{loading?'—':fmtINR(summary.salesBillV)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Sales billed amount</div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:14, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Received</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#6ee7b7' }}>{loading?'—':fmtINR(summary.rcptForBilledV)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Against bills</div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Dues</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:summary.soBillDues>0?'#fca5a5':'#6ee7b7' }}>{loading?'—':fmtINR(summary.soBillDues)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Pending from clients</div>
+                  </div>
+                </div>
+              </div>
+              {/* Payables Card */}
+              <div style={{ background:'linear-gradient(135deg,#1e1b4b 0%,#312e81 100%)', borderRadius:12, padding:'16px 20px', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', textTransform:'uppercase', letterSpacing:'.6px', marginBottom:12 }}>💸 Payables to Vendors</div>
+                <div style={{ display:'flex' }}>
+                  <div style={{ flex:1, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Total Payable</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>{loading?'—':fmtINR(summary.purchBillV)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Purchase billed amount</div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:14, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Paid</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:'#6ee7b7' }}>{loading?'—':fmtINR(summary.pymtForBilledV)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Against bills</div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:14 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Dues</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:summary.poBillDues>0?'#fca5a5':'#6ee7b7' }}>{loading?'—':fmtINR(summary.poBillDues)}</div>
+                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>To be paid to vendors</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ── Financial Summary Grid ── */}
             <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
               {/* Header row */}
