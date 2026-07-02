@@ -60,12 +60,10 @@ app.use('/api/sap/tasks',            require('./api/sap/tasks'));
 
 
 
-// Serve React app for all non-API routes (production only)
-if (process.env.NODE_ENV === 'production') {
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
-  });
-}
+// Serve React app for all non-API routes
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+});
 
 // Global error handler — catches unhandled errors from multer and middleware
 // eslint-disable-next-line no-unused-vars
