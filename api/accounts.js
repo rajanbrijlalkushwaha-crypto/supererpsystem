@@ -764,7 +764,23 @@ router.get('/ledger', (req, res) => {
       });
     });
 
-    /* 8. Ensure all clients and vendors appear even with zero transactions */
+    /* 8. Security Deposits (type='Security', active/released) → Cr client */
+    const deposits = readAllDeep(coDir(companyId, 'Deposits'));
+    deposits.filter(d => d.depositType === 'Security' && ['active','released'].includes(d.status)).forEach(d => {
+      const name = d.customerName;
+      if (!name) return;
+      ensure(name, 'client');
+      const amt = parseFloat(d.amount) || 0;
+      map[name].totalCredit += amt;
+      map[name].entries.push({
+        journalId: d.depositId, date: d.startDate || d.createdAt,
+        narration: `Security Deposit${d.orderNo ? ' — ' + d.orderNo : ''}`,
+        refNo: d.depositId, status: d.status,
+        debit: 0, credit: amt, source: 'security-deposit',
+      });
+    });
+
+    /* 9. Ensure all clients and vendors appear even with zero transactions */
     clients.forEach(c => {
       const name = c.clientName || c.companyName;
       if (!name || name.trim() === '') return;

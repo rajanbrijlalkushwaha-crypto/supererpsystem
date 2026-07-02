@@ -94,12 +94,13 @@ const companyHeader = (company, printTime) => {
 };
 
 const srcLabel = s =>
-  s==='sales-bill'    ? 'Sales Bill'    :
-  s==='purchase-bill' ? 'Purchase Bill' :
-  s==='receipt'       ? 'Receipt'       :
-  s==='payment'       ? 'Payment'       :
-  s==='credit-note'   ? 'Credit Note'   :
-  s==='debit-note'    ? 'Debit Note'    : 'Journal';
+  s==='sales-bill'       ? 'Sales Bill'       :
+  s==='purchase-bill'    ? 'Purchase Bill'    :
+  s==='receipt'          ? 'Receipt'          :
+  s==='payment'          ? 'Payment'          :
+  s==='credit-note'      ? 'Credit Note'      :
+  s==='debit-note'       ? 'Debit Note'       :
+  s==='security-deposit' ? 'Security Deposit' : 'Journal';
 
 /* Print individual ledger statements (one per page) */
 const printSelectedLedgers = (selected, company) => {

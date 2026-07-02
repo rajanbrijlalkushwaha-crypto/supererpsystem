@@ -76,9 +76,14 @@ export default function DepositCreate() {
   const presoId = searchParams.get('soId');
   const isEdit = !!depositId;
 
-  const [orders, setOrders] = useState([]);
-  const [banks,  setBanks]  = useState([]);
+  const [orders,  setOrders]  = useState([]);
+  const [clients, setClients] = useState([]);
+  const [banks,   setBanks]   = useState([]);
   const [showSOPop, setShowSOPop] = useState(false);
+
+  /* Link mode — SO or Direct Client */
+  const [linkMode, setLinkMode] = useState('so'); // 'so' | 'client'
+  const [directClient, setDirectClient] = useState('');
 
   /* Selected SO */
   const [so, setSO] = useState(null);
@@ -132,6 +137,8 @@ export default function DepositCreate() {
           if (found) setSO(found);
         }
       }).catch(()=>{});
+    axios.get(`/api/clients?companyId=${cid}`)
+      .then(r => setClients(r.data||[])).catch(()=>{});
     axios.get(`/api/accounts/banks?companyId=${cid}`)
       .then(r => setBanks(r.data||[])).catch(()=>{});
   }, [cid, presoId]);
@@ -168,20 +175,22 @@ export default function DepositCreate() {
   }, [isEdit, depositId, cid]);
 
   const handleSubmit = async () => {
-    if (!so) { setMsg({text:'Please select a Sales Order.',ok:false}); return; }
+    if (linkMode === 'so' && !so) { setMsg({text:'Please select a Sales Order.',ok:false}); return; }
+    if (linkMode === 'client' && !directClient) { setMsg({text:'Please select a client.',ok:false}); return; }
     if (!depositType) { setMsg({text:'Please select a deposit type.',ok:false}); return; }
 
     /* New deposits go to pending for approval; edits preserve current status */
     const saveStatus = isEdit ? currentStatus : 'pending';
 
+    const customerName = linkMode === 'client' ? directClient : so?.customerName;
     const payload = {
       companyId: cid,
-      soId: so.orderId,
-      orderNo: so.orderNo,
-      customerName: so.customerName,
-      customerPO: so.customerPO,
-      poDate: so.poDate,
-      orderDate: so.orderDate,
+      soId: linkMode === 'so' ? so?.orderId : null,
+      orderNo: linkMode === 'so' ? so?.orderNo : null,
+      customerName,
+      customerPO: linkMode === 'so' ? so?.customerPO : null,
+      poDate: linkMode === 'so' ? so?.poDate : null,
+      orderDate: linkMode === 'so' ? so?.orderDate : null,
       depositType, startDate, endDate, remarks, status: saveStatus,
       // BG
       bgNo, expiryDate, claimExpiryDate:claimExpiry, pbgContactNo:pbgContact,
@@ -305,46 +314,74 @@ export default function DepositCreate() {
         </div>
       )}
 
-      {/* ── Step 1: Sales Order ── */}
+      {/* ── Step 1: Link Mode ── */}
       <div style={card}>
-        <div style={SH()}>Sales Order</div>
+        <div style={SH()}>Link To</div>
         <div style={{ padding:'14px 16px' }}>
-          {so ? (
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:12, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'12px 14px', alignItems:'center' }}>
-              <div>
-                <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Order No</div>
-                <div style={{ fontWeight:800, fontSize:13, color:P }}>{so.orderNo}</div>
+          {/* Toggle */}
+          <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+            {[['so','📋 Sales Order'],['client','👤 Direct Client (No SO)']].map(([k,l])=>(
+              <button key={k} onClick={()=>{ setLinkMode(k); setSO(null); setDirectClient(''); setDepositType(''); }}
+                style={{ padding:'8px 18px', border:`2px solid ${linkMode===k?P:BD}`, borderRadius:8,
+                  background:linkMode===k?'#eff6ff':'#fff', color:linkMode===k?P:'#6b7280',
+                  fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* Sales Order picker */}
+          {linkMode === 'so' && (
+            so ? (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:12, background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8, padding:'12px 14px', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Order No</div>
+                  <div style={{ fontWeight:800, fontSize:13, color:P }}>{so.orderNo}</div>
+                </div>
+                <div style={{ gridColumn:'span 2' }}>
+                  <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Client</div>
+                  <div style={{ fontWeight:700, fontSize:12, color:'#111827' }}>{so.customerName}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Client PO No</div>
+                  <div style={{ fontSize:12, color:'#374151' }}>{so.customerPO||'—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>PO Date</div>
+                  <div style={{ fontSize:12, color:'#374151' }}>{so.poDate||'—'}</div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end' }}>
+                  <button onClick={()=>{ setSO(null); setDepositType(''); }}
+                    style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:6, color:'#dc2626', padding:'5px 12px', cursor:'pointer', fontSize:11, fontWeight:700 }}>
+                    ✕ Change
+                  </button>
+                </div>
               </div>
-              <div style={{ gridColumn:'span 2' }}>
-                <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Client</div>
-                <div style={{ fontWeight:700, fontSize:12, color:'#111827' }}>{so.customerName}</div>
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>Client PO No</div>
-                <div style={{ fontSize:12, color:'#374151' }}>{so.customerPO||'—'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>PO Date</div>
-                <div style={{ fontSize:12, color:'#374151' }}>{so.poDate||'—'}</div>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end' }}>
-                <button onClick={()=>{ setSO(null); setDepositType(''); }}
-                  style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:6, color:'#dc2626', padding:'5px 12px', cursor:'pointer', fontSize:11, fontWeight:700 }}>
-                  ✕ Change
-                </button>
-              </div>
+            ) : (
+              <button onClick={()=>setShowSOPop(true)}
+                style={{ height:40, padding:'0 24px', background:P, border:'none', borderRadius:7, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                📋 Select Sales Order
+              </button>
+            )
+          )}
+
+          {/* Direct Client picker */}
+          {linkMode === 'client' && (
+            <div style={{ maxWidth:400 }}>
+              <label style={lbl}>Select Client *</label>
+              <select value={directClient} onChange={e=>setDirectClient(e.target.value)} style={inp()}>
+                <option value="">— Select client —</option>
+                {clients.map((c,i)=>(
+                  <option key={i} value={c.clientName||c.companyName}>{c.clientName||c.companyName}</option>
+                ))}
+              </select>
             </div>
-          ) : (
-            <button onClick={()=>setShowSOPop(true)}
-              style={{ height:40, padding:'0 24px', background:P, border:'none', borderRadius:7, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-              📋 Select Sales Order
-            </button>
           )}
         </div>
       </div>
 
       {/* ── Step 2: Deposit Type ── */}
-      {so && (
+      {(so || directClient) && (
         <div style={card}>
           <div style={SH()}>Deposit Type</div>
           <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
@@ -609,7 +646,7 @@ export default function DepositCreate() {
       )}
 
       {/* Actions */}
-      {so && depositType && (
+      {(so || directClient) && depositType && (
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
           <button onClick={()=>navigate('/account/deposit/view')}
             style={{ height:36, padding:'0 20px', background:'#fff', border:`1px solid ${BD}`, borderRadius:7, fontSize:12.5, cursor:'pointer', fontFamily:F }}>Cancel</button>
