@@ -458,10 +458,10 @@ export default function ApprovalView() {
     if (search) {
       const q = search.toLowerCase();
       r = r.filter(x=>
-        (x.approvalId||'').toLowerCase().includes(q)||
-        (x.refNo||'').toLowerCase().includes(q)||
-        (x.party||'').toLowerCase().includes(q)||
-        (x.moduleLabel||'').toLowerCase().includes(q)
+        String(x.approvalId||'').toLowerCase().includes(q)||
+        String(x.refNo||'').toLowerCase().includes(q)||
+        String(x.party||'').toLowerCase().includes(q)||
+        String(x.moduleLabel||'').toLowerCase().includes(q)
       );
     }
     return r;
