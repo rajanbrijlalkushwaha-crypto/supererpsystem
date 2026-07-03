@@ -51,6 +51,8 @@ export default function ViewSalesOrders() {
   const [modalOrder,  setModalOrder]  = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [activityRec, setActivityRec] = useState(null);
+  const [expandedCols, setExpandedCols] = useState(new Set());
+  const toggleCol = name => setExpandedCols(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   const navigate = useNavigate();
   const { selectedCompany } = useCompany();
   const cid = selectedCompany?.companyId;
@@ -143,6 +145,8 @@ export default function ViewSalesOrders() {
           custPO:      order.customerPO || '—',
           dueDate:     order.dueDate || order.deliveryDate || '',
           product:     it.itemName || it.description || '—',
+          orderDesc:   order.termsConditions || order.customerNotes || (order.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ') || '',
+          itemDesc:    it.description && it.description !== it.itemName ? it.description : '',
           qty, rate, taxable, gstPct, gstAmt,
           otherCharges, otherChargesLabel,
           orderValue:  parseFloat(order.grandTotal) || 0,
@@ -327,10 +331,22 @@ export default function ViewSalesOrders() {
                 <th style={th('left','90px')}>Order ID</th>
                 <th style={th('left','100px')}>Order No</th>
                 <th style={th('left','140px')}>Client Name</th>
+                <th onClick={()=>toggleCol('orderDesc')} title="Click to expand Order Description"
+                  style={{ ...th('center'), width:expandedCols.has('orderDesc')?220:28, minWidth:expandedCols.has('orderDesc')?220:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                  {expandedCols.has('orderDesc')
+                    ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Order Description</span>
+                    : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Order Description</div>}
+                </th>
                 <th style={th('center','80px')}>Order Date</th>
                 <th style={th('left','100px')}>Cust PO No</th>
                 <th style={th('center','80px')}>Due Date</th>
                 <th style={th('left','180px')}>Product / Description</th>
+                <th onClick={()=>toggleCol('itemDesc')} title="Click to expand Product Description"
+                  style={{ ...th('center'), width:expandedCols.has('itemDesc')?200:28, minWidth:expandedCols.has('itemDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                  {expandedCols.has('itemDesc')
+                    ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Description</span>
+                    : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
+                </th>
                 <th style={th('right','55px')}>Qty</th>
                 <th style={th('right','80px')}>Rate (₹)</th>
                 <th style={th('right','90px')}>Taxable (₹)</th>
@@ -384,6 +400,17 @@ export default function ViewSalesOrders() {
                       </td>
                     )}
                     {row.isFirst && (
+                      <td rowSpan={row.rowCount} style={{ ...td('left',{
+                        background:bg, borderBottom:row.isLast?undefined:'2px solid #c8d4e8',
+                        width:expandedCols.has('orderDesc')?220:28, minWidth:expandedCols.has('orderDesc')?220:28,
+                        maxWidth:expandedCols.has('orderDesc')?240:28, overflow:'hidden',
+                        padding:expandedCols.has('orderDesc')?'4px 8px':'2px 1px',
+                        fontSize:10.5, color:'#374151', wordBreak:'break-word', transition:'width .2s',
+                      }), verticalAlign:'top', paddingTop:6 }}>
+                        {expandedCols.has('orderDesc') ? (row.orderDesc || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
+                      </td>
+                    )}
+                    {row.isFirst && (
                       <td rowSpan={row.rowCount} style={{ ...td('center',{color:'#4B5563',whiteSpace:'nowrap',
                         background:bg,borderBottom:row.isLast?undefined:'2px solid #c8d4e8'}),
                         verticalAlign:'top', paddingTop:6 }}>
@@ -408,6 +435,14 @@ export default function ViewSalesOrders() {
                     {/* Per-item columns */}
                     <td style={td('left',{maxWidth:180,wordBreak:'break-word',fontWeight:500,color:'#111827'})}>
                       {row.product}
+                    </td>
+                    <td style={td('left',{
+                      width:expandedCols.has('itemDesc')?200:28, minWidth:expandedCols.has('itemDesc')?200:28,
+                      maxWidth:expandedCols.has('itemDesc')?220:28, overflow:'hidden',
+                      padding:expandedCols.has('itemDesc')?'4px 8px':'2px 1px',
+                      fontSize:10.5, color:'#555', wordBreak:'break-word', transition:'width .2s',
+                    })}>
+                      {expandedCols.has('itemDesc') ? (row.itemDesc || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
                     </td>
                     <td style={td('right',{fontWeight:600,color:'#374151'})}>{row.qty||'—'}</td>
                     <td style={td('right',{color:'#374151'})}>{row.rate>0?fmt(row.rate):'—'}</td>
@@ -455,7 +490,7 @@ export default function ViewSalesOrders() {
             {/* Totals footer */}
             <tfoot style={{ position:'sticky', bottom:0, zIndex:2 }}>
               <tr style={{ background:'#dce8ff', fontWeight:700 }}>
-                <td colSpan={10} style={{ padding:'6px 10px', border:'1px solid #b8c8e8', fontSize:11,
+                <td colSpan={12} style={{ padding:'6px 10px', border:'1px solid #b8c8e8', fontSize:11,
                   fontFamily:F, color:P, fontWeight:800 }}>
                   TOTALS — {totals.orders} order{totals.orders!==1?'s':''} · {allRows.length} item row{allRows.length!==1?'s':''}
                 </td>

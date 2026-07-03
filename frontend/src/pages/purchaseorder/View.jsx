@@ -313,6 +313,8 @@ const ViewPurchaseOrders = () => {
   const [poModal,     setPoModal]     = useState(null);
   const [selPO,       setSelPO]       = useState(null);
   const [activityRec, setActivityRec] = useState(null);
+  const [expandedCols, setExpandedCols] = useState(new Set());
+  const toggleCol = name => setExpandedCols(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   const [filter,      setFilter]      = useState('all');
   const [fy,          setFy]          = useState('all');
   const navigate = useNavigate();
@@ -538,9 +540,21 @@ const ViewPurchaseOrders = () => {
                   <th style={th}>SO No.</th>
                   <th style={th}>Client Name</th>
                   <th style={th}>Vendor Name</th>
+                  <th onClick={()=>toggleCol('poDesc')} title="Click to expand PO Description"
+                    style={{ ...th, width:expandedCols.has('poDesc')?220:28, minWidth:expandedCols.has('poDesc')?220:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                    {expandedCols.has('poDesc')
+                      ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ PO Description</span>
+                      : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>PO Description</div>}
+                  </th>
                   <th style={{ ...th, textAlign:'center' }}>PO Date</th>
                   <th style={th}>PO No.</th>
                   <th style={th}>Product / Qty</th>
+                  <th onClick={()=>toggleCol('itemDesc')} title="Click to expand Product Description"
+                    style={{ ...th, width:expandedCols.has('itemDesc')?200:28, minWidth:expandedCols.has('itemDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                    {expandedCols.has('itemDesc')
+                      ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Description</span>
+                      : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
+                  </th>
                   <th style={{ ...th, textAlign:'right' }}>Total Amount</th>
                   <th style={{ ...th, textAlign:'center' }}>Status</th>
                 </tr>
@@ -585,6 +599,16 @@ const ViewPurchaseOrders = () => {
                       {order.vendorCode && <div style={{ fontSize:10, color:'#9CA3AF' }}>{order.vendorCode}</div>}
                     </td>
 
+                    {/* PO Description (expandable) */}
+                    <td style={{ ...td,
+                      width:expandedCols.has('poDesc')?220:28, minWidth:expandedCols.has('poDesc')?220:28,
+                      maxWidth:expandedCols.has('poDesc')?240:28, overflow:'hidden',
+                      padding:expandedCols.has('poDesc')?'4px 8px':'2px 1px',
+                      fontSize:11, color:'#374151', wordBreak:'break-word', transition:'width .2s',
+                    }}>
+                      {expandedCols.has('poDesc') ? (order.termsConditions || order.customerNotes || order.remarks || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
+                    </td>
+
                     {/* PO Date */}
                     <td style={{ ...td, textAlign:'center', color:'#4B5563', whiteSpace:'nowrap' }}>
                       {fmtD(order.poDate || order.orderDate)}
@@ -612,6 +636,29 @@ const ViewPurchaseOrders = () => {
                           </div>
                         ))
                       }
+                    </td>
+
+                    {/* Product Description (expandable) */}
+                    <td style={{ ...td,
+                      width:expandedCols.has('itemDesc')?200:28, minWidth:expandedCols.has('itemDesc')?200:28,
+                      maxWidth:expandedCols.has('itemDesc')?220:28, overflow:'hidden',
+                      padding:expandedCols.has('itemDesc')?'4px 8px':'2px 1px',
+                      fontSize:11, color:'#555', wordBreak:'break-word', transition:'width .2s',
+                      verticalAlign:'top',
+                    }}>
+                      {expandedCols.has('itemDesc') ? (
+                        (order.items||[]).length === 0
+                          ? <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>
+                          : (order.items||[]).map((it,idx) => it.description && it.description !== it.itemName
+                              ? <div key={idx} style={{marginBottom:2,paddingBottom:2,borderBottom:idx<order.items.length-1?'1px solid #f3f4f6':'none'}}>{it.description}</div>
+                              : null
+                            ).filter(Boolean).length > 0
+                              ? (order.items||[]).map((it,idx) => it.description && it.description !== it.itemName
+                                  ? <div key={idx} style={{marginBottom:2,paddingBottom:2,borderBottom:idx<order.items.length-1?'1px solid #f3f4f6':'none'}}>{it.description}</div>
+                                  : null
+                                )
+                              : <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>
+                      ) : ''}
                     </td>
 
                     {/* Total Amount */}
