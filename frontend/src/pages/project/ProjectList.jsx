@@ -21,13 +21,15 @@ const fmtD  = d => {
 const today = () => new Date().toISOString().split('T')[0];
 
 const normSOItem = it => ({
-  name: it.description || it.itemName || it.name || '—',
+  name: it.itemName || it.name || it.description || '—',
+  desc: it.description && it.description !== it.itemName ? it.description : '',
   qty:  parseFloat(it.qty || it.quantity) || 0,
   rate: parseFloat(it.rate) || 0,
   gst:  parseFloat(it.gst  || it.gstPercent) || 0,
 });
 const normPOItem = it => ({
   name:         it.itemName || it.description || it.name || '—',
+  desc:         it.description && it.description !== it.itemName ? it.description : '',
   qty:          parseFloat(it.qty || it.quantity) || 0,
   rate:         parseFloat(it.rate) || 0,
   gst:          parseFloat(it.gstPercent || it.gst) || 0,
@@ -915,6 +917,8 @@ export default function ProjectList() {
   const [modal,          setModal]          = useState(null); // {type:'so'|'po', order}
   const [rowModal,       setRowModal]       = useState(null); // {so, po, poBill, soDue, poDue}
   const [editingId,      setEditingId]      = useState(null); // { soId, value } — inline order-no edit
+  const [expandedCols,   setExpandedCols]   = useState(new Set());
+  const toggleCol = name => setExpandedCols(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
 
   const load = useCallback(async () => {
     if (!cid) return;
@@ -1332,20 +1336,32 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
               <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, minWidth:1400 }}>
                 <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
-                    <th colSpan={21} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
+                    <th colSpan={23} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
                       SALES ORDER
                     </th>
-                    <th colSpan={18} style={{ ...th('center'), background:'#1a5500', fontSize:10, padding:'4px 8px' }}>
+                    <th colSpan={20} style={{ ...th('center'), background:'#1a5500', fontSize:10, padding:'4px 8px' }}>
                       PURCHASE ORDER
                     </th>
                   </tr>
                   <tr>
                     <th style={th('left','80px')}>Order ID ✎</th>
                     <th style={th('left','110px')}>Client Name</th>
+                    <th onClick={()=>toggleCol('soDesc')} title="Click to expand Order Description"
+                      style={{ ...th('center'), width:expandedCols.has('soDesc')?200:28, minWidth:expandedCols.has('soDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                      {expandedCols.has('soDesc')
+                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Order Desc</span>
+                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Order Description</div>}
+                    </th>
                     <th style={th('center','60px')}>Order Date</th>
                     <th style={th('left','90px')}>Client PO No</th>
                     <th style={th('center','60px')}>Due Date</th>
                     <th style={th('left','130px')}>Product</th>
+                    <th onClick={()=>toggleCol('soItemDesc')} title="Click to expand Product Description"
+                      style={{ ...th('center'), width:expandedCols.has('soItemDesc')?180:28, minWidth:expandedCols.has('soItemDesc')?180:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                      {expandedCols.has('soItemDesc')
+                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Desc</span>
+                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
+                    </th>
                     <th style={th('right','35px')}>Qty</th>
                     <th style={th('right','70px')}>Rate</th>
                     <th style={th('right','80px')}>Total</th>
@@ -1364,7 +1380,19 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     <th style={pth('left','100px')}>Vendor</th>
                     <th style={pth('center','60px')}>PO Date</th>
                     <th style={pth('left','90px')}>PO No</th>
+                    <th onClick={()=>toggleCol('poDesc')} title="Click to expand PO Description"
+                      style={{ ...pth('center'), width:expandedCols.has('poDesc')?200:28, minWidth:expandedCols.has('poDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                      {expandedCols.has('poDesc')
+                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ PO Desc</span>
+                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>PO Description</div>}
+                    </th>
                     <th style={pth('left','130px')}>Product</th>
+                    <th onClick={()=>toggleCol('poItemDesc')} title="Click to expand PO Product Description"
+                      style={{ ...pth('center'), width:expandedCols.has('poItemDesc')?180:28, minWidth:expandedCols.has('poItemDesc')?180:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
+                      {expandedCols.has('poItemDesc')
+                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Desc</span>
+                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
+                    </th>
                     <th style={pth('right','35px')}>Qty</th>
                     <th style={pth('right','70px')}>Rate</th>
                     <th style={pth('right','80px')}>Total</th>
@@ -1437,6 +1465,15 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                 textDecoration:'underline', textUnderlineOffset:2 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
+                            {/* SO Order Description (expandable) */}
+                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                              width:expandedCols.has('soDesc')?200:28, minWidth:expandedCols.has('soDesc')?200:28,
+                              maxWidth:expandedCols.has('soDesc')?220:28, overflow:'hidden',
+                              padding:expandedCols.has('soDesc')?'3px 6px':'1px',
+                              fontSize:10, color:'#374151', wordBreak:'break-word', transition:'width .2s',
+                              verticalAlign:'top' }}>
+                              {expandedCols.has('soDesc') ? (row.so.termsConditions||row.so.customerNotes||(row.so.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ')||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
+                            </td>
                             <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.so.orderDate||row.so.date)}
                             </td>
@@ -1454,6 +1491,13 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         {/* SO item cells */}
                         <td style={td('left',{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'})}>
                           {row.soItem ? row.soItem.name : '—'}
+                        </td>
+                        {/* SO Item Description (expandable) */}
+                        <td style={{ ...td('left'), width:expandedCols.has('soItemDesc')?180:28, minWidth:expandedCols.has('soItemDesc')?180:28,
+                          maxWidth:expandedCols.has('soItemDesc')?200:28, overflow:'hidden',
+                          padding:expandedCols.has('soItemDesc')?'3px 6px':'1px',
+                          fontSize:10, color:'#555', wordBreak:'break-word', transition:'width .2s' }}>
+                          {expandedCols.has('soItemDesc') ? (row.soItem?.desc || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
                         </td>
                         <td style={td('right')}>{row.soItem ? fmtI(row.soItem.qty) : '—'}</td>
                         <td style={td('right')}>{row.soItem ? fmt(row.soItem.rate) : '—'}</td>
@@ -1503,12 +1547,28 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
                             </td>
+                            {/* PO Description (expandable) */}
+                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a',
+                              width:expandedCols.has('poDesc')?200:28, minWidth:expandedCols.has('poDesc')?200:28,
+                              maxWidth:expandedCols.has('poDesc')?220:28, overflow:'hidden',
+                              padding:expandedCols.has('poDesc')?'3px 6px':'1px',
+                              fontSize:10, color:'#374151', wordBreak:'break-word', transition:'width .2s',
+                              verticalAlign:'top' }}>
+                              {expandedCols.has('poDesc') ? (row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
+                            </td>
                           </>
                         )}
 
                         {/* PO item cells */}
                         <td style={ptd('left',{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'})}>
                           {row.poItem ? row.poItem.name : '—'}
+                        </td>
+                        {/* PO Item Description (expandable) */}
+                        <td style={{ ...ptd('left'), width:expandedCols.has('poItemDesc')?180:28, minWidth:expandedCols.has('poItemDesc')?180:28,
+                          maxWidth:expandedCols.has('poItemDesc')?200:28, overflow:'hidden',
+                          padding:expandedCols.has('poItemDesc')?'3px 6px':'1px',
+                          fontSize:10, color:'#555', wordBreak:'break-word', transition:'width .2s' }}>
+                          {expandedCols.has('poItemDesc') ? (row.poItem?.desc || row.poItem?.description || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
                         </td>
                         <td style={ptd('right')}>{row.poItem ? fmtI(row.poItem.qty) : '—'}</td>
                         <td style={ptd('right')}>{row.poItem ? fmt(row.poItem.rate) : '—'}</td>
