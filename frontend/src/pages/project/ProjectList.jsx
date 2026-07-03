@@ -1102,7 +1102,7 @@ export default function ProjectList() {
   const pth = (align='left',w,ex={}) => ({...th(align,w,ex), background:PG, border:'1px solid #4a8a1a'});
   const td  = (align='left',ex={}) => ({
     padding:'2px 5px', fontSize:10, fontFamily:F, border:`1px solid ${BD}`,
-    verticalAlign:'middle', textAlign:align, whiteSpace:'nowrap', ...ex,
+    verticalAlign:'middle', textAlign:align, ...ex,
   });
   const ptd = (align='left',ex={}) => ({...td(align,ex)});
   const SOBg = idx => idx%2===0 ? '#ffffff' : '#f9f9f9';
@@ -1355,26 +1355,34 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
           </div>
 
           {/* ── Column Toggle Buttons ── */}
-          <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
-            <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:10, fontWeight:700, color:'#1a3a8a', marginRight:2, whiteSpace:'nowrap' }}>SO Columns:</span>
+          <div style={{ background:'#f8faff', border:`1px solid ${BD}`, borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:9, fontWeight:800, color:'#1a3a8a', marginRight:4, whiteSpace:'nowrap',
+                  textTransform:'uppercase', letterSpacing:0.5 }}>SO ▸</span>
                 {SO_BTNS.map(b => (
                   <button key={b.key} onClick={()=>tcv(b.key)}
-                    style={{ padding:'3px 9px', fontSize:10, fontWeight:600, borderRadius:4, cursor:'pointer', border:'none', fontFamily:F,
-                      background: cv(b.key) ? '#1a3a8a' : '#e5e7eb',
-                      color:      cv(b.key) ? '#fff'    : '#6b7280' }}>
+                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
+                      borderRadius:20, lineHeight:'18px',
+                      border: cv(b.key) ? '1.5px solid #1a3a8a' : '1.5px solid #d1d5db',
+                      background: cv(b.key) ? '#1a3a8a' : '#fff',
+                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
+                      transition:'all 0.1s' }}>
                     {b.label}
                   </button>
                 ))}
               </div>
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:10, fontWeight:700, color:'#1a5500', marginRight:2, whiteSpace:'nowrap' }}>PO Columns:</span>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:9, fontWeight:800, color:'#1a5500', marginRight:4, whiteSpace:'nowrap',
+                  textTransform:'uppercase', letterSpacing:0.5 }}>PO ▸</span>
                 {PO_BTNS.map(b => (
                   <button key={b.key} onClick={()=>tcv(b.key)}
-                    style={{ padding:'3px 9px', fontSize:10, fontWeight:600, borderRadius:4, cursor:'pointer', border:'none', fontFamily:F,
-                      background: cv(b.key) ? '#1a5500' : '#e5e7eb',
-                      color:      cv(b.key) ? '#fff'    : '#6b7280' }}>
+                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
+                      borderRadius:20, lineHeight:'18px',
+                      border: cv(b.key) ? '1.5px solid #1a5500' : '1.5px solid #d1d5db',
+                      background: cv(b.key) ? '#1a5500' : '#fff',
+                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
+                      transition:'all 0.1s' }}>
                     {b.label}
                   </button>
                 ))}
@@ -1389,7 +1397,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
             </div>
           ) : (
             <div style={{ overflow:'auto', maxHeight:'calc(100vh - 260px)', border:`1px solid ${BD}`, borderRadius:6 }}>
-              <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, minWidth:1400 }}>
+              <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
                 <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
                     <th colSpan={2+SO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
@@ -1400,8 +1408,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     </th>
                   </tr>
                   <tr>
-                    <th style={th('left','80px')}>Order ID ✎</th>
-                    <th style={th('left','110px')}>Client Name</th>
+                    <th style={th('left','90px')}>Order ID ✎</th>
+                    <th style={{ ...th('left','160px'), whiteSpace:'normal' }}>Client Name</th>
                     {cv('so_orderDesc') && <th style={th('left','180px')}>Order Desc</th>}
                     {cv('so_orderDate') && <th style={th('center','60px')}>Order Date</th>}
                     {cv('so_clientPO')  && <th style={th('left','90px')}>Client PO No</th>}
@@ -1478,8 +1486,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                 <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                                   <span
                                     onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
-                                    style={{ fontWeight:700, color:'#111827', cursor:'pointer',
-                                      textDecoration:'underline', textUnderlineOffset:2, fontSize:10 }}>
+                                    style={{ fontWeight:700, color:'#1a3a8a', cursor:'pointer', fontSize:10 }}>
                                     {row.so.orderNo || row.so.orderId}
                                   </span>
                                   <button
@@ -1495,9 +1502,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             {/* Client Name */}
                             <td rowSpan={row.rowCount}
                               onClick={() => setModal({ type:'so', order:row.so })}
-                              style={{ ...td('left'), fontWeight:700, color:'#111827', background:bg,
+                              style={{ ...td('left'), fontWeight:700, color:'#1a3a8a', background:bg,
                                 borderBottom:'2px solid #1a1a1a', cursor:'pointer',
-                                textDecoration:'underline', textUnderlineOffset:2 }}>
+                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
                             {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
@@ -1551,7 +1558,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             {cv('po_vendor') && <td rowSpan={row.rowCount}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
                               style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a', borderLeft:'2px solid #1a1a1a',
-                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#111827', textDecoration:'underline', textUnderlineOffset:2 } : { color:'#aaa', fontStyle:'italic' }) }}>
+                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160,
+                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#1a5500' } : { color:'#aaa', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
                             </td>}
                             {cv('po_date') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
