@@ -273,6 +273,29 @@ router.get('/dues', (req, res) => {
     const soMap = {};
     salesOrders.forEach(so => { soMap[String(so.orderId || so.id)] = so; });
 
+    // Security deposits — load once, used in clientDues below
+    const allDepositsForDues = (() => {
+      try {
+        const dir = coDir(companyId, 'Deposits');
+        if (!fs.existsSync(dir)) return [];
+        const results = [];
+        fs.readdirSync(dir).forEach(entry => {
+          const full = path.join(dir, entry);
+          try {
+            const stat = fs.statSync(full);
+            if (stat.isFile() && entry.endsWith('.json')) {
+              results.push(JSON.parse(fs.readFileSync(full, 'utf-8')));
+            } else if (stat.isDirectory()) {
+              fs.readdirSync(full).filter(f => f.endsWith('.json')).forEach(f => {
+                try { results.push(JSON.parse(fs.readFileSync(path.join(full, f), 'utf-8'))); } catch {}
+              });
+            }
+          } catch {}
+        });
+        return results;
+      } catch { return []; }
+    })();
+
     // Build credit-note → sales order map via linked bill
     const salesBillsList = readAllRecords(coDir(companyId, 'SalesBills'));
     const billToOrderMap = {};
@@ -313,8 +336,13 @@ router.get('/dues', (req, res) => {
           p.type === 'receipt' && p.status !== 'rejected' &&
           (String(p.orderId) === String(oid) || String(p.orderId) === String(o.voucherNumber))
         );
-        const received        = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-        const creditNotesAmt  = cnByOrder[String(oid)] || 0;
+        const linkedSecurityDeposits = allDepositsForDues.filter(d =>
+          d.depositType === 'Security' && d.status === 'active' && String(d.soId) === String(oid)
+        );
+        const paymentsReceived    = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+        const securityDepositAmt  = linkedSecurityDeposits.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
+        const received            = paymentsReceived + securityDepositAmt;
+        const creditNotesAmt      = cnByOrder[String(oid)] || 0;
         return {
           orderId:         oid,
           orderNo:         o.orderNo || o.voucherNumber || o.soNo || `SO-${oid}`,
@@ -326,6 +354,9 @@ router.get('/dues', (req, res) => {
           status:          o.status || 'approved',
           orderTotal,
           received,
+          paymentsReceived,
+          securityDepositAmt,
+          linkedSecurityDeposits,
           creditNotesAmt,
           linkedCreditNotes: cnRecsByOrder[String(oid)] || [],
           linkedPayments,

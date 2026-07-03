@@ -16,7 +16,7 @@ const DEPOSIT_TYPES = [
   { key:'BG',       label:'Bank Guarantee',   icon:'🏦', desc:'BG issued by bank on behalf of company to client' },
   { key:'EMD',      label:'EMD',               icon:'💵', desc:'Earnest Money Deposit via DD / payment' },
   { key:'FD',       label:'Fixed Deposit',     icon:'📋', desc:'FD placed as security with client or bank' },
-  { key:'Security', label:'Security Deposit',  icon:'🔐', desc:'Direct security deposit / payment to client' },
+  { key:'Security', label:'Security Deposit',  icon:'🔐', desc:'Amount withheld by client from sales bill' },
 ];
 
 const PAYMENT_MODES = ['Demand Draft (DD)', 'RTGS', 'NEFT', 'IMPS', 'Cheque', 'Cash'];
@@ -121,6 +121,7 @@ export default function DepositCreate() {
   const [paymentBank,  setPaymentBank]  = useState('');
   const [fdNo,         setFdNo]         = useState('');
   const [interestRate, setInterestRate] = useState('');
+  const [ackmNo,       setAckmNo]       = useState('');
 
   const [saving,  setSaving]  = useState(false);
   const [msg,     setMsg]     = useState({ text:'', ok:true });
@@ -158,6 +159,7 @@ export default function DepositCreate() {
       setIssuedToBankName(d.issuedToBankName||''); setIssuedToBankIfsc(d.issuedToBankIfsc||'');
       setAmount(d.amount||''); setPaymentMode(d.paymentMode||''); setPaymentRef(d.paymentRef||'');
       setPaymentBank(d.paymentBank||''); setFdNo(d.fdNo||''); setInterestRate(d.interestRate||'');
+      setAckmNo(d.ackmNo||'');
       setPdfFiles(d.pdfFiles||[]);
       setSavedDepositId(d.depositId);
     }).catch(()=>{});
@@ -199,7 +201,7 @@ export default function DepositCreate() {
       amount: depositType==='BG' ? bgAmount : amount,
       bgAmount: depositType==='BG' ? bgAmount : undefined,
       // EMD/FD/Security
-      paymentMode, paymentRef, paymentBank, fdNo, interestRate,
+      paymentMode, paymentRef, paymentBank, fdNo, interestRate, ackmNo,
     };
 
     try {
@@ -607,42 +609,67 @@ export default function DepositCreate() {
 
       {/* ══════ SECURITY DEPOSIT FIELDS ══════ */}
       {depositType==='Security' && (
-        <div style={card}>
-          <div style={SH('#7c3aed')}>Security Deposit Details</div>
-          <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-            <div>
-              <label style={lbl}>Amount (₹) *</label>
-              <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" min="0" step="0.01" style={{ ...inp(), textAlign:'right' }}/>
-            </div>
-            <div>
-              <label style={lbl}>Payment Mode *</label>
-              <select value={paymentMode} onChange={e=>setPaymentMode(e.target.value)} style={inp()}>
-                <option value="">Select…</option>
-                {PAYMENT_MODES.map(m=><option key={m}>{m}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lbl}>Payment Ref / DD No</label>
-              <input value={paymentRef} onChange={e=>setPaymentRef(e.target.value)} placeholder="Reference number" style={inp()}/>
-            </div>
-            <div>
-              <label style={lbl}>Bank Name</label>
-              <input value={paymentBank} onChange={e=>setPaymentBank(e.target.value)} placeholder="Bank name" style={inp()}/>
-            </div>
-            <div>
-              <label style={lbl}>Deposit Date *</label>
-              <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inp()}/>
-            </div>
-            <div>
-              <label style={lbl}>Expected Return Date</label>
-              <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inp()}/>
-            </div>
-            <div style={{ gridColumn:'span 3' }}>
-              <label style={lbl}>Remarks</label>
-              <input value={remarks} onChange={e=>setRemarks(e.target.value)} placeholder="Notes…" style={inp()}/>
+        <>
+          <div style={card}>
+            <div style={SH('#7c3aed')}>Security Deposit Details</div>
+            <div style={{ padding:'14px 16px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+              <div>
+                <label style={lbl}>Amount (₹) *</label>
+                <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" min="0" step="0.01" style={{ ...inp(), textAlign:'right' }}/>
+              </div>
+              <div>
+                <label style={lbl}>Ackm No / Advice No</label>
+                <input value={ackmNo} onChange={e=>setAckmNo(e.target.value)} placeholder="Acknowledgment / Advice number" style={inp()}/>
+              </div>
+              <div>
+                <label style={lbl}>SD Start Date *</label>
+                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inp()}/>
+              </div>
+              <div>
+                <label style={lbl}>SD End Date</label>
+                <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inp()}/>
+              </div>
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Remarks</label>
+                <input value={remarks} onChange={e=>setRemarks(e.target.value)} placeholder="Notes…" style={inp()}/>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* Security Deposit Document Upload */}
+          <div style={card}>
+            <div style={SH('#7c3aed')}>Document Upload (Optional)</div>
+            <div style={{ padding:'14px 16px' }}>
+              {pdfFiles.length > 0 && (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginBottom:6 }}>Uploaded Documents</div>
+                  {pdfFiles.map((f,i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 12px', background:'#f5f0ff', borderRadius:6, marginBottom:4 }}>
+                      <span style={{ fontSize:14 }}>📄</span>
+                      <span style={{ fontSize:12, color:'#374151', flex:1 }}>{f.name}</span>
+                      <a href={`/api/deposits/${savedDepositId||depositId}/docs/${f.file}?companyId=${cid}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ fontSize:11, color:'#7c3aed', fontWeight:600, textDecoration:'none' }}>Download</a>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <label style={{ flex:1 }}>
+                  <div style={{ border:`2px dashed #c4b5fd`, borderRadius:8, padding:'16px 20px', textAlign:'center', cursor:'pointer', background:uploadFile?'#f5f0ff':'#fafafa' }}>
+                    <div style={{ fontSize:20, marginBottom:4 }}>📎</div>
+                    <div style={{ fontSize:12, color:'#374151', fontWeight:600 }}>{uploadFile ? uploadFile.name : 'Click to upload document (PDF / Image)'}</div>
+                    <div style={{ fontSize:11, color:'#9ca3af', marginTop:2 }}>PDF, JPG, PNG — max 20MB</div>
+                  </div>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display:'none' }} onChange={e=>setUploadFile(e.target.files[0]||null)}/>
+                </label>
+                {uploadFile && (
+                  <button onClick={()=>setUploadFile(null)} style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:6, color:'#dc2626', padding:'6px 12px', cursor:'pointer', fontSize:12, fontWeight:700 }}>✕ Remove</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Actions */}

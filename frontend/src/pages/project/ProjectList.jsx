@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
@@ -12,7 +12,7 @@ const BD  = '#c8d4e8';
 const getFY = d => { const dt=d?new Date(d):new Date(); const m=dt.getMonth()+1; const y=dt.getFullYear(); const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 
 const fmt   = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-const fmtI  = n => { const v=parseFloat(n)||0; return v===0?'0':v.toLocaleString('en-IN'); };
+const fmtI  = n => { const v=parseFloat(n)||0; return v===0?'0':String(Math.round(v*100)/100); };
 const fmtD  = d => {
   if (!d) return '—';
   const dt = new Date(d);
@@ -86,11 +86,14 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
   const getDue  = po => po && (Array.isArray(vendorDues)?vendorDues:[])
     .find(d => String(d.orderId)===String(po.orderId) || d.orderNo===po.poNo);
 
-  const soItems    = so?.items || [];
-  const soPayments = soDue?.linkedPayments || [];
-  const soTotal    = parseFloat(so?.grandTotal||so?.amount)||0;
-  const soReceived = soPayments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
-  const soDueAmt   = soTotal - soReceived;
+  const soItems       = so?.items || [];
+  const soPayments    = soDue?.linkedPayments || [];
+  const soSecDeps     = soDue?.linkedSecurityDeposits || [];
+  const soTotal       = parseFloat(so?.grandTotal||so?.amount)||0;
+  const soPayReceived = soDue?.paymentsReceived ?? soPayments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const soSecDepAmt   = soDue?.securityDepositAmt ?? soSecDeps.reduce((s,d)=>s+(parseFloat(d.amount)||0),0);
+  const soReceived    = soDue?.received ?? (soPayReceived + soSecDepAmt);
+  const soDueAmt      = soTotal - soReceived;
 
   const PB  = '#1a4a9a';
   const PG2 = '#1a6600';
@@ -135,11 +138,12 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
       {/* Financial cards */}
       <div style={{ display:'flex', gap:10, marginBottom:16 }}>
         {[
-          { label:'Order Value',  val:`₹${fmt(soTotal)}`,    color:PB },
-          { label:'Received',     val:`₹${fmt(soReceived)}`, color:'#2e7d32' },
-          { label:'Balance Due',  val:`₹${fmt(soDueAmt)}`,   color:soDueAmt>0?'#b71c1c':'#2e7d32' },
+          { label:'Order Value',     val:`₹${fmt(soTotal)}`,       color:PB,        bg:'#f0f5ff', bd:'#c8d8f0' },
+          { label:'Receipts',        val:`₹${fmt(soPayReceived)}`, color:'#2e7d32', bg:'#f0fff4', bd:'#c8e6c9' },
+          ...(soSecDepAmt>0 ? [{ label:'Security Held by Client', val:`₹${fmt(soSecDepAmt)}`, color:'#c2410c', bg:'#fff8f0', bd:'#f5c6a0' }] : []),
+          { label:'Balance Due',     val:`₹${fmt(soDueAmt)}`,      color:soDueAmt>0?'#b71c1c':'#2e7d32', bg:soDueAmt>0?'#fff5f5':'#f0fff4', bd:soDueAmt>0?'#fccaca':'#c8e6c9' },
         ].map(c=>(
-          <div key={c.label} style={{ flex:1, background:'#f0f5ff', border:'1px solid #c8d8f0',
+          <div key={c.label} style={{ flex:1, background:c.bg, border:`1px solid ${c.bd}`,
             borderRadius:7, padding:'9px 14px', textAlign:'center' }}>
             <div style={{ fontSize:9, color:'#888', marginBottom:3 }}>{c.label}</div>
             <div style={{ fontSize:16, fontWeight:800, color:c.color }}>{c.val}</div>
@@ -190,9 +194,9 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
       {/* Receipt history */}
       <SH color='#2e7d32'>Receipt History ({soPayments.length})</SH>
       {soPayments.length===0 ? (
-        <div style={{ padding:'10px 0', color:'#aaa', fontStyle:'italic', fontSize:11 }}>No receipts recorded yet.</div>
+        <div style={{ padding:'6px 0', color:'#aaa', fontStyle:'italic', fontSize:11 }}>No receipts recorded yet.</div>
       ) : (
-        <div style={{ border:'1px solid #c8e6c9', borderRadius:6, overflow:'hidden' }}>
+        <div style={{ border:'1px solid #c8e6c9', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10.5 }}>
             <thead>
               <tr style={{ background:'#e8f5e9' }}>
@@ -215,17 +219,68 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr style={{ background:'#e8f5e9', fontWeight:700 }}>
-                <td colSpan={2} style={{ padding:'5px 8px', borderTop:'1px solid #c8e6c9', fontSize:10 }}>Total Received</td>
-                <td style={{ padding:'5px 8px', borderTop:'1px solid #c8e6c9', textAlign:'right', color:'#2e7d32', fontSize:13 }}>₹{fmt(soReceived)}</td>
-                <td colSpan={4} style={{ padding:'5px 8px', borderTop:'1px solid #c8e6c9', textAlign:'right',
-                  color:soDueAmt>0?'#b71c1c':'#2e7d32', fontSize:11 }}>Balance Due: ₹{fmt(soDueAmt)}</td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       )}
+
+      {/* Security Deposit held by client */}
+      {soSecDeps.length > 0 && (
+        <>
+          <SH color='#7b3f00'>Security Deposit (held by client — {soSecDeps.length})</SH>
+          <div style={{ border:'1px solid #f5c6a0', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10.5 }}>
+              <thead>
+                <tr style={{ background:'#fff3e0' }}>
+                  {['#','Date','Amount (₹)','Mode','Ref / DD No','Bank','Status'].map((h,i)=>(
+                    <th key={h} style={{ padding:'5px 8px', textAlign:i===2?'right':'left', fontSize:9,
+                      fontWeight:700, color:'#7b3f00', borderBottom:'1px solid #f5c6a0' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {soSecDeps.map((d,i)=>(
+                  <tr key={i} style={{ background:i%2===0?'#fff':'#fff8f0' }}>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0', color:'#aaa', width:28 }}>{i+1}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0', whiteSpace:'nowrap' }}>{fmtD(d.startDate||d.createdAt)}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0', textAlign:'right', fontWeight:700, color:'#c2410c', fontSize:12 }}>₹{fmt(d.amount)}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0' }}>{d.paymentMode||'—'}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0', fontFamily:'monospace', fontSize:9, color:'#555' }}>{d.paymentRef||'—'}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0' }}>{d.paymentBank||'—'}</td>
+                    <td style={{ padding:'5px 8px', borderBottom:'1px solid #f5e6d0' }}>
+                      <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3,
+                        background:'#fef3c7', color:'#92400e' }}>Active</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Summary row */}
+      <div style={{ display:'flex', gap:6, marginTop:4, padding:'8px 10px', background:'#f8faff', borderRadius:6, border:'1px solid #e5eaf2' }}>
+        {soPayments.length > 0 && (
+          <div style={{ flex:1, textAlign:'center' }}>
+            <div style={{ fontSize:9, color:'#888' }}>Receipts</div>
+            <div style={{ fontSize:13, fontWeight:700, color:'#2e7d32' }}>₹{fmt(soPayReceived)}</div>
+          </div>
+        )}
+        {soSecDepAmt > 0 && (
+          <div style={{ flex:1, textAlign:'center' }}>
+            <div style={{ fontSize:9, color:'#888' }}>Security Held</div>
+            <div style={{ fontSize:13, fontWeight:700, color:'#c2410c' }}>₹{fmt(soSecDepAmt)}</div>
+          </div>
+        )}
+        <div style={{ flex:1, textAlign:'center' }}>
+          <div style={{ fontSize:9, color:'#888' }}>Total Received</div>
+          <div style={{ fontSize:13, fontWeight:700, color:'#2e7d32' }}>₹{fmt(soReceived)}</div>
+        </div>
+        <div style={{ flex:1, textAlign:'center' }}>
+          <div style={{ fontSize:9, color:'#888' }}>Balance Due</div>
+          <div style={{ fontSize:13, fontWeight:800, color:soDueAmt>0?'#b71c1c':'#2e7d32' }}>₹{fmt(soDueAmt)}</div>
+        </div>
+      </div>
     </div>
   );
 
@@ -904,6 +959,7 @@ export default function ProjectList() {
 
   const [salesOrders,    setSalesOrders]    = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [expenses,       setExpenses]       = useState([]);
   const [purchaseBills,  setPurchaseBills]  = useState([]);
   const [salesBills,     setSalesBills]     = useState([]);
   const [clientDues,     setClientDues]     = useState([]);
@@ -917,8 +973,18 @@ export default function ProjectList() {
   const [modal,          setModal]          = useState(null); // {type:'so'|'po', order}
   const [rowModal,       setRowModal]       = useState(null); // {so, po, poBill, soDue, poDue}
   const [editingId,      setEditingId]      = useState(null); // { soId, value } — inline order-no edit
+  const tableRef = useRef(null);
+  const onRowEnter = useCallback((soId) => {
+    if (!tableRef.current) return;
+    tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`).forEach(td => td.classList.add('row-hov'));
+  }, []);
+  const onRowLeave = useCallback((soId) => {
+    if (!tableRef.current) return;
+    tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`).forEach(td => td.classList.remove('row-hov'));
+  }, []);
   const [hiddenCols, setHiddenCols] = useState(
-    new Set(['so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc','po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc'])
+    new Set(['so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc','po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc',
+             'exp_mode','exp_gstPct','exp_gstAmt'])
   );
   const cv  = key => !hiddenCols.has(key);
   const tcv = key => setHiddenCols(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -947,23 +1013,33 @@ export default function ProjectList() {
     { key:'po_purchNo',   label:'Purch No'   }, { key:'po_amount',    label:'Amount'    },
     { key:'po_gstStatus', label:'GST Status' },
   ];
+  const EXP_BTNS = [
+    { key:'exp_date',   label:'Date'         },
+    { key:'exp_desc',   label:'Description'  },
+    { key:'exp_vendor', label:'Vendor / By'  },
+    { key:'exp_mode',   label:'Pay Mode'     },
+    { key:'exp_gstPct', label:'GST%'         },
+    { key:'exp_gstAmt', label:'GST Amt'      },
+  ];
 
   const load = useCallback(async () => {
     if (!cid) return;
     setLoading(true); setError('');
     try {
-      const [soR, poR, duesR, prR, pbR, sbR] = await Promise.all([
+      const [soR, poR, duesR, prR, pbR, sbR, expR] = await Promise.all([
         axios.get(`/api/sales-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/purchase-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/accounts/dues?companyId=${cid}`).catch(()=>({data:{}})),
         axios.get(`/api/projects?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/bills?companyId=${cid}&type=purchase`).catch(()=>({data:[]})),
         axios.get(`/api/bills?companyId=${cid}&type=sales`).catch(()=>({data:[]})),
+        axios.get(`/api/accounts/expenses?companyId=${cid}`).catch(()=>({data:[]})),
       ]);
       setSalesOrders((soR.data||[]).filter(o => !o.tallyImported && !['draft','rejected'].includes(o.status)));
       setPurchaseOrders(poR.data||[]);
       setPurchaseBills(pbR.data||[]);
       setSalesBills(sbR.data||[]);
+      setExpenses(expR.data||[]);
       const { clientDues:cd=[], vendorDues:vd=[] } = duesR.data || {};
       setClientDues(Array.isArray(cd) ? cd : []);
       setVendorDues(Array.isArray(vd) ? vd : []);
@@ -1030,16 +1106,26 @@ export default function ProjectList() {
   }, [salesOrders, fy, search]);
 
   /* ── Build flat rows ── */
+  const expByOrderId = {};
+  for (const ex of expenses) {
+    const k = String(ex.orderId || '');
+    if (!k) continue;
+    if (!expByOrderId[k]) expByOrderId[k] = [];
+    expByOrderId[k].push(ex);
+  }
+
   const allRows = [];
   const GT = { soTotal:0, pnf:0, transport:0, soTaxable:0, soGst:0, soOV:0, receipt:0, dues:0,
-               poTotal:0, otherC:0, poTaxable:0, poGst:0, poOV:0, payment:0, poDues:0 };
+               poTotal:0, otherC:0, poTaxable:0, poGst:0, poOV:0, payment:0, poDues:0,
+               expTotal:0, expGst:0, expCount:0 };
 
   for (const so of filteredSOs) {
     const pos       = linkedPOs(so.orderId);
     const firstPO   = pos[0] || null;
     const soItems   = (so.items||[]).map(normSOItem);
     const poItems   = firstPO ? (firstPO.items||[]).map(normPOItem) : [];
-    const rowCount  = Math.max(soItems.length, 1);
+    const soExps2   = expByOrderId[String(so.orderId)] || [];
+    const rowCount  = Math.max(soItems.length, 1, soExps2.length);
     const pnf       = parseFloat(so.packingCharges)||0;
     const transport = parseFloat(so.freightCharges)||0;
     const otherC    = firstPO ? (parseFloat(firstPO.packingCharges)||0)+(parseFloat(firstPO.freightCharges)||0) : 0;
@@ -1059,6 +1145,9 @@ export default function ProjectList() {
     GT.otherC    += otherC;
     GT.payment   += payment;
     GT.poDues    += poBalance;
+    GT.expTotal  += soExps2.reduce((s,e) => s+(parseFloat(e.grandTotal||e.amount)||0), 0);
+    GT.expGst    += soExps2.reduce((s,e) => s+(parseFloat(e.amount)||0)*(parseFloat(e.taxRate)||0)/100, 0);
+    GT.expCount  += soExps2.length;
 
     for (let i=0; i<rowCount; i++) {
       const soIt = soItems[i];
@@ -1088,23 +1177,39 @@ export default function ProjectList() {
         receipt, soBalance, payment, poBalance,
         soDue, poDue, poBill: i===0 ? poBill : null,
         salesBill: i===0 ? salesBill : null,
+        expItem: soExps2[i] || null,
       });
     }
   }
 
   /* ── Cell styles ── */
   const th  = (align='left',w,ex={}) => ({
-    padding:'3px 5px', background:P, color:'#fff',
-    fontSize:9, fontWeight:700, textAlign:align,
-    border:'1px solid #3a6abf', whiteSpace:'nowrap',
+    padding:'4px 6px', background:'#3d8b40', color:'#fff',
+    fontSize:11, fontWeight:700, textAlign:align,
+    border:'1px solid #2e7d32', whiteSpace:'nowrap',
     ...(w?{width:w,minWidth:w}:{}), ...ex,
   });
-  const pth = (align='left',w,ex={}) => ({...th(align,w,ex), background:PG, border:'1px solid #4a8a1a'});
+  const pth = (align='left',w,ex={}) => ({
+    padding:'4px 6px', background:'#d32f2f', color:'#fff',
+    fontSize:11, fontWeight:700, textAlign:align,
+    border:'1px solid #b71c1c', whiteSpace:'nowrap',
+    ...(w?{width:w,minWidth:w}:{}), ...ex,
+  });
   const td  = (align='left',ex={}) => ({
     padding:'2px 5px', fontSize:10, fontFamily:F, border:`1px solid ${BD}`,
     verticalAlign:'middle', textAlign:align, ...ex,
   });
   const ptd = (align='left',ex={}) => ({...td(align,ex)});
+  const etd = (align='left',ex={}) => ({
+    padding:'2px 5px', fontSize:10, fontFamily:F, border:'1px solid #fed7aa',
+    verticalAlign:'middle', textAlign:align, ...ex,
+  });
+  const eth = (align='left',w,ex={}) => ({
+    padding:'4px 6px', background:'#f97316', color:'#fff',
+    fontSize:11, fontWeight:700, textAlign:align,
+    border:'1px solid #ea580c', whiteSpace:'nowrap',
+    ...(w?{width:w,minWidth:w}:{}), ...ex,
+  });
   const SOBg = idx => idx%2===0 ? '#ffffff' : '#f9f9f9';
 
   /* ── Projects view ── */
@@ -1117,6 +1222,10 @@ export default function ProjectList() {
 
   return (
     <div style={{ fontFamily:F, fontSize:11, padding:8 }}>
+      <style>{`
+        .proj-row td { transition: background-color 0.28s ease; }
+        .proj-row td.row-hov { background-color: #dbeafe !important; }
+      `}</style>
 
       {/* ── Header ── */}
       <div style={{ background:P, color:'#fff', padding:'6px 12px',
@@ -1363,7 +1472,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                 {SO_BTNS.map(b => (
                   <button key={b.key} onClick={()=>tcv(b.key)}
                     style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
-                      borderRadius:20, lineHeight:'18px',
+                      borderRadius:4, lineHeight:'18px',
                       border: cv(b.key) ? '1.5px solid #1a3a8a' : '1.5px solid #d1d5db',
                       background: cv(b.key) ? '#1a3a8a' : '#fff',
                       color:      cv(b.key) ? '#fff'    : '#9ca3af',
@@ -1378,9 +1487,24 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                 {PO_BTNS.map(b => (
                   <button key={b.key} onClick={()=>tcv(b.key)}
                     style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
-                      borderRadius:20, lineHeight:'18px',
+                      borderRadius:4, lineHeight:'18px',
                       border: cv(b.key) ? '1.5px solid #1a5500' : '1.5px solid #d1d5db',
                       background: cv(b.key) ? '#1a5500' : '#fff',
+                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
+                      transition:'all 0.1s' }}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:9, fontWeight:800, color:'#c2410c', marginRight:4, whiteSpace:'nowrap',
+                  textTransform:'uppercase', letterSpacing:0.5 }}>EXP ▸</span>
+                {EXP_BTNS.map(b => (
+                  <button key={b.key} onClick={()=>tcv(b.key)}
+                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
+                      borderRadius:4, lineHeight:'18px',
+                      border: cv(b.key) ? '1.5px solid #ea580c' : '1.5px solid #d1d5db',
+                      background: cv(b.key) ? '#ea580c' : '#fff',
                       color:      cv(b.key) ? '#fff'    : '#9ca3af',
                       transition:'all 0.1s' }}>
                     {b.label}
@@ -1397,19 +1521,22 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
             </div>
           ) : (
             <div style={{ overflow:'auto', maxHeight:'calc(100vh - 260px)', border:`1px solid ${BD}`, borderRadius:6 }}>
-              <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
+              <table ref={tableRef} style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
                 <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
-                    <th colSpan={2+SO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
+                    <th colSpan={2+SO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#c8e6c9', color:'#1b5e20', fontSize:12, fontWeight:800, padding:'5px 8px', borderRight:'2px solid #fff', letterSpacing:1 }}>
                       SALES ORDER
                     </th>
-                    <th colSpan={PO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#1a5500', fontSize:10, padding:'4px 8px' }}>
+                    <th colSpan={PO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#ffcdd2', color:'#b71c1c', fontSize:12, fontWeight:800, padding:'5px 8px', letterSpacing:1 }}>
                       PURCHASE ORDER
+                    </th>
+                    <th colSpan={1+EXP_BTNS.filter(b=>cv(b.key)).length} style={{ padding:'5px 8px', background:'#fff3e0', color:'#e65100', fontSize:12, fontWeight:800, textAlign:'center', border:'1px solid #ffb74d', letterSpacing:1 }}>
+                      EXPENSES
                     </th>
                   </tr>
                   <tr>
-                    <th style={th('left','90px')}>Order ID ✎</th>
-                    <th style={{ ...th('left','160px'), whiteSpace:'normal' }}>Client Name</th>
+                    <th style={{ ...th('left','90px'), position:'sticky', left:0, zIndex:12 }}>Order ID ✎</th>
+                    <th style={{ ...th('left','160px'), whiteSpace:'normal', position:'sticky', left:92, zIndex:12 }}>Client Name</th>
                     {cv('so_orderDesc') && <th style={th('left','180px')}>Order Desc</th>}
                     {cv('so_orderDate') && <th style={th('center','60px')}>Order Date</th>}
                     {cv('so_clientPO')  && <th style={th('left','90px')}>Client PO No</th>}
@@ -1450,25 +1577,39 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     {cv('po_purchNo')   && <th style={pth('left','90px')}>Purch. No</th>}
                     {cv('po_amount')    && <th style={pth('right','85px')}>Amount</th>}
                     {cv('po_gstStatus') && <th style={pth('center','65px')}>GST Status</th>}
+                    {cv('exp_date')   && <th style={eth('center','65px')}>Date</th>}
+                    <th style={eth('left','90px')}>Category</th>
+                    {cv('exp_desc')   && <th style={eth('left','140px')}>Description</th>}
+                    {cv('exp_vendor') && <th style={eth('left','100px')}>Vendor / By</th>}
+                    {cv('exp_mode')   && <th style={eth('left','70px')}>Pay Mode</th>}
+                    {cv('exp_gstPct') && <th style={eth('center','40px')}>GST%</th>}
+                    {cv('exp_gstAmt') && <th style={eth('right','70px')}>GST Amt</th>}
+                    <th style={eth('right','85px')}>Amount (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {allRows.map(row => {
-                    const soIdx = filteredSOs.indexOf(row.so);
-                    const bg    = SOBg(soIdx);
-                    const poBg  = bg;
+                    const soIdx  = filteredSOs.indexOf(row.so);
+                    const bg     = SOBg(soIdx);
+                    const poBg   = bg;
+                    const soId   = row.so.orderId || row.so._id;
 
                     return (
-                      <tr key={row.key} style={{
-                        background:bg,
-                        borderTop:    row.isFirst ? '2px solid #1a1a1a' : undefined,
-                        borderBottom: row.isLast  ? '2px solid #1a1a1a' : undefined,
-                      }}>
+                      <tr key={row.key} className="proj-row"
+                        data-soid={soId}
+                        onMouseEnter={() => onRowEnter(soId)}
+                        onMouseLeave={() => onRowLeave(soId)}
+                        style={{
+                          background:bg,
+                          borderTop:    row.isFirst ? '2px solid #1a1a1a' : undefined,
+                          borderBottom: row.isLast  ? '2px solid #1a1a1a' : undefined,
+                        }}>
                         {row.isFirst && (
                           <>
                             {/* ── Order ID — click to open detail, double-click to edit order no ── */}
                             <td rowSpan={row.rowCount}
-                              style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a', padding:'2px 4px', borderLeft:'2px solid #1a1a1a' }}>
+                              style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a', padding:'2px 4px', borderLeft:'2px solid #1a1a1a',
+                                position:'sticky', left:0, zIndex:2 }}>
                               {editingId?.soId === row.so.orderId ? (
                                 <input
                                   autoFocus
@@ -1504,7 +1645,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                               onClick={() => setModal({ type:'so', order:row.so })}
                               style={{ ...td('left'), fontWeight:700, color:'#1a3a8a', background:bg,
                                 borderBottom:'2px solid #1a1a1a', cursor:'pointer',
-                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160 }}>
+                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160,
+                                position:'sticky', left:92, zIndex:2 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
                             {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
@@ -1602,6 +1744,28 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             {cv('po_gstStatus') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a', borderRight:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
                           </>
                         )}
+
+                        {/* EXP per-row cells */}
+                        {(() => {
+                          const ex = row.expItem;
+                          const expBase   = parseFloat(ex?.amount) || 0;
+                          const expGstPct = parseFloat(ex?.taxRate) || 0;
+                          const expGstAmt = expBase * expGstPct / 100;
+                          const expTotal  = parseFloat(ex?.grandTotal) || (expBase + expGstAmt) || 0;
+                          const expBg     = ex ? '#fff8f0' : 'transparent';
+                          return (<>
+                            {cv('exp_date')   && <td style={{ ...etd('center'), background:expBg }}>{ex ? fmtD(ex.date||ex.expenseDate||ex.createdAt) : ''}</td>}
+                            <td style={{ ...etd('left'), background:expBg, borderLeft:row.isFirst?'2px solid #e65100':undefined, fontWeight: ex?600:400, color: ex?'#7c3700':'#ccc' }}>
+                              {ex ? (ex.expenseCategory||ex.category||'—') : ''}
+                            </td>
+                            {cv('exp_desc')   && <td style={{ ...etd('left'), background:expBg, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ex?.description||''}</td>}
+                            {cv('exp_vendor') && <td style={{ ...etd('left'), background:expBg }}>{ex?.vendor||''}</td>}
+                            {cv('exp_mode')   && <td style={{ ...etd('left'), background:expBg }}>{ex?.paymentMode||''}</td>}
+                            {cv('exp_gstPct') && <td style={{ ...etd('center'), background:expBg }}>{ex ? (expGstPct?expGstPct+'%':'No GST') : ''}</td>}
+                            {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:expBg }}>{ex && expGstAmt ? fmt(expGstAmt) : (ex?'—':'')}</td>}
+                            <td style={{ ...etd('right'), background:expBg, fontWeight:700, color: ex?'#c2410c':'#ccc' }}>{ex ? fmt(expTotal) : ''}</td>
+                          </>);
+                        })()}
                       </tr>
                     );
                   })}
@@ -1656,6 +1820,14 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     {cv('po_purchNo')   && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
                     {cv('po_amount')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
                     {cv('po_gstStatus') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('exp_date')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
+                    <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>
+                    {cv('exp_desc')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
+                    {cv('exp_vendor') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
+                    {cv('exp_mode')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
+                    {cv('exp_gstPct') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
+                    {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'2px solid #fb923c', color:'#7c3700' }}>{GT.expGst?fmt(GT.expGst):'—'}</td>}
+                    <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'2px solid #fb923c', fontWeight:800, color:'#c2410c' }}>{GT.expTotal?fmt(GT.expTotal):'—'}</td>
                   </tr>
                 </tfoot>
               </table>
