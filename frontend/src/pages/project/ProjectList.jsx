@@ -917,8 +917,36 @@ export default function ProjectList() {
   const [modal,          setModal]          = useState(null); // {type:'so'|'po', order}
   const [rowModal,       setRowModal]       = useState(null); // {so, po, poBill, soDue, poDue}
   const [editingId,      setEditingId]      = useState(null); // { soId, value } — inline order-no edit
-  const [expandedCols,   setExpandedCols]   = useState(new Set());
-  const toggleCol = name => setExpandedCols(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+  const [hiddenCols, setHiddenCols] = useState(
+    new Set(['so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc','po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc'])
+  );
+  const cv  = key => !hiddenCols.has(key);
+  const tcv = key => setHiddenCols(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+  const SO_BTNS = [
+    { key:'so_orderDate', label:'Order Date' }, { key:'so_clientPO',  label:'Client PO' },
+    { key:'so_dueDate',   label:'Due Date'   }, { key:'so_orderDesc', label:'Order Desc'},
+    { key:'so_itemDesc',  label:'Prod Desc'  }, { key:'so_qty',       label:'Qty'       },
+    { key:'so_rate',      label:'Rate'       }, { key:'so_total',     label:'Total'     },
+    { key:'so_pnf',       label:'P&F'        }, { key:'so_transport', label:'Transport' },
+    { key:'so_taxable',   label:'Taxable'    }, { key:'so_gstPct',    label:'GST%'      },
+    { key:'so_gstAmt',    label:'GST Amt'    }, { key:'so_ov',        label:'Order Val' },
+    { key:'so_receipt',   label:'Receipt'    }, { key:'so_dues',      label:'Dues'      },
+    { key:'so_billDate',  label:'Bill Date'  }, { key:'so_billNo',    label:'Bill No'   },
+    { key:'so_status',    label:'Status'     },
+  ];
+  const PO_BTNS = [
+    { key:'po_vendor',    label:'Vendor'     }, { key:'po_date',      label:'PO Date'   },
+    { key:'po_no',        label:'PO No'      }, { key:'po_poDesc',    label:'PO Desc'   },
+    { key:'po_itemDesc',  label:'Prod Desc'  }, { key:'po_qty',       label:'Qty'       },
+    { key:'po_rate',      label:'Rate'       }, { key:'po_total',     label:'Total'     },
+    { key:'po_otherChg',  label:'Other Chg'  }, { key:'po_taxable',   label:'Taxable'   },
+    { key:'po_gstPct',    label:'GST%'       }, { key:'po_gstAmt',    label:'GST Amt'   },
+    { key:'po_ov',        label:'Order Val'  }, { key:'po_payment',   label:'Payment'   },
+    { key:'po_dues',      label:'PO Dues'    }, { key:'po_purchDate', label:'Purch Date' },
+    { key:'po_purchNo',   label:'Purch No'   }, { key:'po_amount',    label:'Amount'    },
+    { key:'po_gstStatus', label:'GST Status' },
+  ];
 
   const load = useCallback(async () => {
     if (!cid) return;
@@ -1326,87 +1354,94 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
             </span>
           </div>
 
+          {/* ── Column Toggle Buttons ── */}
+          <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:10, fontWeight:700, color:'#1a3a8a', marginRight:2, whiteSpace:'nowrap' }}>SO Columns:</span>
+                {SO_BTNS.map(b => (
+                  <button key={b.key} onClick={()=>tcv(b.key)}
+                    style={{ padding:'3px 9px', fontSize:10, fontWeight:600, borderRadius:4, cursor:'pointer', border:'none', fontFamily:F,
+                      background: cv(b.key) ? '#1a3a8a' : '#e5e7eb',
+                      color:      cv(b.key) ? '#fff'    : '#6b7280' }}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:10, fontWeight:700, color:'#1a5500', marginRight:2, whiteSpace:'nowrap' }}>PO Columns:</span>
+                {PO_BTNS.map(b => (
+                  <button key={b.key} onClick={()=>tcv(b.key)}
+                    style={{ padding:'3px 9px', fontSize:10, fontWeight:600, borderRadius:4, cursor:'pointer', border:'none', fontFamily:F,
+                      background: cv(b.key) ? '#1a5500' : '#e5e7eb',
+                      color:      cv(b.key) ? '#fff'    : '#6b7280' }}>
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {filteredSOs.length===0 ? (
             <div style={{ padding:40, textAlign:'center', color:'#888', fontStyle:'italic',
               background:'#fafafa', borderRadius:8, border:`1px solid ${BD}` }}>
               No sales orders found.
             </div>
           ) : (
-            <div style={{ overflow:'auto', maxHeight:'calc(100vh - 200px)', border:`1px solid ${BD}`, borderRadius:6 }}>
+            <div style={{ overflow:'auto', maxHeight:'calc(100vh - 260px)', border:`1px solid ${BD}`, borderRadius:6 }}>
               <table style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, minWidth:1400 }}>
                 <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
-                    <th colSpan={23} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
+                    <th colSpan={2+SO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#1a3a8a', fontSize:10, padding:'4px 8px', borderRight:'2px solid #fff' }}>
                       SALES ORDER
                     </th>
-                    <th colSpan={20} style={{ ...th('center'), background:'#1a5500', fontSize:10, padding:'4px 8px' }}>
+                    <th colSpan={PO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#1a5500', fontSize:10, padding:'4px 8px' }}>
                       PURCHASE ORDER
                     </th>
                   </tr>
                   <tr>
                     <th style={th('left','80px')}>Order ID ✎</th>
                     <th style={th('left','110px')}>Client Name</th>
-                    <th onClick={()=>toggleCol('soDesc')} title="Click to expand Order Description"
-                      style={{ ...th('center'), width:expandedCols.has('soDesc')?200:28, minWidth:expandedCols.has('soDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
-                      {expandedCols.has('soDesc')
-                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Order Desc</span>
-                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Order Description</div>}
-                    </th>
-                    <th style={th('center','60px')}>Order Date</th>
-                    <th style={th('left','90px')}>Client PO No</th>
-                    <th style={th('center','60px')}>Due Date</th>
+                    {cv('so_orderDesc') && <th style={th('left','180px')}>Order Desc</th>}
+                    {cv('so_orderDate') && <th style={th('center','60px')}>Order Date</th>}
+                    {cv('so_clientPO')  && <th style={th('left','90px')}>Client PO No</th>}
+                    {cv('so_dueDate')   && <th style={th('center','60px')}>Due Date</th>}
                     <th style={th('left','130px')}>Product</th>
-                    <th onClick={()=>toggleCol('soItemDesc')} title="Click to expand Product Description"
-                      style={{ ...th('center'), width:expandedCols.has('soItemDesc')?180:28, minWidth:expandedCols.has('soItemDesc')?180:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
-                      {expandedCols.has('soItemDesc')
-                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Desc</span>
-                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
-                    </th>
-                    <th style={th('right','35px')}>Qty</th>
-                    <th style={th('right','70px')}>Rate</th>
-                    <th style={th('right','80px')}>Total</th>
-                    <th style={th('right','45px')}>P&amp;F</th>
-                    <th style={th('right','45px')}>Insured</th>
-                    <th style={th('right','55px')}>Transport</th>
-                    <th style={th('right','80px')}>Taxable</th>
-                    <th style={th('center','38px')}>GST %</th>
-                    <th style={th('right','70px')}>GST Amt</th>
-                    <th style={th('right','85px')}>Order Value</th>
-                    <th style={th('right','70px')}>Receipt</th>
-                    <th style={th('right','70px')}>Dues</th>
-                    <th style={th('center','60px')}>Sales Date</th>
-                    <th style={th('left','70px')}>Sales Bill</th>
-                    <th style={{ ...th('center','60px'), borderRight:'2px solid #5a7abf' }}>Status</th>
-                    <th style={pth('left','100px')}>Vendor</th>
-                    <th style={pth('center','60px')}>PO Date</th>
-                    <th style={pth('left','90px')}>PO No</th>
-                    <th onClick={()=>toggleCol('poDesc')} title="Click to expand PO Description"
-                      style={{ ...pth('center'), width:expandedCols.has('poDesc')?200:28, minWidth:expandedCols.has('poDesc')?200:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
-                      {expandedCols.has('poDesc')
-                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ PO Desc</span>
-                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>PO Description</div>}
-                    </th>
+                    {cv('so_itemDesc')  && <th style={th('left','160px')}>Prod Desc</th>}
+                    {cv('so_qty')       && <th style={th('right','35px')}>Qty</th>}
+                    {cv('so_rate')      && <th style={th('right','70px')}>Rate</th>}
+                    {cv('so_total')     && <th style={th('right','80px')}>Total</th>}
+                    {cv('so_pnf')       && <th style={th('right','45px')}>P&amp;F</th>}
+                    {cv('so_transport') && <th style={th('right','55px')}>Transport</th>}
+                    {cv('so_taxable')   && <th style={th('right','80px')}>Taxable</th>}
+                    {cv('so_gstPct')    && <th style={th('center','38px')}>GST %</th>}
+                    {cv('so_gstAmt')    && <th style={th('right','70px')}>GST Amt</th>}
+                    {cv('so_ov')        && <th style={th('right','85px')}>Order Value</th>}
+                    {cv('so_receipt')   && <th style={th('right','70px')}>Receipt</th>}
+                    {cv('so_dues')      && <th style={th('right','70px')}>Dues</th>}
+                    {cv('so_billDate')  && <th style={th('center','60px')}>Bill Date</th>}
+                    {cv('so_billNo')    && <th style={th('left','70px')}>Bill No</th>}
+                    {cv('so_status')    && <th style={{ ...th('center','60px'), borderRight:'2px solid #5a7abf' }}>Status</th>}
+                    {cv('po_vendor')    && <th style={pth('left','100px')}>Vendor</th>}
+                    {cv('po_date')      && <th style={pth('center','60px')}>PO Date</th>}
+                    {cv('po_no')        && <th style={pth('left','90px')}>PO No</th>}
+                    {cv('po_poDesc')    && <th style={pth('left','180px')}>PO Desc</th>}
                     <th style={pth('left','130px')}>Product</th>
-                    <th onClick={()=>toggleCol('poItemDesc')} title="Click to expand PO Product Description"
-                      style={{ ...pth('center'), width:expandedCols.has('poItemDesc')?180:28, minWidth:expandedCols.has('poItemDesc')?180:28, cursor:'pointer', userSelect:'none', padding:'2px', overflow:'hidden', transition:'width .2s' }}>
-                      {expandedCols.has('poItemDesc')
-                        ? <span style={{fontSize:9,whiteSpace:'nowrap'}}>◀ Product Desc</span>
-                        : <div style={{writingMode:'vertical-rl',transform:'rotate(180deg)',whiteSpace:'nowrap',fontSize:9}}>Product Description</div>}
-                    </th>
-                    <th style={pth('right','35px')}>Qty</th>
-                    <th style={pth('right','70px')}>Rate</th>
-                    <th style={pth('right','80px')}>Total</th>
-                    <th style={pth('right','70px')}>Other Chg</th>
-                    <th style={pth('right','80px')}>Taxable</th>
-                    <th style={pth('center','38px')}>GST %</th>
-                    <th style={pth('right','70px')}>GST Amt</th>
-                    <th style={pth('right','85px')}>Order Value</th>
-                    <th style={pth('right','70px')}>Payment</th>
-                    <th style={pth('right','70px')}>Dues</th>
-                    <th style={pth('center','60px')}>Purch. Date</th>
-                    <th style={pth('left','90px')}>Purch. No</th>
-                    <th style={pth('right','85px')}>Amount</th>
-                    <th style={pth('center','65px')}>GST Status</th>
+                    {cv('po_itemDesc')  && <th style={pth('left','160px')}>Prod Desc</th>}
+                    {cv('po_qty')       && <th style={pth('right','35px')}>Qty</th>}
+                    {cv('po_rate')      && <th style={pth('right','70px')}>Rate</th>}
+                    {cv('po_total')     && <th style={pth('right','80px')}>Total</th>}
+                    {cv('po_otherChg')  && <th style={pth('right','70px')}>Other Chg</th>}
+                    {cv('po_taxable')   && <th style={pth('right','80px')}>Taxable</th>}
+                    {cv('po_gstPct')    && <th style={pth('center','38px')}>GST %</th>}
+                    {cv('po_gstAmt')    && <th style={pth('right','70px')}>GST Amt</th>}
+                    {cv('po_ov')        && <th style={pth('right','85px')}>Order Value</th>}
+                    {cv('po_payment')   && <th style={pth('right','70px')}>Payment</th>}
+                    {cv('po_dues')      && <th style={pth('right','70px')}>Dues</th>}
+                    {cv('po_purchDate') && <th style={pth('center','60px')}>Purch. Date</th>}
+                    {cv('po_purchNo')   && <th style={pth('left','90px')}>Purch. No</th>}
+                    {cv('po_amount')    && <th style={pth('right','85px')}>Amount</th>}
+                    {cv('po_gstStatus') && <th style={pth('center','65px')}>GST Status</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1457,7 +1492,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                 </div>
                               )}
                             </td>
-                            {/* ★ Clickable client name */}
+                            {/* Client Name */}
                             <td rowSpan={row.rowCount}
                               onClick={() => setModal({ type:'so', order:row.so })}
                               style={{ ...td('left'), fontWeight:700, color:'#111827', background:bg,
@@ -1465,26 +1500,21 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                 textDecoration:'underline', textUnderlineOffset:2 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
-                            {/* SO Order Description (expandable) */}
-                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
-                              width:expandedCols.has('soDesc')?200:28, minWidth:expandedCols.has('soDesc')?200:28,
-                              maxWidth:expandedCols.has('soDesc')?220:28, overflow:'hidden',
-                              padding:expandedCols.has('soDesc')?'3px 6px':'1px',
-                              fontSize:10, color:'#374151', wordBreak:'break-word', transition:'width .2s',
-                              verticalAlign:'top' }}>
-                              {expandedCols.has('soDesc') ? (row.so.termsConditions||row.so.customerNotes||(row.so.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ')||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
+                            {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                              maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
+                              wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
+                              {row.so.termsConditions||row.so.customerNotes||(row.so.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ')||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
+                            </td>}
+                            {cv('so_orderDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.so.orderDate||row.so.date)}
-                            </td>
-                            {/* Client PO No — replaces "Order No" */}
-                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                            </td>}
+                            {cv('so_clientPO') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
                               color: row.so.customerPO ? '#111' : '#aaa', fontStyle: row.so.customerPO ? 'normal' : 'italic' }}>
                               {row.so.customerPO || '—'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
+                            </td>}
+                            {cv('so_dueDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.so.dueDate||row.so.deliveryDate)}
-                            </td>
+                            </td>}
                           </>
                         )}
 
@@ -1492,70 +1522,49 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         <td style={td('left',{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'})}>
                           {row.soItem ? row.soItem.name : '—'}
                         </td>
-                        {/* SO Item Description (expandable) */}
-                        <td style={{ ...td('left'), width:expandedCols.has('soItemDesc')?180:28, minWidth:expandedCols.has('soItemDesc')?180:28,
-                          maxWidth:expandedCols.has('soItemDesc')?200:28, overflow:'hidden',
-                          padding:expandedCols.has('soItemDesc')?'3px 6px':'1px',
-                          fontSize:10, color:'#555', wordBreak:'break-word', transition:'width .2s' }}>
-                          {expandedCols.has('soItemDesc') ? (row.soItem?.desc || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
-                        </td>
-                        <td style={td('right')}>{row.soItem ? fmtI(row.soItem.qty) : '—'}</td>
-                        <td style={td('right')}>{row.soItem ? fmt(row.soItem.rate) : '—'}</td>
-                        <td style={td('right',{fontWeight:600})}>{row.soBase ? fmt(row.soBase) : '—'}</td>
-                        <td style={td('right')}>{row.pnf ? fmt(row.pnf) : '0'}</td>
-                        <td style={td('right')}>0</td>
-                        <td style={td('right')}>{row.transport ? fmt(row.transport) : '0'}</td>
-                        <td style={td('right')}>{row.soBase ? fmt(row.soBase) : '—'}</td>
-                        <td style={td('center')}>{row.soItem ? row.soItem.gst+'%' : '—'}</td>
-                        <td style={td('right')}>{row.soGst ? fmt(row.soGst) : '—'}</td>
-                        <td style={td('right',{fontWeight:700,color:'#111827'})}>{row.soOV ? fmt(row.soOV) : '—'}</td>
+                        {cv('so_itemDesc')  && <td style={{ ...td('left'), maxWidth:180, overflow:'hidden', fontSize:10, color:'#555', wordBreak:'break-word', padding:'3px 6px' }}>
+                          {row.soItem?.desc || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
+                        </td>}
+                        {cv('so_qty')       && <td style={td('right')}>{row.soItem ? fmtI(row.soItem.qty) : '—'}</td>}
+                        {cv('so_rate')      && <td style={td('right')}>{row.soItem ? fmt(row.soItem.rate) : '—'}</td>}
+                        {cv('so_total')     && <td style={td('right',{fontWeight:600})}>{row.soBase ? fmt(row.soBase) : '—'}</td>}
+                        {cv('so_pnf')       && <td style={td('right')}>{row.pnf ? fmt(row.pnf) : '0'}</td>}
+                        {cv('so_transport') && <td style={td('right')}>{row.transport ? fmt(row.transport) : '0'}</td>}
+                        {cv('so_taxable')   && <td style={td('right')}>{row.soBase ? fmt(row.soBase) : '—'}</td>}
+                        {cv('so_gstPct')    && <td style={td('center')}>{row.soItem ? row.soItem.gst+'%' : '—'}</td>}
+                        {cv('so_gstAmt')    && <td style={td('right')}>{row.soGst ? fmt(row.soGst) : '—'}</td>}
+                        {cv('so_ov')        && <td style={td('right',{fontWeight:700,color:'#111827'})}>{row.soOV ? fmt(row.soOV) : '—'}</td>}
 
                         {row.isFirst && (
                           <>
-                            <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.receipt ? fmt(row.receipt) : '0'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:600,
-                              color:'#111827', background:bg, borderBottom:'2px solid #1a1a1a' }}>
-                              {fmt(row.soBalance)}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.salesBill ? fmtD(row.salesBill.billDate) : '—'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
-                              color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>
-                              {row.salesBill ? (row.salesBill.billNo || '—') : '—'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`2px solid ${BD}`, background:bg, borderBottom:'2px solid #1a1a1a' }}>
-                              <StatusBadge s={row.so.status}/>
-                            </td>
+                            {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
+                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:600, color:'#111827', background:bg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.soBalance)}</td>}
+                            {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
+                            {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                              color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>{row.salesBill ? (row.salesBill.billNo || '—') : '—'}</td>}
+                            {cv('so_status')   && <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`2px solid ${BD}`, background:bg, borderBottom:'2px solid #1a1a1a' }}><StatusBadge s={row.so.status}/></td>}
                           </>
                         )}
 
                         {row.isFirst && (
                           <>
-                            {/* ★ Clickable vendor name */}
-                            <td rowSpan={row.rowCount}
+                            {cv('po_vendor') && <td rowSpan={row.rowCount}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
                               style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a', borderLeft:'2px solid #1a1a1a',
                                 ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#111827', textDecoration:'underline', textUnderlineOffset:2 } : { color:'#aaa', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
+                            </td>}
+                            {cv('po_date') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {fmtD(row.po?.poDate||row.po?.date)}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
+                            </td>}
+                            {cv('po_no') && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
-                            </td>
-                            {/* PO Description (expandable) */}
-                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a',
-                              width:expandedCols.has('poDesc')?200:28, minWidth:expandedCols.has('poDesc')?200:28,
-                              maxWidth:expandedCols.has('poDesc')?220:28, overflow:'hidden',
-                              padding:expandedCols.has('poDesc')?'3px 6px':'1px',
-                              fontSize:10, color:'#374151', wordBreak:'break-word', transition:'width .2s',
-                              verticalAlign:'top' }}>
-                              {expandedCols.has('poDesc') ? (row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
-                            </td>
+                            </td>}
+                            {cv('po_poDesc') && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a',
+                              maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
+                              wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
+                              {row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
+                            </td>}
                           </>
                         )}
 
@@ -1563,51 +1572,26 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         <td style={ptd('left',{maxWidth:180,overflow:'hidden',textOverflow:'ellipsis'})}>
                           {row.poItem ? row.poItem.name : '—'}
                         </td>
-                        {/* PO Item Description (expandable) */}
-                        <td style={{ ...ptd('left'), width:expandedCols.has('poItemDesc')?180:28, minWidth:expandedCols.has('poItemDesc')?180:28,
-                          maxWidth:expandedCols.has('poItemDesc')?200:28, overflow:'hidden',
-                          padding:expandedCols.has('poItemDesc')?'3px 6px':'1px',
-                          fontSize:10, color:'#555', wordBreak:'break-word', transition:'width .2s' }}>
-                          {expandedCols.has('poItemDesc') ? (row.poItem?.desc || row.poItem?.description || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>) : ''}
-                        </td>
-                        <td style={ptd('right')}>{row.poItem ? fmtI(row.poItem.qty) : '—'}</td>
-                        <td style={ptd('right')}>{row.poItem ? fmt(row.poItem.rate) : '—'}</td>
-                        <td style={ptd('right',{fontWeight:600})}>{row.poBase ? fmt(row.poBase) : '—'}</td>
-                        <td style={ptd('right')}>{row.otherC ? fmt(row.otherC) : '0'}</td>
-                        <td style={ptd('right')}>{row.poTaxable ? fmt(row.poTaxable) : '—'}</td>
-                        <td style={ptd('center')}>{row.poItem ? row.poItem.gst+'%' : '—'}</td>
-                        <td style={ptd('right')}>{row.poGst ? fmt(row.poGst) : '—'}</td>
-                        <td style={ptd('right',{fontWeight:700,color:'#1a5500'})}>{row.poOV ? fmt(row.poOV) : '—'}</td>
+                        {cv('po_itemDesc')  && <td style={{ ...ptd('left'), maxWidth:180, overflow:'hidden', fontSize:10, color:'#555', wordBreak:'break-word', padding:'3px 6px' }}>
+                          {row.poItem?.desc || row.poItem?.description || <span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
+                        </td>}
+                        {cv('po_qty')       && <td style={ptd('right')}>{row.poItem ? fmtI(row.poItem.qty) : '—'}</td>}
+                        {cv('po_rate')      && <td style={ptd('right')}>{row.poItem ? fmt(row.poItem.rate) : '—'}</td>}
+                        {cv('po_total')     && <td style={ptd('right',{fontWeight:600})}>{row.poBase ? fmt(row.poBase) : '—'}</td>}
+                        {cv('po_otherChg')  && <td style={ptd('right')}>{row.otherC ? fmt(row.otherC) : '0'}</td>}
+                        {cv('po_taxable')   && <td style={ptd('right')}>{row.poTaxable ? fmt(row.poTaxable) : '—'}</td>}
+                        {cv('po_gstPct')    && <td style={ptd('center')}>{row.poItem ? row.poItem.gst+'%' : '—'}</td>}
+                        {cv('po_gstAmt')    && <td style={ptd('right')}>{row.poGst ? fmt(row.poGst) : '—'}</td>}
+                        {cv('po_ov')        && <td style={ptd('right',{fontWeight:700,color:'#1a5500'})}>{row.poOV ? fmt(row.poOV) : '—'}</td>}
 
                         {row.isFirst && (
                           <>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.payment ? fmt(row.payment) : '0'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:600,
-                              color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>
-                              {fmt(row.poBalance)}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.poBill ? fmtD(row.poBill.billDate) : '—'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.poBill
-                                ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span>
-                                : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>
-                              {row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}
-                            </td>
-                            <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a', borderRight:'2px solid #1a1a1a' }}>
-                              {row.poBill
-                                ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3,
-                                    background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff',
-                                    color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>
-                                    {row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}
-                                  </span>
-                                : '—'}
-                            </td>
+                            {cv('po_payment')   && <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
+                            {cv('po_dues')      && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:600, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.poBalance)}</td>}
+                            {cv('po_purchDate') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
+                            {cv('po_purchNo')   && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
+                            {cv('po_amount')    && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
+                            {cv('po_gstStatus') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a', borderRight:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
                           </>
                         )}
                       </tr>
@@ -1616,30 +1600,54 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                 </tbody>
                 <tfoot style={{ position:'sticky', bottom:0, zIndex:10 }}>
                   <tr style={{ background:'#E8EFFF', fontWeight:700, fontSize:10 }}>
-                    <td colSpan={5} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'2px solid #9ab0e0' }}>TOTAL</td>
-                    <td colSpan={3} style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:700 }}>{fmt(GT.soTotal)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.pnf)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>0</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.transport)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soTaxable)}</td>
-                    <td style={{ ...td('center'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soGst)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>
-                    <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#b71c1c' }}>{fmt(GT.dues)}</td>
-                    <td colSpan={3} style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0', borderRight:'2px solid #9ab0e0' }}></td>
-                    <td colSpan={3} style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
-                    <td colSpan={3} style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:700 }}>{fmt(GT.poTotal)}</td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.otherC)}</td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poTaxable)}</td>
-                    <td style={{ ...td('center'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poGst)}</td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#2e7d32' }}>{fmt(GT.payment)}</td>
-                    <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#b71c1c' }}>{fmt(GT.poDues)}</td>
-                    <td colSpan={4} style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
+                    {/* SO fixed cols */}
+                    <td colSpan={2} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'2px solid #9ab0e0' }}>TOTAL</td>
+                    {/* SO toggle order-level cols */}
+                    {cv('so_orderDesc') && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_orderDate') && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_clientPO')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_dueDate')   && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {/* SO fixed product col */}
+                    <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
+                    {/* SO toggle item-level cols */}
+                    {cv('so_itemDesc')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_qty')       && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_rate')      && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_total')     && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:700 }}>{fmt(GT.soTotal)}</td>}
+                    {cv('so_pnf')       && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.pnf)}</td>}
+                    {cv('so_transport') && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.transport)}</td>}
+                    {cv('so_taxable')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soTaxable)}</td>}
+                    {cv('so_gstPct')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_gstAmt')    && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soGst)}</td>}
+                    {cv('so_ov')        && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
+                    {cv('so_receipt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
+                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#b71c1c' }}>{fmt(GT.dues)}</td>}
+                    {cv('so_billDate')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_billNo')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_status')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0', borderRight:'2px solid #9ab0e0' }}></td>}
+                    {/* PO toggle order-level cols */}
+                    {cv('po_vendor')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_date')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_no')        && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_poDesc')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {/* PO fixed product col */}
+                    <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
+                    {/* PO toggle item-level cols */}
+                    {cv('po_itemDesc')  && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_qty')       && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_rate')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_total')     && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:700 }}>{fmt(GT.poTotal)}</td>}
+                    {cv('po_otherChg')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.otherC)}</td>}
+                    {cv('po_taxable')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poTaxable)}</td>}
+                    {cv('po_gstPct')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_gstAmt')    && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poGst)}</td>}
+                    {cv('po_ov')        && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>}
+                    {cv('po_payment')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#2e7d32' }}>{fmt(GT.payment)}</td>}
+                    {cv('po_dues')      && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#b71c1c' }}>{fmt(GT.poDues)}</td>}
+                    {cv('po_purchDate') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_purchNo')   && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_amount')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_gstStatus') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
                   </tr>
                 </tfoot>
               </table>
