@@ -629,7 +629,7 @@ export default function Dashboard() {
 
       {/* ── Tab Bar ── */}
       <div style={{ background:'#fff', borderBottom:`2px solid ${BD}`, padding:'0 20px', display:'flex', gap:4, alignItems:'flex-end' }}>
-        {[['summary','📊 Summary'],['balance','⚖️ Balance Sheet'],['daybook','📅 Day Book'],['monthly','📆 Monthly'],['reports','🖨 Reports']].map(([k,l])=>
+        {[['summary','Summary'],['balance','Balance Sheet'],['daybook','Day Book'],['monthly','Monthly'],['reports','Reports']].map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)} style={tabStyle(k)}>{l}</button>
         ))}
         <div style={{ flex:1 }}/>
