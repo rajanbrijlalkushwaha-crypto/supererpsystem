@@ -249,7 +249,7 @@ function AppContent() {
                 <Route path="/vendor/self-registrations" element={<SelfRegistrations />} />
 
                 {/* Account routes */}
-                <Route path="/account" element={<Navigate to="/account/expense/view" replace />} />
+                <Route path="/account" element={<Navigate to="/account/dues" replace />} />
                 <Route path="/account/expense/create"    element={<CreateExpense />} />
                 <Route path="/account/expense/edit/:expenseId" element={<CreateExpense />} />
                 <Route path="/account/expense/view"      element={<ViewExpenses />} />

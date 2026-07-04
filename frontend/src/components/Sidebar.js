@@ -151,7 +151,7 @@ const NAV = [
     ],
   },
   // finance key → clicking enters Account Mode (no sub dropdown in normal mode)
-  { key:'finance', label:'Account', path:'/account/expense/create', routes:['/account','/tally'] },
+  { key:'finance', label:'Account', path:'/account/dues', routes:['/account','/tally'] },
   { key:'stock', label:'Stock View', path:'/stock/view', routes:['/stock'] },
   { key:'gst',   label:'GST & Compliance', path:'/gst/compliance', routes:['/gst'] },
   {
@@ -173,6 +173,7 @@ const NAV = [
 const ACCOUNT_SECTIONS = [
   {
     label: 'Setup',
+    color: '#0d9488',
     items: [
       { label: 'Ledger Master',  path: '/account/ledger/master', icon: 'ledger',  permKey: 'accLedger' },
       { label: 'Account Groups', path: '/account/groups/view',   icon: 'groups',  permKey: 'accLedger' },
@@ -180,36 +181,34 @@ const ACCOUNT_SECTIONS = [
   },
   {
     label: 'Transactions',
+    color: '#7c3aed',
     items: [
-      { label: 'Expense Entry',  path: '/account/expense/create',   icon: 'expense',  permKey: 'accExpense' },
-      { label: 'View Expenses',  path: '/account/expense/view',     icon: 'statement', permKey: 'accExpense' },
-      { label: 'Payment',        path: '/account/payment/create',   icon: 'payment',  permKey: 'accPayment' },
-      { label: 'Receipt',        path: '/account/receipt/create',   icon: 'receipt',  permKey: 'accReceipt' },
-      { label: 'Journal Entry',  path: '/account/journal/view',     icon: 'journal',  permKey: 'accJournal' },
+      { label: 'Expense Entry',  path: '/account/expense/create',   icon: 'expense',    permKey: 'accExpense' },
+      { label: 'View Expenses',  path: '/account/expense/view',     icon: 'statement',  permKey: 'accExpense' },
+      { label: 'Payment',        path: '/account/payment/create',   icon: 'payment',    permKey: 'accPayment' },
+      { label: 'Receipt',        path: '/account/receipt/create',   icon: 'receipt',    permKey: 'accReceipt' },
+      { label: 'Journal Entry',  path: '/account/journal/view',     icon: 'journal',    permKey: 'accJournal' },
+      { label: 'Debit Note',     path: '/account/debit-note/view',  icon: 'debitnote',  permKey: 'accDebitNote' },
+      { label: 'Credit Note',    path: '/account/credit-note/view', icon: 'creditnote', permKey: 'accCreditNote' },
+      { label: 'Deposit',        path: '/account/deposit/view',     icon: 'deposit',    permKey: 'accDeposit' },
     ],
   },
   {
     label: 'Reports',
+    color: '#b45309',
     items: [
+      { label: 'View Balance',  path: '/account/dues',         icon: 'dues',      permKey: null },
       { label: 'All Ledgers',  path: '/account/ledger/view',  icon: 'ledger',    permKey: 'accLedger' },
       { label: 'Bank Account', path: '/account/bank/view',    icon: 'bank',      permKey: 'accBank' },
       { label: 'Statement',    path: '/account/statement',    icon: 'statement', permKey: 'accStatement' },
-      { label: 'View Balance',  path: '/account/dues',         icon: 'dues',      permKey: null },
     ],
   },
   {
-    label: 'Notes & Other',
+    label: 'Other',
+    color: '#475569',
     items: [
-      { label: 'Debit Note',  path: '/account/debit-note/view',  icon: 'debitnote',  permKey: 'accDebitNote' },
-      { label: 'Credit Note', path: '/account/credit-note/view', icon: 'creditnote', permKey: 'accCreditNote' },
-      { label: 'Deposit',     path: '/account/deposit/view',     icon: 'deposit',    permKey: 'accDeposit' },
-      { label: 'Approval',    path: '/account/approval',         icon: 'approval',   permKey: null },
-    ],
-  },
-  {
-    label: 'Documents',
-    items: [
-      { label: 'Financial Documents', path: '/account/financial-docs', icon: 'filedocs', permKey: null },
+      { label: 'Approval',             path: '/account/approval',        icon: 'approval', permKey: null },
+      { label: 'Financial Documents',  path: '/account/financial-docs',  icon: 'filedocs', permKey: null },
     ],
   },
 ];
@@ -410,12 +409,24 @@ export default function Sidebar() {
             <div key={section.label}>
               {/* Section header — only when expanded */}
               {!collapsed && (
-                <div style={{
-                  fontSize: 9.5, fontWeight: 700, color: 'rgba(255,255,255,0.45)',
-                  letterSpacing: '0.8px', textTransform: 'uppercase',
-                  padding: '10px 14px 4px 14px',
-                }}>
-                  {section.label}
+                <div style={{ padding: '10px 10px 4px 10px' }}>
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    background: section.color || 'rgba(255,255,255,0.12)',
+                    border: `1px solid ${section.color || 'rgba(255,255,255,0.2)'}`,
+                    borderRadius: 5, padding: '2px 8px',
+                  }}>
+                    <div style={{
+                      width: 5, height: 5, borderRadius: '50%',
+                      background: '#fff', opacity: 0.85, flexShrink: 0,
+                    }}/>
+                    <span style={{
+                      fontSize: 9.5, fontWeight: 800, color: '#fff',
+                      letterSpacing: '0.7px', textTransform: 'uppercase',
+                    }}>
+                      {section.label}
+                    </span>
+                  </div>
                 </div>
               )}
               {collapsed && <div style={{ height: 6 }} />}
