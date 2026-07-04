@@ -75,6 +75,52 @@ tr:nth-child(odd) td:not(.lbl){background:#fff;}tr:nth-child(even) td:not(.lbl){
   w.document.write(html); w.document.close();
 }
 
+/* ── Print: Ongoing Orders ── */
+function printOngoingOrders(orders, pos, companyName) {
+  const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  let srNo = 0;
+  const allRows = [];
+  orders.forEach(o => {
+    const linkedPOs = pos.filter(p => String(p.linkedSalesOrderId) === String(o.orderId));
+    const vendorNames = [...new Set(linkedPOs.map(p => p.vendorName).filter(Boolean))].join(', ') || '—';
+    const items = (o.items||[]);
+    if (items.length === 0) {
+      srNo++;
+      allRows.push({ srNo, orderNo:o.orderNo||'—', orderDate:fmtD(o.orderDate), client:o.customerName||o.clientName||'—', dueDate:fmtD(o.deliveryDate||o.dueDate||''), vendor:vendorNames, product:'—', qty:'—', unit:'', firstRow:true });
+    } else {
+      items.forEach((item, idx) => {
+        srNo++;
+        allRows.push({ srNo, orderNo:idx===0?(o.orderNo||'—'):'', orderDate:idx===0?fmtD(o.orderDate):'', client:idx===0?(o.customerName||o.clientName||'—'):'', dueDate:idx===0?fmtD(o.deliveryDate||o.dueDate||''):'', vendor:idx===0?vendorNames:'', product:item.description||item.itemName||'—', qty:item.qty||'—', unit:item.unit||'', firstRow:idx===0 });
+      });
+    }
+  });
+  const bodyHTML = allRows.map(r=>`<tr style="${r.firstRow&&r.orderNo?'border-top:2px solid #ccc;':''}" ><td style="text-align:right">${r.srNo}</td><td style="font-weight:700">${r.orderNo}</td><td>${r.orderDate}</td><td>${r.client}</td><td>${r.dueDate}</td><td>${r.vendor}</td><td>${r.product}</td><td style="text-align:right">${r.qty}${r.unit?' '+r.unit:''}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ongoing Orders</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:9pt;}
+.pg{padding:8mm 10mm;}h1{font-size:13pt;font-weight:bold;text-align:center;margin-bottom:2px;}
+.sub{font-size:9pt;text-align:center;color:#444;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #1a2a3a;}
+table{width:100%;border-collapse:collapse;border:2px solid #000;}
+th{background:#1a2a3a;color:#fff;padding:5px 6px;font-size:8pt;font-weight:bold;border:1px solid #000;text-align:left;white-space:nowrap;}
+td{padding:4px 6px;font-size:8.5pt;border:1px solid #ccc;vertical-align:top;}
+tr:nth-child(odd){background:#fff;}tr:nth-child(even){background:#f7f9fc;}
+.foot{margin-top:5px;font-size:7.5pt;color:#555;text-align:right;}
+@media print{@page{margin:7mm;size:A3 landscape;}.pg{padding:0;}}</style>
+</head><body><div class="pg">
+<h1>Ongoing Sales Orders Report</h1>
+<div class="sub">${companyName} &nbsp;·&nbsp; Generated: ${today2} &nbsp;·&nbsp; ${orders.length} Orders</div>
+<table><thead><tr>
+<th style="text-align:right;min-width:36px">Sr No</th>
+<th>Order No</th><th>Order Date</th><th>Client</th>
+<th>Due / Delivery Date</th><th>Vendor (Linked PO)</th>
+<th>Product / Description</th><th style="text-align:right">Qty</th>
+</tr></thead><tbody>${bodyHTML}</tbody></table>
+<div class="foot">Printed: ${today2}</div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script></body></html>`;
+  const w=window.open('','_blank','width=1400,height=900');
+  if(!w){alert('Allow pop-ups to print.');return;}
+  w.document.write(html); w.document.close();
+}
+
 /* ── Print: Day Book ── */
 function printDayBook(dateLabel, sections, companyName) {
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
@@ -583,7 +629,7 @@ export default function Dashboard() {
 
       {/* ── Tab Bar ── */}
       <div style={{ background:'#fff', borderBottom:`2px solid ${BD}`, padding:'0 20px', display:'flex', gap:4, alignItems:'flex-end' }}>
-        {[['summary','📊 Summary'],['balance','⚖ï¸ Balance Sheet'],['daybook','📅 Day Book'],['monthly','📆 Monthly Report']].map(([k,l])=>(
+        {[['summary','📊 Summary'],['balance','⚖️ Balance Sheet'],['daybook','📅 Day Book'],['monthly','📆 Monthly'],['reports','🖨 Reports']].map(([k,l])=>
           <button key={k} onClick={()=>setTab(k)} style={tabStyle(k)}>{l}</button>
         ))}
         <div style={{ flex:1 }}/>
@@ -598,49 +644,66 @@ export default function Dashboard() {
         {tab==='summary' && (
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-            {/* ── Receivables & Payables Quick Cards ── */}
+            {/* ── Receivables & Payables Tables ── */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-              {/* Receivables Card */}
-              <div style={{ background:'linear-gradient(135deg,#0b3d3d 0%,#104f4f 100%)', borderRadius:12, padding:'16px 20px', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', textTransform:'uppercase', letterSpacing:'.6px', marginBottom:12 }}>💰 Receivables from Clients</div>
-                <div style={{ display:'flex' }}>
-                  <div style={{ flex:1, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Total Receivable</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>{loading?'—':fmtINR(summary.salesBillV)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Sales billed amount</div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:14, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Received</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#6ee7b7' }}>{loading?'—':fmtINR(summary.rcptForBilledV)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Against bills</div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Dues</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:summary.soBillDues>0?'#fca5a5':'#6ee7b7' }}>{loading?'—':fmtINR(summary.soBillDues)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Pending from clients</div>
-                  </div>
+              {/* Receivables Table */}
+              <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+                <div style={{ background:'#104f4f', padding:'10px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Receivables from Clients</span>
+                  <span style={{ fontSize:10, color:'rgba(255,255,255,0.65)', fontWeight:600 }}>FY {selectedFY==='all'?'All':selectedFY}</span>
                 </div>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ background:'#e6f7f2' }}>
+                      <th style={{ padding:'8px 14px', fontSize:11, fontWeight:700, color:'#374151', textAlign:'left', border:`1px solid ${BD}` }}>Description</th>
+                      <th style={{ padding:'8px 14px', fontSize:11, fontWeight:700, color:'#374151', textAlign:'right', border:`1px solid ${BD}` }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Sales Billed (Total)</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#1d4ed8', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.salesBillV)}</td>
+                    </tr>
+                    <tr style={{ background:'#fafbff' }}>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Received from Clients</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#059669', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.rcptForBilledV)}</td>
+                    </tr>
+                    <tr style={{ background:'#fef9f0' }}>
+                      <td style={{ padding:'12px 14px', fontSize:13, fontWeight:800, color:'#111', border:`2px solid ${BD}` }}>Outstanding Dues</td>
+                      <td style={{ padding:'12px 14px', fontSize:19, fontWeight:900, color:summary.soBillDues>0?'#dc2626':'#16a34a', textAlign:'right', border:`2px solid ${BD}` }}>{loading?'—':fmtINR(summary.soBillDues)}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              {/* Payables Card */}
-              <div style={{ background:'linear-gradient(135deg,#1e1b4b 0%,#312e81 100%)', borderRadius:12, padding:'16px 20px', boxShadow:'0 2px 8px rgba(0,0,0,0.12)' }}>
-                <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.65)', textTransform:'uppercase', letterSpacing:'.6px', marginBottom:12 }}>💸 Payables to Vendors</div>
-                <div style={{ display:'flex' }}>
-                  <div style={{ flex:1, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Total Payable</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>{loading?'—':fmtINR(summary.purchBillV)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Purchase billed amount</div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:14, borderRight:'1px solid rgba(255,255,255,0.15)', paddingRight:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Paid</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:'#6ee7b7' }}>{loading?'—':fmtINR(summary.pymtForBilledV)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Against bills</div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:14 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>Dues</div>
-                    <div style={{ fontSize:18, fontWeight:800, color:summary.poBillDues>0?'#fca5a5':'#6ee7b7' }}>{loading?'—':fmtINR(summary.poBillDues)}</div>
-                    <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', marginTop:2 }}>To be paid to vendors</div>
-                  </div>
+
+              {/* Payables Table */}
+              <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+                <div style={{ background:'#4c1d95', padding:'10px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Payables to Vendors</span>
+                  <span style={{ fontSize:10, color:'rgba(255,255,255,0.65)', fontWeight:600 }}>FY {selectedFY==='all'?'All':selectedFY}</span>
                 </div>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ background:'#f0ecff' }}>
+                      <th style={{ padding:'8px 14px', fontSize:11, fontWeight:700, color:'#374151', textAlign:'left', border:`1px solid ${BD}` }}>Description</th>
+                      <th style={{ padding:'8px 14px', fontSize:11, fontWeight:700, color:'#374151', textAlign:'right', border:`1px solid ${BD}` }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Purchase Billed (Total)</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#7c3aed', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.purchBillV)}</td>
+                    </tr>
+                    <tr style={{ background:'#fafbff' }}>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Paid to Vendors</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#059669', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.pymtForBilledV)}</td>
+                    </tr>
+                    <tr style={{ background:'#fef9f0' }}>
+                      <td style={{ padding:'12px 14px', fontSize:13, fontWeight:800, color:'#111', border:`2px solid ${BD}` }}>Outstanding Dues</td>
+                      <td style={{ padding:'12px 14px', fontSize:19, fontWeight:900, color:summary.poBillDues>0?'#dc2626':'#16a34a', textAlign:'right', border:`2px solid ${BD}` }}>{loading?'—':fmtINR(summary.poBillDues)}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -803,6 +866,67 @@ export default function Dashboard() {
                         View full report with all records →
                       </span>
                     </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── Upcoming Dues within 10 days ── */}
+            {(() => {
+              const tenDaysFromNow = new Date(today);
+              tenDaysFromNow.setDate(tenDaysFromNow.getDate() + 10);
+              const upcomingSOs = rawSOs.filter(o => {
+                if (['completed','rejected','draft'].includes(o.status)) return false;
+                const dd = o.deliveryDate || o.dueDate;
+                if (!dd) return false;
+                const d = new Date(dd);
+                return !isNaN(d) && d >= today && d <= tenDaysFromNow;
+              }).sort((a,b) => new Date(a.deliveryDate||a.dueDate) - new Date(b.deliveryDate||b.dueDate));
+              if (upcomingSOs.length === 0) return null;
+              return (
+                <div style={{ background:'#fff', border:`2px solid #f59e0b`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 6px rgba(245,158,11,0.15)' }}>
+                  <div style={{ background:'#b45309', padding:'10px 16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <span style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Upcoming Dues — Within 10 Days ({upcomingSOs.length} orders)</span>
+                    <span style={{ fontSize:10, color:'rgba(255,255,255,0.75)', fontWeight:600 }}>as of {fmtD(todayISO)}</span>
+                  </div>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5, fontFamily:F }}>
+                      <thead>
+                        <tr style={{ background:'#fef3c7' }}>
+                          {['#','Order No','Client','Order Date','Delivery Date','Order Value','Status'].map((h,i)=>(
+                            <th key={i} style={{ padding:'8px 12px', fontWeight:700, color:'#374151', textAlign:i>4?'right':'left', border:`1px solid #fcd34d`, whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {upcomingSOs.map((o,ri)=>{
+                          const daysLeft = Math.round((new Date(o.deliveryDate||o.dueDate)-today)/(1000*60*60*24));
+                          const urgent = daysLeft <= 3;
+                          return (
+                            <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#fffbeb' }}>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{ri+1}</td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f' }}>{o.orderNo||'—'}</td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, color:'#374151' }}>{o.customerName||o.clientName||'—'}</td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(o.orderDate)}</td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, fontWeight:700, color:urgent?'#dc2626':'#b45309' }}>
+                                {fmtD(o.deliveryDate||o.dueDate)}
+                                <span style={{ marginLeft:6, fontSize:10, background:urgent?'#dc2626':'#f59e0b', color:'#fff', borderRadius:4, padding:'1px 5px' }}>
+                                  {daysLeft===0?'Today':daysLeft===1?'Tomorrow':`${daysLeft}d`}
+                                </span>
+                              </td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:'#1d4ed8' }}>{fmtINR(o.grandTotal||0)}</td>
+                              <td style={{ padding:'8px 12px', border:`1px solid ${BD}`, textAlign:'right' }}>
+                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:5, fontSize:10, fontWeight:700,
+                                  background:o.status==='approved'?'#dcfce7':o.status==='completed'?'#d1fae5':'#fef3c7',
+                                  color:o.status==='approved'?'#16a34a':o.status==='completed'?'#059669':'#b45309' }}>
+                                  {o.status||'—'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
@@ -1260,6 +1384,61 @@ export default function Dashboard() {
         )}
 
       </div>
+
+
+        {/* ══════════════ REPORTS TAB ══════════════ */}
+        {tab==='reports' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+            {/* Ongoing Orders Report */}
+            <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, padding:'16px 18px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontSize:14, fontWeight:800, color:'#111', marginBottom:4 }}>Ongoing Sales Orders Report</div>
+              <div style={{ fontSize:11, color:'#6b7280', marginBottom:14 }}>
+                Print all active / ongoing sales orders with item-level detail — Order No, Client, Due Date, Vendor (from linked POs), Product, Qty.
+              </div>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+                <button onClick={()=>printOngoingOrders(rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)), rawPOs, selectedCompany?.companyName||'')}
+                  style={{ padding:'9px 24px', background:'#104f4f', color:'#fff', border:'none', borderRadius:7, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                  🖨 Print Ongoing Orders ({rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)).length})
+                </button>
+                <button onClick={()=>printOngoingOrders(rawSOs, rawPOs, selectedCompany?.companyName||'')}
+                  style={{ padding:'9px 24px', background:'#374151', color:'#fff', border:'none', borderRadius:7, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                  🖨 Print All Orders ({rawSOs.length})
+                </button>
+              </div>
+              <div style={{ marginTop:14, overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
+                  <thead>
+                    <tr style={{ background:'#104f4f' }}>
+                      {['#','Order No','Order Date','Client','Delivery Date','Order Value','Status'].map((h,i)=>(
+                        <th key={i} style={{ padding:'8px 12px', color:'#fff', fontWeight:700, textAlign:i>=5?'right':'left', border:'1px solid #1a3a3a', whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)).map((o,ri)=>(
+                      <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#f8faff' }}>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{ri+1}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f' }}>{o.orderNo||'—'}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(o.orderDate)}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#374151' }}>{o.customerName||o.clientName||'—'}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:o.deliveryDate||o.dueDate?'#b45309':'#9ca3af' }}>{fmtD(o.deliveryDate||o.dueDate||'')}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:'#1d4ed8' }}>{fmtINR(o.grandTotal||0)}</td>
+                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right' }}>
+                          <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:5, fontSize:10, fontWeight:700,
+                            background:o.status==='approved'?'#dcfce7':'#fef3c7', color:o.status==='approved'?'#16a34a':'#b45309' }}>
+                            {o.status||'—'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
 
       {/* ── Month Detail Modal ── */}
       {monthDetailOpen !== null && (() => {

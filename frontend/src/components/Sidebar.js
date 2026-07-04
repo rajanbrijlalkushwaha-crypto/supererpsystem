@@ -157,8 +157,9 @@ const NAV = [
   {
     key:'project', label:'Projects', path:'/project/list', routes:['/project'],
     sub:[
-      { label:'All Projects',   path:'/project/list',   permKey:'project' },
-      { label:'Create Project', path:'/project/create', permKey:'project' },
+      { label:'All Projects',    path:'/project/list',   permKey:'project' },
+      { label:'Create Project',  path:'/project/create', permKey:'project' },
+      { label:'Project Close',   path:'/project/close',  permKey:'project' },
     ],
   },
   { key:'communication', label:'Communication Logs', path:'/communication/logs', routes:['/communication'] },
