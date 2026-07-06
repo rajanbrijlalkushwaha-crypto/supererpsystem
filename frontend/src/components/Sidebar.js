@@ -584,15 +584,14 @@ export default function Sidebar() {
               <div key={navItem.key} style={{ padding: '12px 8px 5px 8px' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  background: `${navItem.color}28`,
-                  borderLeft: `4px solid ${navItem.color}`,
+                  background: navItem.color,
+                  borderLeft: `4px solid rgba(0,0,0,0.25)`,
                   borderRadius: '0 6px 6px 0',
                   padding: '7px 12px',
                 }}>
                   <div style={{
                     width: 7, height: 7, borderRadius: '50%',
-                    background: navItem.color, flexShrink: 0,
-                    boxShadow: `0 0 6px ${navItem.color}`,
+                    background: 'rgba(255,255,255,0.7)', flexShrink: 0,
                   }}/>
                   <span style={{
                     fontSize: 11, fontWeight: 800, color: '#fff',
