@@ -32,6 +32,8 @@ const ICON_BG = {
   passwords:    '#65a30d',
   admin:        '#475569',
   logout:       '#ef4444',
+  clientdues:   '#b45309',
+  vendordues:   '#059669',
 };
 
 const Ico = ({ d, color = '#fff', size = 14, stroke = 1.9 }) => (
@@ -91,29 +93,15 @@ const NAV = [
       { label:'Project Close', path:'/project/close', permKey:'project' },
     ],
   },
+
+  /* ── CRM group ── */
+  { type:'group', key:'grp-crm', label:'CRM', color:'#ec4899' },
   {
     key:'crm', label:'Client / CRM', path:'/client/view', routes:['/client','/crm','/client-sap'],
     sub:[
       { label:'View Clients',    path:'/client/view',    permKey:'client' },
       { label:'Pending Clients', path:'/client/pending', permKey:'client' },
       { label:'CRM',             path:'/crm/view',       permKey:'crm' },
-    ],
-  },
-  {
-    key:'vendor', label:'Vendor / Supplier', path:'/vendor/view', routes:['/vendor'],
-    sub:[
-      { label:'All Vendors',        path:'/vendor/view',               permKey:'vendor' },
-      { label:'Add Vendor',         path:'/vendor/create',             permKey:'vendor' },
-      { label:'Pending Vendors',    path:'/vendor/pending',            permKey:'vendor' },
-      { label:'Self Registrations', path:'/vendor/self-registrations', permKey:'vendorSelfReg' },
-    ],
-  },
-  {
-    key:'inventory', label:'Inventory', path:'/items/view', routes:['/items'],
-    sub:[
-      { label:'Items / Products', path:'/items/view',    permKey:'items' },
-      { label:'Create Item',      path:'/items/create',  permKey:'items' },
-      { label:'Order Tracker',    path:'/items/tracker', permKey:'orderTracker' },
     ],
   },
   {
@@ -125,12 +113,24 @@ const NAV = [
     ],
   },
   {
-    key:'mfg', label:'Manufacturing', path:'/manufacturing/orders', routes:['/manufacturing'],
+    key:'dispatch', label:'Sales Bill', path:'/sales-bill', routes:['/sales-bill','/delivery-challan'],
     sub:[
-      { label:'Manufacturing Orders', path:'/manufacturing/orders',            permKey:'mfgOrders' },
-      { label:'Job Sheets',           path:'/manufacturing/job-sheets',        permKey:'jobSheets' },
-      { label:'Create Job Sheet',     path:'/manufacturing/job-sheets/create', permKey:'jobSheets' },
-      { label:'Locations',            path:'/manufacturing/locations',         permKey:'mfgLocations' },
+      { label:'Tax Invoices (Sales Bill)', path:'/sales-bill',            permKey:'salesBill' },
+      { label:'Delivery Challan',          path:'/delivery-challan/view', permKey:'deliveryChallan' },
+    ],
+  },
+  { key:'clientdues', label:'Client Balance', path:'/account/dues?tab=client', routes:[], icon:'dues' },
+  { key:'communication', label:'Communication Logs', path:'/communication/logs', routes:['/communication'] },
+
+  /* ── Vendor group ── */
+  { type:'group', key:'grp-vendor', label:'Vendor', color:'#059669' },
+  {
+    key:'vendor', label:'Vendor / Supplier', path:'/vendor/view', routes:['/vendor'],
+    sub:[
+      { label:'All Vendors',        path:'/vendor/view',               permKey:'vendor' },
+      { label:'Add Vendor',         path:'/vendor/create',             permKey:'vendor' },
+      { label:'Pending Vendors',    path:'/vendor/pending',            permKey:'vendor' },
+      { label:'Self Registrations', path:'/vendor/self-registrations', permKey:'vendorSelfReg' },
     ],
   },
   {
@@ -143,28 +143,48 @@ const NAV = [
     ],
   },
   {
-    key:'dispatch', label:'Sales Bill', path:'/sales-bill', routes:['/sales-bill','/delivery-challan'],
-    sub:[
-      { label:'Tax Invoices (Sales Bill)', path:'/sales-bill',            permKey:'salesBill' },
-      { label:'Delivery Challan',          path:'/delivery-challan/view', permKey:'deliveryChallan' },
-      { label:'GDN',                       path:'/delivery-challan/view', permKey:'deliveryChallan' },
-    ],
-  },
-  {
     key:'purchasebill', label:'Purchase Bill', path:'/purchase-bill', routes:['/purchase-bill'],
     sub:[
       { label:'Purchase Bills',      path:'/purchase-bill', permKey:'purchaseBill' },
       { label:'GRN (Goods Receipt)', path:'/stock/in',      permKey:'grn' },
     ],
   },
-  // finance key → clicking enters Account Mode (no sub dropdown in normal mode)
+  { key:'vendordues', label:'Vendor Dues', path:'/account/dues?tab=vendor', routes:[], icon:'dues' },
+
+  /* ── Inventory group ── */
+  { type:'group', key:'grp-inventory', label:'Inventory', color:'#0d9488' },
+  {
+    key:'inventory', label:'Items / Products', path:'/items/view', routes:['/items'],
+    sub:[
+      { label:'Items / Products', path:'/items/view',    permKey:'items' },
+      { label:'Create Item',      path:'/items/create',  permKey:'items' },
+      { label:'Order Tracker',    path:'/items/tracker', permKey:'orderTracker' },
+    ],
+  },
+  {
+    key:'stock', label:'Stock', path:'/stock/view', routes:['/stock'],
+    sub:[
+      { label:'Stock View',          path:'/stock/view',    permKey:'stock' },
+      { label:'GRN (Goods Receipt)', path:'/stock/in',      permKey:'grn' },
+      { label:'GDN (Stock Out)',     path:'/stock/out',     permKey:'stock' },
+      { label:'Delivery Challan',    path:'/stock/challan', permKey:'deliveryChallan' },
+    ],
+  },
+
+  /* ── Other ── */
   { key:'finance', label:'Account', path:'/account/dues', routes:['/account','/tally'] },
-  { key:'stock', label:'Stock View', path:'/stock/view', routes:['/stock'] },
-  { key:'gst',   label:'GST & Compliance', path:'/gst/compliance', routes:['/gst'] },
-  { key:'communication', label:'Communication Logs', path:'/communication/logs', routes:['/communication'] },
-  { key:'approvals', label:'Approvals',        path:'/approval', routes:['/approval'] },
-  { key:'passwords', label:'Password Manager', path:'/passwords',        routes:['/passwords'] },
-  { key:'admin',     label:'Admin Settings',   path:'/admin/companies',  routes:['/admin','/settings','/user-management'] },
+  {
+    key:'mfg', label:'Manufacturing', path:'/manufacturing/orders', routes:['/manufacturing'],
+    sub:[
+      { label:'Manufacturing Orders', path:'/manufacturing/orders',            permKey:'mfgOrders' },
+      { label:'Job Sheets',           path:'/manufacturing/job-sheets',        permKey:'jobSheets' },
+      { label:'Create Job Sheet',     path:'/manufacturing/job-sheets/create', permKey:'jobSheets' },
+      { label:'Locations',            path:'/manufacturing/locations',         permKey:'mfgLocations' },
+    ],
+  },
+  { key:'approvals', label:'Approvals',        path:'/approval',          routes:['/approval'] },
+  { key:'passwords', label:'Password Manager', path:'/passwords',         routes:['/passwords'] },
+  { key:'admin',     label:'Admin Settings',   path:'/admin/companies',   routes:['/admin','/settings','/user-management'] },
 ];
 
 /* ──────────────────────────────────────────────
@@ -204,6 +224,13 @@ const ACCOUNT_SECTIONS = [
     ],
   },
   {
+    label: 'Compliance',
+    color: '#dc2626',
+    items: [
+      { label: 'GST & Compliance',     path: '/gst/compliance',          icon: 'gst',      permKey: null },
+    ],
+  },
+  {
     label: 'Other',
     color: '#475569',
     items: [
@@ -235,7 +262,7 @@ export default function Sidebar() {
   const isExpanded = pinned || hovered;
 
   const [openKeys, setOpenKeys] = useState(() => {
-    const act = NAV.find(n => isActive(n.routes, window.location.pathname));
+    const act = NAV.find(n => !n.type && isActive(n.routes, window.location.pathname));
     return act?.sub ? new Set([act.key]) : new Set();
   });
 
@@ -247,7 +274,7 @@ export default function Sidebar() {
       setAccountMode(true);
     } else {
       setAccountMode(false);
-      const act = NAV.find(n => isActive(n.routes, pathname));
+      const act = NAV.find(n => !n.type && isActive(n.routes, pathname));
       setOpenKeys(act?.sub ? new Set([act.key]) : new Set());
     }
   }, [pathname]);
@@ -538,16 +565,36 @@ export default function Sidebar() {
       <PinHeader />
 
       <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 0' }}>
-        {NAV.map(({ key, label, path, routes, sub }) => {
+        {NAV.map((navItem) => {
+          /* ── group header ── */
+          if (navItem.type === 'group') {
+            if (collapsed) return <div key={navItem.key} style={{ height: 4, borderTop: `1px solid ${DIVIDER}`, marginTop: 4 }} />;
+            return (
+              <div key={navItem.key} style={{ padding: '10px 10px 4px 10px' }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: navItem.color || 'rgba(255,255,255,0.18)',
+                  border: `1px solid ${navItem.color || 'rgba(255,255,255,0.25)'}`,
+                  borderRadius: 4, padding: '2px 8px',
+                }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', opacity: 0.85 }}/>
+                  <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff', letterSpacing: '0.7px', textTransform: 'uppercase' }}>
+                    {navItem.label}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
+          const { key, label, path, routes, sub, icon } = navItem;
           const active    = isActive(routes, pathname);
           const isOpen    = openKeys.has(key);
-          const iconPaths = ICONS[key];
+          const iconPaths = ICONS[icon || key];
           const locked    = !hasAccess(key);
 
           const handleClick = () => {
             if (locked) return;
             if (key === 'finance') {
-              // Enter account mode instead of accordion
               setAccountMode(true);
               navigate(path);
               return;

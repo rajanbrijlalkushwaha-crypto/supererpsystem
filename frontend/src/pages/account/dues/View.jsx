@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import { useLocation } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -741,7 +742,12 @@ const ViewDues = () => {
   const cid = selectedCompany?.companyId;
   const currentUser = user?.name || user?.username || '';
 
-  const [activeTab,   setActiveTab]   = useState('client');
+  /* respect ?tab=client or ?tab=vendor from sidebar shortcuts */
+  const { search: locSearch } = useLocation();
+  const tabParam = new URLSearchParams(locSearch).get('tab');
+  const lockedTab = tabParam === 'client' || tabParam === 'vendor' ? tabParam : null;
+
+  const [activeTab,   setActiveTab]   = useState(lockedTab || 'client');
   const [data,        setData]        = useState({ clientDues:[], vendorDues:[] });
   const [salesOrders, setSalesOrders] = useState([]);
   const [vendors,     setVendors]     = useState([]);
@@ -1155,8 +1161,8 @@ const ViewDues = () => {
       <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`, padding:'0 14px 8px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
           <div style={{ display:'flex' }}>
-            {tabBtn('client', `📥 Receivable (Clients) — ${data.clientDues.length}`)}
-            {tabBtn('vendor', `📤 Payable (Vendors) — ${data.vendorDues.length}`)}
+            {(!lockedTab || lockedTab==='client') && tabBtn('client', `📥 Receivable (Clients) — ${data.clientDues.length}`)}
+            {(!lockedTab || lockedTab==='vendor') && tabBtn('vendor', `📤 Payable (Vendors) — ${data.vendorDues.length}`)}
           </div>
           <div style={{ flex:1 }}/>
           <input value={search} onChange={e => setSearch(e.target.value)}
