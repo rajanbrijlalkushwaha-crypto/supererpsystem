@@ -257,6 +257,27 @@ const isAccountPath = (p, search = '') => {
   return ACCOUNT_ROUTES.some(r => p === r || p.startsWith(r + '/'));
 };
 
+// Which group key each nav item belongs to (null = ungrouped, always visible)
+const NAV_ITEM_GROUPS = (() => {
+  const map = {};
+  let cur = null;
+  for (const item of NAV) {
+    if (item.type === 'group') { cur = item.key; }
+    else { map[item.key] = cur; }
+  }
+  return map;
+})();
+
+const findGroupForPath = (p, s = '') => {
+  if (isAccountPath(p, s)) return null;
+  let cur = null;
+  for (const item of NAV) {
+    if (item.type === 'group') { cur = item.key; continue; }
+    if (item.routes?.length && isActive(item.routes, p)) return cur;
+  }
+  return null;
+};
+
 /* ──────────────────────────────────────────────
    SIDEBAR COMPONENT
 ──────────────────────────────────────────────── */
@@ -282,6 +303,11 @@ export default function Sidebar() {
     () => isAccountPath(window.location.pathname, window.location.search)
   );
 
+  /* openGroup — which group tag is currently expanded (null = all collapsed) */
+  const [openGroup, setOpenGroup] = useState(
+    () => findGroupForPath(window.location.pathname, window.location.search)
+  );
+
   useEffect(() => {
     if (isAccountPath(pathname, search)) {
       setAccountMode(true);
@@ -289,6 +315,8 @@ export default function Sidebar() {
       setAccountMode(false);
       const act = NAV.find(n => !n.type && isActive(n.routes, pathname));
       setOpenKeys(act?.sub ? new Set([act.key]) : new Set());
+      const grp = findGroupForPath(pathname, search);
+      if (grp) setOpenGroup(grp);
     }
   }, [pathname, search]);
 
@@ -586,24 +614,41 @@ export default function Sidebar() {
                 <div key={navItem.key} style={{ margin: '6px 8px', height: 3, borderRadius: 2, background: navItem.color || DIVIDER, opacity: 0.7 }} />
               );
             }
+            const grpOpen = openGroup === navItem.key;
             return (
-              <div key={navItem.key} style={{ padding: '12px 8px 5px 8px' }}>
+              <div
+                key={navItem.key}
+                onClick={() => setOpenGroup(prev => prev === navItem.key ? null : navItem.key)}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.025)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                style={{
+                  padding: '10px 8px 5px 8px', cursor: 'pointer',
+                  transition: 'transform 0.15s ease', transformOrigin: 'left center',
+                  userSelect: 'none',
+                }}
+              >
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 8,
                   background: navItem.color,
                   borderLeft: `4px solid rgba(0,0,0,0.25)`,
-                  borderRadius: '0 6px 6px 0',
-                  padding: '7px 12px',
+                  borderRadius: '0 8px 8px 0',
+                  padding: '8px 10px 8px 12px',
+                  boxShadow: grpOpen ? `0 2px 10px ${navItem.color}99` : 'none',
+                  transition: 'box-shadow 0.2s',
                 }}>
-                  <div style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.7)', flexShrink: 0,
-                  }}/>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.8)', flexShrink: 0 }}/>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                      {navItem.label}
+                    </span>
+                  </div>
                   <span style={{
-                    fontSize: 11, fontWeight: 800, color: '#fff',
-                    letterSpacing: '1px', textTransform: 'uppercase',
+                    display: 'flex', alignItems: 'center',
+                    transform: grpOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease',
                   }}>
-                    {navItem.label}
+                    <Ico d={ICONS.chevron} color="rgba(255,255,255,0.85)" size={13} stroke={2.5} />
                   </span>
                 </div>
               </div>
@@ -615,6 +660,10 @@ export default function Sidebar() {
           const isOpen    = openKeys.has(key);
           const iconPaths = ICONS[icon || key];
           const locked    = !hasAccess(key);
+
+          // In expanded mode: hide items belonging to a closed group
+          const itemGroup = NAV_ITEM_GROUPS[key];
+          if (isExpanded && itemGroup !== null && openGroup !== itemGroup) return null;
 
           const handleClick = () => {
             if (locked) return;
