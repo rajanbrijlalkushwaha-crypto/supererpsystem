@@ -85,6 +85,14 @@ const ICONS = {
 const NAV = [
   { key:'dashboard', label:'Dashboard', path:'/dashboard', routes:['/dashboard'] },
   {
+    key:'project', label:'Jobcode', path:'/project/list', routes:['/project'],
+    sub:[
+      { label:'All Jobcodes',   path:'/project/list',   permKey:'project' },
+      { label:'Create Jobcode', path:'/project/create', permKey:'project' },
+      { label:'Project Close',  path:'/project/close',  permKey:'project' },
+    ],
+  },
+  {
     key:'crm', label:'Client / CRM', path:'/client/view', routes:['/client','/crm','/client-sap'],
     sub:[
       { label:'View Clients',    path:'/client/view',    permKey:'client' },
@@ -154,14 +162,6 @@ const NAV = [
   { key:'finance', label:'Account', path:'/account/dues', routes:['/account','/tally'] },
   { key:'stock', label:'Stock View', path:'/stock/view', routes:['/stock'] },
   { key:'gst',   label:'GST & Compliance', path:'/gst/compliance', routes:['/gst'] },
-  {
-    key:'project', label:'Projects', path:'/project/list', routes:['/project'],
-    sub:[
-      { label:'All Projects',    path:'/project/list',   permKey:'project' },
-      { label:'Create Project',  path:'/project/create', permKey:'project' },
-      { label:'Project Close',   path:'/project/close',  permKey:'project' },
-    ],
-  },
   { key:'communication', label:'Communication Logs', path:'/communication/logs', routes:['/communication'] },
   { key:'approvals', label:'Approvals',        path:'/approval', routes:['/approval'] },
   { key:'passwords', label:'Password Manager', path:'/passwords',        routes:['/passwords'] },
