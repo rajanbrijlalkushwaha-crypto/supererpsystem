@@ -171,8 +171,12 @@ const NAV = [
     ],
   },
 
-  /* ── Other ── */
+  /* ── Account group ── */
+  { type:'group', key:'grp-account', label:'Account', color:'#b45309' },
   { key:'finance', label:'Account', path:'/account/dues', routes:['/account','/tally'] },
+
+  /* ── Manufacturing group ── */
+  { type:'group', key:'grp-mfg', label:'Manufacturing', color:'#9333ea' },
   {
     key:'mfg', label:'Manufacturing', path:'/manufacturing/orders', routes:['/manufacturing'],
     sub:[
@@ -182,6 +186,9 @@ const NAV = [
       { label:'Locations',            path:'/manufacturing/locations',         permKey:'mfgLocations' },
     ],
   },
+
+  /* ── Admin group ── */
+  { type:'group', key:'grp-admin', label:'Admin', color:'#475569' },
   { key:'approvals', label:'Approvals',        path:'/approval',          routes:['/approval'] },
   { key:'passwords', label:'Password Manager', path:'/passwords',         routes:['/passwords'] },
   { key:'admin',     label:'Admin Settings',   path:'/admin/companies',   routes:['/admin','/settings','/user-management'] },
@@ -568,17 +575,29 @@ export default function Sidebar() {
         {NAV.map((navItem) => {
           /* ── group header ── */
           if (navItem.type === 'group') {
-            if (collapsed) return <div key={navItem.key} style={{ height: 4, borderTop: `1px solid ${DIVIDER}`, marginTop: 4 }} />;
+            if (collapsed) {
+              return (
+                <div key={navItem.key} style={{ margin: '6px 8px', height: 3, borderRadius: 2, background: navItem.color || DIVIDER, opacity: 0.7 }} />
+              );
+            }
             return (
-              <div key={navItem.key} style={{ padding: '10px 10px 4px 10px' }}>
+              <div key={navItem.key} style={{ padding: '12px 8px 5px 8px' }}>
                 <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  background: navItem.color || 'rgba(255,255,255,0.18)',
-                  border: `1px solid ${navItem.color || 'rgba(255,255,255,0.25)'}`,
-                  borderRadius: 4, padding: '2px 8px',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: `${navItem.color}28`,
+                  borderLeft: `4px solid ${navItem.color}`,
+                  borderRadius: '0 6px 6px 0',
+                  padding: '7px 12px',
                 }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', opacity: 0.85 }}/>
-                  <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff', letterSpacing: '0.7px', textTransform: 'uppercase' }}>
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: navItem.color, flexShrink: 0,
+                    boxShadow: `0 0 6px ${navItem.color}`,
+                  }}/>
+                  <span style={{
+                    fontSize: 11, fontWeight: 800, color: '#fff',
+                    letterSpacing: '1px', textTransform: 'uppercase',
+                  }}>
                     {navItem.label}
                   </span>
                 </div>
