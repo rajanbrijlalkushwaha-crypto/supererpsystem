@@ -66,6 +66,7 @@ const ALL_PAGES = [
   { section:'Account',         label:'Bank Accounts',              path:'/account/bank/view',               color:'#b45309', keys:'bank' },
   { section:'Account',         label:'Statement',                  path:'/account/statement',               color:'#b45309', keys:'bank statement' },
   { section:'Account',         label:'Approval',                   path:'/account/approval',                color:'#b45309', keys:'approve' },
+  { section:'Account',         label:'Financial Documents',         path:'/account/financial-docs',          color:'#b45309', keys:'pdf docs certificates gst pan' },
   /* Tally */
   { section:'Tally',           label:'Tally Import',               path:'/tally/import',                    color:'#0f766e', keys:'import sync' },
   { section:'Tally',           label:'Tally Pending Review',       path:'/tally/pending',                   color:'#0f766e', keys:'pending review' },

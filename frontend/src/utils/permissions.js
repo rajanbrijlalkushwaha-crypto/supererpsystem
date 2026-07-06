@@ -5,7 +5,7 @@ export const ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
 export const GROUP_ORDER = [
   'Dashboard','CRM','Vendor','Inventory',
   'Sales Order','Sales Bill','Purchase Order','Purchase Bill',
-  'Manufacturing','Account','Stock','GST','Projects','Other',
+  'Manufacturing','Account','Stock','GST','Projects','Communication','Other',
 ];
 
 /* navKey maps each module to the Sidebar top-level key it lives under */
@@ -68,6 +68,9 @@ export const MODULES = [
 
   /* Projects */
   { key:'project',         label:'Projects',                 group:'Projects',       navKey:'project',       actions:['view','create','edit','delete'] },
+
+  /* Communication */
+  { key:'communication',   label:'Communication Logs',       group:'Communication',  navKey:'communication', actions:['view','create','edit','delete'] },
 
   /* Other */
   { key:'approvals',       label:'Approvals',                group:'Other',          navKey:'approvals',     actions:['view','approve'] },

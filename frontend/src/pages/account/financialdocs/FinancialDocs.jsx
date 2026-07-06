@@ -98,27 +98,19 @@ function PDFPreviewModal({ doc, cid, onClose, onDownload }) {
 
         {/* PDF viewer */}
         <div style={{ flex: 1, background: '#525659', position: 'relative', overflow: 'hidden' }}>
-          <object
-            data={src}
-            type="application/pdf"
+          <iframe
+            src={`${src}#toolbar=1&view=FitH`}
+            title={doc.docName || doc.fileName}
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-          >
-            {/* Fallback if browser can't embed PDF */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 14, background: '#fff' }}>
-              <div style={{ fontSize: 52 }}>📄</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>PDF preview not available in this browser</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <a href={src} target="_blank" rel="noopener noreferrer"
-                  style={{ padding: '8px 18px', background: '#0d9488', color: '#fff', borderRadius: 7, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-                  Open PDF in new tab
-                </a>
-                <button onClick={onDownload}
-                  style={{ padding: '8px 18px', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
-                  Download
-                </button>
-              </div>
-            </div>
-          </object>
+            allow="fullscreen"
+          />
+          {/* Fallback open-in-tab link for non-PDF browsers */}
+          <div style={{ position: 'absolute', bottom: 10, right: 14, display: 'flex', gap: 8 }}>
+            <a href={src} target="_blank" rel="noopener noreferrer"
+              style={{ padding: '5px 13px', background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6, fontSize: 11.5, fontWeight: 600, textDecoration: 'none' }}>
+              Open in new tab ↗
+            </a>
+          </div>
         </div>
 
         {/* Footer hint */}
