@@ -8,21 +8,80 @@ import {
   Settings, RefreshCw, Bell,
 } from 'lucide-react';
 
-/* ── Quick-nav shortcuts ── */
-const SHORTCUTS = {
-  'CC':  { path: '/client/create',         label: 'Create Client' },
-  'CV':  { path: '/client/view',           label: 'View Clients' },
-  'VC':  { path: '/vendor/create',         label: 'Create Vendor' },
-  'VV':  { path: '/vendor/view',           label: 'View Vendors' },
-  'SC':  { path: '/sales-order/create',    label: 'Create Sales Order' },
-  'SV':  { path: '/sales-order/view',      label: 'View Sales Orders' },
-  'PC':  { path: '/purchase-order/create', label: 'Create Purchase Order' },
-  'PV':  { path: '/purchase-order/view',   label: 'View Purchase Orders' },
-  'TI':  { path: '/tally/import',          label: 'Tally Import' },
-  'TP':  { path: '/tally/pending',         label: 'Tally Pending' },
-  'ADM': { path: '/admin/companies',       label: 'Admin Companies' },
-  'STK': { path: '/stock/view',            label: 'Stock View' },
-};
+/* ── All navigable pages (section → label → path → optional keywords) ── */
+const ALL_PAGES = [
+  /* Dashboard */
+  { section:'Dashboard',       label:'Dashboard',                  path:'/dashboard',                       color:'#3b82f6', keys:'home main' },
+  /* Jobcode / Project */
+  { section:'Jobcode',         label:'All Jobcodes',               path:'/project/list',                    color:'#4f46e5', keys:'project list' },
+  { section:'Jobcode',         label:'Project Close',              path:'/project/close',                   color:'#4f46e5', keys:'close finish' },
+  /* Client / CRM */
+  { section:'Client',          label:'View Clients',               path:'/client/view',                     color:'#ec4899', keys:'customers list' },
+  { section:'Client',          label:'Pending Clients',            path:'/client/pending',                  color:'#ec4899', keys:'approval' },
+  { section:'Client',          label:'CRM',                        path:'/crm/view',                        color:'#ec4899', keys:'leads crm' },
+  /* Vendor */
+  { section:'Vendor',          label:'All Vendors',                path:'/vendor/view',                     color:'#059669', keys:'suppliers list' },
+  { section:'Vendor',          label:'Add Vendor',                 path:'/vendor/create',                   color:'#059669', keys:'new create' },
+  { section:'Vendor',          label:'Pending Vendors',            path:'/vendor/pending',                  color:'#059669', keys:'approval' },
+  { section:'Vendor',          label:'Self Registrations',         path:'/vendor/self-registrations',       color:'#059669', keys:'register' },
+  /* Inventory */
+  { section:'Inventory',       label:'Items / Products',           path:'/items/view',                      color:'#0d9488', keys:'product catalogue' },
+  { section:'Inventory',       label:'Create Item',                path:'/items/create',                    color:'#0d9488', keys:'new add' },
+  { section:'Inventory',       label:'Order Tracker',              path:'/items/tracker',                   color:'#0d9488', keys:'track' },
+  /* Sales Order */
+  { section:'Sales Order',     label:'All Sales Orders',           path:'/sales-order/view',                color:'#7c3aed', keys:'SO view list' },
+  { section:'Sales Order',     label:'Create Sales Order',         path:'/sales-order/create',              color:'#7c3aed', keys:'new SO' },
+  { section:'Sales Order',     label:'Pending Approval',           path:'/sales-order/pending',             color:'#7c3aed', keys:'approve' },
+  /* Manufacturing */
+  { section:'Manufacturing',   label:'Manufacturing Orders',       path:'/manufacturing/orders',            color:'#9333ea', keys:'mfg production' },
+  { section:'Manufacturing',   label:'Job Sheets',                 path:'/manufacturing/job-sheets',        color:'#9333ea', keys:'job work' },
+  { section:'Manufacturing',   label:'Create Job Sheet',           path:'/manufacturing/job-sheets/create', color:'#9333ea', keys:'new job' },
+  { section:'Manufacturing',   label:'Locations',                  path:'/manufacturing/locations',         color:'#9333ea', keys:'warehouse store' },
+  /* Purchase Order */
+  { section:'Purchase Order',  label:'PO Tracking',                path:'/purchase-order/tracking',         color:'#ea580c', keys:'track PO' },
+  { section:'Purchase Order',  label:'Create PO',                  path:'/purchase-order/create',           color:'#ea580c', keys:'new purchase' },
+  { section:'Purchase Order',  label:'View / Edit POs',            path:'/purchase-order/view',             color:'#ea580c', keys:'list PO' },
+  { section:'Purchase Order',  label:'Pending Approval',           path:'/purchase-order/pending',          color:'#ea580c', keys:'approve' },
+  /* Sales Bill */
+  { section:'Sales Bill',      label:'Tax Invoices',               path:'/sales-bill',                      color:'#0891b2', keys:'invoice bill dispatch' },
+  { section:'Sales Bill',      label:'Delivery Challan',           path:'/delivery-challan/view',           color:'#0891b2', keys:'DC challan' },
+  /* Purchase Bill */
+  { section:'Purchase Bill',   label:'Purchase Bills',             path:'/purchase-bill',                   color:'#6d28d9', keys:'vendor invoice' },
+  { section:'Purchase Bill',   label:'GRN (Goods Receipt)',        path:'/stock/in',                        color:'#6d28d9', keys:'goods received' },
+  /* Account — Setup */
+  { section:'Account',         label:'Ledger Master',              path:'/account/ledger/master',           color:'#b45309', keys:'master setup' },
+  { section:'Account',         label:'Account Groups',             path:'/account/groups/view',             color:'#b45309', keys:'groups setup' },
+  /* Account — Transactions */
+  { section:'Account',         label:'Expense Entry',              path:'/account/expense/create',          color:'#b45309', keys:'expense add' },
+  { section:'Account',         label:'View Expenses',              path:'/account/expense/view',            color:'#b45309', keys:'expenses list' },
+  { section:'Account',         label:'Payment to Vendor',          path:'/account/payment/create',          color:'#b45309', keys:'pay vendor outflow' },
+  { section:'Account',         label:'Receipt from Client',        path:'/account/receipt/create',          color:'#b45309', keys:'receive client inflow' },
+  { section:'Account',         label:'Journal Entry',              path:'/account/journal/view',            color:'#b45309', keys:'journal voucher' },
+  { section:'Account',         label:'Debit Note',                 path:'/account/debit-note/view',         color:'#b45309', keys:'debit' },
+  { section:'Account',         label:'Credit Note',                path:'/account/credit-note/view',        color:'#b45309', keys:'credit' },
+  { section:'Account',         label:'Deposit',                    path:'/account/deposit/view',            color:'#b45309', keys:'deposit bank' },
+  /* Account — Reports */
+  { section:'Account',         label:'View Balance / Dues',        path:'/account/dues',                    color:'#b45309', keys:'dues balance receivable payable' },
+  { section:'Account',         label:'All Ledgers',                path:'/account/ledger/view',             color:'#b45309', keys:'ledger accounts' },
+  { section:'Account',         label:'Bank Accounts',              path:'/account/bank/view',               color:'#b45309', keys:'bank' },
+  { section:'Account',         label:'Statement',                  path:'/account/statement',               color:'#b45309', keys:'bank statement' },
+  { section:'Account',         label:'Approval',                   path:'/account/approval',                color:'#b45309', keys:'approve' },
+  /* Tally */
+  { section:'Tally',           label:'Tally Import',               path:'/tally/import',                    color:'#0f766e', keys:'import sync' },
+  { section:'Tally',           label:'Tally Pending Review',       path:'/tally/pending',                   color:'#0f766e', keys:'pending review' },
+  /* Stock */
+  { section:'Stock',           label:'Stock View',                 path:'/stock/view',                      color:'#0f766e', keys:'inventory levels' },
+  { section:'Stock',           label:'GRN — Goods Receipt',        path:'/stock/in',                        color:'#0f766e', keys:'receive inward' },
+  { section:'Stock',           label:'GDN — Stock Out',            path:'/stock/out',                       color:'#0f766e', keys:'issue outward' },
+  { section:'Stock',           label:'Delivery Challan',           path:'/stock/challan',                   color:'#0f766e', keys:'challan delivery' },
+  /* GST */
+  { section:'GST',             label:'GST & Compliance',           path:'/gst/compliance',                  color:'#dc2626', keys:'tax return filing' },
+  /* Other */
+  { section:'Communication',   label:'Communication Logs',         path:'/communication/logs',              color:'#0284c7', keys:'logs chat messages' },
+  { section:'Approvals',       label:'Approvals',                  path:'/approval',                        color:'#16a34a', keys:'approve pending' },
+  { section:'Admin',           label:'Companies',                  path:'/admin/companies',                 color:'#475569', keys:'admin settings company' },
+  { section:'Admin',           label:'Password Manager',           path:'/passwords',                       color:'#65a30d', keys:'passwords secrets' },
+];
 
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -37,60 +96,134 @@ function useClickOutside(ref, onClose) {
 
 /* ── Command Palette ── */
 function CommandPalette({ onClose }) {
-  const [q, setQ] = useState('');
-  const navigate  = useNavigate();
-  const ref       = useRef(null);
+  const [q,      setQ]      = useState('');
+  const [active, setActive] = useState(0);
+  const navigate = useNavigate();
+  const ref      = useRef(null);
+  const listRef  = useRef(null);
   useClickOutside(ref, onClose);
   useEffect(() => { ref.current?.querySelector('input')?.focus(); }, []);
 
-  const filtered = Object.entries(SHORTCUTS).filter(([code, { label }]) =>
-    code.includes(q.toUpperCase()) || label.toLowerCase().includes(q.toLowerCase())
-  );
+  const filtered = q.trim() === ''
+    ? ALL_PAGES.slice(0, 8)
+    : ALL_PAGES.filter(p => {
+        const t = q.toLowerCase();
+        return p.label.toLowerCase().includes(t)
+          || p.section.toLowerCase().includes(t)
+          || (p.keys||'').toLowerCase().includes(t);
+      });
+
+  useEffect(() => { setActive(0); }, [q]);
+
   const go = (path) => { navigate(path); onClose(); };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape')    { onClose(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(i+1, filtered.length-1)); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(i => Math.max(i-1, 0)); }
+    if (e.key === 'Enter' && filtered[active]) go(filtered[active].path);
+  };
+
+  /* scroll active item into view */
+  useEffect(() => {
+    const el = listRef.current?.children[active];
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  /* group results by section */
+  const groups = [];
+  const seen = new Map();
+  filtered.forEach((p, idx) => {
+    if (!seen.has(p.section)) { seen.set(p.section, groups.length); groups.push({ section: p.section, color: p.color, items: [] }); }
+    groups[seen.get(p.section)].items.push({ ...p, idx });
+  });
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80,
+      background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 70,
     }}>
       <div ref={ref} style={{
-        width: 520, background: '#fff', borderRadius: 14,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-        overflow: 'hidden', border: '1px solid #E5E7EB',
-        fontFamily: FONT,
+        width: 580, background: '#fff', borderRadius: 16,
+        boxShadow: '0 24px 70px rgba(0,0,0,0.22)',
+        border: '1px solid #E5E7EB', fontFamily: FONT,
+        display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 140px)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid #F1F5F9' }}>
-          <Search size={16} color="#9ca3af" strokeWidth={2} />
+        {/* Search input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+          <Search size={17} color="#6366f1" strokeWidth={2.2} />
           <input
-            value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Search pages or type shortcode (e.g. CC, SV)…"
-            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13.5, color: '#1e293b', fontFamily: 'inherit', background: 'transparent' }}
-            onKeyDown={e => {
-              if (e.key === 'Escape') onClose();
-              if (e.key === 'Enter' && filtered[0]) go(filtered[0][1].path);
-            }}
+            value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey}
+            placeholder="Search any page, menu, feature…"
+            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14.5, color: '#1e293b', fontFamily: 'inherit', background: 'transparent', fontWeight: 500 }}
           />
-          <kbd style={{ fontSize: 11, color: '#94a3b8', border: '1px solid #e5e7eb', borderRadius: 5, padding: '2px 7px', fontFamily: 'monospace' }}>ESC</kbd>
+          {q && (
+            <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: 0 }}>✕</button>
+          )}
+          <kbd style={{ fontSize: 10.5, color: '#94a3b8', border: '1px solid #e5e7eb', borderRadius: 5, padding: '2px 7px', fontFamily: 'monospace', flexShrink: 0 }}>ESC</kbd>
         </div>
-        <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+
+        {/* Results */}
+        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '28px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>No results found</div>
-          ) : filtered.map(([code, { path, label }]) => (
-            <div key={code} onClick={() => go(path)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', transition: 'background 0.12s' }}
-              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <kbd style={{ fontSize: 11, fontWeight: 700, color: '#EA580C', border: '1px solid #FED7AA', borderRadius: 5, padding: '2px 8px', background: '#FFF7ED', fontFamily: 'monospace', minWidth: 34, textAlign: 'center' }}>{code}</kbd>
-              <span style={{ fontSize: 13, color: '#374151', fontWeight: 500 }}>{label}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>↵</span>
+            <div style={{ padding: '36px 18px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
+              No pages found for <strong>"{q}"</strong>
+            </div>
+          ) : groups.map(g => (
+            <div key={g.section}>
+              {/* Section header */}
+              <div style={{ padding: '6px 18px 3px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{g.section}</span>
+              </div>
+              {g.items.map(p => {
+                const isAct = active === p.idx;
+                return (
+                  <div key={p.path} onClick={() => go(p.path)}
+                    onMouseEnter={() => setActive(p.idx)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '9px 18px', cursor: 'pointer',
+                      background: isAct ? '#EEF2FF' : 'transparent',
+                      borderLeft: `3px solid ${isAct ? '#6366f1' : 'transparent'}`,
+                      transition: 'all 0.08s',
+                    }}>
+                    {/* Color dot */}
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: isAct ? g.color : '#F1F5F9', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}>
+                      <span style={{ fontSize: 14 }}>
+                        {p.section==='Dashboard'?'🏠':p.section==='Sales Order'?'📋':p.section==='Purchase Order'?'🛒':
+                         p.section==='Account'?'💰':p.section==='Vendor'?'🏢':p.section==='Client'?'👥':
+                         p.section==='Stock'?'📦':p.section==='Sales Bill'?'🧾':p.section==='Purchase Bill'?'📄':
+                         p.section==='Inventory'?'🗂️':p.section==='Manufacturing'?'🏭':p.section==='Tally'?'📥':
+                         p.section==='GST'?'🏷️':p.section==='Jobcode'?'📁':p.section==='Admin'?'⚙️':'📌'}
+                      </span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: isAct ? 700 : 500, color: isAct ? '#3730a3' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{p.section}</div>
+                    </div>
+                    {isAct && <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, flexShrink: 0 }}>↵ open</span>}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 14 }}>
-          {['↑↓ navigate','↵ select','ESC close'].map(h => (
-            <span key={h} style={{ fontSize: 11, color: '#94a3b8' }}>{h}</span>
+
+        {/* Footer */}
+        <div style={{ padding: '8px 18px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0, background: '#FAFAFA', borderRadius: '0 0 16px 16px' }}>
+          {[['↑↓','Navigate'],['↵','Open'],['Esc','Close']].map(([k,l]) => (
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af' }}>
+              <kbd style={{ fontSize: 10, background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', color: '#64748b' }}>{k}</kbd>
+              {l}
+            </span>
           ))}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#c7d2fe', fontWeight: 600 }}>
+            {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+          </span>
         </div>
       </div>
     </div>
