@@ -691,16 +691,16 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     <tr>
-                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Purchase Billed (Total)</td>
-                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#7c3aed', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.purchBillV)}</td>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>PO Value (Total)</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#7c3aed', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.poValue)}</td>
                     </tr>
                     <tr style={{ background:'#fafbff' }}>
-                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Paid to Vendors</td>
-                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#059669', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.pymtForBilledV)}</td>
+                      <td style={{ padding:'10px 14px', fontSize:12, color:'#374151', border:`1px solid ${BD}` }}>Payment Made to Vendors</td>
+                      <td style={{ padding:'10px 14px', fontSize:14, fontWeight:700, color:'#059669', textAlign:'right', border:`1px solid ${BD}` }}>{loading?'—':fmtINR(summary.paymentV)}</td>
                     </tr>
                     <tr style={{ background:'#fef9f0' }}>
                       <td style={{ padding:'12px 14px', fontSize:13, fontWeight:800, color:'#111', border:`2px solid ${BD}` }}>Outstanding Dues</td>
-                      <td style={{ padding:'12px 14px', fontSize:19, fontWeight:900, color:summary.poBillDues>0?'#dc2626':'#16a34a', textAlign:'right', border:`2px solid ${BD}` }}>{loading?'—':fmtINR(summary.poBillDues)}</td>
+                      <td style={{ padding:'12px 14px', fontSize:19, fontWeight:900, color:summary.poOrderDues>0?'#dc2626':'#16a34a', textAlign:'right', border:`2px solid ${BD}` }}>{loading?'—':fmtINR(summary.poOrderDues)}</td>
                     </tr>
                   </tbody>
                 </table>

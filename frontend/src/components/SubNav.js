@@ -87,8 +87,8 @@ const SECTIONS = {
     label: 'Project',
     routes: ['/project'],
     tabs: [
-      { label: 'Projects',       path: '/project/list' },
-      { label: 'Create Project', path: '/project/create' },
+      { label: 'Jobcodes',      path: '/project/list' },
+      { label: 'Project Close', path: '/project/close' },
     ],
   },
   stock: {

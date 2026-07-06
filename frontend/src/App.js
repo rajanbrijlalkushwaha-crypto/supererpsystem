@@ -85,7 +85,6 @@ import PurchaseDashboard from './pages/purchaseorder/PurchaseDashboard';
 import POTrackingView from './pages/purchaseorder/POTrackingView';
 
 import ProjectList from './pages/project/ProjectList';
-import ProjectCreate from './pages/project/ProjectCreate';
 import ProjectClose from './pages/project/ProjectClose';
 import CommunicationLogs   from './pages/communication/CommunicationLogs';
 import CommunicationDetail from './pages/communication/CommunicationDetail';
@@ -228,7 +227,6 @@ function AppContent() {
                 {/* Project routes */}
                 <Route path="/project" element={<Navigate to="/project/list" replace />} />
                 <Route path="/project/list"   element={<ProjectList />} />
-                <Route path="/project/create" element={<ProjectCreate />} />
                 <Route path="/project/close"  element={<ProjectClose />} />
                 <Route path="/communication/logs"           element={<CommunicationLogs />} />
                 <Route path="/communication/logs/:orderId"  element={<CommunicationDetail />} />

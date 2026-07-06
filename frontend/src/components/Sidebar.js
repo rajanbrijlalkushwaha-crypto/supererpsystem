@@ -87,9 +87,8 @@ const NAV = [
   {
     key:'project', label:'Jobcode', path:'/project/list', routes:['/project'],
     sub:[
-      { label:'All Jobcodes',   path:'/project/list',   permKey:'project' },
-      { label:'Create Jobcode', path:'/project/create', permKey:'project' },
-      { label:'Project Close',  path:'/project/close',  permKey:'project' },
+      { label:'All Jobcodes',  path:'/project/list',  permKey:'project' },
+      { label:'Project Close', path:'/project/close', permKey:'project' },
     ],
   },
   {

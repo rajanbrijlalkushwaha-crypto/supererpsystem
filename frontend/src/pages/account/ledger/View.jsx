@@ -521,10 +521,19 @@ export default function LedgerView() {
                           onClick={() => setExpanded(isOpen ? null : l.ledger)}>
                           {(() => {
                             const st = balanceStatus(l.partyType, l.balance, hasBank);
+                            const isPending = !hasBank && bal > 0 && (
+                              (l.partyType==='client' && l.balance > 0) ||
+                              (l.partyType==='vendor' && l.balance < 0)
+                            );
                             return (
-                              <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`,
-                                borderRadius:5, padding:'3px 9px', fontSize:10.5, fontWeight:700, whiteSpace:'nowrap' }}>
-                                {st.label}
+                              <span style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:5, flexWrap:'nowrap' }}>
+                                {isPending && (
+                                  <span style={{ background:'#b45309', color:'#fff', borderRadius:4, padding:'2px 7px', fontSize:9.5, fontWeight:800, letterSpacing:'0.4px' }}>PENDING</span>
+                                )}
+                                <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`,
+                                  borderRadius:5, padding:'3px 9px', fontSize:10.5, fontWeight:700, whiteSpace:'nowrap' }}>
+                                  {st.label}
+                                </span>
                               </span>
                             );
                           })()}
@@ -597,7 +606,12 @@ export default function LedgerView() {
                                                 {e.credit>0?`₹${fmt(e.credit)}`:'—'}
                                               </td>
                                               <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700 }}>
-                                                <span style={{ color:rd?'#1e40af':'#7c3aed' }}>₹{fmt(Math.abs(running))} {rd?'Dr':'Cr'}</span>
+                                                <span style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4 }}>
+                                                  {Math.abs(running) > 0.005 && (src==='sales-bill'||src==='purchase-bill') && (
+                                                    <span style={{ background:'#b45309', color:'#fff', borderRadius:3, padding:'1px 5px', fontSize:9, fontWeight:800 }}>PENDING</span>
+                                                  )}
+                                                  <span style={{ color:rd?'#1e40af':'#7c3aed' }}>₹{fmt(Math.abs(running))} {rd?'Dr':'Cr'}</span>
+                                                </span>
                                               </td>
                                             </tr>
                                           );

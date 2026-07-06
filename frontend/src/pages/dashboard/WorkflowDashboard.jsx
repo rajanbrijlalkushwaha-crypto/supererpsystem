@@ -20,7 +20,7 @@ const PHASES = [
     border: '#16a34a', accent: '#15803d', textOnDark: '#fff',
     steps: [
       { no:1, icon:'📋', title:'Receive Order\nfrom Client',   desc:'Check all details, scope & terms',                                  path:'/client/view' },
-      { no:2, icon:'📁', title:'Create Project\n& Save',       desc:'Create and save in Project Folder',                                  path:'/project/create' },
+      { no:2, icon:'📁', title:'Create Jobcode\n& Save',       desc:'Create and save in Project Folder',                                  path:'/project/list' },
       { no:3, icon:'🖥ï¸', title:'Entry in Tally\n& Local Portal', desc:'Make entry in Tally and Local Portal',                           path:'/tally/import' },
       { no:4, icon:'📄', title:'Save PDF in\nProject Folder',  desc:'Save PDF with Seal & Sign of Authorized Person',                    path:'/project/list' },
       { no:5, icon:'📐', title:'Specs Drawing &\nScope of Work', desc:'Create or find specs drawing, add all add-on items & scope of work', path:'/sales-order/create' },

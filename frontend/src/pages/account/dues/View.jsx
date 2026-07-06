@@ -495,7 +495,7 @@ function printAdvice(entityName, groupRows, type, companyData, entityDetail, bil
 /* ══════════════════════════════════════════════════════════
    PRINT LIST REPORT (tabular summary, company header + orientation)
 ══════════════════════════════════════════════════════════ */
-const printListReport = async (title, subtitle, cols, rows, groupEnds, rightColsSet, boldColsSet, company, orientation='landscape') => {
+const printListReport = async (title, subtitle, cols, rows, groupEnds, rightColsSet, boldColsSet, company, orientation='landscape', subTotalRows=null) => {
   /* ── fetch company logo ── */
   let logoB64 = '';
   if (company?.logoFileName && company?.companyId) {
@@ -507,84 +507,131 @@ const printListReport = async (title, subtitle, cols, rows, groupEnds, rightCols
   }
   const coName  = company?.companyName || 'Epsilon Enterprise';
   const coAddr  = [company?.address, company?.city, company?.state, company?.pincode].filter(Boolean).join(', ');
-  const coMeta  = [company?.gstin ? 'GSTIN: '+company.gstin : '', company?.phone ? 'Ph: '+company.phone : '', company?.email ? 'Email: '+company.email : ''].filter(Boolean).join('  |  ');
+  const coPhone = company?.phone || '';
+  const coEmail = company?.email || '';
+  const coGstin = company?.gstin || '';
+  const pageUrl = (typeof window !== 'undefined') ? window.location.href : '';
 
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   const rightCols = rightColsSet instanceof Set ? rightColsSet : new Set([7,8,9,11,15,16]);
   const boldCols  = boldColsSet  instanceof Set ? boldColsSet  : new Set([11,15,16]);
   const ends = groupEnds instanceof Set ? groupEnds : new Set();
-  const rHtml = rows.map((r,ri) => {
+
+  /* auto-detect wrappable columns from header names */
+  const wrapCols = new Set();
+  cols.forEach((c, ci) => {
+    const cl = String(c).toLowerCase();
+    if (cl.includes('name') || cl.includes('date') || cl.includes('product') ||
+        cl.includes('description') || cl.includes('bill no') || cl.includes('bill') ||
+        cl.includes('narration') || cl.includes('invoice')) {
+      wrapCols.add(ci);
+    }
+  });
+
+  /* build row HTML — include subtotal rows after group-end */
+  let rHtml = '';
+  rows.forEach((r, ri) => {
     const isEnd = ends.has(ri);
-    const cls = ['seq'+ri]; if(isEnd) cls.push('grp-end');
-    return `<tr class="${cls.join(' ')}">${r.map((c,ci)=>{
-      const tc=[]; if(rightCols.has(ci)) tc.push('r'); if(boldCols.has(ci)) tc.push('b');
+    const cls = []; if (isEnd && !(subTotalRows && subTotalRows.has(ri))) cls.push('grp-end');
+    rHtml += `<tr${cls.length?' class="'+cls.join(' ')+'"':''}>${r.map((c,ci) => {
+      const tc=[]; if(rightCols.has(ci)) tc.push('r'); if(boldCols.has(ci)) tc.push('b'); if(wrapCols.has(ci)) tc.push('wc');
       const clsStr=tc.length?` class="${tc.join(' ')}"`:''
-      const val=(c===null||c===undefined||c==='')?'':String(c).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      return `<td${clsStr}>${val}</td>`;
+      const raw=(c===null||c===undefined||c==='')?'':String(c);
+      const val=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const stkStyle=raw.includes('\n')?' style="white-space:pre-line;line-height:1.6;text-align:right;"':'';
+      return `<td${clsStr}${stkStyle}>${val}</td>`;
     }).join('')}</tr>`;
-  }).join('');
+    /* subtotal row after multi-item orders */
+    if (subTotalRows && subTotalRows.has(ri)) {
+      const sub = subTotalRows.get(ri);
+      rHtml += `<tr class="sub-row grp-end">${sub.map((c,ci) => {
+        const tc=[]; if(rightCols.has(ci)) tc.push('r');
+        const clsStr=tc.length?` class="${tc.join(' ')}"`:''
+        const val=c?String(c).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
+        return `<td${clsStr}>${val}</td>`;
+      }).join('')}</tr>`;
+    }
+  });
 
   const coHeaderHtml = `
     <div class="co-hdr">
-      ${logoB64 ? `<img src="${logoB64}" class="co-logo" alt="logo"/>` : ''}
+      ${logoB64 ? `<div class="co-logo-wrap"><img src="${logoB64}" class="co-logo" alt="logo"/></div>` : ''}
       <div class="co-info">
         <div class="co-name">${coName}</div>
-        ${coAddr ? `<div class="co-addr">${coAddr}</div>` : ''}
-        ${coMeta ? `<div class="co-addr">${coMeta}</div>` : ''}
+        ${coAddr   ? `<div class="co-addr">${coAddr}</div>` : ''}
+        <div class="co-meta">${[coGstin?'GSTIN: <b>'+coGstin+'</b>':'', coPhone?'Ph: '+coPhone:'', coEmail?'Email: '+coEmail:''].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</div>
       </div>
     </div>`;
-
-  const isP = orientation === 'portrait';
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#000;background:#fff;}
-.pg{padding:8mm 10mm;}
-/* ── Company header ── */
-.co-hdr{display:flex;align-items:center;gap:14px;margin-bottom:10px;padding-bottom:8px;border-bottom:3px solid #1a2a3a;}
-.co-logo{height:66px;width:auto;object-fit:contain;flex-shrink:0;}
-.co-info{flex:1;}
-.co-name{font-size:17pt;font-weight:bold;color:#1a2a3a;line-height:1.2;}
-.co-addr{font-size:10pt;color:#444;margin-top:2px;line-height:1.5;}
+body{font-family:'Calibri','Segoe UI',Arial,sans-serif;font-size:11.5pt;color:#000;background:#fff;}
+.pg{padding:10mm 12mm;}
+/* ── Company header — centered ── */
+.co-hdr{text-align:center;margin-bottom:12px;padding-bottom:10px;border-bottom:3px double #1a2a3a;}
+.co-logo-wrap{margin-bottom:6px;}
+.co-logo{height:62px;width:auto;object-fit:contain;}
+.co-name{font-size:20pt;font-weight:900;color:#1a2a3a;letter-spacing:0.3pt;line-height:1.2;}
+.co-addr{font-size:10.5pt;color:#333;margin-top:5px;line-height:1.7;}
+.co-meta{font-size:10.5pt;color:#222;margin-top:3px;line-height:1.7;}
 /* ── Report title ── */
-.report-head{text-align:center;margin-bottom:8px;}
-h1{font-size:15pt;font-weight:bold;color:#1a2a3a;margin-bottom:2px;}
-.sub{font-size:11pt;color:#444;padding-bottom:5px;border-bottom:2px solid #1a2a3a;margin-bottom:8px;display:block;}
-/* ── Table — Excel style ── */
-table{width:100%;border-collapse:collapse;border:2px solid #000;}
+.report-head{text-align:center;margin-bottom:10px;}
+h1{font-size:14pt;font-weight:bold;color:#1a2a3a;margin-bottom:3px;}
+.sub{font-size:10.5pt;color:#555;padding-bottom:5px;border-bottom:2px solid #1a2a3a;margin-bottom:10px;display:block;}
+/* ── Table ── */
+table{width:100%;border-collapse:collapse;border:2px solid #1a2a3a;}
 thead{display:table-header-group;}
 thead tr th{
-  background:#1a2a3a;color:#fff;
-  padding:10px 10px;font-size:10.5pt;font-weight:bold;
-  text-align:left;border:1px solid #000;white-space:nowrap;
+  background:#104f4f;color:#fff;
+  padding:7px 9px;font-size:10pt;font-weight:700;
+  text-align:left;border:1px solid #0b3d3d;white-space:nowrap;
 }
 thead tr th.r{text-align:right;}
-tbody tr:nth-child(odd)  td{background:#ffffff;}
-tbody tr:nth-child(even) td{background:#eef3fb;}
 tbody tr td{
-  padding:9px 10px;font-size:10.5pt;
-  border-right:1px solid #aaa;border-bottom:1px solid #ddd;border-left:none;border-top:none;
-  vertical-align:middle;color:#111;line-height:1.6;word-break:break-word;
+  padding:6px 9px;font-size:10pt;
+  border:1px solid #c8d4e0;
+  vertical-align:middle;color:#111;line-height:1.4;
+  white-space:nowrap;
 }
-tbody tr td:first-child{border-left:1px solid #aaa;}
-tbody tr.grp-end td{border-bottom:2px solid #000 !important;}
+tbody tr td.wc{white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:120px;}
+tbody tr:nth-child(even) td{background:#f2f7ff;}
+tbody tr.grp-end td{border-bottom:2.5px solid #1a2a3a !important;}
+tbody tr.sub-row td{
+  background:#fefce8 !important;
+  font-weight:800;font-size:11.5pt;
+  border-top:1.5px solid #d97706 !important;
+  border-bottom:2.5px solid #1a2a3a !important;
+  color:#78350f;
+}
+tbody tr.sub-row td:first-child{border-left:2px solid #d97706;}
 tfoot tr td{
-  padding:9px 10px;font-size:11pt;font-weight:bold;
-  border:1px solid #000;background:#c8d8ea;
+  padding:9px 11px;font-size:12pt;font-weight:800;
+  border:1.5px solid #1a2a3a;background:#dbeafe;color:#1a2a3a;
 }
 .r{text-align:right;}.b{font-weight:700;}
 /* ── Footer ── */
-.foot{margin-top:12px;font-size:9.5pt;color:#444;text-align:right;border-top:1.5px solid #888;padding-top:6px;font-style:italic;}
+.foot{margin-top:14px;font-size:9.5pt;color:#555;display:flex;justify-content:space-between;align-items:flex-start;border-top:1px solid #aaa;padding-top:6px;}
+.foot-url{color:#104f4f;font-weight:600;}
 @media print{
-  @page{margin:10mm;size:A3 ${orientation};}
+  @page{margin:5mm;size:A3 ${orientation};}
   .pg{padding:0;}
-  .co-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  tbody tr:nth-child(odd)  td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#ffffff !important;}
-  tbody tr:nth-child(even) td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#eef3fb !important;}
-  thead tr th{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#1a2a3a !important;color:#fff !important;}
-  tfoot tr td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#c8d8ea !important;}
-  .foot{page-break-inside:avoid;}
+  thead{display:table-header-group;}
+  table{page-break-inside:auto;width:100%;table-layout:auto;}
+  tr{page-break-inside:avoid;page-break-after:auto;}
+  thead tr th{
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    background:#104f4f !important;color:#fff !important;
+    font-size:8.5pt;padding:5px 6px;white-space:normal;word-break:break-word;
+  }
+  tbody tr td{font-size:8.5pt;padding:4px 6px;}
+  tbody tr td.wc{max-width:100px;}
+  tbody tr.sub-row td{font-size:9pt;padding:5px 6px;}
+  tfoot tr td{font-size:9.5pt;padding:6px 7px;}
+  tbody tr:nth-child(even) td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#f2f7ff !important;}
+  tbody tr.sub-row td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fefce8 !important;}
+  tfoot tr td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#dbeafe !important;}
+  .foot{page-break-inside:avoid;font-size:8pt;}
 }
 </style>
 </head><body><div class="pg">
@@ -597,10 +644,13 @@ ${coHeaderHtml}
 <thead><tr>${cols.map((c,ci)=>`<th${rightCols.has(ci)?' class="r"':''}>${c}</th>`).join('')}</tr></thead>
 <tbody>${rHtml}</tbody>
 </table>
-<div class="foot">Printed by: ${today2}</div>
+<div class="foot">
+  <span>Printed by Epsilon ERP &nbsp;|&nbsp; ${today2}</span>
+  ${pageUrl ? `<span class="foot-url">${pageUrl}</span>` : ''}
+</div>
 </div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
 </body></html>`;
-  const w=window.open('','_blank','width=1400,height=900,scrollbars=yes');
+  const w=window.open('','_blank','width=1500,height=900,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
   w.document.write(html); w.document.close();
 };
@@ -857,17 +907,27 @@ const ViewDues = () => {
     return tRows;
   }, [filtered, salesBillsLookup]);
 
-  const totals = useMemo(() => ({
-    orderVal: filtered.reduce((s,r) => s+r.orderTotal, 0),
-    received: filtered.reduce((s,r) => s+(activeTab==='client'?(r.received||0):(r.paid||0)), 0),
-    due:      filtered.reduce((s,r) => s+Math.max(0,r.due), 0),
-    taxable:  tableRows.reduce((s,tr) => {
-      if (!tr.item) return s;
-      const qty=parseFloat(tr.item.qty||tr.item.quantity||0), rate=parseFloat(tr.item.rate||0);
-      const disc=tr.item.discountType==='%'?qty*rate*(parseFloat(tr.item.discount)||0)/100:(parseFloat(tr.item.discount)||0);
-      return s+(qty*rate-disc);
-    }, 0),
-  }), [filtered, tableRows, activeTab]);
+  const totals = useMemo(() => {
+    let taxable = 0, gst = 0;
+    tableRows.forEach(tr => {
+      if (!tr.item) return;
+      const qty  = parseFloat(tr.item.qty||tr.item.quantity||0);
+      const rate = parseFloat(tr.item.rate||0);
+      const disc = tr.item.discountType==='%'
+        ? qty*rate*(parseFloat(tr.item.discount)||0)/100
+        : (parseFloat(tr.item.discount)||0);
+      const tx   = qty*rate-disc;
+      const gp   = parseFloat(tr.item.gstPercent||tr.item.gstPct||tr.item.gst||0);
+      taxable += tx;
+      gst     += tx * gp / 100;
+    });
+    return {
+      orderVal: filtered.reduce((s,r) => s+r.orderTotal, 0),
+      received: filtered.reduce((s,r) => s+(activeTab==='client'?(r.received||0):(r.paid||0)), 0),
+      due:      filtered.reduce((s,r) => s+Math.max(0,r.due), 0),
+      taxable, gst,
+    };
+  }, [filtered, tableRows, activeTab]);
 
   const TH = ({children, right, style:sx={}}) => (
     <th style={{ padding:'8px 9px', background:'#104f4f', color:'#fff', fontWeight:700,
@@ -884,81 +944,144 @@ const ViewDues = () => {
     /* ── column definitions ── */
     let cols, rightCols, boldCols;
     if (isVendorTab) {
-      // #(0) | PO No(1) | Client Name(2, optional) | Vendor Name | PO Date | Due Date | Product | Qty | Rate | Taxable | GST% | PO Value | Purchase Bill No | Bill Date | Payment Date | Payment Amt | Balance Due
+      // #(0) | PO No(1) | [Client Name(2)] | Vendor | PO Date | Due Date | Product | Qty×Rate | Taxable | GST% | GST Amt | PO Value | Bill No | Bill Date | Payment Date | Payment Amt | Balance Due
       cols = ['#', 'PO No'];
       if (showClientInPrint) cols.push('Client Name');
       cols.push('Vendor Name', 'PO Date', 'Due Date', 'Product / Description',
-        'Qty', 'Rate (₹)', 'Taxable (₹)', 'GST%',
+        'Qty × Rate', 'Taxable (₹)', 'GST%', 'GST Amt (₹)',
         'PO Value (₹)', 'Purchase Bill No', 'Bill Date', 'Payment Date', 'Payment Amt (₹)', 'Balance Due (₹)');
-      // Qty starts at index 7 (with client) or 6 (without)
+      // Qty×Rate starts at index 7 (with client) or 6 (without)
       const baseQtyIdx = showClientInPrint ? 7 : 6;
-      // right-align: Qty(+0), Rate(+1), Taxable(+2), PO Value(+4), Payment Amt(+8), Balance Due(+9)
-      rightCols = new Set([baseQtyIdx, baseQtyIdx+1, baseQtyIdx+2, baseQtyIdx+4, baseQtyIdx+8, baseQtyIdx+9]);
+      // right-align: Qty×Rate(+0), Taxable(+1), GST Amt(+3), PO Value(+4), Payment Amt(+8), Balance Due(+9)
+      rightCols = new Set([baseQtyIdx, baseQtyIdx+1, baseQtyIdx+3, baseQtyIdx+4, baseQtyIdx+8, baseQtyIdx+9]);
       boldCols  = new Set([baseQtyIdx+4, baseQtyIdx+9]);
     } else {
+      // #(0) | Order No(1) | Client Name(2) | Order Date(3) | Cust PO No(4) | Due Date(5) | Product(6) | Qty×Rate(7) | Taxable(8) | GST%(9) | GST Amt(10) | Order Value(11) | Sales Bill(12) | Bill Date(13) | Receipt Date(14) | Receipt Amt(15) | Balance Due(16)
       cols = ['#', 'Order No', 'Client Name', 'Order Date', 'Cust PO No', 'Due Date',
-        'Product / Description', 'Qty', 'Rate (₹)', 'Taxable (₹)', 'GST%',
+        'Product / Description', 'Qty × Rate', 'Taxable (₹)', 'GST%', 'GST Amt (₹)',
         'Order Value (₹)', 'Sales Bill No', 'Bill Date', 'Receipt Date', 'Receipt Amt (₹)', 'Balance Due (₹)'];
-      rightCols = new Set([7,8,9,11,15,16]);
+      rightCols = new Set([7,8,10,11,15,16]);
       boldCols  = new Set([11,15,16]);
     }
 
     const pRows = [];
-    tableRows.forEach(tr => {
-      const { row, item, isFirst, seq, receipts } = tr;
+    const subTotalRowsMap = new Map();
 
-      /* bills: vendor tab uses purchase billsLookup, client uses salesBillsLookup */
+    /* Group tableRows by order, preserving order of appearance */
+    const orderIds2 = [];
+    const orderMap2 = new Map();
+    tableRows.forEach(tr => {
+      const id = String(tr.row.orderId);
+      if (!orderMap2.has(id)) {
+        orderIds2.push(id);
+        orderMap2.set(id, { row: tr.row, seq: tr.seq, items: [], receipts: tr.receipts });
+      }
+      if (tr.item) orderMap2.get(id).items.push(tr.item);
+    });
+
+    orderIds2.forEach(orderId => {
+      const { row, seq, items, receipts } = orderMap2.get(orderId);
+
       const orderBills = isVendorTab
         ? (billsLookup[String(row.orderId)] || []).slice().sort((a,b)=>new Date(a.billDate||0)-new Date(b.billDate||0))
         : (salesBillsLookup[String(row.orderId)] || []).slice().sort((a,b)=>new Date(a.billDate||0)-new Date(b.billDate||0));
 
-      const qty   = item ? parseFloat(item.qty||item.quantity||0) : 0;
-      const rate  = item ? parseFloat(item.rate||0) : 0;
-      const disc  = item ? (item.discountType==='%' ? qty*rate*(parseFloat(item.discount)||0)/100 : (parseFloat(item.discount)||0)) : 0;
-      const taxable = qty * rate - disc;
-      const totPmt  = receipts.reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+      /* one print-row per item OR per receipt/bill — whichever is more */
+      const maxRows = Math.max(items.length || 1, orderBills.length, receipts.length, 1);
 
-      let row_;
-      if (isVendorTab) {
-        const linkedSO = soMap[String(row.linkedSalesOrderId || '')];
-        const clientName = linkedSO
-          ? (linkedSO.customerName || linkedSO.clientName || linkedSO.party || '')
-          : (row.clientName || '');
-        // #(0) | PO No(1) | [Client Name(2)] | Vendor Name | PO Date | Due Date
-        row_ = [
-          isFirst ? seq : '',
-          isFirst ? (row.orderNo || row.poNo || '—') : '',
-          ...(showClientInPrint ? [isFirst ? (clientName || '—') : ''] : []),
-          isFirst ? (row.entityName || '—') : '',
-          isFirst ? fmtD(row.orderDate) : '',
-          isFirst ? fmtD(row.deliveryDate || row.dueDate) : '',
-        ];
-      } else {
-        // #(0) | Order No(1) | Client Name(2) | Order Date(3) | Cust PO No(4) | Due Date(5)
-        row_ = [
-          isFirst ? seq : '',
-          isFirst ? (row.orderNo || '—') : '',
-          isFirst ? (row.entityName || '—') : '',
-          isFirst ? fmtD(row.orderDate) : '',
-          isFirst ? (row.customerPO || row.reference || '—') : '',
-          isFirst ? fmtD(row.deliveryDate || row.dueDate) : '',
-        ];
+      for (let j = 0; j < maxRows; j++) {
+        const item    = items[j]      || null;
+        const bill    = orderBills[j] || null;
+        const receipt = receipts[j]   || null;
+        const isFirst = j === 0;
+
+        const qty     = item ? parseFloat(item.qty||item.quantity||0) : 0;
+        const rate    = item ? parseFloat(item.rate||0) : 0;
+        const disc    = item ? (item.discountType==='%' ? qty*rate*(parseFloat(item.discount)||0)/100 : (parseFloat(item.discount)||0)) : 0;
+        const taxable = qty * rate - disc;
+
+        let row_;
+        if (isVendorTab) {
+          const linkedSO   = soMap[String(row.linkedSalesOrderId || '')];
+          const clientName = linkedSO
+            ? (linkedSO.customerName || linkedSO.clientName || linkedSO.party || '')
+            : (row.clientName || '');
+          row_ = [
+            isFirst ? seq : '',
+            isFirst ? (row.orderNo || row.poNo || '—') : '',
+            ...(showClientInPrint ? [isFirst ? (clientName || '—') : ''] : []),
+            isFirst ? (row.entityName || '—') : '',
+            isFirst ? fmtD(row.orderDate) : '',
+            isFirst ? fmtD(row.deliveryDate || row.dueDate) : '',
+          ];
+        } else {
+          row_ = [
+            isFirst ? seq : '',
+            isFirst ? (row.orderNo || '—') : '',
+            isFirst ? (row.entityName || '—') : '',
+            isFirst ? fmtD(row.orderDate) : '',
+            isFirst ? (row.customerPO || row.reference || '—') : '',
+            isFirst ? fmtD(row.deliveryDate || row.dueDate) : '',
+          ];
+        }
+
+        const gstPctPrint = item ? parseFloat(item.gstPercent||item.gstPct||item.gst||0) : 0;
+        const gstAmtPrint = taxable * gstPctPrint / 100;
+        const unitStr = item ? (item.unit||'').trim() : '';
+        const qtyStr  = item ? (qty%1===0 ? qty.toFixed(0) : qty.toFixed(2)) : '';
+        row_.push(
+          item ? (item.itemName||item.description||'—') : '',
+          item ? `${qtyStr}${unitStr?' '+unitStr:''}\n${fmt(rate)}${unitStr?'/'+unitStr:''}` : '',
+          item ? fmt(taxable) : '',
+          item ? `${gstPctPrint}%` : '',
+          item ? fmt(gstAmtPrint) : '',
+          isFirst ? fmt(row.orderTotal) : '',
+          /* each bill/receipt on its own row — matching portal display */
+          bill    ? (bill.billNo || bill.vendorBillNo || `B#${bill.billId}`) : '',
+          bill    ? fmtD(bill.billDate) : '',
+          receipt ? fmtD(receipt.date) : '',
+          receipt ? fmt(parseFloat(receipt.amount)||0) : '',
+          isFirst ? fmt(Math.max(0, row.due)) : '',
+        );
+        pRows.push(row_);
       }
 
-      row_.push(
-        item ? (item.itemName||item.description||'—') : '—',
-        item ? `${qty.toFixed(2)} ${item.unit||''}`.trim() : '—',
-        item ? fmt(rate) : '—',
-        item ? fmt(taxable) : '—',
-        item ? `${item.gstPercent||item.gstPct||item.gst||0}%` : '—',
-        isFirst ? fmt(row.orderTotal) : '',
-        isFirst ? orderBills.map(b => b.billNo || b.vendorBillNo || `B#${b.billId}`).join(', ') : '',
-        isFirst ? orderBills.map(b => fmtD(b.billDate)).join(', ') : '',
-        isFirst ? receipts.map(p => fmtD(p.date)).join(', ') : '',
-        isFirst ? fmt(totPmt) : '',
-        isFirst ? fmt(Math.max(0, row.due)) : '',
-      );
-      pRows.push(row_);
+      /* subtotal row for orders with multiple display rows */
+      if (maxRows > 1) {
+        const groupEndIdx = pRows.length - 1;
+        let totTax = 0, totGst = 0;
+        items.forEach(it => {
+          const q = parseFloat(it.qty||it.quantity||0);
+          const r2 = parseFloat(it.rate||0);
+          const d = it.discountType==='%' ? q*r2*(parseFloat(it.discount)||0)/100 : (parseFloat(it.discount)||0);
+          const tx = q*r2-d;
+          const gp = parseFloat(it.gstPercent||it.gstPct||it.gst||0);
+          totTax += tx;
+          totGst += tx*gp/100;
+        });
+        const totRec = receipts.reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+        const totDue = Math.max(0, parseFloat(row.due)||0);
+        const ov     = parseFloat(row.orderTotal)||0;
+
+        const subCells = new Array(cols.length).fill('');
+        if (isVendorTab) {
+          const bi = showClientInPrint ? 7 : 6;
+          subCells[bi-1] = 'ORDER TOTAL';
+          subCells[bi+1] = fmt(totTax);
+          subCells[bi+3] = fmt(totGst);
+          subCells[bi+4] = fmt(ov);
+          subCells[bi+8] = fmt(totRec);
+          subCells[bi+9] = fmt(totDue);
+        } else {
+          subCells[6]  = 'ORDER TOTAL';
+          subCells[8]  = fmt(totTax);
+          subCells[10] = fmt(totGst);
+          subCells[11] = fmt(ov);
+          subCells[15] = fmt(totRec);
+          subCells[16] = fmt(totDue);
+        }
+        subTotalRowsMap.set(groupEndIdx, subCells);
+      }
     });
 
     const groupEnds = new Set();
@@ -970,7 +1093,7 @@ const ViewDues = () => {
     const title    = isVendorTab ? 'Payables — Vendor List' : 'Receivables — Client List';
     const subtitle = (fy==='all' ? 'All FY' : `FY ${fy}`) + (entityFlt!=='all' ? ` | ${entityFlt}` : '');
     const orient   = listPrintOpts?.orient || 'landscape';
-    printListReport(title, subtitle, cols, pRows, groupEnds, rightCols, boldCols, selectedCompany, orient);
+    printListReport(title, subtitle, cols, pRows, groupEnds, rightCols, boldCols, selectedCompany, orient, subTotalRowsMap);
     setListPrintOpts(null);
   };
 
@@ -1132,7 +1255,7 @@ const ViewDues = () => {
             overflow:'auto', maxHeight:'calc(100vh - 270px)', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
             {activeTab === 'client' ? (
             /* ══ RECEIVABLE TABLE (client) ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1100 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1300 }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1140,9 +1263,11 @@ const ViewDues = () => {
                   <TH>Client Name</TH>
                   <TH>Due Date</TH>
                   <TH>Product / Description</TH>
+                  <TH right>Rate (₹)</TH>
                   <TH right style={{width:80}}>Qty</TH>
                   <TH right>Taxable (₹)</TH>
                   <TH right style={{width:55}}>GST%</TH>
+                  <TH right>GST Amt (₹)</TH>
                   <TH right>Order Value (₹)</TH>
                   <TH>Sales Bill No</TH>
                   <TH>Receipt</TH>
@@ -1157,6 +1282,8 @@ const ViewDues = () => {
                   const rate=item?parseFloat(item.rate||0):0;
                   const disc=item?(item.discountType==='%'?qty*rate*(parseFloat(item.discount)||0)/100:(parseFloat(item.discount)||0)):0;
                   const taxable=qty*rate-disc;
+                  const gstPct=item?parseFloat(item.gstPercent||item.gstPct||item.gst||0):0;
+                  const gstAmt=taxable*gstPct/100;
                   const totalReceipt=receipts.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
                   const C = (content, right=false, extra={}) => rowSpan > 0 ? (
                     <td rowSpan={rowSpan} style={{ padding:'6px 9px', borderRight:'1px solid #e5e7eb', borderBottom:'1px solid #e5e7eb', background:bg, textAlign:right?'right':'left', verticalAlign:'top', ...extra }}>{content}</td>
@@ -1170,9 +1297,11 @@ const ViewDues = () => {
                       <td style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#374151'}}>
                         {item ? <div>{item.itemName||item.description||item.name||'—'}</div> : <span style={{color:'#9ca3af',fontStyle:'italic'}}>No items</span>}
                       </td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(rate):'—'}</td>
                       <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
                       <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(taxable):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${item.gstPercent||item.gstPct||item.gst||0}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${gstPct}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmt):'—'}</td>
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {salesBills.length===0?<span style={{color:'#9ca3af'}}>—</span>:salesBills.map((b,bi)=>(
@@ -1193,9 +1322,12 @@ const ViewDues = () => {
               </tbody>
               <tfoot>
                 <tr style={{ background:'#e8f0fe', position:'sticky', bottom:0, zIndex:2 }}>
-                  <td colSpan={6} style={{padding:'8px 10px',fontWeight:700,color:'#104f4f',fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
+                  <td colSpan={5} style={{padding:'8px 10px',fontWeight:700,color:'#104f4f',fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
+                  <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
+                  <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#1e293b'}}>₹{fmt(totals.taxable)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received)}</td>
@@ -1204,8 +1336,8 @@ const ViewDues = () => {
               </tfoot>
             </table>
             ) : (
-            /* ══ PAYABLE TABLE (vendor) — # | Client | Vendor | PO Date | PO No | Product | Rate | Qty | Taxable | GST% | Order Value | Bill | Payment | Balance ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1300 }}>
+            /* ══ PAYABLE TABLE (vendor) ══ */
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1400 }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1218,6 +1350,7 @@ const ViewDues = () => {
                   <TH right style={{width:80}}>Qty</TH>
                   <TH right>Taxable (₹)</TH>
                   <TH right style={{width:55}}>GST%</TH>
+                  <TH right>GST Amt (₹)</TH>
                   <TH right>PO Value (₹)</TH>
                   <TH>Purchase Bill</TH>
                   <TH right>Payment</TH>
@@ -1232,6 +1365,8 @@ const ViewDues = () => {
                   const rate=item?parseFloat(item.rate||0):0;
                   const disc=item?(item.discountType==='%'?qty*rate*(parseFloat(item.discount)||0)/100:(parseFloat(item.discount)||0)):0;
                   const taxable=qty*rate-disc;
+                  const gstPctV=item?parseFloat(item.gstPercent||item.gstPct||item.gst||0):0;
+                  const gstAmtV=taxable*gstPctV/100;
                   const totalPayment=receipts.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
                   const linkedSO = soMap[String(row.linkedSalesOrderId||'')];
                   const clientName = linkedSO ? (linkedSO.customerName||linkedSO.clientName||linkedSO.party||'') : (row.clientName||'');
@@ -1251,7 +1386,8 @@ const ViewDues = () => {
                       <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(rate):'—'}</td>
                       <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
                       <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(taxable):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${item.gstPercent||item.gstPct||item.gst||0}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${gstPctV}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmtV):'—'}</td>
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {salesBills.length===0?<span style={{color:'#9ca3af'}}>—</span>:salesBills.map((b,bi)=>(
@@ -1277,6 +1413,7 @@ const ViewDues = () => {
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#1e293b'}}>₹{fmt(totals.taxable)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received)}</td>

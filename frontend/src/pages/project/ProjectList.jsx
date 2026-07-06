@@ -1362,12 +1362,6 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                 cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
                 🖨️ PDF
               </button>
-              <button onClick={()=>navigate('/project/create')}
-                style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-                  border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-                  cursor:'pointer', fontSize:11, fontWeight:700, fontFamily:F }}>
-                + New Project
-              </button>
             </>
           )}
           <button onClick={load}
@@ -1410,9 +1404,6 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                   <td style={td()}><StatusBadge s={p.status}/></td>
                   <td style={td()}>
                     <div style={{ display:'flex', gap:4 }}>
-                      <button onClick={()=>navigate(`/project/create?edit=${p.projectId}`)}
-                        style={{ height:20, padding:'0 7px', fontSize:9, fontWeight:700, cursor:'pointer',
-                          background:'#EEF4FF', border:`1px solid ${BD}`, color:P, borderRadius:3, fontFamily:F }}>✎ Edit</button>
                       <button onClick={async()=>{
                         if(!window.confirm(`Delete "${p.projectName}"?`)) return;
                         await axios.delete(`/api/projects/${p.projectId}?companyId=${cid}`).catch(()=>{});

@@ -261,6 +261,21 @@ export default function CreateReceipt() {
                 {checkedRows.length} selected — Total: ₹{fmt(totalAmount)}
               </span>
             </div>
+            {/* Pending summary banner */}
+            {(() => {
+              const totalPending = orderRows.reduce((s,r) => s + r.due, 0);
+              const pendingCount = orderRows.filter(r => r.due > 0).length;
+              if (totalPending <= 0) return null;
+              return (
+                <div style={{ background:'#fef3c7', borderBottom:'1px solid #fbbf24', padding:'8px 16px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                  <span style={{ background:'#b45309', color:'#fff', borderRadius:5, padding:'2px 10px', fontSize:11, fontWeight:800, letterSpacing:'0.5px' }}>PENDING</span>
+                  <span style={{ fontSize:12, color:'#92400e', fontWeight:700 }}>
+                    {pendingCount} order{pendingCount>1?'s':''} with outstanding dues —
+                    Total Pending: <span style={{ color:'#dc2626', fontSize:13, fontWeight:800 }}>₹{fmt(totalPending)}</span>
+                  </span>
+                </div>
+              );
+            })()}
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:F, fontSize:12 }}>
                 <thead>
@@ -296,7 +311,14 @@ export default function CreateReceipt() {
                         <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, borderRight:`1px solid ${BD}`, textAlign:'right', fontWeight:600 }}>₹{fmt(r.orderTotal)}</td>
                         <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, borderRight:`1px solid ${BD}`, textAlign:'right', color:'#059669', fontWeight:600 }}>₹{fmt(r.prevReceived)}</td>
                         <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, borderRight:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:dueColor }}>
-                          {r.due <= 0 ? <span style={{ color:'#059669' }}>✓ Cleared</span> : `₹${fmt(r.due)}`}
+                          {r.due <= 0 ? (
+                            <span style={{ color:'#059669' }}>✓ Cleared</span>
+                          ) : (
+                            <span style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:6 }}>
+                              <span style={{ background:'#dc2626', color:'#fff', borderRadius:4, padding:'2px 8px', fontSize:10, fontWeight:800, letterSpacing:'0.4px', flexShrink:0 }}>PENDING</span>
+                              <span style={{ color:'#dc2626', fontWeight:800 }}>₹{fmt(r.due)}</span>
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding:'6px 10px', borderBottom:`1px solid ${BD}` }}
                           onClick={e => e.stopPropagation()}>
