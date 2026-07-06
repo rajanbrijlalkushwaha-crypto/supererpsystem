@@ -10,7 +10,8 @@ echo.
 cd /d "%~dp0"
 
 echo [1/4] Pulling latest code from GitHub...
-git pull origin main
+git fetch --all
+git reset --hard epsilonportal/main 2>nul || git reset --hard origin/main
 
 echo.
 echo [2/4] Installing any new dependencies...
