@@ -251,13 +251,17 @@ const isActive = (routes, path) =>
   routes?.some(r => path === r || path.startsWith(r + '/'));
 
 const ACCOUNT_ROUTES = ['/account', '/tally'];
-const isAccountPath  = (p) => ACCOUNT_ROUTES.some(r => p === r || p.startsWith(r + '/'));
+// /account/dues?tab= links are sidebar shortcuts (Client Balance / Vendor Dues) — not account mode
+const isAccountPath = (p, search = '') => {
+  if (p === '/account/dues' && new URLSearchParams(search).get('tab')) return false;
+  return ACCOUNT_ROUTES.some(r => p === r || p.startsWith(r + '/'));
+};
 
 /* ──────────────────────────────────────────────
    SIDEBAR COMPONENT
 ──────────────────────────────────────────────── */
 export default function Sidebar() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate     = useNavigate();
   const { user, logout } = useAuth();
   const hasAccess = (navKey) => canViewNav(user, navKey);
@@ -274,17 +278,19 @@ export default function Sidebar() {
   });
 
   /* accountMode — transforms sidebar to show all account menu items */
-  const [accountMode, setAccountMode] = useState(() => isAccountPath(window.location.pathname));
+  const [accountMode, setAccountMode] = useState(
+    () => isAccountPath(window.location.pathname, window.location.search)
+  );
 
   useEffect(() => {
-    if (isAccountPath(pathname)) {
+    if (isAccountPath(pathname, search)) {
       setAccountMode(true);
     } else {
       setAccountMode(false);
       const act = NAV.find(n => !n.type && isActive(n.routes, pathname));
       setOpenKeys(act?.sub ? new Set([act.key]) : new Set());
     }
-  }, [pathname]);
+  }, [pathname, search]);
 
   useEffect(() => {
     localStorage.setItem('sidebar-pinned', String(pinned));
