@@ -986,6 +986,8 @@ export default function ProjectList() {
     new Set(['so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc','po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc',
              'exp_mode','exp_gstPct','exp_gstAmt'])
   );
+  const [colPanelOpen, setColPanelOpen] = useState(false);
+  const [colPanelTab,  setColPanelTab]  = useState('so');
   const cv  = key => !hiddenCols.has(key);
   const tcv = key => setHiddenCols(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
@@ -1463,55 +1465,80 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
             </span>
           </div>
 
-          {/* ── Column Toggle Buttons ── */}
-          <div style={{ background:'#f8faff', border:`1px solid ${BD}`, borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:9, fontWeight:800, color:'#1a3a8a', marginRight:4, whiteSpace:'nowrap',
-                  textTransform:'uppercase', letterSpacing:0.5 }}>SO ▸</span>
-                {SO_BTNS.map(b => (
-                  <button key={b.key} onClick={()=>tcv(b.key)}
-                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
-                      borderRadius:4, lineHeight:'18px',
-                      border: cv(b.key) ? '1.5px solid #1a3a8a' : '1.5px solid #d1d5db',
-                      background: cv(b.key) ? '#1a3a8a' : '#fff',
-                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
-                      transition:'all 0.1s' }}>
-                    {b.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:9, fontWeight:800, color:'#1a5500', marginRight:4, whiteSpace:'nowrap',
-                  textTransform:'uppercase', letterSpacing:0.5 }}>PO ▸</span>
-                {PO_BTNS.map(b => (
-                  <button key={b.key} onClick={()=>tcv(b.key)}
-                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
-                      borderRadius:4, lineHeight:'18px',
-                      border: cv(b.key) ? '1.5px solid #1a5500' : '1.5px solid #d1d5db',
-                      background: cv(b.key) ? '#1a5500' : '#fff',
-                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
-                      transition:'all 0.1s' }}>
-                    {b.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:9, fontWeight:800, color:'#c2410c', marginRight:4, whiteSpace:'nowrap',
-                  textTransform:'uppercase', letterSpacing:0.5 }}>EXP ▸</span>
-                {EXP_BTNS.map(b => (
-                  <button key={b.key} onClick={()=>tcv(b.key)}
-                    style={{ padding:'2px 10px', fontSize:10, fontWeight:600, cursor:'pointer', fontFamily:F,
-                      borderRadius:4, lineHeight:'18px',
-                      border: cv(b.key) ? '1.5px solid #ea580c' : '1.5px solid #d1d5db',
-                      background: cv(b.key) ? '#ea580c' : '#fff',
-                      color:      cv(b.key) ? '#fff'    : '#9ca3af',
-                      transition:'all 0.1s' }}>
-                    {b.label}
-                  </button>
-                ))}
-              </div>
+          {/* ── Column Toggle — compact collapsible panel ── */}
+          <div style={{ marginBottom:8 }}>
+            {/* Toggle button row */}
+            <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom: colPanelOpen ? 0 : 0 }}>
+              <button onClick={()=>setColPanelOpen(o=>!o)}
+                style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 14px', height:28,
+                  background: colPanelOpen ? P : '#fff',
+                  border: `1.5px solid ${colPanelOpen ? P : BD}`,
+                  borderRadius: colPanelOpen ? '6px 6px 0 0' : 6,
+                  color: colPanelOpen ? '#fff' : '#374151',
+                  fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
+                  borderBottom: colPanelOpen ? `1.5px solid ${P}` : undefined }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
+                </svg>
+                Columns
+                <span style={{ fontSize:10, fontWeight:600, color: colPanelOpen ? 'rgba(255,255,255,0.75)' : '#9ca3af' }}>
+                  {colPanelOpen ? '▲' : '▼'}
+                </span>
+              </button>
+              {/* Quick-access tab buttons even when closed */}
+              {[['so','SO','#1a4a9a'],['po','PO','#2a6600'],['exp','EXP','#c2410c']].map(([t,l,c])=>(
+                <button key={t}
+                  onClick={()=>{ setColPanelTab(t); setColPanelOpen(true); }}
+                  style={{ padding:'4px 12px', height:28, borderRadius:6,
+                    border: `1.5px solid ${colPanelOpen&&colPanelTab===t?c:BD}`,
+                    background: colPanelOpen&&colPanelTab===t ? c : '#fff',
+                    color: colPanelOpen&&colPanelTab===t ? '#fff' : '#6b7280',
+                    fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                  {l}
+                </button>
+              ))}
+              <span style={{ fontSize:10, color:'#9ca3af', marginLeft:4 }}>
+                {SO_BTNS.filter(b=>cv(b.key)).length} SO · {PO_BTNS.filter(b=>cv(b.key)).length} PO · {EXP_BTNS.filter(b=>cv(b.key)).length} EXP cols shown
+              </span>
             </div>
+
+            {/* Collapsible panel */}
+            {colPanelOpen && (
+              <div style={{ background:'#f8faff', border:`1.5px solid ${P}`, borderRadius:'0 6px 6px 6px', padding:'8px 10px' }}>
+                {/* Tabs */}
+                <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
+                  {[['so','Sales Order (SO)','#1a4a9a'],['po','Purchase Order (PO)','#2a6600'],['exp','Expenses (EXP)','#c2410c']].map(([t,l,c])=>(
+                    <button key={t} onClick={()=>setColPanelTab(t)}
+                      style={{ padding:'5px 16px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
+                        border:'none', borderBottom: colPanelTab===t ? `2.5px solid ${c}` : '2.5px solid transparent',
+                        background:'transparent', color: colPanelTab===t ? c : '#6b7280',
+                        marginBottom:-1 }}>
+                      {l}
+                    </button>
+                  ))}
+                  <div style={{ flex:1 }}/>
+                  <button onClick={()=>setColPanelOpen(false)}
+                    style={{ padding:'2px 8px', border:'none', background:'transparent', cursor:'pointer', color:'#9ca3af', fontSize:16, lineHeight:'26px' }}>✕</button>
+                </div>
+                {/* Buttons for active tab */}
+                <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+                  {(colPanelTab==='so' ? SO_BTNS : colPanelTab==='po' ? PO_BTNS : EXP_BTNS).map(b => {
+                    const ac = colPanelTab==='so' ? '#1a4a9a' : colPanelTab==='po' ? '#2a6600' : '#ea580c';
+                    return (
+                      <button key={b.key} onClick={()=>tcv(b.key)}
+                        style={{ padding:'3px 11px', fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:F,
+                          borderRadius:5, lineHeight:'18px',
+                          border: cv(b.key) ? `1.5px solid ${ac}` : '1.5px solid #d1d5db',
+                          background: cv(b.key) ? ac : '#fff',
+                          color:      cv(b.key) ? '#fff' : '#9ca3af',
+                          transition:'all 0.1s' }}>
+                        {b.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {filteredSOs.length===0 ? (
