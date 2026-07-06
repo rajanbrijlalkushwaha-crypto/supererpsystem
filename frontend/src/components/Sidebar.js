@@ -85,9 +85,9 @@ const ICONS = {
    MAIN NAV
 ──────────────────────────────────────────────── */
 const NAV = [
-  { key:'dashboard', label:'Dashboard', path:'/dashboard', routes:['/dashboard'] },
+  { key:'dashboard', label:'Dashboard', short:'D',   path:'/dashboard', routes:['/dashboard'] },
   {
-    key:'project', label:'Jobcode', path:'/project/list', routes:['/project'],
+    key:'project', label:'Jobcode', short:'JC', path:'/project/list', routes:['/project'],
     sub:[
       { label:'All Jobcodes',  path:'/project/list',  permKey:'project' },
       { label:'Project Close', path:'/project/close', permKey:'project' },
@@ -95,7 +95,7 @@ const NAV = [
   },
 
   /* ── CRM group ── */
-  { type:'group', key:'grp-crm', label:'CRM', color:'#ec4899' },
+  { type:'group', key:'grp-crm', label:'CRM', short:'CRM', color:'#ec4899' },
   {
     key:'crm', label:'Client / CRM', path:'/client/view', routes:['/client','/crm','/client-sap'],
     sub:[
@@ -123,7 +123,7 @@ const NAV = [
   { key:'communication', label:'Communication Logs', path:'/communication/logs', routes:['/communication'] },
 
   /* ── Vendor group ── */
-  { type:'group', key:'grp-vendor', label:'Vendor', color:'#059669' },
+  { type:'group', key:'grp-vendor', label:'Vendor', short:'VDR', color:'#059669' },
   {
     key:'vendor', label:'Vendor / Supplier', path:'/vendor/view', routes:['/vendor'],
     sub:[
@@ -152,7 +152,7 @@ const NAV = [
   { key:'vendordues', label:'Vendor Dues', path:'/account/dues?tab=vendor', routes:[], icon:'dues' },
 
   /* ── Inventory group ── */
-  { type:'group', key:'grp-inventory', label:'Inventory', color:'#0d9488' },
+  { type:'group', key:'grp-inventory', label:'Inventory', short:'INV', color:'#0d9488' },
   {
     key:'inventory', label:'Items / Products', path:'/items/view', routes:['/items'],
     sub:[
@@ -172,11 +172,11 @@ const NAV = [
   },
 
   /* ── Account group ── */
-  { type:'group', key:'grp-account', label:'Account', color:'#b45309' },
+  { type:'group', key:'grp-account', label:'Account', short:'A/C', color:'#b45309' },
   { key:'finance', label:'Account', path:'/account/dues', routes:['/account','/tally'] },
 
   /* ── Manufacturing group ── */
-  { type:'group', key:'grp-mfg', label:'Manufacturing', color:'#9333ea' },
+  { type:'group', key:'grp-mfg', label:'Manufacturing', short:'MFG', color:'#9333ea' },
   {
     key:'mfg', label:'Manufacturing', path:'/manufacturing/orders', routes:['/manufacturing'],
     sub:[
@@ -188,7 +188,7 @@ const NAV = [
   },
 
   /* ── Admin group ── */
-  { type:'group', key:'grp-admin', label:'Admin', color:'#475569' },
+  { type:'group', key:'grp-admin', label:'Admin', short:'ADM', color:'#475569' },
   { key:'approvals', label:'Approvals',        path:'/approval',          routes:['/approval'] },
   { key:'passwords', label:'Password Manager', path:'/passwords',         routes:['/passwords'] },
   { key:'admin',     label:'Admin Settings',   path:'/admin/companies',   routes:['/admin','/settings','/user-management'] },
@@ -325,6 +325,7 @@ export default function Sidebar() {
   }, [pinned]);
 
   const collapsed = !isExpanded;
+  const W = isExpanded ? 240 : 62;
 
   const initials = (name) => {
     if (!name) return 'U';
@@ -335,7 +336,6 @@ export default function Sidebar() {
   };
 
   const userName = user?.name || user?.username || 'User';
-  const W = isExpanded ? 240 : 56;
 
   /* ── Pin toggle header ── */
   const PinHeader = () => (
@@ -610,8 +610,29 @@ export default function Sidebar() {
           /* ── group header ── */
           if (navItem.type === 'group') {
             if (collapsed) {
+              const grpOpen = openGroup === navItem.key;
               return (
-                <div key={navItem.key} style={{ margin: '6px 8px', height: 3, borderRadius: 2, background: navItem.color || DIVIDER, opacity: 0.7 }} />
+                <div
+                  key={navItem.key}
+                  onClick={() => setOpenGroup(prev => prev === navItem.key ? null : navItem.key)}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  style={{ padding: '4px 6px', cursor: 'pointer', transition: 'transform 0.15s', transformOrigin: 'center' }}
+                >
+                  <div style={{
+                    background: navItem.color,
+                    borderRadius: 6,
+                    padding: '6px 4px',
+                    textAlign: 'center',
+                    boxShadow: grpOpen ? `0 2px 8px ${navItem.color}99` : 'none',
+                    outline: grpOpen ? `2px solid rgba(255,255,255,0.45)` : 'none',
+                    transition: 'box-shadow 0.2s',
+                  }}>
+                    <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                      {navItem.short || navItem.label}
+                    </span>
+                  </div>
+                </div>
               );
             }
             const grpOpen = openGroup === navItem.key;
@@ -655,15 +676,15 @@ export default function Sidebar() {
             );
           }
 
-          const { key, label, path, routes, sub, icon } = navItem;
+          const { key, label, short, path, routes, sub, icon } = navItem;
           const active    = isActive(routes, pathname);
           const isOpen    = openKeys.has(key);
           const iconPaths = ICONS[icon || key];
           const locked    = !hasAccess(key);
 
-          // In expanded mode: hide items belonging to a closed group
+          // Hide items belonging to a closed group; in collapsed mode hide ALL grouped items
           const itemGroup = NAV_ITEM_GROUPS[key];
-          if (isExpanded && itemGroup !== null && openGroup !== itemGroup) return null;
+          if (itemGroup !== null && (collapsed || openGroup !== itemGroup)) return null;
 
           const handleClick = () => {
             if (locked) return;
@@ -691,13 +712,16 @@ export default function Sidebar() {
                 onClick={handleClick}
                 title={collapsed ? label : undefined}
                 style={{
-                  display: 'flex', alignItems: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexDirection: collapsed ? 'column' : 'row',
                   justifyContent: collapsed ? 'center' : 'flex-start',
-                  gap: 10,
-                  height: 40, padding: collapsed ? '0' : '0 12px 0 10px',
+                  gap: collapsed ? 2 : 10,
+                  height: collapsed ? 48 : 40,
+                  padding: collapsed ? '4px 0' : '0 12px 0 10px',
                   cursor: 'pointer',
                   background: active ? 'rgba(255,255,255,0.2)' : 'transparent',
-                  borderLeft: `3px solid ${active ? 'rgba(255,255,255,0.85)' : 'transparent'}`,
+                  borderLeft: collapsed ? 'none' : `3px solid ${active ? 'rgba(255,255,255,0.85)' : 'transparent'}`,
                   transition: 'background 0.12s',
                   userSelect: 'none',
                 }}
@@ -705,15 +729,21 @@ export default function Sidebar() {
                 onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
               >
                 <span style={{
-                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                  width: collapsed ? 26 : 30, height: collapsed ? 26 : 30, borderRadius: 8, flexShrink: 0,
                   background: active ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
                   border: `1.5px solid ${active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)'}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   transition: 'all 0.15s',
                   boxShadow: active ? '0 2px 8px rgba(0,0,0,0.25)' : 'none',
                 }}>
-                  <Ico d={iconPaths} color="#fff" size={15} stroke={active ? 2.2 : 1.9} />
+                  <Ico d={iconPaths} color="#fff" size={collapsed ? 13 : 15} stroke={active ? 2.2 : 1.9} />
                 </span>
+
+                {collapsed && short && (
+                  <span style={{ fontSize: 8, fontWeight: 700, color: active ? '#fff' : 'rgba(255,255,255,0.75)', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                    {short}
+                  </span>
+                )}
 
                 {!collapsed && (
                   <>
@@ -785,8 +815,11 @@ export default function Sidebar() {
             title={collapsed ? 'Logout' : undefined}
             style={{
               display: 'flex', alignItems: 'center',
+              flexDirection: collapsed ? 'column' : 'row',
               justifyContent: collapsed ? 'center' : 'flex-start',
-              gap: 10, height: 40, padding: collapsed ? '0' : '0 12px 0 10px',
+              gap: collapsed ? 2 : 10,
+              height: collapsed ? 48 : 40,
+              padding: collapsed ? '4px 0' : '0 12px 0 10px',
               cursor: 'pointer', transition: 'background 0.12s', userSelect: 'none',
               borderLeft: '3px solid transparent',
             }}
@@ -794,12 +827,15 @@ export default function Sidebar() {
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
             <span style={{
-              width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+              width: collapsed ? 26 : 28, height: collapsed ? 26 : 28, borderRadius: 7, flexShrink: 0,
               background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Ico d={ICONS.logout} color="#fff" size={13} stroke={2}/>
+              <Ico d={ICONS.logout} color="#fff" size={collapsed ? 12 : 13} stroke={2}/>
             </span>
+            {collapsed && (
+              <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.4px' }}>LGOUT</span>
+            )}
             {!collapsed && (
               <span style={{ fontSize: 12.5, fontWeight: 400, color: '#fff' }}>Logout</span>
             )}
