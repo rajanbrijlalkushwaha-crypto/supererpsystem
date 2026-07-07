@@ -67,6 +67,8 @@ export default function Chat() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   // statusMap: { [msgId]: 'delivered' | 'read' } — real-time status for sent messages
   const [statusMap, setStatusMap] = useState({});
+  // viewFile: { url, name, mime } | null — file preview modal
+  const [viewFile,  setViewFile]  = useState(null);
 
   const endRef      = useRef(null);
   const fileRef     = useRef(null);
@@ -212,6 +214,81 @@ export default function Chat() {
 
   if (!isChatOpen) return null;
 
+  /* ── File viewer modal ── */
+  const FileModal = viewFile ? (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) setViewFile(null); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1400,
+        background: 'rgba(0,0,0,0.72)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {/* Modal box */}
+      <div style={{
+        background: '#1e293b', borderRadius: 12, overflow: 'hidden',
+        width: '90vw', maxWidth: 900, height: '88vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: P, padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 18 }}>{fileIcon(viewFile.mime)}</span>
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {viewFile.name}
+          </span>
+          <a
+            href={`${viewFile.url}?download=1&name=${encodeURIComponent(viewFile.name)}`}
+            style={{
+              background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none',
+              borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 12,
+              fontWeight: 700, textDecoration: 'none', marginRight: 4,
+            }}
+          >↓ Download</a>
+          <button
+            onClick={() => setViewFile(null)}
+            style={{
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 6,
+              color: '#fff', width: 30, height: 30, cursor: 'pointer', fontSize: 18,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >×</button>
+        </div>
+        {/* Content */}
+        <div style={{ flex: 1, overflow: 'hidden', background: '#f8f8f8' }}>
+          {viewFile.mime?.includes('pdf') ? (
+            <iframe
+              src={`${viewFile.url}#toolbar=1&view=FitH`}
+              title={viewFile.name}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          ) : viewFile.mime?.includes('image') ? (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', overflow: 'auto' }}>
+              <img
+                src={viewFile.url}
+                alt={viewFile.name}
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              />
+            </div>
+          ) : (
+            <div style={{ padding: 40, textAlign: 'center', color: '#555', fontFamily: F }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>{fileIcon(viewFile.mime)}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{viewFile.name}</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 24 }}>Preview not available for this file type</div>
+              <a href={`${viewFile.url}?download=1&name=${encodeURIComponent(viewFile.name)}`}
+                style={{ background: P, color: '#fff', padding: '10px 24px', borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
+                ↓ Download File
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const peer     = users.find(u => String(u.id || u.userId) === activePeer);
   const peerName = peer ? (peer.name || peer.username) : (activePeer || '');
   const peerOnline  = activePeer && onlineIds.includes(activePeer);
@@ -235,6 +312,7 @@ export default function Chat() {
 
   return (
     <>
+      {FileModal}
       <style>{`
         .chat-bounce { animation: chatBounce 1.2s infinite; }
         @keyframes chatBounce {
@@ -428,32 +506,44 @@ export default function Chat() {
                       boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
                       fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word',
                     }}>
-                      {m.file ? (
-                        <a
-                          href={`/api/chat/file/${cid}/${m.file.storedAs}`}
-                          download={m.file.name}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            textDecoration: 'none', color: 'inherit',
-                          }}
-                        >
-                          <span style={{ fontSize: 26, lineHeight: 1 }}>{fileIcon(m.file.mime)}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                              fontWeight: 600, fontSize: 12.5,
-                              color: isMine ? '#fff' : '#111',
-                              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                              maxWidth: 200,
-                            }}>{m.file.name}</div>
-                            <div style={{ fontSize: 10, color: isMine ? 'rgba(255,255,255,0.65)' : '#9ca3af' }}>
-                              {fmtSize(m.file.size)} · Click to download
+                      {m.file ? (() => {
+                        const fileUrl  = `/api/chat/file/${cid}/${m.file.storedAs}`;
+                        const dlUrl    = `${fileUrl}?download=1&name=${encodeURIComponent(m.file.name)}`;
+                        const canView  = m.file.mime?.includes('pdf') || m.file.mime?.includes('image');
+                        const btnBase  = {
+                          border: 'none', borderRadius: 5, cursor: 'pointer',
+                          fontSize: 11, fontWeight: 700, padding: '4px 10px',
+                          transition: 'opacity 0.15s',
+                        };
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                            <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{fileIcon(m.file.mime)}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontWeight: 600, fontSize: 12.5,
+                                color: isMine ? '#fff' : '#111',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                maxWidth: 180,
+                              }}>{m.file.name}</div>
+                              <div style={{ fontSize: 10, color: isMine ? 'rgba(255,255,255,0.6)' : '#9ca3af', marginBottom: 6 }}>
+                                {fmtSize(m.file.size)}
+                              </div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                {canView && (
+                                  <button
+                                    onClick={() => setViewFile({ url: fileUrl, name: m.file.name, mime: m.file.mime })}
+                                    style={{ ...btnBase, background: isMine ? 'rgba(255,255,255,0.22)' : '#e0f2f1', color: isMine ? '#fff' : P }}
+                                  >👁 View</button>
+                                )}
+                                <a
+                                  href={dlUrl}
+                                  style={{ ...btnBase, background: isMine ? 'rgba(255,255,255,0.15)' : '#f3f4f6', color: isMine ? '#fff' : '#374151', textDecoration: 'none', display: 'inline-block' }}
+                                >↓ Download</a>
+                              </div>
                             </div>
                           </div>
-                          <span style={{ fontSize: 16, color: isMine ? 'rgba(255,255,255,0.8)' : P }}>↓</span>
-                        </a>
-                      ) : (
+                        );
+                      })() : (
                         <span style={{ whiteSpace: 'pre-wrap' }}>{m.text}</span>
                       )}
                       <div style={{

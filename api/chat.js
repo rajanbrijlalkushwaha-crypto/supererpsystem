@@ -116,6 +116,11 @@ router.post('/deliver', (req, res) => {
 router.get('/file/:companyId/:filename', (req, res) => {
   const fp = path.join(filesDir(req.params.companyId), req.params.filename);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
+  if (req.query.download === '1') {
+    // Force browser to download
+    const orig = req.query.name || req.params.filename;
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(orig)}"`);
+  }
   res.sendFile(path.resolve(fp));
 });
 
