@@ -928,9 +928,12 @@ const ViewDues = () => {
       gst     += tx * gp / 100;
     });
     return {
-      orderVal: filtered.reduce((s,r) => s+r.orderTotal, 0),
-      received: filtered.reduce((s,r) => s+(activeTab==='client'?(r.received||0):(r.paid||0)), 0),
-      due:      filtered.reduce((s,r) => s+Math.max(0,r.due), 0),
+      orderVal:    filtered.reduce((s,r) => s+r.orderTotal, 0),
+      received:    filtered.reduce((s,r) => s+(activeTab==='client'?(r.received||0):(r.paid||0)), 0),
+      due:         filtered.reduce((s,r) => s+Math.max(0,r.due), 0),
+      debitNotes:  filtered.reduce((s,r) => s+(r.debitNotesAmt||0), 0),
+      creditNotes: filtered.reduce((s,r) => s+(r.creditNotesAmt||0), 0),
+      advance:     filtered.reduce((s,r) => s+Math.max(0,-(r.due||0)), 0),
       taxable, gst,
     };
   }, [filtered, tableRows, activeTab]);
@@ -1133,13 +1136,16 @@ const ViewDues = () => {
       )}
 
       {/* KPI strip */}
-      <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`, display:'flex', alignItems:'stretch' }}>
+      <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`, display:'flex', alignItems:'stretch', flexWrap:'wrap' }}>
         {[
           { label:'Total Order Value', val:`₹${fmt(totals.orderVal)}`, color:'#104f4f' },
-          { label:activeTab==='client'?'Total Received':'Total Paid', val:`₹${fmt(totals.received)}`, color:'#2e7d32' },
-          { label:'Total Due', val:`₹${fmt(totals.due)}`, color:'#b71c1c' },
-        ].map(k => (
-          <div key={k.label} style={{ padding:'6px 16px', borderRight:`1px solid ${BD}`, minWidth:140 }}>
+          { label:activeTab==='client'?'Total Received':'Total Paid (Cash)', val:`₹${fmt(totals.received)}`, color:'#2e7d32' },
+          activeTab==='vendor' && totals.debitNotes>0 ? { label:'Debit Notes', val:`₹${fmt(totals.debitNotes)}`, color:'#b45309' } : null,
+          activeTab==='client' && totals.creditNotes>0 ? { label:'Credit Notes', val:`₹${fmt(totals.creditNotes)}`, color:'#7c3aed' } : null,
+          { label:'Balance Due', val:`₹${fmt(totals.due)}`, color: totals.due>0?'#b71c1c':'#2e7d32' },
+          totals.advance>0 ? { label:'Advance / Credit', val:`₹${fmt(totals.advance)}`, color:'#0891b2' } : null,
+        ].filter(Boolean).map(k => (
+          <div key={k.label} style={{ padding:'6px 16px', borderRight:`1px solid ${BD}`, minWidth:130 }}>
             <div style={{ fontSize:9.5, color:'#888', textTransform:'uppercase', letterSpacing:'0.5px' }}>{k.label}</div>
             <div style={{ fontSize:14, fontWeight:800, color:k.color, marginTop:1 }}>{k.val}</div>
           </div>
@@ -1321,7 +1327,7 @@ const ViewDues = () => {
                           {(receipts.length+(row.linkedCreditNotes||[]).length)>1&&<div style={{borderTop:'1px solid #e5e7eb',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalReceipt+(row.creditNotesAmt||0))}</div>}
                         </>}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<=0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<=0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<0?`↑ Adv ₹${fmt(-row.due)}`:row.due===0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
                     </tr>
                   );
                 })}
@@ -1336,8 +1342,8 @@ const ViewDues = () => {
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received)}</td>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#b71c1c',fontSize:13}}>₹{fmt(totals.due)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received + totals.creditNotes)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#b71c1c':'#2e7d32',fontSize:13}}>₹{fmt(totals.due)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -1407,7 +1413,7 @@ const ViewDues = () => {
                           {(receipts.length+(row.linkedDebitNotes||[]).length)>1&&<div style={{borderTop:'1px solid #e5e7eb',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalPayment+(row.debitNotesAmt||0))}</div>}
                         </>}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<=0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<=0?'✓ Paid':`₹${fmt(row.due)}`}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<0?`↑ Credit ₹${fmt(-row.due)}`:row.due===0?'✓ Paid':`₹${fmt(row.due)}`}</td>}
                     </tr>
                   );
                 })}
@@ -1422,8 +1428,8 @@ const ViewDues = () => {
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received)}</td>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#b71c1c',fontSize:13}}>₹{fmt(totals.due)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received + totals.debitNotes)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#b71c1c':'#2e7d32',fontSize:13}}>₹{fmt(totals.due)}</td>
                 </tr>
               </tfoot>
             </table>
