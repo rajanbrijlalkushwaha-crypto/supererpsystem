@@ -18,6 +18,34 @@ const STATUS_STYLE = {
   read:      { label: 'Seen',      color: '#6ee7b7' },
 };
 
+/* ── User avatar: photo if set, else colored initial circle ── */
+function UserAv({ user, size = 38, border }) {
+  const uid  = String(user?.id || user?.userId || '');
+  const name = user?.name || user?.username || '?';
+  const [imgOk, setImgOk] = React.useState(!!user?.photoExt);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: P, overflow: 'hidden', position: 'relative',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: border || 'none',
+    }}>
+      {imgOk ? (
+        <img
+          src={`/api/auth/profile/photo/${uid}`}
+          alt={name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setImgOk(false)}
+        />
+      ) : (
+        <span style={{ color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.38), userSelect: 'none' }}>
+          {name[0].toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ── helpers ── */
 function fileIcon(mime = '') {
   if (mime.includes('pdf'))                              return '📄';
@@ -257,16 +285,16 @@ export default function Chat() {
             }}
           >×</button>
         </div>
-        {/* Content */}
-        <div style={{ flex: 1, overflow: 'hidden', background: '#f8f8f8' }}>
+        {/* Content — position:relative so iframe can fill with position:absolute */}
+        <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#f8f8f8' }}>
           {viewFile.mime?.includes('pdf') ? (
             <iframe
-              src={`${viewFile.url}#toolbar=1&view=FitH`}
+              src={viewFile.url}
               title={viewFile.name}
-              style={{ width: '100%', height: '100%', border: 'none' }}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', display: 'block' }}
             />
           ) : viewFile.mime?.includes('image') ? (
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', overflow: 'auto' }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', overflow: 'auto' }}>
               <img
                 src={viewFile.url}
                 alt={viewFile.name}
@@ -274,8 +302,8 @@ export default function Chat() {
               />
             </div>
           ) : (
-            <div style={{ padding: 40, textAlign: 'center', color: '#555', fontFamily: F }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>{fileIcon(viewFile.mime)}</div>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center', color: '#555', fontFamily: F }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>{fileIcon(viewFile.mime)}</div>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{viewFile.name}</div>
               <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 24 }}>Preview not available for this file type</div>
               <a href={`${viewFile.url}?download=1&name=${encodeURIComponent(viewFile.name)}`}
@@ -394,13 +422,7 @@ export default function Chat() {
                   }}
                 >
                   <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <div style={{
-                      width: 38, height: 38, borderRadius: '50%', background: P,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontWeight: 700, fontSize: 15, userSelect: 'none',
-                    }}>
-                      {(name[0] || '?').toUpperCase()}
-                    </div>
+                    <UserAv user={u} size={38} />
                     <div style={{
                       position: 'absolute', bottom: 1, right: 1,
                       width: 10, height: 10, borderRadius: '50%',
@@ -447,13 +469,7 @@ export default function Chat() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>‹</button>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontWeight: 700, fontSize: 16,
-                }}>
-                  {(peerName[0] || '?').toUpperCase()}
-                </div>
+                <UserAv user={peer || { name: peerName }} size={38} border="2px solid rgba(255,255,255,0.3)" />
                 <div style={{
                   position: 'absolute', bottom: 1, right: 1,
                   width: 11, height: 11, borderRadius: '50%',
