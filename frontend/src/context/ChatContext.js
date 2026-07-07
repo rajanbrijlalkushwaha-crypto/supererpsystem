@@ -19,8 +19,9 @@ export const ChatProvider = ({ children }) => {
   const [incomingMsg,    setIncomingMsg]    = useState(null);   // latest received msg object
   const [typingFrom,     setTypingFrom]     = useState({});     // { userId: true }
   const [msgStatusUpdate, setMsgStatusUpdate] = useState(null); // { type:'delivered'|'read', msgIds:[] }
-  const [incomingCall,   setIncomingCall]   = useState(null);   // { fromUserId, callType, offer }
+  const [incomingCall,     setIncomingCall]   = useState(null);   // { fromUserId, callType, offer }
   const [incomingGroupMsg, setIncomingGroupMsg] = useState(null); // latest group msg
+  const [callSignal,       setCallSignal]    = useState(null);   // { type, data, _ts } — WebRTC signals for Chat.jsx
 
   const myId = user ? String(user.id || user.userId) : null;
   const cid  = selectedCompany?.companyId || '';
@@ -83,9 +84,15 @@ export const ChatProvider = ({ children }) => {
       });
     });
 
-    // Incoming call
-    s.on('call:incoming', data => setIncomingCall({ ...data, _ts: Date.now() }));
-    s.on('call:ended',    ()   => setIncomingCall(null));
+    // Call signaling — all events captured here so Chat.jsx doesn't need direct socket access
+    s.on('call:incoming',      data => setIncomingCall({ ...data, _ts: Date.now() }));
+    s.on('call:answered',      data => setCallSignal({ type: 'answered',  data, _ts: Date.now() }));
+    s.on('call:ice-candidate', data => setCallSignal({ type: 'ice',       data, _ts: Date.now() }));
+    s.on('call:rejected',      ()   => setCallSignal({ type: 'rejected',  data: null, _ts: Date.now() }));
+    s.on('call:ended',         ()   => {
+      setIncomingCall(null);
+      setCallSignal({ type: 'ended', data: null, _ts: Date.now() });
+    });
 
     return () => { s.disconnect(); socketRef.current = null; };
   }, [myId]); // eslint-disable-line
@@ -127,6 +134,7 @@ export const ChatProvider = ({ children }) => {
       unread, total, incomingMsg, typingFrom, msgStatusUpdate,
       incomingCall, setIncomingCall,
       incomingGroupMsg,
+      callSignal,
       myId, cid,
       openPanel, closePanel, selectPeer,
     }}>

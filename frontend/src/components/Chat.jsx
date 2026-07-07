@@ -109,6 +109,7 @@ export default function Chat() {
     unread, incomingMsg, typingFrom, msgStatusUpdate,
     incomingCall, setIncomingCall,
     incomingGroupMsg,
+    callSignal,
     myId, cid, closePanel, selectPeer,
   } = useChat();
 
@@ -171,12 +172,12 @@ export default function Chat() {
 
   useEffect(() => { callPeerRef.current = callPeerId; }, [callPeerId]);
 
-  /* ── load users + groups when panel opens ── */
+  /* ── load users + groups on mount (also needed for incoming call banner) ── */
   useEffect(() => {
-    if (!isChatOpen || !myId || !cid) return;
+    if (!myId || !cid) return;
     axios.get('/api/auth/users').then(r => setUsers((Array.isArray(r.data) ? r.data : []).filter(u => String(u.id || u.userId) !== myId))).catch(() => {});
     axios.get('/api/chat/groups', { params: { companyId: cid, userId: myId } }).then(r => setGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {});
-  }, [isChatOpen, myId, cid]);
+  }, [myId, cid]);
 
   /* ── load 1-1 conversation ── */
   useEffect(() => {
@@ -248,49 +249,7 @@ export default function Chat() {
     if (activePeer || activeGroup) setTimeout(() => inputRef.current?.focus(), 80);
   }, [activePeer, activeGroup]);
 
-  /* ── WebRTC socket event listeners ── */
-  useEffect(() => {
-    const s = socketRef.current;
-    if (!s) return;
-
-    const onAnswered = async ({ answer }) => {
-      if (!pcRef.current) return;
-      try {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        for (const c of iceQueueRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
-        iceQueueRef.current = [];
-        setCallState('active');
-        clearInterval(callTimerRef.current);
-        setCallDuration(0);
-        callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
-      } catch {}
-    };
-    const onIce = async ({ candidate }) => {
-      if (!candidate) return;
-      if (pcRef.current?.remoteDescription) {
-        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      } else {
-        iceQueueRef.current.push(candidate);
-      }
-    };
-    const onEnded   = () => cleanupCall();
-    const onReject  = () => {
-      cleanupCall();
-    };
-
-    s.on('call:answered',      onAnswered);
-    s.on('call:ice-candidate', onIce);
-    s.on('call:ended',         onEnded);
-    s.on('call:rejected',      onReject);
-    return () => {
-      s.off('call:answered',      onAnswered);
-      s.off('call:ice-candidate', onIce);
-      s.off('call:ended',         onEnded);
-      s.off('call:rejected',      onReject);
-    };
-  }, []); // eslint-disable-line
-
-  /* ── call cleanup ── */
+  /* ── call cleanup (defined first so callSignal effect can reference it) ── */
   const cleanupCall = useCallback(() => {
     clearInterval(callTimerRef.current);
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
@@ -303,6 +262,38 @@ export default function Chat() {
     if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   }, []);
+
+  /* ── WebRTC signal handler — driven by callSignal from ChatContext (avoids null-socket timing bug) ── */
+  useEffect(() => {
+    if (!callSignal) return;
+    const { type, data } = callSignal;
+
+    if (type === 'answered') {
+      (async () => {
+        if (!pcRef.current) return;
+        try {
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          for (const c of iceQueueRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+          iceQueueRef.current = [];
+          setCallState('active');
+          clearInterval(callTimerRef.current);
+          setCallDuration(0);
+          callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+        } catch {}
+      })();
+    } else if (type === 'ice') {
+      (async () => {
+        if (!data?.candidate) return;
+        if (pcRef.current?.remoteDescription) {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+        } else {
+          iceQueueRef.current.push(data.candidate);
+        }
+      })();
+    } else if (type === 'ended' || type === 'rejected') {
+      cleanupCall();
+    }
+  }, [callSignal, cleanupCall]);
 
   const createPC = useCallback((peerId) => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
