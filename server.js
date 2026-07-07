@@ -133,8 +133,11 @@ io.on('connection', (socket) => {
 
   // ── WebRTC call signaling ──
   socket.on('call:offer', ({ toUserId, offer, callType }) => {
-    if (!socket.userId) return;
+    console.log(`[Server] call:offer  from=${socket.userId}  to=${toUserId}  type=${callType}`);
+    if (!socket.userId) { console.log('[Server] call:offer DROPPED — socket.userId not set'); return; }
     const sids = onlineUsers.get(String(toUserId));
+    console.log(`[Server] target "${toUserId}" sockets:`, sids ? [...sids] : 'NOT IN onlineUsers');
+    console.log('[Server] all online users:', [...onlineUsers.keys()]);
     if (sids) sids.forEach(sid => io.to(sid).emit('call:incoming', { fromUserId: socket.userId, offer, callType }));
   });
   socket.on('call:answer', ({ toUserId, answer }) => {

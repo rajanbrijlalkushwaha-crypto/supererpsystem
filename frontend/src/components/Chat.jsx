@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useChat } from '../context/ChatContext';
 
@@ -262,6 +263,11 @@ export default function Chat() {
     if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   }, []);
+
+  /* ── debug: log whenever incomingCall changes ── */
+  useEffect(() => {
+    console.log('[Chat.jsx] incomingCall state:', incomingCall);
+  }, [incomingCall]);
 
   /* ── WebRTC signal handler — driven by callSignal from ChatContext (avoids null-socket timing bug) ── */
   useEffect(() => {
@@ -1065,33 +1071,28 @@ export default function Chat() {
   );
 }
 
-/* ── Incoming call notification — full-screen overlay, impossible to miss ── */
+/* ── Incoming call notification — portalled to document.body to bypass any stacking context ── */
 function IncomingCallBanner({ call, users, myId, onAccept, onReject }) {
-  const caller = (users || []).find(u => String(u.id || u.userId) === String(call?.fromUserId));
-  const name   = caller ? (caller.name || caller.username) : `User ${call?.fromUserId || '?'}`;
+  const caller  = (users || []).find(u => String(u.id || u.userId) === String(call?.fromUserId));
+  const name    = caller ? (caller.name || caller.username) : `User ${call?.fromUserId || '?'}`;
   const isVideo = call?.callType === 'video';
 
-  // Ring animation via CSS
-  React.useEffect(() => {
-    const el = document.getElementById('__call_ring_anim');
-    if (el) el.style.animation = 'callRing 1s ease-in-out infinite';
-  }, []);
-
-  return (
+  return createPortal(
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
+      position: 'fixed', inset: 0, zIndex: 999999,
       background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'Inter, system-ui, sans-serif',
     }}>
       <style>{`
-        @keyframes callRing { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes callRing  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
         @keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)} 70%{box-shadow:0 0 0 20px rgba(34,197,94,0)} }
       `}</style>
-      <div id="__call_ring_anim" style={{
+      <div style={{
         background: 'linear-gradient(135deg, #0f172a, #1e293b)',
         borderRadius: 24, padding: '40px 48px', textAlign: 'center',
         boxShadow: '0 32px 80px rgba(0,0,0,0.8)', minWidth: 300,
+        animation: 'callRing 1s ease-in-out infinite',
       }}>
         <div style={{ fontSize: 42, marginBottom: 12 }}>{isVideo ? '📹' : '📞'}</div>
         <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
@@ -1126,7 +1127,8 @@ function IncomingCallBanner({ call, users, myId, onAccept, onReject }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
