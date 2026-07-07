@@ -109,6 +109,18 @@ io.on('connection', (socket) => {
     if (sids) sids.forEach(sid => io.to(sid).emit('chat:message', msg));
   });
 
+  // Recipient tells server: "I received msgId" → relay delivered status back to sender
+  socket.on('chat:deliveredAck', ({ msgId, toUserId }) => {
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('chat:delivered', { msgId }));
+  });
+
+  // Recipient tells server: "I read these messages" → relay read status back to sender
+  socket.on('chat:readAck', ({ msgIds, toUserId }) => {
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('chat:read', { msgIds }));
+  });
+
   socket.on('disconnect', () => {
     if (socket.userId) {
       const sids = onlineUsers.get(socket.userId);

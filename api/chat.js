@@ -47,9 +47,14 @@ router.get('/messages', (req, res) => {
   const { companyId, fromUserId, toUserId } = req.query;
   if (!companyId || !fromUserId || !toUserId) return res.status(400).json({ error: 'Missing params' });
   const msgs = readConv(companyId, fromUserId, toUserId);
-  // Mark all messages to fromUserId (viewer) as read
+  // Mark all messages to fromUserId (viewer) as delivered + read
   let changed = false;
-  msgs.forEach(m => { if (m.toUserId === fromUserId && !m.read) { m.read = true; changed = true; } });
+  msgs.forEach(m => {
+    if (m.toUserId === fromUserId) {
+      if (!m.delivered) { m.delivered = true; changed = true; }
+      if (!m.read)      { m.read      = true; changed = true; }
+    }
+  });
   if (changed) writeConv(companyId, fromUserId, toUserId, msgs);
   res.json(msgs);
 });
@@ -65,6 +70,7 @@ router.post('/messages', (req, res) => {
     text: text || '',
     file: null,
     timestamp: new Date().toISOString(),
+    delivered: false,
     read: false,
   };
   msgs.push(msg);
@@ -88,11 +94,22 @@ router.post('/upload', upload.single('file'), (req, res) => {
       mime: req.file.mimetype,
     },
     timestamp: new Date().toISOString(),
+    delivered: false,
     read: false,
   };
   msgs.push(msg);
   writeConv(companyId, fromUserId, toUserId, msgs);
   res.json(msg);
+});
+
+/* ── POST /api/chat/deliver — mark a message as delivered ── */
+router.post('/deliver', (req, res) => {
+  const { companyId, msgId, fromUserId, toUserId } = req.body;
+  if (!companyId || !msgId || !fromUserId || !toUserId) return res.status(400).json({ error: 'Missing params' });
+  const msgs = readConv(companyId, fromUserId, toUserId);
+  const m = msgs.find(x => x.id === msgId);
+  if (m && !m.delivered) { m.delivered = true; writeConv(companyId, fromUserId, toUserId, msgs); }
+  res.json({ ok: true });
 });
 
 /* ── GET /api/chat/file/:companyId/:filename ── serve file ── */

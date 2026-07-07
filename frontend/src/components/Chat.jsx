@@ -5,6 +5,19 @@ import { useChat } from '../context/ChatContext';
 const P  = '#104f4f';
 const F  = 'Inter, system-ui, sans-serif';
 
+/* ── message status helper ── */
+function msgStatus(msg, statusMap) {
+  if (msg.read      || statusMap[msg.id] === 'read')      return 'read';
+  if (msg.delivered || statusMap[msg.id] === 'delivered') return 'delivered';
+  return 'sent';
+}
+
+const STATUS_STYLE = {
+  sent:      { label: 'Sent',      color: 'rgba(255,255,255,0.45)' },
+  delivered: { label: 'Delivered', color: '#93c5fd' },
+  read:      { label: 'Seen',      color: '#6ee7b7' },
+};
+
 /* ── helpers ── */
 function fileIcon(mime = '') {
   if (mime.includes('pdf'))                              return '📄';
@@ -42,7 +55,7 @@ function dayLabel(ts) {
 export default function Chat() {
   const {
     socketRef, onlineIds, isChatOpen, activePeer,
-    unread, incomingMsg, typingFrom,
+    unread, incomingMsg, typingFrom, msgStatusUpdate,
     myId, cid, closePanel, selectPeer,
   } = useChat();
 
@@ -52,6 +65,8 @@ export default function Chat() {
   const [uploading, setUploading] = useState(false);
   const [searchQ,   setSearchQ]   = useState('');
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // statusMap: { [msgId]: 'delivered' | 'read' } — real-time status for sent messages
+  const [statusMap, setStatusMap] = useState({});
 
   const endRef      = useRef(null);
   const fileRef     = useRef(null);
@@ -78,19 +93,57 @@ export default function Chat() {
       .finally(() => setLoadingMsgs(false));
   }, [activePeer, cid, myId]);
 
-  // Append incoming messages from socket
+  // Append incoming messages from socket + emit delivered ack
   useEffect(() => {
     if (!incomingMsg) return;
     const from = String(incomingMsg.fromUserId);
     const to   = String(incomingMsg.toUserId);
-    // Only append if it belongs to the currently open conversation
     if (activePeer && (from === activePeer || to === activePeer)) {
       setMessages(m => {
-        if (m.some(x => x.id === incomingMsg.id)) return m; // dedup
+        if (m.some(x => x.id === incomingMsg.id)) return m;
         return [...m, incomingMsg];
       });
     }
+    // If I'm the recipient, mark as delivered on server + notify sender
+    if (to === myId && cid) {
+      axios.post('/api/chat/deliver', {
+        companyId: cid, msgId: incomingMsg.id,
+        fromUserId: from, toUserId: myId,
+      }).catch(() => {});
+      socketRef.current?.emit('chat:deliveredAck', {
+        msgId: incomingMsg.id,
+        toUserId: from, // tell the sender
+      });
+    }
   }, [incomingMsg]); // eslint-disable-line
+
+  // When conversation loads, emit readAck for all unread messages from activePeer
+  useEffect(() => {
+    if (!activePeer || !messages.length || !myId) return;
+    const unreadIds = messages
+      .filter(m => String(m.fromUserId) === activePeer && !m.read)
+      .map(m => m.id);
+    if (unreadIds.length > 0) {
+      socketRef.current?.emit('chat:readAck', {
+        msgIds: unreadIds,
+        toUserId: activePeer,
+      });
+    }
+  }, [messages, activePeer]); // eslint-disable-line
+
+  // Apply incoming status updates (delivered / read) to statusMap
+  useEffect(() => {
+    if (!msgStatusUpdate) return;
+    setStatusMap(prev => {
+      const next = { ...prev };
+      msgStatusUpdate.msgIds.forEach(id => {
+        if (msgStatusUpdate.type === 'read' || next[id] !== 'read') {
+          next[id] = msgStatusUpdate.type;
+        }
+      });
+      return next;
+    });
+  }, [msgStatusUpdate]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -405,16 +458,25 @@ export default function Chat() {
                       )}
                       <div style={{
                         display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-                        gap: 4, marginTop: 4,
+                        gap: 5, marginTop: 4,
                       }}>
                         <span style={{ fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.6)' : '#aaa' }}>
                           {fmtTime(m.timestamp)}
                         </span>
-                        {isMine && (
-                          <span style={{ fontSize: 11, color: m.read ? '#a7f3d0' : 'rgba(255,255,255,0.45)', letterSpacing: '-1px' }}>
-                            {m.read ? '✓✓' : '✓'}
-                          </span>
-                        )}
+                        {isMine && (() => {
+                          const st = msgStatus(m, statusMap);
+                          const s  = STATUS_STYLE[st];
+                          return (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, color: s.color,
+                              border: `1px solid ${s.color}`,
+                              borderRadius: 4, padding: '1px 5px',
+                              letterSpacing: '0.3px', lineHeight: 1.4,
+                            }}>
+                              {s.label}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

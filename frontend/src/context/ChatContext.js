@@ -12,12 +12,13 @@ export const ChatProvider = ({ children }) => {
   const socketRef   = useRef(null);
   const typingTimers = useRef({});
 
-  const [onlineIds,   setOnlineIds]   = useState([]);
-  const [isChatOpen,  setIsChatOpen]  = useState(false);
-  const [activePeer,  setActivePeer]  = useState(null);   // userId string | null
-  const [unread,      setUnread]      = useState({});     // { userId: count }
-  const [incomingMsg, setIncomingMsg] = useState(null);   // latest received msg object
-  const [typingFrom,  setTypingFrom]  = useState({});     // { userId: true }
+  const [onlineIds,      setOnlineIds]      = useState([]);
+  const [isChatOpen,     setIsChatOpen]     = useState(false);
+  const [activePeer,     setActivePeer]     = useState(null);   // userId string | null
+  const [unread,         setUnread]         = useState({});     // { userId: count }
+  const [incomingMsg,    setIncomingMsg]    = useState(null);   // latest received msg object
+  const [typingFrom,     setTypingFrom]     = useState({});     // { userId: true }
+  const [msgStatusUpdate, setMsgStatusUpdate] = useState(null); // { type:'delivered'|'read', msgIds:[] }
 
   const myId = user ? String(user.id || user.userId) : null;
   const cid  = selectedCompany?.companyId || '';
@@ -62,6 +63,14 @@ export const ChatProvider = ({ children }) => {
       setTypingFrom(t => { const n = { ...t }; delete n[uid]; return n; });
     });
 
+    // Delivery/read status updates for messages I sent
+    s.on('chat:delivered', ({ msgId }) => {
+      setMsgStatusUpdate({ type: 'delivered', msgIds: [msgId], _ts: Date.now() });
+    });
+    s.on('chat:read', ({ msgIds }) => {
+      setMsgStatusUpdate({ type: 'read', msgIds, _ts: Date.now() });
+    });
+
     return () => { s.disconnect(); socketRef.current = null; };
   }, [myId]); // eslint-disable-line
 
@@ -99,7 +108,7 @@ export const ChatProvider = ({ children }) => {
     <ChatCtx.Provider value={{
       socketRef, onlineIds,
       isChatOpen, activePeer,
-      unread, total, incomingMsg, typingFrom,
+      unread, total, incomingMsg, typingFrom, msgStatusUpdate,
       myId, cid,
       openPanel, closePanel, selectPeer,
     }}>
