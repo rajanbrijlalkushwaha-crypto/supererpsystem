@@ -5,7 +5,7 @@ export const ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
 export const GROUP_ORDER = [
   'Dashboard','CRM','Vendor','Inventory',
   'Sales Order','Sales Bill','Purchase Order','Purchase Bill',
-  'Manufacturing','Account','Stock','GST','Projects','Communication','Other',
+  'Manufacturing','Account','Stock','GST','Projects','Communication','Other','Admin',
 ];
 
 /* navKey maps each module to the Sidebar top-level key it lives under */
@@ -76,6 +76,9 @@ export const MODULES = [
   { key:'approvals',       label:'Approvals',                group:'Other',          navKey:'approvals',     actions:['view','approve'] },
   { key:'passwords',       label:'Password Manager',         group:'Other',          navKey:'passwords',     actions:['view','create','edit','delete'] },
   { key:'tally',           label:'Tally Import',             group:'Other',          navKey:'finance',       actions:['view','create'] },
+
+  /* Admin */
+  { key:'userMgmt',        label:'User Management',          group:'Admin',          navKey:'admin',         actions:['view','create','edit','delete'] },
 ];
 
 /** True if user can perform action on module. Admin always true. null permissions = full access except approve (backward compat). */
@@ -90,7 +93,7 @@ export const can = (user, moduleKey, action = 'view') => {
 export const canViewNav = (user, navKey) => {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  if (navKey === 'admin') return false;
+  if (navKey === 'admin') return !!(user.permissions?.userMgmt?.view);
   if (navKey === 'dashboard') return true;
   if (user.permissions == null) return true;
   const mods = MODULES.filter(m => m.navKey === navKey);

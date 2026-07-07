@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
-import { MODULES, GROUP_ORDER } from '../../utils/permissions';
+import { MODULES, GROUP_ORDER, can } from '../../utils/permissions';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P  = '#133d80';
@@ -143,7 +143,10 @@ function InviteModal({ data, onClose }) {
 
 /* ════════════════════════════════════════════════ */
 export default function AdminUsers() {
-  const { user: me } = useAuth();
+  const { user: me, isAdmin } = useAuth();
+  const canCreate = isAdmin || can(me, 'userMgmt', 'create');
+  const canEdit   = isAdmin || can(me, 'userMgmt', 'edit');
+  const canDelete = isAdmin || can(me, 'userMgmt', 'delete');
 
   const [users,   setUsers]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -295,10 +298,12 @@ export default function AdminUsers() {
           <div style={{ fontSize:17, fontWeight:800, color:'#111827' }}>User Management</div>
           <div style={{ fontSize:12, color:'#6b7280', marginTop:2 }}>Create users and set their menu access permissions</div>
         </div>
-        <button onClick={openCreate}
-          style={{ height:36, padding:'0 18px', background:P, border:'none', borderRadius:7, color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-          + Invite User
-        </button>
+        {canCreate && (
+          <button onClick={openCreate}
+            style={{ height:36, padding:'0 18px', background:P, border:'none', borderRadius:7, color:'#fff', fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+            + Invite User
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -376,23 +381,25 @@ export default function AdminUsers() {
                   </td>
                   <td style={{ padding:'8px 10px' }}>
                     <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                      <button onClick={()=>openEdit(u)}
-                        style={{ padding:'3px 10px', background:'#eff6ff', border:`1px solid #bfdbfe`, borderRadius:5, color:P, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
-                        Edit
-                      </button>
-                      {(u.status==='pending'||u.active===false) && u.email && (
+                      {canEdit && (
+                        <button onClick={()=>openEdit(u)}
+                          style={{ padding:'3px 10px', background:'#eff6ff', border:`1px solid #bfdbfe`, borderRadius:5, color:P, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
+                          Edit
+                        </button>
+                      )}
+                      {(u.status==='pending'||u.active===false) && u.email && canEdit && (
                         <button onClick={()=>resendInvite(u)}
                           style={{ padding:'3px 10px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:5, color:'#92400e', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
                           Resend
                         </button>
                       )}
-                      {u.active!==false && u.status!=='pending' && (
+                      {u.active!==false && u.status!=='pending' && canEdit && (
                         <button onClick={()=>{ setPwdUserId(u.id); setNewPwd(''); setConfPwd(''); setShowPwdForm(true); }}
                           style={{ padding:'3px 10px', background:'#f3e8ff', border:'1px solid #ddd6fe', borderRadius:5, color:'#7c3aed', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F }}>
                           Pwd
                         </button>
                       )}
-                      {me?.role==='admin' && u.id!==me?.id && (
+                      {canDelete && u.id!==me?.id && (
                         delConf===u.id ? (
                           <div style={{ display:'flex', gap:4 }}>
                             <button onClick={()=>handleDelete(u.id)} style={{ padding:'3px 8px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:5, color:'#dc2626', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>✓</button>
