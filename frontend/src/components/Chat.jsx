@@ -174,8 +174,8 @@ export default function Chat() {
   /* ── load users + groups when panel opens ── */
   useEffect(() => {
     if (!isChatOpen || !myId || !cid) return;
-    axios.get('/api/auth/users').then(r => setUsers((r.data || []).filter(u => String(u.id || u.userId) !== myId))).catch(() => {});
-    axios.get('/api/chat/groups', { params: { companyId: cid, userId: myId } }).then(r => setGroups(r.data || [])).catch(() => {});
+    axios.get('/api/auth/users').then(r => setUsers((Array.isArray(r.data) ? r.data : []).filter(u => String(u.id || u.userId) !== myId))).catch(() => {});
+    axios.get('/api/chat/groups', { params: { companyId: cid, userId: myId } }).then(r => setGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, [isChatOpen, myId, cid]);
 
   /* ── load 1-1 conversation ── */
@@ -431,7 +431,7 @@ export default function Chat() {
       const { data: msg } = await axios.post('/api/chat/upload', fd);
       if (activeGroup) {
         setGroupMessages(m => [...m, msg]);
-        const grp = groups.find(g => g.id === activeGroup);
+        const grp = grpList.find(g => g.id === activeGroup);
         if (grp) socketRef.current?.emit('chat:groupRelay', { msg, memberIds: grp.members });
       } else {
         setMessages(m => [...m, msg]);
@@ -460,7 +460,7 @@ export default function Chat() {
         });
         msg = data;
         setGroupMessages(m => [...m, msg]);
-        const grp = groups.find(g => g.id === activeGroup);
+        const grp = grpList.find(g => g.id === activeGroup);
         if (grp) socketRef.current?.emit('chat:groupRelay', { msg, memberIds: grp.members });
       } else {
         const { data } = await axios.post('/api/chat/messages', {
@@ -554,7 +554,8 @@ export default function Chat() {
   const peerName    = peer ? (peer.name || peer.username) : (activePeer || '');
   const peerOnline  = activePeer && onlineIds.includes(activePeer);
   const peerTyping  = activePeer && typingFrom[activePeer];
-  const activeGrp   = groups.find(g => g.id === activeGroup);
+  const grpList     = Array.isArray(groups) ? groups : [];
+  const activeGrp   = grpList.find(g => g.id === activeGroup);
   const isInConv    = !!(activePeer || activeGroup);
   const panelWidth  = isInConv ? 740 : 280;
 
@@ -778,7 +779,7 @@ export default function Chat() {
           {/* List */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {/* Groups */}
-            {groups.filter(g => !searchQ || g.name.toLowerCase().includes(searchQ.toLowerCase())).map(grp => {
+            {grpList.filter(g => !searchQ || g.name.toLowerCase().includes(searchQ.toLowerCase())).map(grp => {
               const cnt    = unread[unreadKey(grp.id)] || 0;
               const active = activeGroup === grp.id;
               return (
