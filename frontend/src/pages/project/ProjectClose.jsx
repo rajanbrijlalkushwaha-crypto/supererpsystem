@@ -16,23 +16,29 @@ const fmtD  = d => {
 };
 
 /* ── Pill badge ── */
-const Pill = ({ ok, label, val }) => (
-  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2,
-    background: ok ? '#f0fdf4' : '#fff7ed',
-    border: `1px solid ${ok ? '#86efac' : '#fed7aa'}`,
-    borderRadius:8, padding:'6px 12px', minWidth:110 }}>
-    <span style={{ fontSize:9, fontWeight:700, color: ok ? '#15803d' : '#c2410c',
-      textTransform:'uppercase', letterSpacing:'0.5px' }}>
-      {label}
-    </span>
-    <span style={{ fontSize:12, fontWeight:800, color: ok ? '#15803d' : '#c2410c' }}>
-      {val}
-    </span>
-    <span style={{ fontSize:9, color: ok ? '#16a34a' : '#ea580c' }}>
-      {ok ? 'Cleared' : 'Pending'}
-    </span>
-  </div>
-);
+const Pill = ({ ok, label, val, green = false }) => {
+  /* green=true → receivable (client dues); false → payable (vendor dues) */
+  const pendFg = green ? '#16a34a' : '#c2410c';
+  const pendBg = green ? '#f0fdf4' : '#fff7ed';
+  const pendBd = green ? '#86efac' : '#fed7aa';
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+      background: ok ? '#f0fdf4' : pendBg,
+      border: `1px solid ${ok ? '#86efac' : pendBd}`,
+      borderRadius:8, padding:'6px 12px', minWidth:110 }}>
+      <span style={{ fontSize:9, fontWeight:700, color: ok ? '#15803d' : pendFg,
+        textTransform:'uppercase', letterSpacing:'0.5px' }}>
+        {label}
+      </span>
+      <span style={{ fontSize:12, fontWeight:800, color: ok ? '#15803d' : pendFg }}>
+        {val}
+      </span>
+      <span style={{ fontSize:9, color: ok ? '#16a34a' : pendFg }}>
+        {ok ? 'Cleared' : 'Pending'}
+      </span>
+    </div>
+  );
+};
 
 /* ── Print report ── */
 function printReport(so, pos, expenses, clientDue, vendorDues, companyName) {
@@ -466,7 +472,7 @@ export default function ProjectClose() {
 
                 {/* Condition pills */}
                 <div style={{ display:'flex', gap:6, flexShrink:0, flexWrap:'wrap' }}>
-                  <Pill ok={conds.clientOk} label="Client Due"
+                  <Pill ok={conds.clientOk} label="Client Due" green
                     val={conds.clientOk ? '₹0' : `₹${fmt(conds.clientBal)}`} />
                   <Pill ok={conds.vendorOk} label="Vendor Paid"
                     val={conds.vendorOk ? 'All Clear' : `₹${fmt(conds.totalPODue)} due`} />
@@ -513,21 +519,30 @@ export default function ProjectClose() {
                   <SH col={TC}>Sales Order Details</SH>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:12 }}>
                     {[
-                      ['Order No',   so.orderNo||'—'],
-                      ['Client',     so.customerName||so.clientName||'—'],
-                      ['Order Date', fmtD(so.orderDate)],
-                      ['Due Date',   fmtD(so.deliveryDate||so.dueDate)],
-                      ['Sub Total',  `₹${fmt(so.subTotal||0)}`],
-                      ['Total GST',  `₹${fmt(so.totalGST||0)}`],
-                      ['Grand Total',`₹${fmt(so.grandTotal||0)}`],
-                      ['Received',   `₹${fmt(conds.received)}`],
-                    ].map(([l,v])=>(
+                      ['Order No',   so.orderNo||'—',              '#104f4f'],
+                      ['Client',     so.customerName||so.clientName||'—', '#104f4f'],
+                      ['Order Date', fmtD(so.orderDate),            '#104f4f'],
+                      ['Due Date',   fmtD(so.deliveryDate||so.dueDate), '#104f4f'],
+                      ['Sub Total',  `₹${fmt(so.subTotal||0)}`,    '#104f4f'],
+                      ['Total GST',  `₹${fmt(so.totalGST||0)}`,    '#104f4f'],
+                      ['Grand Total',`₹${fmt(so.grandTotal||0)}`,  '#104f4f'],
+                      ['Received',   `₹${fmt(conds.received)}`,    '#104f4f'],
+                    ].map(([l,v,c])=>(
                       <div key={l} style={{ background:'#f0fdf4', border:'1px solid #86efac',
                         borderRadius:6, padding:'5px 9px' }}>
                         <div style={{ fontSize:8.5, color:'#6b7280', textTransform:'uppercase' }}>{l}</div>
-                        <div style={{ fontSize:11, fontWeight:700, color:'#104f4f', marginTop:1 }}>{v}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color:c, marginTop:1 }}>{v}</div>
                       </div>
                     ))}
+                  {/* Client Balance Due — green bold (receivable) */}
+                  <div style={{ background: conds.clientBal > 0 ? '#f0fdf4' : '#f9fafb',
+                    border: `1px solid ${conds.clientBal > 0 ? '#16a34a' : '#d1d5db'}`,
+                    borderRadius:6, padding:'5px 9px' }}>
+                    <div style={{ fontSize:8.5, color:'#6b7280', textTransform:'uppercase' }}>Balance Due (Client)</div>
+                    <div style={{ fontSize:13, fontWeight:800, color: conds.clientBal > 0 ? '#16a34a' : '#6b7280', marginTop:1 }}>
+                      {conds.clientBal > 0 ? `₹${fmt(conds.clientBal)}` : '✓ Cleared'}
+                    </div>
+                  </div>
                   </div>
 
                   {/* Linked POs */}

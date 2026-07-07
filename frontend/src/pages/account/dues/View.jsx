@@ -1142,7 +1142,7 @@ const ViewDues = () => {
           { label:activeTab==='client'?'Total Received':'Total Paid (Cash)', val:`₹${fmt(totals.received)}`, color:'#2e7d32' },
           activeTab==='vendor' && totals.debitNotes>0 ? { label:'Debit Notes', val:`₹${fmt(totals.debitNotes)}`, color:'#b45309' } : null,
           activeTab==='client' && totals.creditNotes>0 ? { label:'Credit Notes', val:`₹${fmt(totals.creditNotes)}`, color:'#7c3aed' } : null,
-          { label:'Balance Due', val:`₹${fmt(totals.due)}`, color: totals.due>0?'#b71c1c':'#2e7d32' },
+          { label:'Balance Due', val:`₹${fmt(totals.due)}`, color: totals.due>0?(activeTab==='client'?'#16a34a':'#b71c1c'):'#6b7280' },
           totals.advance>0 ? { label:'Advance / Credit', val:`₹${fmt(totals.advance)}`, color:'#0891b2' } : null,
         ].filter(Boolean).map(k => (
           <div key={k.label} style={{ padding:'6px 16px', borderRight:`1px solid ${BD}`, minWidth:130 }}>
@@ -1327,7 +1327,7 @@ const ViewDues = () => {
                           {(receipts.length+(row.linkedCreditNotes||[]).length)>1&&<div style={{borderTop:'1px solid #e5e7eb',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalReceipt+(row.creditNotesAmt||0))}</div>}
                         </>}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<0?`↑ Adv ₹${fmt(-row.due)}`:row.due===0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#6b7280':'#16a34a',whiteSpace:'nowrap'}}>{row.due<0?`↑ Adv ₹${fmt(-row.due)}`:row.due===0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
                     </tr>
                   );
                 })}
@@ -1343,7 +1343,7 @@ const ViewDues = () => {
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received + totals.creditNotes)}</td>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#b71c1c':'#2e7d32',fontSize:13}}>₹{fmt(totals.due)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#16a34a':'#6b7280',fontSize:13}}>₹{fmt(totals.due)}</td>
                 </tr>
               </tfoot>
             </table>

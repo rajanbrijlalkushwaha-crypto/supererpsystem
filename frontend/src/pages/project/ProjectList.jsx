@@ -141,7 +141,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
           { label:'Order Value',     val:`₹${fmt(soTotal)}`,       color:PB,        bg:'#f0f5ff', bd:'#c8d8f0' },
           { label:'Receipts',        val:`₹${fmt(soPayReceived)}`, color:'#2e7d32', bg:'#f0fff4', bd:'#c8e6c9' },
           ...(soSecDepAmt>0 ? [{ label:'Security Held by Client', val:`₹${fmt(soSecDepAmt)}`, color:'#c2410c', bg:'#fff8f0', bd:'#f5c6a0' }] : []),
-          { label:'Balance Due',     val:`₹${fmt(soDueAmt)}`,      color:soDueAmt>0?'#b71c1c':'#2e7d32', bg:soDueAmt>0?'#fff5f5':'#f0fff4', bd:soDueAmt>0?'#fccaca':'#c8e6c9' },
+          { label:'Balance Due',     val:`₹${fmt(soDueAmt)}`,      color:soDueAmt>0?'#16a34a':'#6b7280', bg:soDueAmt>0?'#f0fdf4':'#f9fafb', bd:soDueAmt>0?'#86efac':'#d1d5db' },
         ].map(c=>(
           <div key={c.label} style={{ flex:1, background:c.bg, border:`1px solid ${c.bd}`,
             borderRadius:7, padding:'9px 14px', textAlign:'center' }}>
@@ -278,7 +278,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
         </div>
         <div style={{ flex:1, textAlign:'center' }}>
           <div style={{ fontSize:9, color:'#888' }}>Balance Due</div>
-          <div style={{ fontSize:13, fontWeight:800, color:soDueAmt>0?'#b71c1c':'#2e7d32' }}>₹{fmt(soDueAmt)}</div>
+          <div style={{ fontSize:13, fontWeight:800, color:soDueAmt>0?'#16a34a':'#6b7280' }}>₹{fmt(soDueAmt)}</div>
         </div>
       </div>
     </div>
