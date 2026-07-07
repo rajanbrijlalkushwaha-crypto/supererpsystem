@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useChat } from '../context/ChatContext';
 import { canViewNav, can } from '../utils/permissions';
 
 /* ──────────────────────────────────────────────
@@ -285,6 +286,7 @@ export default function Sidebar() {
   const { pathname, search } = useLocation();
   const navigate     = useNavigate();
   const { user, logout } = useAuth();
+  const { openPanel, total: chatUnread, isChatOpen } = useChat() || {};
   const hasAccess = (navKey) => canViewNav(user, navKey);
 
   const [pinned,  setPinned]  = useState(
@@ -549,6 +551,49 @@ export default function Sidebar() {
             </div>
           ))}
 
+          {/* Chat button */}
+          <div style={{ marginTop: 4 }}>
+            <div
+              onClick={openPanel}
+              title={collapsed ? 'Chat' : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', position: 'relative',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                gap: 10, height: 38, padding: collapsed ? '0' : '0 12px 0 10px',
+                cursor: 'pointer', transition: 'background 0.12s', userSelect: 'none',
+                borderLeft: isChatOpen ? '3px solid #22c55e' : '3px solid transparent',
+                background: isChatOpen ? HOVER : 'transparent',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = HOVER; }}
+              onMouseLeave={e => { e.currentTarget.style.background = isChatOpen ? HOVER : 'transparent'; }}
+            >
+              <span style={{
+                width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                background: isChatOpen ? '#22c55e' : 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'relative',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+                {chatUnread > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -5, right: -5, background: '#ef4444',
+                    color: '#fff', borderRadius: 8, fontSize: 8, fontWeight: 800,
+                    padding: '1px 4px', minWidth: 14, textAlign: 'center',
+                    border: `1px solid ${BG}`, lineHeight: 1.4,
+                  }}>{chatUnread > 99 ? '99+' : chatUnread}</span>
+                )}
+              </span>
+              {!collapsed && (
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.8)' }}>
+                  Chat{chatUnread > 0 ? ` (${chatUnread})` : ''}
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Logout at bottom */}
           <div style={{ marginTop: 8 }}>
             <div
@@ -808,6 +853,55 @@ export default function Sidebar() {
             </div>
           );
         })}
+
+        {/* Chat button — normal mode */}
+        <div style={{ marginTop: 2 }}>
+          <div
+            onClick={openPanel}
+            title={collapsed ? 'Chat' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', position: 'relative',
+              flexDirection: collapsed ? 'column' : 'row',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              gap: collapsed ? 2 : 10,
+              height: collapsed ? 48 : 40,
+              padding: collapsed ? '4px 0' : '0 12px 0 10px',
+              cursor: 'pointer', transition: 'background 0.12s', userSelect: 'none',
+              borderLeft: isChatOpen ? '3px solid #22c55e' : '3px solid transparent',
+              background: isChatOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = isChatOpen ? 'rgba(255,255,255,0.1)' : 'transparent'; }}
+          >
+            <span style={{
+              width: collapsed ? 26 : 28, height: collapsed ? 26 : 28, borderRadius: 7, flexShrink: 0,
+              background: isChatOpen ? '#22c55e' : 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative',
+            }}>
+              <svg width={collapsed ? 12 : 13} height={collapsed ? 12 : 13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              {chatUnread > 0 && (
+                <span style={{
+                  position: 'absolute', top: -4, right: -4, background: '#ef4444',
+                  color: '#fff', borderRadius: 8, fontSize: 7, fontWeight: 800,
+                  padding: '1px 3px', minWidth: 13, textAlign: 'center',
+                  border: `1px solid ${BG}`, lineHeight: 1.4,
+                }}>{chatUnread > 99 ? '99+' : chatUnread}</span>
+              )}
+            </span>
+            {collapsed && (
+              <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.4px' }}>CHAT</span>
+            )}
+            {!collapsed && (
+              <span style={{ fontSize: 12.5, fontWeight: 400, color: '#fff' }}>
+                Chat{chatUnread > 0 ? ` (${chatUnread})` : ''}
+              </span>
+            )}
+          </div>
+        </div>
 
         <div style={{ marginTop: 4 }}>
           <div

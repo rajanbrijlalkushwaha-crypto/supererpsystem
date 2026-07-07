@@ -94,6 +94,9 @@ import StockView from './pages/stock/StockView';
 import StockIn from './pages/stock/StockIn';
 import StockOut from './pages/stock/StockOut';
 
+import { ChatProvider } from './context/ChatContext';
+import Chat from './components/Chat';
+
 import './App.css';
 
 // Guard: renders children only when a company is selected, else shows block screen
@@ -161,14 +164,15 @@ function AppContent() {
   const { user, logout }    = useAuth();
 
   return (
-    <div className="app-container">
-      <Sidebar />
-      <div className="app-right">
-        <Header username={user?.name || user?.username || 'User'} onLogout={logout} />
-        <div className="right-panel">
-          <SubNav />
-          {/* key forces full remount of all pages when company changes → data reloads automatically */}
-          <div className="content-area" key={selectedCompany?.companyId || 'no-company'}>
+    <ChatProvider>
+      <div className="app-container">
+        <Sidebar />
+        <div className="app-right">
+          <Header username={user?.name || user?.username || 'User'} onLogout={logout} />
+          <div className="right-panel">
+            <SubNav />
+            {/* key forces full remount of all pages when company changes → data reloads automatically */}
+            <div className="content-area" key={selectedCompany?.companyId || 'no-company'}>
             <Routes>
               {/* Admin panel */}
               <Route path="/admin"           element={<Admin />} />
@@ -305,7 +309,9 @@ function AppContent() {
           </div>
         </div>
       </div>
+      <Chat />
     </div>
+    </ChatProvider>
   );
 }
 
