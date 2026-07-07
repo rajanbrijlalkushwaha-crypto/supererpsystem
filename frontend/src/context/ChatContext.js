@@ -15,10 +15,12 @@ export const ChatProvider = ({ children }) => {
   const [onlineIds,      setOnlineIds]      = useState([]);
   const [isChatOpen,     setIsChatOpen]     = useState(false);
   const [activePeer,     setActivePeer]     = useState(null);   // userId string | null
-  const [unread,         setUnread]         = useState({});     // { userId: count }
+  const [unread,         setUnread]         = useState({});     // { userId|grp_groupId: count }
   const [incomingMsg,    setIncomingMsg]    = useState(null);   // latest received msg object
   const [typingFrom,     setTypingFrom]     = useState({});     // { userId: true }
   const [msgStatusUpdate, setMsgStatusUpdate] = useState(null); // { type:'delivered'|'read', msgIds:[] }
+  const [incomingCall,   setIncomingCall]   = useState(null);   // { fromUserId, callType, offer }
+  const [incomingGroupMsg, setIncomingGroupMsg] = useState(null); // latest group msg
 
   const myId = user ? String(user.id || user.userId) : null;
   const cid  = selectedCompany?.companyId || '';
@@ -71,6 +73,20 @@ export const ChatProvider = ({ children }) => {
       setMsgStatusUpdate({ type: 'read', msgIds, _ts: Date.now() });
     });
 
+    // Group messages
+    s.on('chat:groupMessage', msg => {
+      setIncomingGroupMsg({ ...msg, _recv: Date.now() });
+      const key = `grp_${msg.groupId}`;
+      setActivePeer(cur => {
+        if (cur !== key) setUnread(u => ({ ...u, [key]: (u[key] || 0) + 1 }));
+        return cur;
+      });
+    });
+
+    // Incoming call
+    s.on('call:incoming', data => setIncomingCall({ ...data, _ts: Date.now() }));
+    s.on('call:ended',    ()   => setIncomingCall(null));
+
     return () => { s.disconnect(); socketRef.current = null; };
   }, [myId]); // eslint-disable-line
 
@@ -109,6 +125,8 @@ export const ChatProvider = ({ children }) => {
       socketRef, onlineIds,
       isChatOpen, activePeer,
       unread, total, incomingMsg, typingFrom, msgStatusUpdate,
+      incomingCall, setIncomingCall,
+      incomingGroupMsg,
       myId, cid,
       openPanel, closePanel, selectPeer,
     }}>

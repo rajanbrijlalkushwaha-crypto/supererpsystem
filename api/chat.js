@@ -61,7 +61,7 @@ router.get('/messages', (req, res) => {
 
 /* ── POST /api/chat/messages — send a text message ── */
 router.post('/messages', (req, res) => {
-  const { companyId, fromUserId, toUserId, text } = req.body;
+  const { companyId, fromUserId, toUserId, text, replyTo, order } = req.body;
   if (!companyId || !fromUserId || !toUserId) return res.status(400).json({ error: 'Missing params' });
   const msgs = readConv(companyId, fromUserId, toUserId);
   const msg = {
@@ -69,6 +69,8 @@ router.post('/messages', (req, res) => {
     fromUserId, toUserId, companyId,
     text: text || '',
     file: null,
+    order: order || null,
+    replyTo: replyTo || null,
     timestamp: new Date().toISOString(),
     delivered: false,
     read: false,
@@ -78,24 +80,36 @@ router.post('/messages', (req, res) => {
   res.json(msg);
 });
 
-/* ── POST /api/chat/upload — upload a file attachment ── */
+/* ── POST /api/chat/upload — upload a file attachment (1-1 or group) ── */
 router.post('/upload', upload.single('file'), (req, res) => {
-  const { companyId, fromUserId, toUserId } = req.body;
-  if (!companyId || !fromUserId || !toUserId || !req.file) return res.status(400).json({ error: 'Missing params or file' });
+  const { companyId, fromUserId, toUserId, groupId } = req.body;
+  if (!companyId || !fromUserId || !req.file) return res.status(400).json({ error: 'Missing params or file' });
+  let replyTo = null;
+  try { replyTo = req.body.replyTo ? JSON.parse(req.body.replyTo) : null; } catch {}
+  const fileInfo = { name: req.file.originalname, storedAs: req.file.filename, size: req.file.size, mime: req.file.mimetype };
+  if (groupId) {
+    const fp = path.join(chatDir(companyId), `grp_${groupId}.json`);
+    const msgs = fs.existsSync(fp) ? JSON.parse(fs.readFileSync(fp, 'utf-8') || '[]') : [];
+    const msg = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      groupId, fromUserId: String(fromUserId), companyId,
+      text: '', file: fileInfo, order: null, replyTo,
+      timestamp: new Date().toISOString(),
+      readBy: [String(fromUserId)],
+    };
+    msgs.push(msg);
+    fs.mkdirSync(chatDir(companyId), { recursive: true });
+    fs.writeFileSync(fp, JSON.stringify(msgs, null, 2));
+    return res.json(msg);
+  }
+  if (!toUserId) return res.status(400).json({ error: 'Missing toUserId' });
   const msgs = readConv(companyId, fromUserId, toUserId);
   const msg = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
     fromUserId, toUserId, companyId,
-    text: '',
-    file: {
-      name: req.file.originalname,
-      storedAs: req.file.filename,
-      size: req.file.size,
-      mime: req.file.mimetype,
-    },
+    text: '', file: fileInfo, order: null, replyTo,
     timestamp: new Date().toISOString(),
-    delivered: false,
-    read: false,
+    delivered: false, read: false,
   };
   msgs.push(msg);
   writeConv(companyId, fromUserId, toUserId, msgs);
@@ -122,6 +136,72 @@ router.get('/file/:companyId/:filename', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(orig)}"`);
   }
   res.sendFile(path.resolve(fp));
+});
+
+/* ── GET /api/chat/groups?companyId=&userId= ── */
+router.get('/groups', (req, res) => {
+  const { companyId, userId } = req.query;
+  if (!companyId || !userId) return res.status(400).json({ error: 'Missing params' });
+  const gf = path.join(chatDir(companyId), '_groups.json');
+  if (!fs.existsSync(gf)) return res.json([]);
+  try {
+    const all = JSON.parse(fs.readFileSync(gf, 'utf-8') || '[]');
+    res.json(all.filter(g => g.members.includes(String(userId))));
+  } catch { res.json([]); }
+});
+
+/* ── POST /api/chat/groups — create group ── */
+router.post('/groups', (req, res) => {
+  const { companyId, name, members, createdBy } = req.body;
+  if (!companyId || !name || !members) return res.status(400).json({ error: 'Missing params' });
+  const dir = chatDir(companyId);
+  fs.mkdirSync(dir, { recursive: true });
+  const gf = path.join(dir, '_groups.json');
+  const all = fs.existsSync(gf) ? JSON.parse(fs.readFileSync(gf, 'utf-8') || '[]') : [];
+  const group = {
+    id: `grp-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+    name: name.trim(), members: members.map(String),
+    createdBy: String(createdBy), createdAt: new Date().toISOString(),
+  };
+  all.push(group);
+  fs.writeFileSync(gf, JSON.stringify(all, null, 2));
+  res.json(group);
+});
+
+/* ── GET /api/chat/group-messages?companyId=&groupId=&userId= ── */
+router.get('/group-messages', (req, res) => {
+  const { companyId, groupId, userId } = req.query;
+  if (!companyId || !groupId) return res.status(400).json({ error: 'Missing params' });
+  const fp = path.join(chatDir(companyId), `grp_${groupId}.json`);
+  const msgs = fs.existsSync(fp) ? JSON.parse(fs.readFileSync(fp, 'utf-8') || '[]') : [];
+  if (userId) {
+    let changed = false;
+    msgs.forEach(m => {
+      if (!m.readBy) m.readBy = [];
+      if (!m.readBy.includes(String(userId))) { m.readBy.push(String(userId)); changed = true; }
+    });
+    if (changed) fs.writeFileSync(fp, JSON.stringify(msgs, null, 2));
+  }
+  res.json(msgs);
+});
+
+/* ── POST /api/chat/group-messages ── */
+router.post('/group-messages', (req, res) => {
+  const { companyId, groupId, fromUserId, text, replyTo, order } = req.body;
+  if (!companyId || !groupId || !fromUserId) return res.status(400).json({ error: 'Missing params' });
+  const fp = path.join(chatDir(companyId), `grp_${groupId}.json`);
+  const msgs = fs.existsSync(fp) ? JSON.parse(fs.readFileSync(fp, 'utf-8') || '[]') : [];
+  const msg = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    groupId, fromUserId: String(fromUserId), companyId,
+    text: text || '', file: null, order: order || null, replyTo: replyTo || null,
+    timestamp: new Date().toISOString(),
+    readBy: [String(fromUserId)],
+  };
+  msgs.push(msg);
+  fs.mkdirSync(chatDir(companyId), { recursive: true });
+  fs.writeFileSync(fp, JSON.stringify(msgs, null, 2));
+  res.json(msg);
 });
 
 /* ── GET /api/chat/unread?companyId=&userId= — count unread per sender ── */

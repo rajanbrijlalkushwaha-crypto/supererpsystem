@@ -109,6 +109,16 @@ io.on('connection', (socket) => {
     if (sids) sids.forEach(sid => io.to(sid).emit('chat:message', msg));
   });
 
+  // Relay group message to all online members (except sender)
+  socket.on('chat:groupRelay', ({ msg, memberIds }) => {
+    if (!msg || !Array.isArray(memberIds)) return;
+    memberIds.forEach(uid => {
+      if (String(uid) === socket.userId) return;
+      const sids = onlineUsers.get(String(uid));
+      if (sids) sids.forEach(sid => io.to(sid).emit('chat:groupMessage', msg));
+    });
+  });
+
   // Recipient tells server: "I received msgId" → relay delivered status back to sender
   socket.on('chat:deliveredAck', ({ msgId, toUserId }) => {
     const sids = onlineUsers.get(String(toUserId));
@@ -119,6 +129,33 @@ io.on('connection', (socket) => {
   socket.on('chat:readAck', ({ msgIds, toUserId }) => {
     const sids = onlineUsers.get(String(toUserId));
     if (sids) sids.forEach(sid => io.to(sid).emit('chat:read', { msgIds }));
+  });
+
+  // ── WebRTC call signaling ──
+  socket.on('call:offer', ({ toUserId, offer, callType }) => {
+    if (!socket.userId) return;
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('call:incoming', { fromUserId: socket.userId, offer, callType }));
+  });
+  socket.on('call:answer', ({ toUserId, answer }) => {
+    if (!socket.userId) return;
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('call:answered', { answer }));
+  });
+  socket.on('call:ice-candidate', ({ toUserId, candidate }) => {
+    if (!socket.userId) return;
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('call:ice-candidate', { candidate }));
+  });
+  socket.on('call:end', ({ toUserId }) => {
+    if (!socket.userId) return;
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('call:ended', { fromUserId: socket.userId }));
+  });
+  socket.on('call:reject', ({ toUserId }) => {
+    if (!socket.userId) return;
+    const sids = onlineUsers.get(String(toUserId));
+    if (sids) sids.forEach(sid => io.to(sid).emit('call:rejected', { fromUserId: socket.userId }));
   });
 
   socket.on('disconnect', () => {
