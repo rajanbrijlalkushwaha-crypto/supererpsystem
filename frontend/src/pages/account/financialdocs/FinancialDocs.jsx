@@ -17,7 +17,29 @@ const getFYOptions = () => {
 
 /* ── PDF Preview Modal ─────────────────────────────── */
 function PDFPreviewModal({ doc, cid, onClose, onDownload }) {
-  const src = `${API}/${doc.id}/view?companyId=${cid}`;
+  const [blobUrl,  setBlobUrl]  = useState(null);
+  const [loadErr,  setLoadErr]  = useState('');
+  const [fetching, setFetching] = useState(true);
+
+  // Fetch PDF as blob so the iframe always gets a same-origin object URL
+  useEffect(() => {
+    let objectUrl;
+    setFetching(true);
+    setLoadErr('');
+    setBlobUrl(null);
+    fetch(`${API}/${doc.id}/view?companyId=${cid}`)
+      .then(r => {
+        if (!r.ok) throw new Error(`Server returned ${r.status}`);
+        return r.blob();
+      })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+        setFetching(false);
+      })
+      .catch(e => { setLoadErr(e.message); setFetching(false); });
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [doc.id, cid]);
 
   const handleKey = useCallback(e => { if (e.key === 'Escape') onClose(); }, [onClose]);
   useEffect(() => {
@@ -97,20 +119,42 @@ function PDFPreviewModal({ doc, cid, onClose, onDownload }) {
         </div>
 
         {/* PDF viewer */}
-        <div style={{ flex: 1, background: '#525659', position: 'relative', overflow: 'hidden' }}>
-          <iframe
-            src={`${src}#toolbar=1&view=FitH`}
-            title={doc.docName || doc.fileName}
-            style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-            allow="fullscreen"
-          />
-          {/* Fallback open-in-tab link for non-PDF browsers */}
-          <div style={{ position: 'absolute', bottom: 10, right: 14, display: 'flex', gap: 8 }}>
-            <a href={src} target="_blank" rel="noopener noreferrer"
-              style={{ padding: '5px 13px', background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6, fontSize: 11.5, fontWeight: 600, textDecoration: 'none' }}>
-              Open in new tab ↗
-            </a>
-          </div>
+        <div style={{ flex: 1, background: '#525659', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {fetching && (
+            <div style={{ color: '#fff', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+              Loading PDF…
+            </div>
+          )}
+          {loadErr && (
+            <div style={{ color: '#fca5a5', fontSize: 14, textAlign: 'center', padding: 20 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+              Could not load PDF: {loadErr}
+              <br />
+              <a href={`${API}/${doc.id}/view?companyId=${cid}`} target="_blank" rel="noopener noreferrer"
+                style={{ color: '#7dd3fc', marginTop: 12, display: 'inline-block', fontSize: 13 }}>
+                Try opening in new tab ↗
+              </a>
+            </div>
+          )}
+          {blobUrl && (
+            <iframe
+              src={`${blobUrl}#toolbar=1&view=FitH`}
+              title={doc.docName || doc.fileName}
+              style={{ width: '100%', height: '100%', border: 'none', display: 'block', position: 'absolute', inset: 0 }}
+              allow="fullscreen"
+            />
+          )}
+          {/* Open in new tab fallback */}
+          {blobUrl && (
+            <div style={{ position: 'absolute', bottom: 10, right: 14 }}>
+              <a href={blobUrl} download={doc.fileName}
+                style={{ padding: '5px 13px', background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6, fontSize: 11.5, fontWeight: 600, textDecoration: 'none' }}>
+                Open in new tab ↗
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Footer hint */}
@@ -186,18 +230,27 @@ export default function FinancialDocs() {
     setSelected(next);
   };
 
-  const downloadDoc = doc => {
-    const a = document.createElement('a');
-    a.href = `${API}/${doc.id}/download?companyId=${cid}`;
-    a.download = doc.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const downloadDoc = async doc => {
+    try {
+      const r = await fetch(`${API}/${doc.id}/download?companyId=${cid}`);
+      if (!r.ok) throw new Error(`Server returned ${r.status}`);
+      const blob = await r.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = doc.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (e) {
+      alert(`Download failed: ${e.message}`);
+    }
   };
 
   const downloadSelected = () => {
     filtered.filter(d => selected.has(d.id)).forEach((doc, i) => {
-      setTimeout(() => downloadDoc(doc), i * 400);
+      setTimeout(() => downloadDoc(doc), i * 600);
     });
   };
 
