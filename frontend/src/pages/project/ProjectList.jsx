@@ -1705,7 +1705,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         {row.isFirst && (
                           <>
                             {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
-                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:600, color:'#111827', background:bg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.soBalance)}</td>}
+                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700, color:'#16a34a', background:bg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.soBalance)}</td>}
                             {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
                             {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
                               color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>{row.salesBill ? (row.salesBill.billNo || '—') : '—'}</td>}
@@ -1755,7 +1755,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         {row.isFirst && (
                           <>
                             {cv('po_payment')   && <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
-                            {cv('po_dues')      && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:600, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.poBalance)}</td>}
+                            {cv('po_dues')      && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.poBalance)}</td>}
                             {cv('po_purchDate') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
                             {cv('po_purchNo')   && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
                             {cv('po_amount')    && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
@@ -1811,7 +1811,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     {cv('so_gstAmt')    && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soGst)}</td>}
                     {cv('so_ov')        && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
                     {cv('so_receipt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
-                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#b71c1c' }}>{fmt(GT.dues)}</td>}
+                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#16a34a', fontWeight:800 }}>{fmt(GT.dues)}</td>}
                     {cv('so_billDate')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
                     {cv('so_billNo')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
                     {cv('so_status')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0', borderRight:'2px solid #9ab0e0' }}></td>}
