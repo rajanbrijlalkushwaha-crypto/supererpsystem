@@ -561,7 +561,7 @@ export default function Sidebar() {
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 gap: 10, height: 38, padding: collapsed ? '0' : '0 12px 0 10px',
                 cursor: 'pointer', transition: 'background 0.12s', userSelect: 'none',
-                borderLeft: isChatOpen ? '3px solid #22c55e' : '3px solid transparent',
+                borderLeft: isChatOpen ? '3px solid #f97316' : '3px solid transparent',
                 background: isChatOpen ? HOVER : 'transparent',
               }}
               onMouseEnter={e => { e.currentTarget.style.background = HOVER; }}
@@ -569,7 +569,7 @@ export default function Sidebar() {
             >
               <span style={{
                 width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                background: isChatOpen ? '#22c55e' : 'rgba(255,255,255,0.08)',
+                background: isChatOpen ? '#f97316' : '#f97316',
                 border: '1px solid rgba(255,255,255,0.2)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 position: 'relative',
@@ -867,7 +867,7 @@ export default function Sidebar() {
               height: collapsed ? 48 : 40,
               padding: collapsed ? '4px 0' : '0 12px 0 10px',
               cursor: 'pointer', transition: 'background 0.12s', userSelect: 'none',
-              borderLeft: isChatOpen ? '3px solid #22c55e' : '3px solid transparent',
+              borderLeft: isChatOpen ? '3px solid #f97316' : '3px solid transparent',
               background: isChatOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
@@ -875,7 +875,7 @@ export default function Sidebar() {
           >
             <span style={{
               width: collapsed ? 26 : 28, height: collapsed ? 26 : 28, borderRadius: 7, flexShrink: 0,
-              background: isChatOpen ? '#22c55e' : 'rgba(255,255,255,0.1)',
+              background: '#f97316',
               border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               position: 'relative',
