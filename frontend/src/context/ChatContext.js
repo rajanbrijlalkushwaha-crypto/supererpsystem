@@ -30,8 +30,9 @@ export const ChatProvider = ({ children }) => {
   // ── Socket connection ──
   useEffect(() => {
     if (!myId) return;
+    // Use window.location.hostname so LAN users (192.168.x.x) connect to the right server
     const SOCKET_URL = window.location.port === '3000'
-      ? 'http://localhost:5000'
+      ? `${window.location.protocol}//${window.location.hostname}:5000`
       : window.location.origin;
     const s = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = s;
@@ -85,7 +86,10 @@ export const ChatProvider = ({ children }) => {
     });
 
     // Call signaling — all events captured here so Chat.jsx doesn't need direct socket access
-    s.on('call:incoming',      data => setIncomingCall({ ...data, _ts: Date.now() }));
+    s.on('call:incoming', data => {
+      console.log('[Chat] call:incoming received', data);
+      setIncomingCall({ ...data, _ts: Date.now() });
+    });
     s.on('call:answered',      data => setCallSignal({ type: 'answered',  data, _ts: Date.now() }));
     s.on('call:ice-candidate', data => setCallSignal({ type: 'ice',       data, _ts: Date.now() }));
     s.on('call:rejected',      ()   => setCallSignal({ type: 'rejected',  data: null, _ts: Date.now() }));

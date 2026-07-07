@@ -312,6 +312,11 @@ export default function Chat() {
   /* ── start outgoing call ── */
   const startCall = useCallback(async (type) => {
     if (!activePeer || callState !== 'idle') return;
+    const sock = socketRef.current;
+    if (!sock?.connected) {
+      alert('Not connected to server — please refresh and try again.');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
       localStreamRef.current = stream;
@@ -321,7 +326,8 @@ export default function Chat() {
       pcRef.current = pc;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketRef.current?.emit('call:offer', { toUserId: activePeer, offer: pc.localDescription, callType: type });
+      console.log('[Chat] emitting call:offer to', activePeer, 'type:', type);
+      sock.emit('call:offer', { toUserId: activePeer, offer: pc.localDescription, callType: type });
       setCallType(type); setCallPeerId(activePeer); setCallState('outgoing');
     } catch (err) { alert('Cannot access mic/camera: ' + err.message); }
   }, [activePeer, callState, createPC, socketRef]);
@@ -1059,27 +1065,66 @@ export default function Chat() {
   );
 }
 
-/* ── Incoming call notification banner ── */
+/* ── Incoming call notification — full-screen overlay, impossible to miss ── */
 function IncomingCallBanner({ call, users, myId, onAccept, onReject }) {
-  const caller = users.find(u => String(u.id || u.userId) === String(call.fromUserId));
-  const name   = caller ? (caller.name || caller.username) : `User ${call.fromUserId}`;
+  const caller = (users || []).find(u => String(u.id || u.userId) === String(call?.fromUserId));
+  const name   = caller ? (caller.name || caller.username) : `User ${call?.fromUserId || '?'}`;
+  const isVideo = call?.callType === 'video';
+
+  // Ring animation via CSS
+  React.useEffect(() => {
+    const el = document.getElementById('__call_ring_anim');
+    if (el) el.style.animation = 'callRing 1s ease-in-out infinite';
+  }, []);
+
   return (
-    <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 2000, fontFamily: 'Inter, system-ui, sans-serif' }}>
-      <div style={{ background: '#1e293b', borderRadius: 16, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 12px 48px rgba(0,0,0,0.55)', minWidth: 300 }}>
-        <div style={{ position: 'relative' }}>
-          <UserAv user={caller || { name }} size={48} />
-          <div style={{ position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: '50%', background: '#22c55e', border: '2px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8 }}>
-            {call.callType === 'video' ? '📹' : '📞'}
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'Inter, system-ui, sans-serif',
+    }}>
+      <style>{`
+        @keyframes callRing { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes callPulse { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)} 70%{box-shadow:0 0 0 20px rgba(34,197,94,0)} }
+      `}</style>
+      <div id="__call_ring_anim" style={{
+        background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+        borderRadius: 24, padding: '40px 48px', textAlign: 'center',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.8)', minWidth: 300,
+      }}>
+        <div style={{ fontSize: 42, marginBottom: 12 }}>{isVideo ? '📹' : '📞'}</div>
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+          <UserAv user={caller || { name }} size={80} />
+          <div style={{
+            position: 'absolute', inset: -6, borderRadius: '50%',
+            border: '3px solid #22c55e', animation: 'callPulse 1.5s infinite',
+          }} />
+        </div>
+        <div style={{ color: '#fff', fontWeight: 800, fontSize: 20, marginBottom: 6 }}>{name}</div>
+        <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 32 }}>
+          Incoming {isVideo ? 'Video' : 'Voice'} Call…
+        </div>
+        <div style={{ display: 'flex', gap: 24, justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={onReject}
+              style={{ width: 60, height: 60, borderRadius: '50%', background: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: '0 4px 16px rgba(239,68,68,0.5)', transition: 'transform 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
+              📵
+            </button>
+            <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>Decline</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={onAccept}
+              style={{ width: 60, height: 60, borderRadius: '50%', background: '#22c55e', border: 'none', cursor: 'pointer', fontSize: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: '0 4px 16px rgba(34,197,94,0.5)', animation: 'callPulse 1.5s infinite', transition: 'transform 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
+              {isVideo ? '📹' : '📞'}
+            </button>
+            <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>Accept</div>
           </div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{name}</div>
-          <div style={{ color: '#9ca3af', fontSize: 11.5 }}>Incoming {call.callType === 'video' ? 'video' : 'voice'} call…</div>
-        </div>
-        <button onClick={onAccept} title="Accept"
-          style={{ width: 40, height: 40, borderRadius: '50%', background: '#22c55e', border: 'none', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
-        <button onClick={onReject} title="Reject"
-          style={{ width: 40, height: 40, borderRadius: '50%', background: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
       </div>
     </div>
   );
