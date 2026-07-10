@@ -65,6 +65,12 @@ router.post('/login', (req, res) => {
   if (!user || user.password !== hashPwd(password))
     return res.status(401).json({ error: 'Invalid username or password.' });
 
+  if (user.suspended)
+    return res.status(403).json({ error: 'Your account has been suspended. Please contact the administrator.' });
+
+  if (user.validUntil && new Date(user.validUntil) < new Date())
+    return res.status(403).json({ error: `Your account access expired on ${new Date(user.validUntil).toLocaleDateString('en-IN')}. Please contact the administrator.` });
+
   const token     = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000; // 8 hours
   SESSIONS.set(token, { userId: user.id, username: user.username, name: user.name, role: user.role, expiresAt });
@@ -318,7 +324,7 @@ router.put('/users/:id', (req, res) => {
   const idx   = users.findIndex(u => u.id == req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
-  const { firstName, middleName, lastName, email, phone, role, active, permissions, designation, department } = req.body || {};
+  const { firstName, middleName, lastName, email, phone, role, active, permissions, designation, department, suspended, validUntil } = req.body || {};
   const fullName = firstName && lastName
     ? [firstName, middleName, lastName].filter(Boolean).join(' ')
     : users[idx].name;
@@ -336,6 +342,8 @@ router.put('/users/:id', (req, res) => {
     ...(permissions !== undefined && { permissions }),
     ...(designation !== undefined && { designation }),
     ...(department  !== undefined && { department }),
+    ...(suspended   !== undefined && { suspended: !!suspended }),
+    ...(validUntil  !== undefined && { validUntil: validUntil || null }),
     updatedAt: new Date().toISOString(),
   };
   saveUsers(users);

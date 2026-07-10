@@ -168,6 +168,8 @@ export default function AdminUsers() {
   const [designation,setDesignation]= useState('');
   const [department, setDepartment] = useState('');
   const [active,     setActive]     = useState(true);
+  const [suspended,  setSuspended]  = useState(false);
+  const [validUntil, setValidUntil] = useState('');
   const [perms,      setPerms]      = useState({});
 
   /* Pwd form (change password) */
@@ -189,7 +191,8 @@ export default function AdminUsers() {
     setEditUser(null);
     setFirstName(''); setMiddleName(''); setLastName('');
     setEmail(''); setPhone(''); setRole('user');
-    setDesignation(''); setDepartment(''); setActive(true); setPerms({});
+    setDesignation(''); setDepartment(''); setActive(true);
+    setSuspended(false); setValidUntil(''); setPerms({});
     setShowForm(true);
   };
 
@@ -199,6 +202,7 @@ export default function AdminUsers() {
     setLastName(u.lastName||''); setEmail(u.email||''); setPhone(u.phone||'');
     setRole(u.role||'user'); setDesignation(u.designation||'');
     setDepartment(u.department||''); setActive(u.active!==false);
+    setSuspended(!!u.suspended); setValidUntil(u.validUntil||'');
     setPerms(u.permissions||{});
     setShowForm(true);
   };
@@ -213,7 +217,8 @@ export default function AdminUsers() {
       if (editUser) {
         await axios.put(`/api/auth/users/${editUser.id}`, {
           firstName: firstName.trim(), middleName: middleName.trim(), lastName: lastName.trim(),
-          email: email.trim(), phone: phone.trim(), role, designation, department, active, permissions: perms,
+          email: email.trim(), phone: phone.trim(), role, designation, department, active,
+          suspended, validUntil: validUntil || null, permissions: perms,
         });
         showMsg(`User "${firstName} ${lastName}" updated.`, true);
         fetchUsers();
@@ -263,6 +268,8 @@ export default function AdminUsers() {
   });
 
   const statusBadge = (u) => {
+    if (u.suspended) return { label:'Suspended', bg:'#fef2f2', color:'#dc2626', border:'#fecaca' };
+    if (u.validUntil && new Date(u.validUntil) < new Date()) return { label:'Expired', bg:'#fff7ed', color:'#c2410c', border:'#fed7aa' };
     if (u.status==='pending' || u.active===false) return { label:'Pending', bg:'#fef3c7', color:'#92400e', border:'#fde68a' };
     return { label:'Active', bg:'#dcfce7', color:'#15803d', border:'#bbf7d0' };
   };
@@ -482,9 +489,25 @@ export default function AdminUsers() {
                     <input value={department} onChange={e=>setDepartment(e.target.value)} placeholder="e.g. Finance" style={inp()}/>
                   </div>
                   {editUser && (
-                    <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:18 }}>
-                      <input type="checkbox" id="actv" checked={active} onChange={e=>setActive(e.target.checked)} style={{ width:14, height:14, cursor:'pointer' }}/>
-                      <label htmlFor="actv" style={{ fontSize:12, color:'#374151', cursor:'pointer', userSelect:'none' }}>Active</label>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8, paddingTop:10 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <input type="checkbox" id="actv" checked={active} onChange={e=>setActive(e.target.checked)} style={{ width:14, height:14, cursor:'pointer' }}/>
+                        <label htmlFor="actv" style={{ fontSize:12, color:'#374151', cursor:'pointer', userSelect:'none' }}>Active</label>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <input type="checkbox" id="susp" checked={suspended} onChange={e=>setSuspended(e.target.checked)} style={{ width:14, height:14, cursor:'pointer', accentColor:'#dc2626' }}/>
+                        <label htmlFor="susp" style={{ fontSize:12, color:'#dc2626', cursor:'pointer', userSelect:'none', fontWeight:suspended?700:400 }}>Suspended</label>
+                      </div>
+                    </div>
+                  )}
+                  {editUser && (
+                    <div>
+                      <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Valid Until <span style={{ color:'#9ca3af', fontWeight:400 }}>(leave blank = no expiry)</span></label>
+                      <input type="date" value={validUntil} onChange={e=>setValidUntil(e.target.value)}
+                        style={{ ...inp(), color: validUntil && new Date(validUntil)<new Date() ? '#dc2626' : '#374151' }}/>
+                      {validUntil && new Date(validUntil) < new Date() && (
+                        <div style={{ fontSize:10, color:'#dc2626', marginTop:2 }}>⚠ Access already expired</div>
+                      )}
                     </div>
                   )}
                 </div>

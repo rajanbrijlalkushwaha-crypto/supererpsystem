@@ -286,8 +286,14 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
     let ex;
     if (db.connected) {
       const [[existing]] = await db.query('SELECT * FROM sales_orders WHERE id = ? AND company_id = ?', [orderId, companyId]);
-      if (!existing) return res.status(404).json({ error: 'Sales order not found' });
-      ex = parseJ(existing.data, {});
+      if (existing) {
+        ex = parseJ(existing.data, {});
+      } else {
+        // Created while DB was offline — fall back to file store
+        const fileEx = jstore.readOne('SalesOrder', companyId, orderId);
+        if (!fileEx) return res.status(404).json({ error: 'Sales order not found' });
+        ex = fileEx;
+      }
     } else {
       const existing = jstore.readOne('SalesOrder', companyId, orderId);
       if (!existing) return res.status(404).json({ error: 'Sales order not found' });
@@ -403,12 +409,13 @@ router.delete('/:orderId', async (req, res) => {
     const orderId   = req.params.orderId;
 
     if (db.connected) {
-      const [result] = await db.query('DELETE FROM sales_orders WHERE id = ? AND company_id = ?', [orderId, companyId]);
-      if (!result.affectedRows) return res.status(404).json({ error: 'Sales order not found' });
+      await db.query('DELETE FROM sales_orders WHERE id = ? AND company_id = ?', [orderId, companyId]);
+      // Don't return 404 — record may exist only in file system (created while DB was offline)
     }
 
-    const p = path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', orderId);
+    const p = path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(orderId));
     if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
+    else if (db.connected) { /* already removed from DB above; nothing else to do */ }
 
     res.json({ success: true, message: 'Sales order deleted' });
   } catch (e) { res.status(500).json({ error: e.message }); }

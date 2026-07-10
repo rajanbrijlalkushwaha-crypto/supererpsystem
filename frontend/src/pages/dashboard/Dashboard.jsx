@@ -76,42 +76,44 @@ tr:nth-child(odd) td:not(.lbl){background:#fff;}tr:nth-child(even) td:not(.lbl){
 }
 
 /* ── Print: Ongoing Orders ── */
-function printOngoingOrders(orders, pos, companyName) {
+function printOngoingOrders(orders, pos, companyName, orientation='landscape') {
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   let srNo = 0;
   const allRows = [];
   orders.forEach(o => {
-    const linkedPOs = pos.filter(p => String(p.linkedSalesOrderId) === String(o.orderId));
+    const linkedPOs  = pos.filter(p => String(p.linkedSalesOrderId) === String(o.orderId));
     const vendorNames = [...new Set(linkedPOs.map(p => p.vendorName).filter(Boolean))].join(', ') || '—';
+    const vendorAmts  = linkedPOs.reduce((s,p)=>s+(parseFloat(p.grandTotal)||0),0);
     const items = (o.items||[]);
     if (items.length === 0) {
       srNo++;
-      allRows.push({ srNo, orderNo:o.orderNo||'—', orderDate:fmtD(o.orderDate), client:o.customerName||o.clientName||'—', dueDate:fmtD(o.deliveryDate||o.dueDate||''), vendor:vendorNames, product:'—', qty:'—', unit:'', firstRow:true });
+      allRows.push({ srNo, orderNo:o.orderNo||'—', orderDate:fmtD(o.orderDate), client:o.customerName||o.clientName||'—', dueDate:fmtD(o.deliveryDate||o.dueDate||''), status:o.status||'—', vendor:vendorNames, vendorAmt:vendorAmts?`₹${fmt2(vendorAmts)}`:'—', product:'—', qty:'—', unit:'', firstRow:true });
     } else {
       items.forEach((item, idx) => {
         srNo++;
-        allRows.push({ srNo, orderNo:idx===0?(o.orderNo||'—'):'', orderDate:idx===0?fmtD(o.orderDate):'', client:idx===0?(o.customerName||o.clientName||'—'):'', dueDate:idx===0?fmtD(o.deliveryDate||o.dueDate||''):'', vendor:idx===0?vendorNames:'', product:item.description||item.itemName||'—', qty:item.qty||'—', unit:item.unit||'', firstRow:idx===0 });
+        allRows.push({ srNo, orderNo:idx===0?(o.orderNo||'—'):'', orderDate:idx===0?fmtD(o.orderDate):'', client:idx===0?(o.customerName||o.clientName||'—'):'', dueDate:idx===0?fmtD(o.deliveryDate||o.dueDate||''):'', status:idx===0?(o.status||'—'):'', vendor:idx===0?vendorNames:'', vendorAmt:idx===0&&vendorAmts?`₹${fmt2(vendorAmts)}`:'', product:item.description||item.itemName||'—', qty:item.qty||'—', unit:item.unit||'', firstRow:idx===0 });
       });
     }
   });
-  const bodyHTML = allRows.map(r=>`<tr style="${r.firstRow&&r.orderNo?'border-top:2px solid #ccc;':''}" ><td style="text-align:right">${r.srNo}</td><td style="font-weight:700">${r.orderNo}</td><td>${r.orderDate}</td><td>${r.client}</td><td>${r.dueDate}</td><td>${r.vendor}</td><td>${r.product}</td><td style="text-align:right">${r.qty}${r.unit?' '+r.unit:''}</td></tr>`).join('');
+  const bodyHTML = allRows.map(r=>`<tr style="${r.firstRow&&r.orderNo?'border-top:2px solid #ccc;':''}" ><td style="text-align:right">${r.srNo}</td><td style="font-weight:700">${r.orderNo}</td><td>${r.orderDate}</td><td>${r.client}</td><td>${r.dueDate}</td><td>${r.status}</td><td>${r.vendor}</td><td style="text-align:right">${r.vendorAmt||''}</td><td>${r.product}</td><td style="text-align:right">${r.qty}${r.unit?' '+r.unit:''}</td></tr>`).join('');
+  const pageSize = orientation==='portrait' ? 'A4' : 'A3 landscape';
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ongoing Orders</title>
-<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:9pt;}
+<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:8.5pt;}
 .pg{padding:8mm 10mm;}h1{font-size:13pt;font-weight:bold;text-align:center;margin-bottom:2px;}
 .sub{font-size:9pt;text-align:center;color:#444;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #1a2a3a;}
 table{width:100%;border-collapse:collapse;border:2px solid #000;}
 th{background:#1a2a3a;color:#fff;padding:5px 6px;font-size:8pt;font-weight:bold;border:1px solid #000;text-align:left;white-space:nowrap;}
-td{padding:4px 6px;font-size:8.5pt;border:1px solid #ccc;vertical-align:top;}
+td{padding:4px 6px;font-size:8pt;border:1px solid #ccc;vertical-align:top;}
 tr:nth-child(odd){background:#fff;}tr:nth-child(even){background:#f7f9fc;}
 .foot{margin-top:5px;font-size:7.5pt;color:#555;text-align:right;}
-@media print{@page{margin:7mm;size:A3 landscape;}.pg{padding:0;}}</style>
+@media print{@page{margin:7mm;size:${pageSize};}.pg{padding:0;}}</style>
 </head><body><div class="pg">
 <h1>Ongoing Sales Orders Report</h1>
-<div class="sub">${companyName} &nbsp;·&nbsp; Generated: ${today2} &nbsp;·&nbsp; ${orders.length} Orders</div>
+<div class="sub">${companyName} &nbsp;·&nbsp; Generated: ${today2} &nbsp;·&nbsp; ${orders.length} Orders &nbsp;·&nbsp; ${orientation==='portrait'?'Portrait':'Landscape'}</div>
 <table><thead><tr>
-<th style="text-align:right;min-width:36px">Sr No</th>
+<th style="text-align:right;min-width:30px">Sr</th>
 <th>Order No</th><th>Order Date</th><th>Client</th>
-<th>Due / Delivery Date</th><th>Vendor (Linked PO)</th>
+<th>Due Date</th><th>Status</th><th>Vendor (Linked PO)</th><th style="text-align:right">Vendor Amt</th>
 <th>Product / Description</th><th style="text-align:right">Qty</th>
 </tr></thead><tbody>${bodyHTML}</tbody></table>
 <div class="foot">Printed: ${today2}</div>
@@ -309,13 +311,14 @@ export default function Dashboard() {
   const cid = selectedCompany?.companyId;
   const prefs = user?.dashboardPrefs || {};
 
-  const [tab,             setTab]             = useState('summary');
-  const [selectedFY,      setSelectedFY]      = useState(currentFY);
-  const [availFYs,        setAvailFYs]        = useState([]);
-  const [dayDate,         setDayDate]         = useState(todayISO);
-  const [monthFY,         setMonthFY]         = useState(currentFY);
-  const [monthDetailOpen,  setMonthDetailOpen]  = useState(null); // popup — slot 0-11 or null
-  const [selectedMonthSlot, setSelectedMonthSlot] = useState(null); // inline panel — slot 0-11 or null
+  const [tab,               setTab]               = useState('summary');
+  const [selectedFY,        setSelectedFY]        = useState(currentFY);
+  const [availFYs,          setAvailFYs]          = useState([]);
+  const [dayDate,           setDayDate]           = useState(todayISO);
+  const [monthFY,           setMonthFY]           = useState(currentFY);
+  const [monthDetailOpen,   setMonthDetailOpen]   = useState(null);
+  const [selectedMonthSlot, setSelectedMonthSlot] = useState(null);
+  const [reportStatusFilter, setReportStatusFilter] = useState('all'); // for Reports tab
 
   const [rawSOs,      setRawSOs]      = useState([]);
   const [rawPOs,      setRawPOs]      = useState([]);
@@ -327,8 +330,29 @@ export default function Dashboard() {
   const [baseCounts,  setBaseCounts]  = useState({ clients:0, vendors:0 });
   const [loading,     setLoading]     = useState(false);
 
-  const load = useCallback(async () => {
+  const CACHE_KEY = `dash_v1_${cid}`;
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  /* Apply a cached snapshot to state */
+  const applyCache = useCallback((c) => {
+    setRawSOs(c.sos); setRawPOs(c.pos);
+    setRawBills(c.bills); setRawPBills(c.pbills);
+    setRawPayments(c.payments); setRawStock(c.stock); setRawGRN(c.grn);
+    setBaseCounts(c.counts); setAvailFYs(c.fys);
+  }, []);
+
+  const load = useCallback(async (fromCache=false) => {
     if (!cid) return;
+    if (!fromCache) {
+      // Show cached data instantly while fresh data loads in background
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        if (raw) {
+          const { data: cd, ts } = JSON.parse(raw);
+          if (Date.now() - ts < CACHE_TTL) { applyCache(cd); }
+        }
+      } catch {}
+    }
     setLoading(true);
     try {
       const [cR,vR,soR,poR,sbR,pbR,pymtR,stR,grnR] = await Promise.all([
@@ -350,13 +374,18 @@ export default function Dashboard() {
       const fys = [...fySet].sort().reverse();
       setAvailFYs(fys);
       if (!fys.includes(selectedFY) && fys.length) setSelectedFY(fys[0]);
+      const bills    = Array.isArray(sbR.data)?sbR.data:[];
+      const pbills   = Array.isArray(pbR.data)?pbR.data:[];
+      const payments = Array.isArray(pymtR.data)?pymtR.data:[];
+      const stock    = Array.isArray(stR.data)?stR.data:[];
+      const grn      = Array.isArray(grnR.data)?grnR.data:[];
+      const counts   = { clients:(cR.data||[]).length, vendors:(vR.data||[]).length };
       setRawSOs(sos); setRawPOs(pos);
-      setRawBills(Array.isArray(sbR.data)?sbR.data:[]);
-      setRawPBills(Array.isArray(pbR.data)?pbR.data:[]);
-      setRawPayments(Array.isArray(pymtR.data)?pymtR.data:[]);
-      setRawStock(Array.isArray(stR.data)?stR.data:[]);
-      setRawGRN(Array.isArray(grnR.data)?grnR.data:[]);
-      setBaseCounts({ clients:(cR.data||[]).length, vendors:(vR.data||[]).length });
+      setRawBills(bills); setRawPBills(pbills);
+      setRawPayments(payments); setRawStock(stock); setRawGRN(grn);
+      setBaseCounts(counts);
+      // Save to cache
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data:{ sos, pos, bills, pbills, payments, stock, grn, counts, fys }, ts: Date.now() })); } catch {}
     } catch(e){ console.error(e); }
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1387,58 +1416,131 @@ export default function Dashboard() {
 
 
         {/* ══════════════ REPORTS TAB ══════════════ */}
-        {tab==='reports' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {tab==='reports' && (() => {
+          const STATUS_FILTERS = [
+            { key:'all',               label:'All',          color:'#374151', bg:'#f3f4f6' },
+            { key:'in-progress',       label:'In Progress',  color:'#1d4ed8', bg:'#dbeafe' },
+            { key:'hold',              label:'Hold',         color:'#92400e', bg:'#fef3c7' },
+            { key:'completed',         label:'Completed',    color:'#15803d', bg:'#dcfce7' },
+            { key:'pending',           label:'Pending',      color:'#6b7280', bg:'#f3f4f6' },
+            { key:'approved',          label:'Approved',     color:'#059669', bg:'#d1fae5' },
+            { key:'dispatched',        label:'Dispatched',   color:'#7c3aed', bg:'#ede9fe' },
+            { key:'dispatch-pending',  label:'Dispatch Pending', color:'#c2410c', bg:'#fff7ed' },
+          ];
 
-            {/* Ongoing Orders Report */}
-            <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, padding:'16px 18px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize:14, fontWeight:800, color:'#111', marginBottom:4 }}>Ongoing Sales Orders Report</div>
-              <div style={{ fontSize:11, color:'#6b7280', marginBottom:14 }}>
-                Print all active / ongoing sales orders with item-level detail — Order No, Client, Due Date, Vendor (from linked POs), Product, Qty.
-              </div>
-              <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
-                <button onClick={()=>printOngoingOrders(rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)), rawPOs, selectedCompany?.companyName||'')}
-                  style={{ padding:'9px 24px', background:'#104f4f', color:'#fff', border:'none', borderRadius:7, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-                  🖨 Print Ongoing Orders ({rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)).length})
-                </button>
-                <button onClick={()=>printOngoingOrders(rawSOs, rawPOs, selectedCompany?.companyName||'')}
-                  style={{ padding:'9px 24px', background:'#374151', color:'#fff', border:'none', borderRadius:7, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-                  🖨 Print All Orders ({rawSOs.length})
-                </button>
-              </div>
-              <div style={{ marginTop:14, overflowX:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
-                  <thead>
-                    <tr style={{ background:'#104f4f' }}>
-                      {['#','Order No','Order Date','Client','Delivery Date','Order Value','Status'].map((h,i)=>(
-                        <th key={i} style={{ padding:'8px 12px', color:'#fff', fontWeight:700, textAlign:i>=5?'right':'left', border:'1px solid #1a3a3a', whiteSpace:'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawSOs.filter(o=>!['draft','rejected','completed'].includes(o.status)).map((o,ri)=>(
-                      <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#f8faff' }}>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{ri+1}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f' }}>{o.orderNo||'—'}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(o.orderDate)}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#374151' }}>{o.customerName||o.clientName||'—'}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:o.deliveryDate||o.dueDate?'#b45309':'#9ca3af' }}>{fmtD(o.deliveryDate||o.dueDate||'')}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:'#1d4ed8' }}>{fmtINR(o.grandTotal||0)}</td>
-                        <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right' }}>
-                          <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:5, fontSize:10, fontWeight:700,
-                            background:o.status==='approved'?'#dcfce7':'#fef3c7', color:o.status==='approved'?'#16a34a':'#b45309' }}>
-                            {o.status||'—'}
-                          </span>
-                        </td>
+          const filteredReportOrders = rawSOs.filter(o => {
+            if (reportStatusFilter === 'all') return true;
+            return (o.status||'').toLowerCase() === reportStatusFilter;
+          });
+
+          // Build vendor map for each SO
+          const vendorMap = {};
+          rawPOs.forEach(p => {
+            const k = String(p.linkedSalesOrderId||'');
+            if (!k) return;
+            if (!vendorMap[k]) vendorMap[k] = [];
+            if (p.vendorName && !vendorMap[k].includes(p.vendorName)) vendorMap[k].push(p.vendorName);
+          });
+
+          const statusColor = st => {
+            const s = (st||'').toLowerCase();
+            if (s==='completed') return { bg:'#dcfce7', color:'#15803d' };
+            if (s==='approved') return { bg:'#d1fae5', color:'#059669' };
+            if (s==='dispatched') return { bg:'#ede9fe', color:'#7c3aed' };
+            if (s==='in-progress') return { bg:'#dbeafe', color:'#1d4ed8' };
+            if (s==='hold') return { bg:'#fef3c7', color:'#92400e' };
+            if (s==='dispatch-pending') return { bg:'#fff7ed', color:'#c2410c' };
+            return { bg:'#f3f4f6', color:'#6b7280' };
+          };
+
+          return (
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, padding:'16px 18px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize:14, fontWeight:800, color:'#111', marginBottom:4 }}>Sales Orders Report</div>
+                <div style={{ fontSize:11, color:'#6b7280', marginBottom:12 }}>
+                  Filter by status, view vendor details, and print in portrait or landscape.
+                </div>
+
+                {/* Status filter buttons */}
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14, alignItems:'center' }}>
+                  <span style={{ fontSize:11, fontWeight:600, color:'#374151', marginRight:4 }}>Filter:</span>
+                  {STATUS_FILTERS.map(sf => {
+                    const count = sf.key==='all' ? rawSOs.length : rawSOs.filter(o=>(o.status||'').toLowerCase()===sf.key).length;
+                    const active = reportStatusFilter === sf.key;
+                    return (
+                      <button key={sf.key} onClick={()=>setReportStatusFilter(sf.key)}
+                        style={{ padding:'5px 13px', borderRadius:20, fontSize:11.5, fontWeight:700, cursor:'pointer', fontFamily:F,
+                          background: active ? sf.color : sf.bg, color: active ? '#fff' : sf.color,
+                          border: `1.5px solid ${sf.color}44`, transition:'all .12s',
+                          boxShadow: active ? `0 2px 8px ${sf.color}55` : 'none' }}>
+                        {sf.label} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Print buttons */}
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
+                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'landscape')}
+                    style={{ padding:'8px 18px', background:'#104f4f', color:'#fff', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                    🖨 Print Landscape ({filteredReportOrders.length})
+                  </button>
+                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'portrait')}
+                    style={{ padding:'8px 18px', background:'#374151', color:'#fff', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+                    🖨 Print Portrait ({filteredReportOrders.length})
+                  </button>
+                </div>
+
+                {/* On-screen table */}
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
+                    <thead>
+                      <tr style={{ background:'#104f4f' }}>
+                        {['#','Order No','Order Date','Client','Delivery Date','Status','Vendor (Linked PO)','Order Value'].map((h,i)=>(
+                          <th key={i} style={{ padding:'8px 12px', color:'#fff', fontWeight:700, textAlign:i>=6?'right':'left', border:'1px solid #1a3a3a', whiteSpace:'nowrap' }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredReportOrders.length === 0 ? (
+                        <tr><td colSpan={8} style={{ padding:'24px', textAlign:'center', color:'#9ca3af', fontStyle:'italic' }}>No orders for this filter.</td></tr>
+                      ) : filteredReportOrders.map((o,ri)=>{
+                        const vendors = (vendorMap[String(o.orderId)]||[]).join(', ') || '—';
+                        const sc = statusColor(o.status);
+                        return (
+                          <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#f8faff' }}>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{ri+1}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f' }}>{o.orderNo||'—'}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(o.orderDate)}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#374151', fontWeight:500 }}>{o.customerName||o.clientName||'—'}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:o.deliveryDate||o.dueDate?'#b45309':'#9ca3af' }}>{fmtD(o.deliveryDate||o.dueDate||'')}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}` }}>
+                              <span style={{ display:'inline-block', padding:'2px 9px', borderRadius:5, fontSize:10, fontWeight:700, background:sc.bg, color:sc.color }}>
+                                {o.status||'—'}
+                              </span>
+                            </td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280', fontSize:11 }}>{vendors}</td>
+                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:'#1d4ed8' }}>{fmtINR(o.grandTotal||0)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {filteredReportOrders.length > 0 && (
+                      <tfoot>
+                        <tr style={{ background:'#dde5f7' }}>
+                          <td colSpan={7} style={{ padding:'7px 12px', fontWeight:800, color:'#104f4f', border:`1px solid ${BD}` }}>Total ({filteredReportOrders.length} orders)</td>
+                          <td style={{ padding:'7px 12px', textAlign:'right', fontWeight:800, color:'#104f4f', border:`1px solid ${BD}`, fontSize:12 }}>
+                            {fmtINR(filteredReportOrders.reduce((s,o)=>s+(parseFloat(o.grandTotal)||0),0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
               </div>
             </div>
-
-          </div>
-        )}
+          );
+        })()}
 
       {/* ── Month Detail Modal ── */}
       {monthDetailOpen !== null && (() => {
