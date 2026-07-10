@@ -76,28 +76,31 @@ tr:nth-child(odd) td:not(.lbl){background:#fff;}tr:nth-child(even) td:not(.lbl){
 }
 
 /* ── Print: Ongoing Orders ── */
-function printOngoingOrders(orders, pos, companyName, orientation='landscape') {
+function printOngoingOrders(orders, pos, companyName, orientation='landscape', reportNotes={}) {
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
   let srNo = 0;
   const allRows = [];
   orders.forEach(o => {
-    const linkedPOs  = pos.filter(p => String(p.linkedSalesOrderId) === String(o.orderId));
+    const oid         = String(o.orderId);
+    const note        = reportNotes[oid] || {};
+    const linkedPOs   = pos.filter(p => String(p.linkedSalesOrderId) === oid);
     const vendorNames = [...new Set(linkedPOs.map(p => p.vendorName).filter(Boolean))].join(', ') || '—';
-    const vendorAmts  = linkedPOs.reduce((s,p)=>s+(parseFloat(p.grandTotal)||0),0);
+    const displayStatus = note.status || o.status || '—';
+    const remark      = note.remark || '';
     const items = (o.items||[]);
     if (items.length === 0) {
       srNo++;
-      allRows.push({ srNo, orderNo:o.orderNo||'—', orderDate:fmtD(o.orderDate), client:o.customerName||o.clientName||'—', dueDate:fmtD(o.deliveryDate||o.dueDate||''), status:o.status||'—', vendor:vendorNames, vendorAmt:vendorAmts?`₹${fmt2(vendorAmts)}`:'—', product:'—', qty:'—', unit:'', firstRow:true });
+      allRows.push({ srNo, orderNo:o.orderNo||'—', client:o.customerName||o.clientName||'—', vendor:vendorNames, product:'—', qty:'—', unit:'', remark, status:displayStatus, firstRow:true });
     } else {
       items.forEach((item, idx) => {
         srNo++;
-        allRows.push({ srNo, orderNo:idx===0?(o.orderNo||'—'):'', orderDate:idx===0?fmtD(o.orderDate):'', client:idx===0?(o.customerName||o.clientName||'—'):'', dueDate:idx===0?fmtD(o.deliveryDate||o.dueDate||''):'', status:idx===0?(o.status||'—'):'', vendor:idx===0?vendorNames:'', vendorAmt:idx===0&&vendorAmts?`₹${fmt2(vendorAmts)}`:'', product:item.description||item.itemName||'—', qty:item.qty||'—', unit:item.unit||'', firstRow:idx===0 });
+        allRows.push({ srNo, orderNo:idx===0?(o.orderNo||'—'):'', client:idx===0?(o.customerName||o.clientName||'—'):'', vendor:idx===0?vendorNames:'', product:item.description||item.itemName||'—', qty:item.qty||'—', unit:item.unit||'', remark:idx===0?remark:'', status:idx===0?displayStatus:'', firstRow:idx===0 });
       });
     }
   });
-  const bodyHTML = allRows.map(r=>`<tr style="${r.firstRow&&r.orderNo?'border-top:2px solid #ccc;':''}" ><td style="text-align:right">${r.srNo}</td><td style="font-weight:700">${r.orderNo}</td><td>${r.orderDate}</td><td>${r.client}</td><td>${r.dueDate}</td><td>${r.status}</td><td>${r.vendor}</td><td style="text-align:right">${r.vendorAmt||''}</td><td>${r.product}</td><td style="text-align:right">${r.qty}${r.unit?' '+r.unit:''}</td></tr>`).join('');
+  const bodyHTML = allRows.map(r=>`<tr style="${r.firstRow&&r.orderNo?'border-top:2px solid #ccc;':''}"><td style="text-align:right">${r.srNo}</td><td style="font-weight:700">${r.orderNo}</td><td>${r.client}</td><td>${r.vendor}</td><td>${r.product}</td><td style="text-align:right">${r.qty}${r.unit?' '+r.unit:''}</td><td style="color:#555">${r.remark}</td><td><span style="font-weight:700">${r.status}</span></td></tr>`).join('');
   const pageSize = orientation==='portrait' ? 'A4' : 'A3 landscape';
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ongoing Orders</title>
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sales Orders Report</title>
 <style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;font-size:8.5pt;}
 .pg{padding:8mm 10mm;}h1{font-size:13pt;font-weight:bold;text-align:center;margin-bottom:2px;}
 .sub{font-size:9pt;text-align:center;color:#444;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #1a2a3a;}
@@ -108,13 +111,13 @@ tr:nth-child(odd){background:#fff;}tr:nth-child(even){background:#f7f9fc;}
 .foot{margin-top:5px;font-size:7.5pt;color:#555;text-align:right;}
 @media print{@page{margin:7mm;size:${pageSize};}.pg{padding:0;}}</style>
 </head><body><div class="pg">
-<h1>Ongoing Sales Orders Report</h1>
+<h1>Sales Orders Report</h1>
 <div class="sub">${companyName} &nbsp;·&nbsp; Generated: ${today2} &nbsp;·&nbsp; ${orders.length} Orders &nbsp;·&nbsp; ${orientation==='portrait'?'Portrait':'Landscape'}</div>
 <table><thead><tr>
 <th style="text-align:right;min-width:30px">Sr</th>
-<th>Order No</th><th>Order Date</th><th>Client</th>
-<th>Due Date</th><th>Status</th><th>Vendor (Linked PO)</th><th style="text-align:right">Vendor Amt</th>
+<th>Order No</th><th>Client</th><th>Vendor (PO)</th>
 <th>Product / Description</th><th style="text-align:right">Qty</th>
+<th>Remark</th><th>Status</th>
 </tr></thead><tbody>${bodyHTML}</tbody></table>
 <div class="foot">Printed: ${today2}</div>
 </div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script></body></html>`;
@@ -319,6 +322,7 @@ export default function Dashboard() {
   const [monthDetailOpen,   setMonthDetailOpen]   = useState(null);
   const [selectedMonthSlot, setSelectedMonthSlot] = useState(null);
   const [reportStatusFilter, setReportStatusFilter] = useState('all'); // for Reports tab
+  const [reportNotes, setReportNotes] = useState({}); // { [orderId]: { status, remark } } — stored in localStorage
 
   const [rawSOs,      setRawSOs]      = useState([]);
   const [rawPOs,      setRawPOs]      = useState([]);
@@ -330,8 +334,23 @@ export default function Dashboard() {
   const [baseCounts,  setBaseCounts]  = useState({ clients:0, vendors:0 });
   const [loading,     setLoading]     = useState(false);
 
-  const CACHE_KEY = `dash_v1_${cid}`;
-  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  const CACHE_KEY  = `dash_v1_${cid}`;
+  const CACHE_TTL  = 5 * 60 * 1000; // 5 minutes
+  const NOTES_KEY  = `report_notes_${cid}`;
+
+  // Load report notes from localStorage when cid changes
+  useEffect(() => {
+    if (!cid) return;
+    try { const n = localStorage.getItem(NOTES_KEY); if (n) setReportNotes(JSON.parse(n)); } catch {}
+  }, [cid]); // eslint-disable-line
+
+  const saveNote = (orderId, patch) => {
+    setReportNotes(prev => {
+      const updated = { ...prev, [String(orderId)]: { ...(prev[String(orderId)]||{}), ...patch } };
+      try { localStorage.setItem(NOTES_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
 
   /* Apply a cached snapshot to state */
   const applyCache = useCallback((c) => {
@@ -1417,23 +1436,25 @@ export default function Dashboard() {
 
         {/* ══════════════ REPORTS TAB ══════════════ */}
         {tab==='reports' && (() => {
-          const STATUS_FILTERS = [
-            { key:'all',               label:'All',          color:'#374151', bg:'#f3f4f6' },
-            { key:'in-progress',       label:'In Progress',  color:'#1d4ed8', bg:'#dbeafe' },
-            { key:'hold',              label:'Hold',         color:'#92400e', bg:'#fef3c7' },
-            { key:'completed',         label:'Completed',    color:'#15803d', bg:'#dcfce7' },
-            { key:'pending',           label:'Pending',      color:'#6b7280', bg:'#f3f4f6' },
-            { key:'approved',          label:'Approved',     color:'#059669', bg:'#d1fae5' },
-            { key:'dispatched',        label:'Dispatched',   color:'#7c3aed', bg:'#ede9fe' },
-            { key:'dispatch-pending',  label:'Dispatch Pending', color:'#c2410c', bg:'#fff7ed' },
+          const STATUS_OPTS = [
+            { key:'in-progress',      label:'In Progress',      color:'#1d4ed8', bg:'#dbeafe' },
+            { key:'hold',             label:'Hold',             color:'#92400e', bg:'#fef3c7' },
+            { key:'completed',        label:'Completed',        color:'#15803d', bg:'#dcfce7' },
+            { key:'pending',          label:'Pending',          color:'#6b7280', bg:'#f3f4f6' },
+            { key:'approved',         label:'Approved',         color:'#059669', bg:'#d1fae5' },
+            { key:'dispatched',       label:'Dispatched',       color:'#7c3aed', bg:'#ede9fe' },
+            { key:'dispatch-pending', label:'Dispatch Pending', color:'#c2410c', bg:'#fff7ed' },
           ];
+          const STATUS_FILTERS = [{ key:'all', label:'All', color:'#374151', bg:'#f3f4f6' }, ...STATUS_OPTS];
 
-          const filteredReportOrders = rawSOs.filter(o => {
-            if (reportStatusFilter === 'all') return true;
-            return (o.status||'').toLowerCase() === reportStatusFilter;
-          });
+          // Effective status = report-local override if set, else actual SO status
+          const effStatus = o => ((reportNotes[String(o.orderId)]?.status) || o.status || '').toLowerCase();
 
-          // Build vendor map for each SO
+          const filteredReportOrders = rawSOs.filter(o =>
+            reportStatusFilter === 'all' || effStatus(o) === reportStatusFilter
+          );
+
+          // Vendor map
           const vendorMap = {};
           rawPOs.forEach(p => {
             const k = String(p.linkedSalesOrderId||'');
@@ -1442,15 +1463,9 @@ export default function Dashboard() {
             if (p.vendorName && !vendorMap[k].includes(p.vendorName)) vendorMap[k].push(p.vendorName);
           });
 
-          const statusColor = st => {
-            const s = (st||'').toLowerCase();
-            if (s==='completed') return { bg:'#dcfce7', color:'#15803d' };
-            if (s==='approved') return { bg:'#d1fae5', color:'#059669' };
-            if (s==='dispatched') return { bg:'#ede9fe', color:'#7c3aed' };
-            if (s==='in-progress') return { bg:'#dbeafe', color:'#1d4ed8' };
-            if (s==='hold') return { bg:'#fef3c7', color:'#92400e' };
-            if (s==='dispatch-pending') return { bg:'#fff7ed', color:'#c2410c' };
-            return { bg:'#f3f4f6', color:'#6b7280' };
+          const statusColor = s => {
+            const m = STATUS_OPTS.find(x=>x.key===s);
+            return m ? { bg:m.bg, color:m.color } : { bg:'#f3f4f6', color:'#6b7280' };
           };
 
           return (
@@ -1458,14 +1473,14 @@ export default function Dashboard() {
               <div style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:10, padding:'16px 18px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
                 <div style={{ fontSize:14, fontWeight:800, color:'#111', marginBottom:4 }}>Sales Orders Report</div>
                 <div style={{ fontSize:11, color:'#6b7280', marginBottom:12 }}>
-                  Filter by status, view vendor details, and print in portrait or landscape.
+                  Filter and set status / remarks per order (report-only, does not affect the actual order). Print in portrait or landscape.
                 </div>
 
                 {/* Status filter buttons */}
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14, alignItems:'center' }}>
                   <span style={{ fontSize:11, fontWeight:600, color:'#374151', marginRight:4 }}>Filter:</span>
                   {STATUS_FILTERS.map(sf => {
-                    const count = sf.key==='all' ? rawSOs.length : rawSOs.filter(o=>(o.status||'').toLowerCase()===sf.key).length;
+                    const count = sf.key==='all' ? rawSOs.length : rawSOs.filter(o=>effStatus(o)===sf.key).length;
                     const active = reportStatusFilter === sf.key;
                     return (
                       <button key={sf.key} onClick={()=>setReportStatusFilter(sf.key)}
@@ -1481,11 +1496,11 @@ export default function Dashboard() {
 
                 {/* Print buttons */}
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:14 }}>
-                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'landscape')}
+                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'landscape', reportNotes)}
                     style={{ padding:'8px 18px', background:'#104f4f', color:'#fff', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
                     🖨 Print Landscape ({filteredReportOrders.length})
                   </button>
-                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'portrait')}
+                  <button onClick={()=>printOngoingOrders(filteredReportOrders, rawPOs, selectedCompany?.companyName||'', 'portrait', reportNotes)}
                     style={{ padding:'8px 18px', background:'#374151', color:'#fff', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
                     🖨 Print Portrait ({filteredReportOrders.length})
                   </button>
@@ -1496,8 +1511,8 @@ export default function Dashboard() {
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
                     <thead>
                       <tr style={{ background:'#104f4f' }}>
-                        {['#','Order No','Order Date','Client','Delivery Date','Status','Vendor (Linked PO)','Order Value'].map((h,i)=>(
-                          <th key={i} style={{ padding:'8px 12px', color:'#fff', fontWeight:700, textAlign:i>=6?'right':'left', border:'1px solid #1a3a3a', whiteSpace:'nowrap' }}>{h}</th>
+                        {['#','Order No','Client','Vendor (PO)','Product','Qty','Remark','Status'].map((h,i)=>(
+                          <th key={i} style={{ padding:'8px 12px', color:'#fff', fontWeight:700, textAlign:'left', border:'1px solid #1a3a3a', whiteSpace:'nowrap' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -1505,36 +1520,48 @@ export default function Dashboard() {
                       {filteredReportOrders.length === 0 ? (
                         <tr><td colSpan={8} style={{ padding:'24px', textAlign:'center', color:'#9ca3af', fontStyle:'italic' }}>No orders for this filter.</td></tr>
                       ) : filteredReportOrders.map((o,ri)=>{
-                        const vendors = (vendorMap[String(o.orderId)]||[]).join(', ') || '—';
-                        const sc = statusColor(o.status);
+                        const oid     = String(o.orderId);
+                        const note    = reportNotes[oid] || {};
+                        const vendors = (vendorMap[oid]||[]).join(', ') || '—';
+                        const items   = Array.isArray(o.items) ? o.items : [];
+                        const products= items.map(it=>it.description||it.itemName||it.name||'').filter(Boolean).join(', ') || '—';
+                        const qty     = items.reduce((s,it)=>s+parseFloat(it.qty||it.quantity||0),0);
+                        const curSt   = effStatus(o);
+                        const sc      = statusColor(curSt);
                         return (
-                          <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#f8faff' }}>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{ri+1}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f' }}>{o.orderNo||'—'}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(o.orderDate)}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#374151', fontWeight:500 }}>{o.customerName||o.clientName||'—'}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:o.deliveryDate||o.dueDate?'#b45309':'#9ca3af' }}>{fmtD(o.deliveryDate||o.dueDate||'')}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}` }}>
-                              <span style={{ display:'inline-block', padding:'2px 9px', borderRadius:5, fontSize:10, fontWeight:700, background:sc.bg, color:sc.color }}>
-                                {o.status||'—'}
-                              </span>
+                          <tr key={o.orderId} style={{ background:ri%2===0?'#fff':'#f8faff', verticalAlign:'top' }}>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, color:'#6b7280', whiteSpace:'nowrap' }}>{ri+1}</td>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, fontWeight:700, color:'#104f4f', whiteSpace:'nowrap' }}>{o.orderNo||'—'}</td>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, color:'#374151', fontWeight:500, minWidth:120 }}>{o.customerName||o.clientName||'—'}</td>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, color:'#6b7280', fontSize:11, minWidth:100 }}>{vendors}</td>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, color:'#475569', fontSize:11, maxWidth:200 }}>{products}</td>
+                            <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, color:'#374151', textAlign:'center' }}>{qty>0?qty:'—'}</td>
+                            <td style={{ padding:'4px 6px', border:`1px solid ${BD}`, minWidth:140 }}>
+                              <textarea
+                                value={note.remark||''}
+                                onChange={e=>saveNote(oid,{remark:e.target.value})}
+                                placeholder="Write remark…"
+                                rows={2}
+                                style={{ width:'100%', fontSize:11, fontFamily:F, border:'none', outline:'none',
+                                  background:'transparent', resize:'vertical', padding:'2px 4px', color:'#374151' }}
+                              />
                             </td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, color:'#6b7280', fontSize:11 }}>{vendors}</td>
-                            <td style={{ padding:'7px 12px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:'#1d4ed8' }}>{fmtINR(o.grandTotal||0)}</td>
+                            <td style={{ padding:'4px 6px', border:`1px solid ${BD}`, minWidth:130 }}>
+                              <select
+                                value={note.status||curSt||''}
+                                onChange={e=>saveNote(oid,{status:e.target.value})}
+                                style={{ width:'100%', padding:'4px 6px', border:`1.5px solid ${sc.color}66`,
+                                  borderRadius:5, fontSize:11, fontFamily:F, outline:'none',
+                                  background:sc.bg, color:sc.color, fontWeight:700, cursor:'pointer' }}>
+                                {STATUS_OPTS.map(s=>(
+                                  <option key={s.key} value={s.key}>{s.label}</option>
+                                ))}
+                              </select>
+                            </td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    {filteredReportOrders.length > 0 && (
-                      <tfoot>
-                        <tr style={{ background:'#dde5f7' }}>
-                          <td colSpan={7} style={{ padding:'7px 12px', fontWeight:800, color:'#104f4f', border:`1px solid ${BD}` }}>Total ({filteredReportOrders.length} orders)</td>
-                          <td style={{ padding:'7px 12px', textAlign:'right', fontWeight:800, color:'#104f4f', border:`1px solid ${BD}`, fontSize:12 }}>
-                            {fmtINR(filteredReportOrders.reduce((s,o)=>s+(parseFloat(o.grandTotal)||0),0))}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    )}
                   </table>
                 </div>
               </div>

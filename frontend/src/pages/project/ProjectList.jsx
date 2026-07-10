@@ -1123,64 +1123,103 @@ export default function ProjectList() {
 
   for (const so of filteredSOs) {
     const pos       = linkedPOs(so.orderId);
-    const firstPO   = pos[0] || null;
     const soItems   = (so.items||[]).map(normSOItem);
-    const poItems   = firstPO ? (firstPO.items||[]).map(normPOItem) : [];
     const soExps2   = expByOrderId[String(so.orderId)] || [];
-    const rowCount  = Math.max(soItems.length, 1, soExps2.length);
     const pnf       = parseFloat(so.packingCharges)||0;
     const transport = parseFloat(so.freightCharges)||0;
-    const otherC    = firstPO ? (parseFloat(firstPO.packingCharges)||0)+(parseFloat(firstPO.freightCharges)||0) : 0;
     const soDue     = getSODue(so);
-    const poDue     = getPODue(firstPO);
-    const poBill    = getPOBill(firstPO);
     const salesBill = getSalesBill(so);
     const receipt   = soDue ? parseFloat(soDue.received||soDue.totalPaid)||0 : 0;
     const soBalance = soDue ? parseFloat(soDue.due||soDue.balance)||0 : 0;
-    const payment   = poDue ? parseFloat(poDue.paid||poDue.totalPaid)||0 : 0;
-    const poBalance = poDue ? parseFloat(poDue.due||poDue.balance)||0 : 0;
 
+    // GT — SO level (once per SO)
     GT.pnf       += pnf;
     GT.transport += transport;
     GT.receipt   += receipt;
     GT.dues      += soBalance;
-    GT.otherC    += otherC;
-    GT.payment   += payment;
-    GT.poDues    += poBalance;
     GT.expTotal  += soExps2.reduce((s,e) => s+(parseFloat(e.grandTotal||e.amount)||0), 0);
     GT.expGst    += soExps2.reduce((s,e) => s+(parseFloat(e.amount)||0)*(parseFloat(e.taxRate)||0)/100, 0);
     GT.expCount  += soExps2.length;
+    soItems.forEach((soIt, idx) => {
+      const soBase = soIt.qty*soIt.rate;
+      const soGst  = soBase*soIt.gst/100;
+      GT.soTotal   += soBase; GT.soTaxable += soBase; GT.soGst += soGst;
+      GT.soOV      += soBase+soGst+(idx===0?pnf+transport:0);
+    });
 
-    for (let i=0; i<rowCount; i++) {
-      const soIt = soItems[i];
-      const poIt = poItems[i] || null;
+    // one "PO block" per linked PO (or one empty block when no POs at all)
+    const poList       = pos.length > 0 ? pos : [null];
+    const poBlockSizes = poList.map(po => Math.max(po ? (po.items||[]).length : 0, 1));
+    const totalPORows  = poBlockSizes.reduce((s,n) => s+n, 0);
+    const soTotalRows  = Math.max(soItems.length, totalPORows, soExps2.length);
 
-      const soBase = soIt ? soIt.qty*soIt.rate : 0;
-      const soGst  = soBase*(soIt?soIt.gst:0)/100;
-      const soOV   = soBase+soGst+(i===0?pnf+transport:0);
-
-      let poBase=0, poTaxable=0, poGst=0, poOV=0;
-      if (poIt) {
-        poBase    = poIt.qty*poIt.rate;
-        const d   = poIt.discountType==='%' ? poBase*poIt.discount/100 : poIt.discount;
-        poTaxable = poBase-d;
-        poGst     = poTaxable*poIt.gst/100;
-        poOV      = poTaxable+poGst+(i===0?otherC:0);
-      }
-
-      GT.soTotal   += soBase; GT.soTaxable += soBase; GT.soGst += soGst; GT.soOV += soOV;
-      GT.poTotal   += poBase; GT.poTaxable += poTaxable; GT.poGst += poGst; GT.poOV += poOV;
-
-      allRows.push({
-        key:`${so.orderId}-${i}`, isFirst:i===0, isLast:i===rowCount-1, rowCount,
-        so, soItem:soIt, soBase, soGst, soOV,
-        pnf:i===0?pnf:0, transport:i===0?transport:0,
-        po:firstPO, poItem:poIt, poBase, poTaxable, poGst, poOV, otherC:i===0?otherC:0,
-        receipt, soBalance, payment, poBalance,
-        soDue, poDue, poBill: i===0 ? poBill : null,
-        salesBill: i===0 ? salesBill : null,
-        expItem: soExps2[i] || null,
+    // GT — PO level (once per PO)
+    poList.forEach(po => {
+      if (!po) return;
+      const poDue  = getPODue(po);
+      const otherC = (parseFloat(po.packingCharges)||0)+(parseFloat(po.freightCharges)||0);
+      GT.otherC  += otherC;
+      GT.payment += poDue ? parseFloat(poDue.paid||poDue.totalPaid)||0 : 0;
+      GT.poDues  += poDue ? parseFloat(poDue.due||poDue.balance)||0 : 0;
+      let firstPI = true;
+      (po.items||[]).map(normPOItem).forEach(poIt => {
+        const poBase = poIt.qty*poIt.rate;
+        const d      = poIt.discountType==='%' ? poBase*poIt.discount/100 : poIt.discount;
+        const poTax  = poBase-d;
+        const poGst  = poTax*poIt.gst/100;
+        GT.poTotal   += poBase; GT.poTaxable += poTax; GT.poGst += poGst;
+        GT.poOV      += poTax+poGst+(firstPI?otherC:0);
+        firstPI = false;
       });
+    });
+
+    let absIdx = 0;
+    for (let pb = 0; pb < poList.length; pb++) {
+      const po          = poList[pb];
+      const poItems     = po ? (po.items||[]).map(normPOItem) : [];
+      const poBlockSize = poBlockSizes[pb];
+      const poDue       = getPODue(po);
+      const poBill      = getPOBill(po);
+      const payment     = poDue ? parseFloat(poDue.paid||poDue.totalPaid)||0 : 0;
+      const poBalance   = poDue ? parseFloat(poDue.due||poDue.balance)||0 : 0;
+      const otherC      = po ? (parseFloat(po.packingCharges)||0)+(parseFloat(po.freightCharges)||0) : 0;
+
+      for (let i = 0; i < poBlockSize; i++) {
+        const soIt      = soItems[absIdx] || null;
+        const poIt      = poItems[i]      || null;
+        const isSOFirst = absIdx === 0;
+        const isSOLast  = absIdx === soTotalRows - 1;
+        const isPOFirst = i === 0;
+
+        const soBase = soIt ? soIt.qty*soIt.rate : 0;
+        const soGst  = soBase*(soIt?soIt.gst:0)/100;
+        const soOV   = soBase+soGst+(isSOFirst?pnf+transport:0);
+
+        let poBase=0, poTaxable=0, poGst=0, poOV=0;
+        if (poIt) {
+          poBase    = poIt.qty*poIt.rate;
+          const d   = poIt.discountType==='%' ? poBase*poIt.discount/100 : poIt.discount;
+          poTaxable = poBase-d;
+          poGst     = poTaxable*poIt.gst/100;
+          poOV      = poTaxable+poGst+(isPOFirst?otherC:0);
+        }
+
+        allRows.push({
+          key:`${so.orderId}-${pb}-${i}`,
+          isFirst:isSOFirst, isLast:isSOLast, rowCount:soTotalRows,  // keep for compat
+          isSOFirst, isSOLast, isPOFirst,
+          soRowCount:soTotalRows, poBlockSize,
+          so, soItem:soIt, soBase, soGst, soOV,
+          pnf:isSOFirst?pnf:0, transport:isSOFirst?transport:0,
+          po, poItem:poIt, poBase, poTaxable, poGst, poOV, otherC:isPOFirst?otherC:0,
+          receipt, soBalance, payment, poBalance,
+          soDue, poDue,
+          poBill:    isPOFirst  ? poBill    : null,
+          salesBill: isSOFirst  ? salesBill : null,
+          expItem: soExps2[absIdx] || null,
+        });
+        absIdx++;
+      }
     }
   }
 
@@ -1619,8 +1658,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         onMouseLeave={() => onRowLeave(soId)}
                         style={{
                           background:bg,
-                          borderTop:    row.isFirst ? '2px solid #1a1a1a' : undefined,
-                          borderBottom: row.isLast  ? '2px solid #1a1a1a' : undefined,
+                          borderTop:    row.isSOFirst ? '2px solid #1a1a1a' : row.isPOFirst ? '1.5px solid #888' : undefined,
+                          borderBottom: row.isSOLast  ? '2px solid #1a1a1a' : undefined,
                         }}>
                         {row.isFirst && (
                           <>
@@ -1713,22 +1752,22 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                           </>
                         )}
 
-                        {row.isFirst && (
+                        {row.isPOFirst && (
                           <>
-                            {cv('po_vendor') && <td rowSpan={row.rowCount}
+                            {cv('po_vendor') && <td rowSpan={row.poBlockSize}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
-                              style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a', borderLeft:'2px solid #1a1a1a',
+                              style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888', borderLeft:'2px solid #1a1a1a',
                                 whiteSpace:'normal', wordBreak:'break-word', maxWidth:160,
                                 ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#1a5500' } : { color:'#aaa', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
                             </td>}
-                            {cv('po_date') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
+                            {cv('po_date') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888' }}>
                               {fmtD(row.po?.poDate||row.po?.date)}
                             </td>}
-                            {cv('po_no') && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>
+                            {cv('po_no') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888' }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
                             </td>}
-                            {cv('po_poDesc') && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a',
+                            {cv('po_poDesc') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888',
                               maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
                               wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
                               {row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
@@ -1752,14 +1791,14 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         {cv('po_gstAmt')    && <td style={ptd('right')}>{row.poGst ? fmt(row.poGst) : '—'}</td>}
                         {cv('po_ov')        && <td style={ptd('right',{fontWeight:700,color:'#1a5500'})}>{row.poOV ? fmt(row.poOV) : '—'}</td>}
 
-                        {row.isFirst && (
+                        {row.isPOFirst && (
                           <>
-                            {cv('po_payment')   && <td rowSpan={row.rowCount} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
-                            {cv('po_dues')      && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.poBalance)}</td>}
-                            {cv('po_purchDate') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
-                            {cv('po_purchNo')   && <td rowSpan={row.rowCount} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
-                            {cv('po_amount')    && <td rowSpan={row.rowCount} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #1a1a1a' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
-                            {cv('po_gstStatus') && <td rowSpan={row.rowCount} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #1a1a1a', borderRight:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
+                            {cv('po_payment')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #888' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
+                            {cv('po_dues')      && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'2px solid #888' }}>{fmt(row.poBalance)}</td>}
+                            {cv('po_purchDate') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
+                            {cv('po_purchNo')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
+                            {cv('po_amount')    && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
+                            {cv('po_gstStatus') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888', borderRight:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
                           </>
                         )}
 

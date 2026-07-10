@@ -215,6 +215,112 @@ router.post('/backfill', (req, res) => {
   res.json({ success: true, added, fixed, message: `Backfill complete — ${added} entries added, ${fixed} dates corrected` });
 });
 
+/* ── Letters helpers ── */
+const lettersFile = (companyId, orderId) =>
+  path.join(soDir(companyId, orderId), 'letters.json');
+
+const readLetters = (companyId, orderId) => {
+  const f = lettersFile(companyId, orderId);
+  if (!fs.existsSync(f)) return [];
+  try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return []; }
+};
+
+const writeLetters = (companyId, orderId, letters) => {
+  const dir = soDir(companyId, orderId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(lettersFile(companyId, orderId), JSON.stringify(letters, null, 2));
+};
+
+// PUT /:orderId/logs/:logId — edit a manual log entry
+router.put('/:orderId/logs/:logId', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const { orderId, logId } = req.params;
+    const logs = readLogs(companyId, orderId);
+    const idx = logs.findIndex(l => String(l.id) === String(logId));
+    if (idx === -1) return res.status(404).json({ error: 'Log not found' });
+    logs[idx] = {
+      ...logs[idx],
+      date:        req.body.date        || logs[idx].date,
+      stage:       req.body.stage       || logs[idx].stage,
+      type:        req.body.stage       || logs[idx].type,
+      description: req.body.description !== undefined ? req.body.description : logs[idx].description,
+      details:     req.body.description !== undefined ? req.body.description : logs[idx].details,
+      department:  req.body.department  !== undefined ? req.body.department  : logs[idx].department,
+      referenceNo: req.body.referenceNo !== undefined ? req.body.referenceNo : logs[idx].referenceNo,
+      by:          req.body.by          !== undefined ? req.body.by          : logs[idx].by,
+      referredBy:  req.body.by          !== undefined ? req.body.by          : logs[idx].referredBy,
+      status:      req.body.status      || logs[idx].status,
+      remarks:     req.body.remarks     !== undefined ? req.body.remarks     : logs[idx].remarks,
+      updatedAt:   new Date().toISOString(),
+    };
+    writeLogs(companyId, orderId, logs);
+    res.json(logs[idx]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /:orderId/logs/:logId — delete a log entry
+router.delete('/:orderId/logs/:logId', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const { orderId, logId } = req.params;
+    const logs = readLogs(companyId, orderId);
+    const idx = logs.findIndex(l => String(l.id) === String(logId));
+    if (idx === -1) return res.status(404).json({ error: 'Log not found' });
+    logs.splice(idx, 1);
+    writeLogs(companyId, orderId, logs);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /:orderId/letters — list letters for an order
+router.get('/:orderId/letters', (req, res) => {
+  try {
+    res.json(readLetters(cid(req), req.params.orderId));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /:orderId/letters — save a new letter
+router.post('/:orderId/letters', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const { orderId } = req.params;
+    const letters = readLetters(companyId, orderId);
+    const entry = { id: Date.now(), ...req.body, createdAt: new Date().toISOString() };
+    letters.push(entry);
+    writeLetters(companyId, orderId, letters);
+    res.json(entry);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /:orderId/letters/:letterId — edit a letter
+router.put('/:orderId/letters/:letterId', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const { orderId, letterId } = req.params;
+    const letters = readLetters(companyId, orderId);
+    const idx = letters.findIndex(l => String(l.id) === String(letterId));
+    if (idx === -1) return res.status(404).json({ error: 'Letter not found' });
+    letters[idx] = { ...letters[idx], ...req.body, updatedAt: new Date().toISOString() };
+    writeLetters(companyId, orderId, letters);
+    res.json(letters[idx]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /:orderId/letters/:letterId — delete a letter
+router.delete('/:orderId/letters/:letterId', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const { orderId, letterId } = req.params;
+    const letters = readLetters(companyId, orderId);
+    const idx = letters.findIndex(l => String(l.id) === String(letterId));
+    if (idx === -1) return res.status(404).json({ error: 'Letter not found' });
+    letters.splice(idx, 1);
+    writeLetters(companyId, orderId, letters);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET logs for one order
 router.get('/:orderId', (req, res) => {
   try {
