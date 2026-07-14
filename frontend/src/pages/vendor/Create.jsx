@@ -898,7 +898,7 @@ const CreateVendor = () => {
               </div>
               {(form.paymentTerms||form.creditLimit)&&(
                 <div style={{margin:'0 10px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toLocaleString('en-IN')}`:''},{l:'Currency',v:form.currency}].map(c=>(
+                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toFixed(2)}`:''},{l:'Currency',v:form.currency}].map(c=>(
                     <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
                       <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
                       <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F}}>{c.v||'—'}</div>

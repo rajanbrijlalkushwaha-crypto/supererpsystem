@@ -527,7 +527,7 @@ const EditPurchaseOrder = () => {
   };
 
   /* ── Helpers ── */
-  const fmt = n => '₹' + Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const fmt = n => '₹' + Number(n||0).toFixed(2);
   const tabIdx = TABS.findIndex(t => t.id === activeTab);
   const filteredVendors = vendors.filter(v =>
     v.vendorName?.toLowerCase().includes(vendorSearch.toLowerCase()) ||

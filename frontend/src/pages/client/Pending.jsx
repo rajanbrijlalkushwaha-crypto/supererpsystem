@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 
-const P  = '#104f4f';
-const PD = '#104f4f';
+const P  = '#3A6186';
+const PD = '#2A4D6E';
 const BG = '#F5F7FB';
 const BD = '#E5EAF2';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -43,7 +43,7 @@ function DetailModal({ client, onClose }) {
     ]},
     { section:'💳 Payment Terms', rows:[
       ['Payment Terms', client.paymentTerms],
-      ['Credit Limit',  client.creditLimit ? `₹ ${Number(client.creditLimit).toLocaleString('en-IN')}` : ''],
+      ['Credit Limit',  client.creditLimit ? `₹ ${Number(client.creditLimit).toFixed(2)}` : ''],
       ['Currency',      client.currency],
     ]},
   ];
@@ -146,7 +146,10 @@ const PendingClients = () => {
   const [detailClient, setDetailClient] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [working,      setWorking]      = useState(false);
+  const [allClients,   setAllClients]   = useState([]);
+  const [fy,           setFy]           = useState('all');
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { selectedCompany } = useCompany();
 
   useEffect(() => { fetchClients(); }, [selectedCompany]);
@@ -156,7 +159,9 @@ const PendingClients = () => {
       setLoading(true);
       const params = selectedCompany ? { companyId: selectedCompany.companyId } : {};
       const res = await axios.get('/api/clients', { params });
-      setClients(res.data.filter(c => c.status === 'pending'));
+      const all = res.data.filter(c => c.status !== 'rejected');
+      setAllClients(all);
+      setClients(all.filter(c => c.status === 'pending'));
       setChecked(new Set()); setSelectedId(null);
     } catch (err) { setMessage('Error: ' + err.message); }
     finally { setLoading(false); }
@@ -230,15 +235,32 @@ const PendingClients = () => {
     else setChecked(new Set(filtered.map(c => c.clientId)));
   };
 
+  const getFY = d => { if (!d) return null; const dt = new Date(d); if (isNaN(dt)) return null; const y = dt.getFullYear(), m = dt.getMonth() + 1, s = m >= 4 ? y : y - 1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
+
+  const fyList = useMemo(() => {
+    const set = new Set();
+    allClients.forEach(c => { const f = getFY(c.createdAt); if (f) set.add(f); });
+    return Array.from(set).sort().reverse();
+  }, [allClients]);
+
+  const kpis = [
+    { label:'Total',    value: allClients.length,                                              color:'#fff'    },
+    { label:'Approved', value: allClients.filter(c => c.status === 'approved').length,         color:'#4ade80' },
+    { label:'Pending',  value: allClients.filter(c => c.status === 'pending').length,          color:'#fbbf24' },
+    { label:'Draft',    value: allClients.filter(c => !c.status || c.status === 'draft').length, color:'#a78bfa' },
+  ];
+
   const filtered = clients.filter(c => {
     const q = search.toLowerCase();
-    return !q || (
+    const matchQ = !q || (
       String(c.clientId).includes(q) ||
       (c.companyName || c.clientName || '').toLowerCase().includes(q) ||
       (c.city || '').toLowerCase().includes(q) ||
       (c.gstin || c.gst || '').toLowerCase().includes(q) ||
       (c.contactPersons?.[0]?.name || c.contactPerson || '').toLowerCase().includes(q)
     );
+    const matchFY = fy === 'all' || getFY(c.createdAt) === fy;
+    return matchQ && matchFY;
   });
 
   const singleActive = selectedId ? filtered.find(c => c.clientId === selectedId) : null;
@@ -257,44 +279,115 @@ const PendingClients = () => {
       {detailClient && <DetailModal client={detailClient} onClose={() => setDetailClient(null)} />}
       {rejectTarget && <RejectModal client={rejectTarget} onConfirm={handleRejectConfirm} onClose={() => setRejectTarget(null)} />}
 
-      {/* ── Header strip ── */}
-      <div style={{ flexShrink:0, background:'#104f4f',
-        padding:'9px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <div>
-          <span style={{ fontSize:13, fontWeight:800, color:'#fff' }}>
-            Client Approval Queue
-          </span>
-          <span style={{ marginLeft:10, background:'rgba(255,255,255,0.2)', color:'#fff',
-            padding:'1px 10px', borderRadius:20, fontSize:11, fontWeight:700 }}>
-            {clients.length} pending
-          </span>
-        </div>
-        <button onClick={fetchClients}
-          style={{ height:27, padding:'0 12px', fontSize:11, fontFamily:F, cursor:'pointer',
-            background:'rgba(255,255,255,0.18)', color:'#fff',
-            border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontWeight:700 }}>
-          ↻ Refresh
-        </button>
-      </div>
+      {/* ══ Combined nav + toolbar — matches View Clients ══ */}
+      <div style={{ flexShrink:0, height:40, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
+        <style>{`.pend-srch::placeholder{color:rgba(255,255,255,0.45)}`}</style>
 
-      {/* ── Toolbar ── */}
-      <div style={{ flexShrink:0, padding:'7px 14px', background:'#fff',
-        borderBottom:`1px solid ${BD}`, display:'flex', gap:8, alignItems:'center' }}>
-        <div style={{ position:'relative', flex:1, maxWidth:320 }}>
-          <span style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)',
-            fontSize:12, color:'#9CA3AF' }}>🔍</span>
+        {/* Section label */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          CLIENTS
+        </div>
+
+        {/* + Create Client */}
+        <button onClick={() => navigate('/client-sap')}
+          style={{ display:'flex', alignItems:'center', padding:'0 14px', fontSize:11.5,
+            fontWeight:700, color:'#fff', background:'#059669', border:'none', cursor:'pointer',
+            whiteSpace:'nowrap', flexShrink:0, margin:'auto 6px', borderRadius:5, height:26 }}
+          onMouseEnter={e => { e.currentTarget.style.background='#047857'; }}
+          onMouseLeave={e => { e.currentTarget.style.background='#059669'; }}>
+          + Create Client
+        </button>
+
+        {/* Tabs */}
+        {[
+          { label:'👥 View Clients', path:'/client/view' },
+          { label:'⏳ Pending',      path:'/client/pending' },
+        ].map(tab => {
+          const isAct = pathname === tab.path;
+          return (
+            <button key={tab.path} onClick={() => navigate(tab.path)}
+              style={{ display:'flex', alignItems:'center', padding:'0 11px', height:'100%',
+                fontSize:11.5, fontWeight: isAct ? 700 : 400, border:'none', cursor:'pointer',
+                whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
+                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
+                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
+                marginBottom: -2 }}
+              onMouseEnter={e => { if (!isAct) e.currentTarget.style.background='rgba(255,255,255,0.08)'; }}
+              onMouseLeave={e => { if (!isAct) e.currentTarget.style.background='transparent'; }}>
+              {tab.label}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 6px' }} />
+
+        {/* Count chips */}
+        {kpis.map((k, i) => (
+          <div key={i}
+            style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'0 8px', height:24,
+              alignSelf:'center', borderRadius:20, fontFamily:F, flexShrink:0, marginRight:3,
+              border:'1.5px solid rgba(255,255,255,0.22)',
+              background:'rgba(255,255,255,0.07)' }}>
+            <span style={{ fontSize:11.5, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</span>
+            <span style={{ fontSize:8.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px',
+              color:'rgba(255,255,255,0.5)' }}>{k.label}</span>
+          </div>
+        ))}
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 6px' }} />
+
+        {/* Search */}
+        <div style={{ position:'relative', flex:1, minWidth:140, maxWidth:260, alignSelf:'center' }}>
+          <span style={{ position:'absolute', left:7, top:'50%', transform:'translateY(-50%)',
+            fontSize:11, color:'rgba(255,255,255,0.45)', pointerEvents:'none' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name, ID, GSTIN…"
-            style={{ width:'100%', height:30, paddingLeft:26, paddingRight:8,
-              border:`1px solid ${BD}`, borderRadius:6, fontSize:12, fontFamily:F,
-              outline:'none', background:'#F9FAFB', color:'#1F2937', boxSizing:'border-box' }} />
-          {search && <button onClick={() => setSearch('')}
-            style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)',
-              background:'none', border:'none', cursor:'pointer', color:'#9CA3AF', fontSize:13, padding:0 }}>✕</button>}
+            className="pend-srch"
+            style={{ width:'100%', height:26, paddingLeft:23, paddingRight: search ? 22 : 8,
+              border:'1px solid rgba(255,255,255,0.22)', borderRadius:6, fontSize:11, fontFamily:F,
+              outline:'none', background:'rgba(255,255,255,0.1)', color:'#fff', boxSizing:'border-box' }} />
+          {search && (
+            <button onClick={() => setSearch('')}
+              style={{ position:'absolute', right:5, top:'50%', transform:'translateY(-50%)',
+                background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.55)',
+                fontSize:12, padding:0, lineHeight:1 }}>✕</button>
+          )}
         </div>
-        <div style={{ marginLeft:'auto', fontSize:11, color:'#6B7280' }}>
-          {filtered.length} pending
-        </div>
+
+        {/* FY buttons */}
+        {['all', ...fyList].map(f => (
+          <button key={f} onClick={() => setFy(f)}
+            style={{ height:24, padding:'0 9px', borderRadius:6, flexShrink:0, alignSelf:'center',
+              marginLeft:4, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap', fontSize:11, fontWeight:700,
+              border: fy===f ? '1.5px solid rgba(255,255,255,0.88)' : '1px solid rgba(255,255,255,0.22)',
+              background: fy===f ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.07)',
+              color: fy===f ? P : 'rgba(255,255,255,0.8)' }}>
+            {f === 'all' ? 'All FY' : `FY ${f}`}
+          </button>
+        ))}
+
+        {/* Count */}
+        <span style={{ fontSize:10, color:'rgba(255,255,255,0.5)', alignSelf:'center',
+          flexShrink:0, whiteSpace:'nowrap', margin:'0 8px' }}>
+          {filtered.length}/{clients.length}
+        </span>
+
+        {/* Refresh */}
+        <button onClick={fetchClients}
+          style={{ display:'flex', alignItems:'center', gap:4, height:24, padding:'0 10px',
+            alignSelf:'center', marginRight:8, flexShrink:0, cursor:'pointer', fontFamily:F,
+            fontSize:11, fontWeight:700, borderRadius:6,
+            background:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.88)',
+            border:'1px solid rgba(255,255,255,0.22)' }}>
+          ↻ Refresh
+        </button>
       </div>
 
       {message && (
@@ -312,9 +405,9 @@ const PendingClients = () => {
       {/* ── Multi-select action bar ── */}
       {multiActive && (
         <div style={{ flexShrink:0, margin:'6px 14px 0',
-          background:'#104f4f', borderRadius:7,
+          background:P, borderRadius:7,
           padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
-          boxShadow:'0 2px 8px rgba(16,79,79,0.25)' }}>
+          boxShadow:'0 2px 8px rgba(58,97,134,0.25)' }}>
           <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1 }}>
             {checked.size} client{checked.size > 1 ? 's' : ''} selected
           </span>
@@ -339,9 +432,9 @@ const PendingClients = () => {
       {/* ── Single-row action bar ── */}
       {singleActive && !multiActive && (
         <div style={{ flexShrink:0, margin:'6px 14px 0',
-          background:'linear-gradient(90deg,#104f4f,#104f4f)', borderRadius:7,
+          background:`linear-gradient(90deg,${P},${PD})`, borderRadius:7,
           padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
-          boxShadow:'0 2px 8px rgba(37,99,235,0.25)' }}>
+          boxShadow:'0 2px 8px rgba(58,97,134,0.25)' }}>
           <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1,
             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
             ▶ {singleActive.clientId} · {singleActive.companyName || singleActive.clientName}
@@ -369,20 +462,19 @@ const PendingClients = () => {
       )}
 
       {/* ── Scrollable Table ── */}
-      <div style={{ flex:1, overflow:'auto', padding:'8px 14px 14px' }}>
+      <div style={{ flex:1, overflow:'auto' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign:'center', padding:'50px 20px', color:'#9CA3AF', fontSize:13,
-            background:'#fff', borderRadius:8, border:`1px solid ${BD}` }}>
+            background:'#fff', border:`1px solid ${BD}` }}>
             {search ? `No results for "${search}"` : 'No pending clients at the moment.'}
           </div>
         ) : (
-          <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`,
-            boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ background:'#fff' }}>
             <table style={{ width:'100%', minWidth:780, borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
                 <thead>
                   <tr>
-                    <th style={{ padding:'7px 8px', background:'#104f4f', color:'#fff', fontSize:10,
-                      fontWeight:700, border:'1px solid #0b3d3d', width:36, textAlign:'center',
+                    <th style={{ padding:'7px 8px', background:P, color:'#fff', fontSize:10,
+                      fontWeight:700, border:`1px solid ${PD}`, width:36, textAlign:'center',
                       position:'sticky', top:0, zIndex:2 }}>
                       <input type="checkbox"
                         checked={filtered.length > 0 && checked.size === filtered.length}
@@ -390,8 +482,8 @@ const PendingClients = () => {
                         style={{ cursor:'pointer', width:13, height:13, accentColor:'#fff' }} />
                     </th>
                     {['Client ID','Company Name','GSTIN','City / State','Contact','Mobile','Submitted'].map(h => (
-                      <th key={h} style={{ padding:'7px 11px', background:'#104f4f', color:'#fff',
-                        fontSize:10, fontWeight:700, textAlign:'left', border:'1px solid #0b3d3d',
+                      <th key={h} style={{ padding:'7px 11px', background:P, color:'#fff',
+                        fontSize:10, fontWeight:700, textAlign:'left', border:`1px solid ${PD}`,
                         whiteSpace:'nowrap', position:'sticky', top:0, zIndex:2 }}>{h}</th>
                     ))}
                   </tr>
@@ -414,11 +506,11 @@ const PendingClients = () => {
                         <td style={{ padding:'5px 8px', border:`1px solid ${BD}`, textAlign:'center' }}
                           onClick={e => toggleCheck(client.clientId, e)}>
                           <input type="checkbox" checked={isChk} readOnly
-                            style={{ cursor:'pointer', width:13, height:13, accentColor:'#104f4f',
+                            style={{ cursor:'pointer', width:13, height:13, accentColor:P,
                               pointerEvents:'none' }} />
                         </td>
                         <td style={{ padding:'5px 11px', border:`1px solid ${BD}` }}>
-                          <span style={{ fontWeight:800, color:'#104f4f', fontSize:12 }}>
+                          <span style={{ fontWeight:800, color:P, fontSize:12 }}>
                             {client.clientId}
                           </span>
                         </td>

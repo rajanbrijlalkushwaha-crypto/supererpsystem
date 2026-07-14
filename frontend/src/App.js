@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
-import Sidebar from './components/Sidebar';
 import SubNav from './components/SubNav';
 import Admin from './pages/admin/Admin';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
@@ -49,7 +48,6 @@ import TallyPending from './pages/tally/Pending';
 import GSTCompliance from './pages/gst/GSTCompliance';
 import CreateExpense from './pages/account/expense/Create';
 import ViewExpenses  from './pages/account/expense/View';
-import OrderTracker  from './pages/items/Tracker';
 import CreateAsset from './pages/account/asset/Create';
 import ViewAssets from './pages/account/asset/View';
 import CreatePayment from './pages/account/payment/Create';
@@ -89,6 +87,8 @@ import ProjectClose from './pages/project/ProjectClose';
 import CommunicationLogs   from './pages/communication/CommunicationLogs';
 import CommunicationDetail from './pages/communication/CommunicationDetail';
 import PasswordManager from './pages/passwords/PasswordManager';
+import CompanyInfo from './pages/company/CompanyInfo';
+import MonthlyReport from './pages/reports/MonthlyReport';
 
 import StockView from './pages/stock/StockView';
 import StockIn from './pages/stock/StockIn';
@@ -165,9 +165,7 @@ function AppContent() {
 
   return (
     <ChatProvider>
-      <div className="app-container">
-        <Sidebar />
-        <div className="app-right">
+      <div className="app-container" style={{ flexDirection:'column' }}>
           <Header username={user?.name || user?.username || 'User'} onLogout={logout} />
           <div className="right-panel">
             <SubNav />
@@ -189,7 +187,6 @@ function AppContent() {
                 <Route path="/items/create"         element={<CreateItem />} />
                 <Route path="/items/view"           element={<ViewItems />} />
                 <Route path="/items/edit/:itemCode" element={<CreateItem />} />
-                <Route path="/items/tracker"        element={<OrderTracker />} />
 
                 {/* Client routes */}
                 <Route path="/client/create" element={<SAPClientDashboard />} />
@@ -285,6 +282,8 @@ function AppContent() {
                 <Route path="/account/approval" element={<ApprovalView />} />
                 <Route path="/account/advice"  element={<PaymentAdvice />} />
                 <Route path="/account/financial-docs" element={<FinancialDocs />} />
+                <Route path="/company-info" element={<CompanyInfo />} />
+                <Route path="/reports/monthly" element={<MonthlyReport />} />
                 <Route path="/profile" element={<UserProfile />} />
 
                 {/* Tally Import routes */}
@@ -308,7 +307,6 @@ function AppContent() {
             </Routes>
           </div>
         </div>
-      </div>
       <Chat />
     </div>
     </ChatProvider>

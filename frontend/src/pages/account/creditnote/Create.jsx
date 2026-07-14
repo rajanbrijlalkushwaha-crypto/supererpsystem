@@ -18,7 +18,7 @@ const inp = (ex={}) => ({ height:34, padding:'0 10px', border:`1px solid ${BD}`,
 const lbl = { fontSize:11, fontWeight:600, color:'#374151', marginBottom:3, display:'block' };
 const card = { background:'#fff', border:`1px solid ${BD}`, borderRadius:10, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.05)', marginBottom:14 };
 const SH = (color=PU) => ({ background:color, padding:'9px 14px', fontSize:11, fontWeight:700, color:'#fff', textTransform:'uppercase', letterSpacing:'0.6px', display:'flex', justifyContent:'space-between', alignItems:'center' });
-const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits:2 });
+const fmt = n => (parseFloat(n)||0).toFixed(2);
 const newLine = () => ({ _id:Date.now()+Math.random(), productName:'', qty:'1', unit:'Nos', rate:'', gstPercent:'18', maxQty:null });
 
 const stepBadge = (n, active) => ({

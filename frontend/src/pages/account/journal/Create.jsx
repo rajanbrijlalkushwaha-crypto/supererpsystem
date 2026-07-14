@@ -6,7 +6,7 @@ import { useCompany } from '../../../context/CompanyContext';
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P   = '#133d80';
 const BD  = '#d1d9e6';
-const fmt = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n) || 0).toFixed(2);
 let _rid  = 1;
 const newRow = () => ({ _id: _rid++, ledger: '', dr: '', cr: '' });
 

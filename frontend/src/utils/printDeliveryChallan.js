@@ -1,8 +1,8 @@
-﻿/**
+/**
  * Delivery Challan & Packing List — print layout matching the reference image.
  */
 export function printDeliveryChallan(dc, company = {}) {
-  const fmtN = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtN = n => (parseFloat(n) || 0).toFixed(2);
   const fmtD = d => {
     if (!d) return '';
     const dt = new Date(d); if (isNaN(dt)) return d;

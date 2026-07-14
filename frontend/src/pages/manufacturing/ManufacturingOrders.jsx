@@ -5,7 +5,7 @@ import { useCompany } from '../../context/CompanyContext';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const N = '#104f4f';
 
-const fmt = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmt = n => (parseFloat(n) || 0).toFixed(2);
 
 const STATUS_CFG = {
   completed:   { bg: '#d4edda', color: '#155724', border: '#c3e6cb', label: 'Completed' },

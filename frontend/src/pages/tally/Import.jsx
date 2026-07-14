@@ -209,7 +209,7 @@ const Import = () => {
     modified:      previewItems.filter(i => i.changeType === 'modified').length,
   };
 
-  const fmtAmt = n => n ? `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—';
+  const fmtAmt = n => n ? `₹${Number(n).toFixed(2)}` : '—';
 
   const renderPreviewCell = (item) => {
     const t = item.targetType;

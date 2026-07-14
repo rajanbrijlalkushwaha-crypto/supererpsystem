@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -722,7 +722,7 @@ const EditVendor = () => {
                 <div style={css.secHead}>Payment Summary</div>
                 <div style={{ padding: '8px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <SummaryCell label="Terms"        value={form.paymentTerms} />
-                  <SummaryCell label="Credit Limit" value={form.creditLimit ? `₹ ${Number(form.creditLimit).toLocaleString('en-IN')}` : '—'} />
+                  <SummaryCell label="Credit Limit" value={form.creditLimit ? `₹ ${Number(form.creditLimit).toFixed(2)}` : '—'} />
                   <SummaryCell label="Currency"     value={form.currency} />
                 </div>
               </div>

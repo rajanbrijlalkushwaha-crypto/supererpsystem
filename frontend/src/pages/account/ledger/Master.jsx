@@ -5,7 +5,7 @@ import { useCompany } from '../../../context/CompanyContext';
 const P   = '#104f4f';
 const BD  = '#d1dde1';
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
-const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n)||0).toFixed(2);
 
 const HDR = { background: P, color: '#fff', padding: '14px 20px', display: 'flex',
   alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 };

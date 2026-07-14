@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ActivityDrawer from '../../../components/ActivityDrawer';
 
-const fmt = (n) => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = (n) => (parseFloat(n) || 0).toFixed(2);
 
 const ViewPayments = () => {
   const [records,     setRecords]     = useState([]);

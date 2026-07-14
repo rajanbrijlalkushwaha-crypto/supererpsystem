@@ -5,7 +5,7 @@ import { useCompany } from '../../../context/CompanyContext';
 
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const BD  = '#d1d9e6';
-const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n)||0).toFixed(2);
 const today = () => new Date().toISOString().slice(0,10);
 const GST_RATES = [0,5,12,18,28];
 

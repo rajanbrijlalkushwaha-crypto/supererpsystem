@@ -48,7 +48,7 @@ const S = {
 /* ────────────────────────────────────────────────────────────
    Mini helpers
 ──────────────────────────────────────────────────────────── */
-const fmt = (n) => n == null ? '' : Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n) => n == null ? '' : Number(n).toFixed(2);
 const fmtDate = (d) => {
   if (!d) return '';
   try { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`; }

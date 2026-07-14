@@ -24,7 +24,7 @@ const Badge = ({ s }) => {
   return <span style={{ padding:'2px 9px', borderRadius:20, fontSize:10, fontWeight:700, background:c.bg, color:c.color, fontFamily:F, whiteSpace:'nowrap' }}>{c.label}</span>;
 };
 
-const fmt  = n => `₹ ${Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2 })}`;
+const fmt  = n => `₹ ${Number(n||0).toFixed(2)}`;
 const fmtD = d => { if (!d) return '—'; const s=String(d).slice(0,10); const [y,m,dy]=s.split('-'); return `${dy}-${m}-${y}`; };
 const fmtSz= b => b>1048576?`${(b/1048576).toFixed(1)} MB`:`${Math.round(b/1024)} KB`;
 const fileIcon = n => { const e=(n||'').split('.').pop().toLowerCase(); return e==='pdf'?'📄':['jpg','jpeg','png'].includes(e)?'🖼':['xlsx','xls'].includes(e)?'📊':['doc','docx'].includes(e)?'📝':'📎'; };
@@ -184,9 +184,9 @@ function CreateBillModal({ po, token, onClose, onCreated }) {
                             style={{ width:'100%', height:26, padding:'0 5px', border:`1px solid ${overQty?R:BD}`, borderRadius:3, fontSize:11, fontFamily:F, textAlign:'right', outline:'none', background:overQty?'#FEF2F2':'#fff' }}/>
                         </td>
                         <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, color:'#6B7280' }}>{r.unit}</td>
-                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>₹{Number(r.rate||0).toLocaleString('en-IN')}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>₹{Number(r.rate||0).toFixed(2)}</td>
                         <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right' }}>{r.gstPercent}%</td>
-                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:P }}>₹{(net+gst).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+                        <td style={{ padding:'4px 7px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:P }}>₹{(net+gst).toFixed(2)}</td>
                       </tr>
                     );
                   })}
@@ -194,7 +194,7 @@ function CreateBillModal({ po, token, onClose, onCreated }) {
                 <tfoot>
                   <tr style={{ background:'#EFF6FF' }}>
                     <td colSpan={8} style={{ padding:'5px 7px', fontWeight:700, textAlign:'right', fontFamily:F }}>Total</td>
-                    <td style={{ padding:'5px 7px', fontWeight:800, textAlign:'right', color:P, fontFamily:F }}>₹{totals.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+                    <td style={{ padding:'5px 7px', fontWeight:800, textAlign:'right', color:P, fontFamily:F }}>₹{totals.total.toFixed(2)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -202,9 +202,9 @@ function CreateBillModal({ po, token, onClose, onCreated }) {
             {/* Summary */}
             {totals.net > 0 && (
               <div style={{ display:'flex', gap:16, marginTop:6, fontSize:11, color:'#374151', fontFamily:F }}>
-                <span>Net: <strong>₹{totals.net.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
-                <span>GST: <strong style={{color:O}}>₹{totals.gst.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
-                <span>Total: <strong style={{color:G}}>₹{totals.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></span>
+                <span>Net: <strong>₹{totals.net.toFixed(2)}</strong></span>
+                <span>GST: <strong style={{color:O}}>₹{totals.gst.toFixed(2)}</strong></span>
+                <span>Total: <strong style={{color:G}}>₹{totals.total.toFixed(2)}</strong></span>
               </div>
             )}
           </div>
@@ -460,7 +460,7 @@ export default function VendorPortal() {
     { label:'My POs',       val: pos.length,                                        icon:'📋', color:P        },
     { label:'Pending',      val: pos.filter(p=>p.status==='pending'||p.status==='draft').length, icon:'⏳', color:O },
     { label:'Completed',    val: pos.filter(p=>p.status==='completed'||p.status==='approved').length, icon:'✅', color:G },
-    { label:'Amt Received', val: `₹ ${payments.reduce((s,p)=>s+(Number(p.amount)||0),0).toLocaleString('en-IN')}`, icon:'💰', color:'#7C3AED' },
+    { label:'Amt Received', val: `₹ ${payments.reduce((s,p)=>s+(Number(p.amount)||0),0).toFixed(2)}`, icon:'💰', color:'#7C3AED' },
   ];
 
   return (
@@ -530,7 +530,7 @@ export default function VendorPortal() {
                         <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
                           <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{fmtD(p.date||p.createdAt)}</td>
                           <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.description||p.narration||'—'}</td>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toFixed(2)}</td>
                           <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.mode||p.paymentMode||'—'}</td>
                           <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}><Badge s={p.status}/></td>
                         </tr>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -342,7 +342,7 @@ const VendorDetail = () => {
               <div style={css.secHead}>Payment Configuration</div>
               <FRow label="Payment Terms" value={v.paymentTerms} />
               <FRow label="Currency"      value={v.currency} />
-              <FRow label="Credit Limit"  value={v.creditLimit ? `₹ ${Number(v.creditLimit).toLocaleString('en-IN')}` : ''} />
+              <FRow label="Credit Limit"  value={v.creditLimit ? `₹ ${Number(v.creditLimit).toFixed(2)}` : ''} />
               <div style={css.fr}>
                 <label style={css.lbl}>Payment Modes</label>
                 <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4, padding: '3px 0' }}>

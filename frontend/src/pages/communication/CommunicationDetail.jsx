@@ -33,7 +33,7 @@ const ddmmyyyyToISO = str => {
   const iso=`${yyyy}-${mm}-${dd}`;
   return isNaN(new Date(iso).getTime())?null:iso;
 };
-const fmtMoney = n => n!=null&&n!==''&&!isNaN(n)?'₹ '+Number(n).toLocaleString('en-IN'):'—';
+const fmtMoney = n => n!=null&&n!==''&&!isNaN(n)?'₹ '+Number(n).toFixed(2):'—';
 
 const EMPTY_FORM = {
   date:'', stage:'', description:'', department:'', referenceNo:'', by:'', status:'Completed', remarks:'',

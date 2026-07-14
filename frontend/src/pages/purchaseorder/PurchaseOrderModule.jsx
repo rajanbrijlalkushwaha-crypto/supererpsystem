@@ -21,7 +21,7 @@ const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /* ── helpers ── */
 const api  = (url, cfg={}) => axios({ url, ...cfg });
-const fmt  = n => `₹${(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const fmt  = n => `₹${(n||0).toFixed(2)}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
 
@@ -36,7 +36,7 @@ const getFY = (dateStr) => {
 };
 const makePoNo = (id,dateStr) => `${getFY(dateStr)}/${id}`;
 
-const fmtNR = n => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtNR = n => Number(n||0).toFixed(2);
 const fmtDR = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
 const printReport = (title, subtitle, cols, rows, totalRow) => {
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
@@ -530,7 +530,7 @@ function VendorBillsSection({order,companyId}){
     </div>
   );
 
-  const fmt2=n=>`₹${Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2})}`;
+  const fmt2=n=>`₹${Number(n||0).toFixed(2)}`;
   const fmtD2=d=>{ if(!d) return '—'; const s=String(d).slice(0,10); const [y,m,dy]=s.split('-'); return `${dy}-${m}-${y}`; };
 
   return(

@@ -3,13 +3,14 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
-const N = '#104f4f';
-const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const N  = '#3A6186';
+const ND = '#2A4D6E';
+const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const TYPE_COLOR = {
   'Ready Product': { bg: '#e8f5e9', color: '#2e7d32', border: '#a5d6a7' },
   'Raw Material':  { bg: '#fff3e0', color: '#e65100', border: '#ffcc80' },
-  'Service':       { bg: '#e3f2fd', color: '#104f4f', border: '#90caf9' },
+  'Service':       { bg: '#e3f2fd', color: '#1565c0', border: '#90caf9' },
 };
 
 export default function ViewItems() {
@@ -53,47 +54,69 @@ export default function ViewItems() {
     }
   };
 
-  const th = { padding: '5px 8px', background: N, color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: '1px solid #0b3d3d' };
-  const td = { padding: '4px 8px', fontSize: 11, fontFamily: F, border: '1px solid #dde', verticalAlign: 'middle' };
+  const th = { padding: '5px 8px', background: N, color: '#fff', fontSize: 10.5, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: `1px solid ${ND}`, position: 'sticky', top: 0, zIndex: 2 };
+  const td = { padding: '5px 9px', fontSize: 11, fontFamily: F, border: '1px solid #e2e8f0', verticalAlign: 'middle' };
 
   return (
-    <div style={{ padding: 10, fontFamily: F }}>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <input
-          style={{ height: 26, padding: '0 8px', border: '1px solid #b0b0b0', fontSize: 12, fontFamily: F, width: 220, outline: 'none' }}
-          placeholder="Search code / name / HSN…"
-          value={search} onChange={e => setSearch(e.target.value)}
-        />
-        {['All', 'Ready Product', 'Raw Material', 'Service'].map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            style={{
-              height: 26, padding: '0 12px', fontSize: 11, fontFamily: F, cursor: 'pointer',
-              background: filter === f ? N : '#e8eaed',
-              color: filter === f ? '#fff' : '#333',
-              border: `1px solid ${filter === f ? N : '#bbb'}`,
-              fontWeight: filter === f ? 700 : 400,
-            }}>
-            {f}
-          </button>
-        ))}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: F }}>
+
+      {/* ══ Single nav row ══ */}
+      <div style={{ flexShrink: 0, height: 40, background: N, borderBottom: `2px solid ${ND}`,
+        display: 'flex', alignItems: 'stretch', overflow: 'hidden', fontFamily: F }}>
+        <style>{`.itm-srch::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+
+        {/* Search */}
+        <div style={{ position: 'relative', minWidth: 180, maxWidth: 260, alignSelf: 'center', margin: '0 8px' }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search code / name / HSN…" className="itm-srch"
+            style={{ width: '100%', height: 26, padding: '0 10px',
+              border: '1px solid rgba(255,255,255,0.25)', borderRadius: 5, fontSize: 11, fontFamily: F,
+              outline: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* Filter chips */}
+        {['All', 'Ready Product', 'Raw Material', 'Service'].map(f => {
+          const isAct = filter === f;
+          return (
+            <button key={f} onClick={() => setFilter(f)}
+              style={{ display: 'flex', alignItems: 'center', padding: '0 11px', height: '100%',
+                fontSize: 11.5, fontWeight: isAct ? 700 : 400, border: 'none', cursor: 'pointer',
+                whiteSpace: 'nowrap', flexShrink: 0, fontFamily: F,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
+                background: isAct ? 'rgba(255,255,255,0.15)' : 'transparent',
+                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
+                marginBottom: -2 }}>
+              {f}
+            </button>
+          );
+        })}
+
+        {/* Refresh */}
         <button onClick={load}
-          style={{ height: 26, padding: '0 12px', fontSize: 11, fontFamily: F, cursor: 'pointer', background: '#e8eaed', border: '1px solid #bbb' }}>
+          style={{ display: 'flex', alignItems: 'center', height: 26, padding: '0 10px', alignSelf: 'center',
+            marginLeft: 6, flexShrink: 0, cursor: 'pointer', fontFamily: F, fontSize: 11, fontWeight: 700,
+            borderRadius: 5, background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.88)',
+            border: '1px solid rgba(255,255,255,0.22)' }}>
           ↻ Refresh
         </button>
+
+        {/* Count */}
+        <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.55)', alignSelf: 'center',
+          flexShrink: 0, whiteSpace: 'nowrap', margin: '0 8px' }}>
+          {loading ? '…' : `${filtered.length} items`}
+        </span>
+
+        {/* + New Item */}
         <button onClick={() => navigate('/items/create')}
-          style={{ height: 26, padding: '0 14px', fontSize: 11, fontFamily: F, cursor: 'pointer', background: N, color: '#fff', border: 'none', fontWeight: 700, marginLeft: 'auto' }}>
+          style={{ height: 26, padding: '0 14px', alignSelf: 'center', marginRight: 8, flexShrink: 0,
+            fontSize: 11, fontFamily: F, cursor: 'pointer', background: '#059669', color: '#fff',
+            border: 'none', fontWeight: 700, borderRadius: 5, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
           + New Item
         </button>
       </div>
 
-      {/* Count */}
-      <div style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>
-        {loading ? 'Loading…' : `${filtered.length} item${filtered.length !== 1 ? 's' : ''} found`}
-      </div>
-
       {/* Table */}
-      <div style={{ overflowX: 'auto', border: '1px solid #ccc' }}>
+      <div style={{ flex: 1, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: F }}>
           <thead>
             <tr>

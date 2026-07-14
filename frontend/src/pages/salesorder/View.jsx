@@ -15,7 +15,7 @@ const getFY = d => {
   const m = dt.getMonth() + 1, y = dt.getFullYear(), s = m >= 4 ? y : y - 1;
   return `${String(s).slice(2)}-${String(s+1).slice(2)}`;
 };
-const fmt  = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits:2 });
+const fmt  = n => (parseFloat(n)||0).toFixed(2);
 const fmtD = d => {
   if (!d) return '—';
   const dt = new Date(d);

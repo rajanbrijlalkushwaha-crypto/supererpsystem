@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
@@ -8,7 +9,7 @@ const PC = '#4c1d95';   // purple
 const AC = '#7c2d12';   // amber/brown for expenses
 const BD = '#e2e8f0';
 
-const fmt   = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmt   = n => (parseFloat(n)||0).toFixed(2);
 const fmtD  = d => {
   if (!d) return '—';
   const dt = new Date(d);
@@ -228,6 +229,7 @@ function printReport(so, pos, expenses, clientDue, vendorDues, companyName) {
 export default function ProjectClose() {
   const { selectedCompany } = useCompany();
   const cid = selectedCompany?.companyId;
+  const navigate = useNavigate();
   const companyName = selectedCompany?.companyName || selectedCompany?.name || 'Company';
 
   const [salesOrders,  setSalesOrders]  = useState([]);
@@ -360,27 +362,51 @@ export default function ProjectClose() {
       display:'inline-block', marginBottom:6 }}>{children}</div>
   );
 
+  const P = '#1a4a9a';
   return (
     <div style={{ fontFamily:F, background:'#f1f5f9', minHeight:'100vh' }}>
 
-      {/* Page header */}
-      <div style={{ background:'linear-gradient(135deg,#0b3d3d,#104f4f)', padding:'14px 20px' }}>
-        <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Project Close</div>
-        <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', marginTop:2 }}>
-          Close a jobcode only when all client dues are received, all vendor payments are made, and all expenses are paid.
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div style={{ background:'#fff', borderBottom:`1px solid ${BD}`, padding:'10px 16px',
-        display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+      {/* ── FINACLE-STYLE COMPACT TOOLBAR ── */}
+      <div style={{
+        background:'#f0f2f5', borderBottom:'1px solid #c0c4cc',
+        padding:'3px 8px', display:'flex', alignItems:'center',
+        flexWrap:'nowrap', overflowX:'auto', minHeight:36, gap:0,
+      }}>
+        <span style={{ fontWeight:800, fontSize:13, color:P, paddingRight:8,
+          borderRight:'1px solid #bbb', marginRight:6, whiteSpace:'nowrap', flexShrink:0 }}>
+          PROJECT
+        </span>
+        <button onClick={()=>navigate('/project/list')} style={{
+          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:400, position:'relative',
+          background:'#e4e8ed', border:'1px solid #c8c8c8',
+          borderBottom:'1px solid #c8c8c8',
+          color:'#555', zIndex:0, marginBottom:0, borderRadius:'3px 3px 0 0',
+        }}>Jobcodes</button>
+        <button onClick={()=>navigate('/project/close')} style={{
+          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:700, position:'relative', marginRight:8,
+          background:'#fff', border:'1px solid #aaa',
+          borderBottom:'1px solid #f0f2f5',
+          color:P, zIndex:1, marginBottom:-1, borderRadius:'3px 3px 0 0',
+        }}>Project Close</button>
+        <div style={{ flex:1 }}/>
         <input
           placeholder="Search by order no, client…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ height:32, padding:'0 10px', border:`1px solid ${BD}`, borderRadius:6,
-            fontSize:12, fontFamily:F, outline:'none', width:220 }}
+          style={{ height:26, padding:'0 8px', border:'1px solid #bbb', borderRadius:3,
+            fontSize:11, fontFamily:F, outline:'none', width:220, background:'#fff',
+            marginRight:4, flexShrink:0 }}
         />
+        <button onClick={load}
+          style={{ height:26, padding:'0 8px', background:'#fff', flexShrink:0,
+            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:13 }}>↻</button>
+      </div>
+
+      {/* Controls — filter buttons only */}
+      <div style={{ background:'#fff', borderBottom:`1px solid ${BD}`, padding:'6px 12px',
+        display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         {[
           ['all',    `All (${salesOrders.length})`],
           ['open',   `Open (${openCount})`],
@@ -393,11 +419,6 @@ export default function ProjectClose() {
             {l}
           </button>
         ))}
-        <button onClick={load}
-          style={{ marginLeft:'auto', height:32, padding:'0 14px', background:'#f8faff',
-            border:`1px solid ${BD}`, borderRadius:6, fontSize:12, cursor:'pointer', fontFamily:F }}>
-          {loading ? 'Loading…' : '↻ Refresh'}
-        </button>
       </div>
 
       {/* Condition legend */}

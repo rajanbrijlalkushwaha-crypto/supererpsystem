@@ -2,18 +2,103 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P = '#2563EB';
+const F    = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const TEAL = '#0d5c5c';
+const TEAL2= '#14837e';
 
-const inp = (err) => ({
-  width:'100%', height:40, padding:'0 12px', fontSize:13, fontFamily:F,
-  border:`1px solid ${err?'#EF4444':'#D1D5DB'}`, borderRadius:7,
-  background:'#fff', outline:'none', boxSizing:'border-box',
-});
+const ICONS = {
+  CRM:        { bg:'#e0f2fe', fg:'#0369a1', symbol:'👥' },
+  ERP:        { bg:'#ede9fe', fg:'#7c3aed', symbol:'⚡' },
+  Projects:   { bg:'#fef3c7', fg:'#d97706', symbol:'📋' },
+  Production: { bg:'#dcfce7', fg:'#16a34a', symbol:'🏭' },
+  Quality:    { bg:'#fff1f2', fg:'#e11d48', symbol:'✅' },
+  Testing:    { bg:'#f0fdf4', fg:'#15803d', symbol:'🧪' },
+  Finance:    { bg:'#fdf4ff', fg:'#9333ea', symbol:'💰' },
+  Inventory:  { bg:'#fff7ed', fg:'#ea580c', symbol:'📦' },
+  HR:         { bg:'#fce7f3', fg:'#db2777', symbol:'👤' },
+  Reports:    { bg:'#e0f7fa', fg:'#0097a7', symbol:'📊' },
+};
+const INNER = ['CRM','ERP','Projects','Production','Quality'];
+const OUTER = ['Finance','Inventory','HR','Reports','Testing'];
 
-export default function ForgotPassword() {
+const CSS = `
+* { box-sizing:border-box; margin:0; padding:0; }
+@keyframes orbitInner { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes orbitOuter { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+@keyframes counterIn  { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+@keyframes counterOut { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+@keyframes centerPulse {
+  0%,100%{box-shadow:0 0 0 0 rgba(13,92,92,0.25),0 8px 28px rgba(13,92,92,0.2);}
+  50%{box-shadow:0 0 0 12px rgba(13,92,92,0),0 8px 28px rgba(13,92,92,0.25);}
+}
+@keyframes slideIn { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+
+.vfp-wrapper { height:100vh; overflow-y:auto; }
+.vfp-left  { width:60%; flex-shrink:0; }
+.vfp-right { width:40%; flex-shrink:0; }
+
+@media (max-width: 860px) {
+  .vfp-wrapper { height:auto; min-height:100vh; }
+  .vfp-left  { display:none !important; }
+  .vfp-right { width:100% !important; min-width:0 !important; }
+}
+
+.vfp-field {
+  width:100%; height:30px; padding:0 10px;
+  border:1.5px solid #AAAAAA;
+  font-size:13px; font-family:${F};
+  background:#FFFFFF; color:#111; outline:none;
+  border-radius:2px; transition:border-color 0.15s, box-shadow 0.15s;
+}
+.vfp-field:focus { border-color:#3A6186; box-shadow:0 0 0 3px rgba(58,97,134,0.15); }
+.vfp-btn {
+  height:30px; padding:0 22px;
+  background:linear-gradient(180deg,#4A7FAA 0%,#2D5F8A 100%);
+  border:1px solid #1E4A70;
+  font-size:13px; font-family:${F}; font-weight:700;
+  cursor:pointer; color:#fff; border-radius:3px;
+  transition:all 0.15s; white-space:nowrap;
+}
+.vfp-btn:hover:not(:disabled) { background:linear-gradient(180deg,#5A8FBA 0%,#3D6F9A 100%); }
+.vfp-btn:disabled { opacity:0.6; cursor:not-allowed; }
+.vfp-btn-green {
+  height:30px; padding:0 22px;
+  background:linear-gradient(180deg,#27AE60 0%,#1E8449 100%);
+  border:1px solid #1A7040;
+  font-size:13px; font-family:${F}; font-weight:700;
+  cursor:pointer; color:#fff; border-radius:3px; white-space:nowrap;
+}
+.vfp-btn-green:disabled { opacity:0.6; cursor:not-allowed; }
+.vfp-link {
+  background:none; border:none; cursor:pointer; color:#3A6186;
+  font-size:12px; text-decoration:underline; font-family:${F}; padding:0;
+}
+`;
+
+function OrbitRing({ radius, modules, duration, reverse, iconSize=42 }) {
+  return (
+    <div style={{ position:'absolute', width:radius*2, height:radius*2, top:'50%', left:'50%', marginTop:-radius, marginLeft:-radius, borderRadius:'50%', border:'1.5px dashed rgba(13,92,92,0.12)', animation:`${reverse?'orbitOuter':'orbitInner'} ${duration}s linear infinite` }}>
+      {modules.map((name,i) => {
+        const angle=(2*Math.PI*i)/modules.length;
+        const x=radius+radius*Math.cos(angle)-iconSize/2;
+        const y=radius+radius*Math.sin(angle)-iconSize/2;
+        const m=ICONS[name];
+        return (
+          <div key={name} style={{ position:'absolute', left:x, top:y, width:iconSize, height:iconSize, animation:`${reverse?'counterOut':'counterIn'} ${duration}s linear infinite` }}>
+            <div style={{ width:'100%', height:'100%', borderRadius:12, background:m.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow:'0 3px 10px rgba(0,0,0,0.1)', border:`1.5px solid ${m.fg}22` }}>
+              <span style={{ fontSize:iconSize*0.36, lineHeight:1 }}>{m.symbol}</span>
+              <span style={{ fontSize:8, fontWeight:700, color:m.fg, marginTop:2 }}>{name.toUpperCase()}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function VendorForgotPassword() {
   const navigate = useNavigate();
-  const [step, setStep]       = useState(0); // 0: email, 1: otp+new password
+  const [step, setStep]       = useState(0);
   const [email, setEmail]     = useState('');
   const [otp, setOtp]         = useState('');
   const [newPwd, setNewPwd]   = useState('');
@@ -28,9 +113,7 @@ export default function ForgotPassword() {
     try {
       const res = await axios.post('/api/vendor-portal/forgot-password/send-otp', { email: email.trim() });
       setStep(1);
-      const txt = res.data.message || `OTP sent to ${email}.`;
-      setMsg({ type:'success', text: txt });
-      if (res.data.devOtp) setMsg({ type:'success', text: `OTP: ${res.data.devOtp} (email delivery failed — use this OTP)` });
+      setMsg({ type:'success', text: res.data.devOtp ? `OTP: ${res.data.devOtp} (use this OTP)` : res.data.message || `OTP sent to ${email}.` });
     } catch (e) {
       setMsg({ type:'error', text: e.response?.data?.error || e.message });
     } finally { setLoading(false); }
@@ -50,86 +133,136 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#1E293B 0%,#2563EB 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:F }}>
-      <div style={{ background:'#fff', borderRadius:14, boxShadow:'0 24px 60px rgba(0,0,0,0.25)', width:'100%', maxWidth:420, overflow:'hidden' }}>
+    <>
+      <style>{CSS}</style>
+      <div className="vfp-wrapper" style={{ display:'flex', fontFamily:F, background:'#fff' }}>
 
-        {/* Header */}
-        <div style={{ background:'linear-gradient(135deg,#1E293B,#2563EB)', padding:'22px 26px' }}>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,0.6)', fontWeight:500, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:5 }}>Epsilon Enterprise</div>
-          <div style={{ fontSize:19, fontWeight:800, color:'#fff' }}>Reset Password</div>
-          <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', marginTop:3 }}>Vendor Portal Account</div>
-        </div>
-
-        <div style={{ padding:'24px 26px' }}>
-          {done ? (
-            <div style={{ textAlign:'center', padding:'12px 0' }}>
-              <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
-              <div style={{ fontSize:15, fontWeight:700, color:'#1E293B', marginBottom:8 }}>Password Reset Successful!</div>
-              <div style={{ fontSize:13, color:'#64748b', marginBottom:24 }}>Your password has been updated. You can now log in with your new password.</div>
-              <button onClick={() => navigate('/login')} style={{ width:'100%', padding:'10px 0', borderRadius:8, cursor:'pointer', background:P, border:'none', color:'#fff', fontSize:14, fontWeight:700, fontFamily:F }}>Go to Login →</button>
+        {/* LEFT — orbit animation */}
+        <div className="vfp-left" style={{ position:'relative', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'#EDEAE4', overflow:'hidden', minHeight:'100vh' }}>
+          <div style={{ position:'absolute', top:'-8%', left:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(13,92,92,0.06),transparent 70%)', pointerEvents:'none' }} />
+          <div style={{ position:'absolute', bottom:'-8%', right:'-5%', width:340, height:340, borderRadius:'50%', background:'radial-gradient(circle,rgba(20,131,126,0.05),transparent 70%)', pointerEvents:'none' }} />
+          <div style={{ position:'relative', width:360, height:360 }}>
+            <OrbitRing radius={160} modules={OUTER} duration={28} reverse iconSize={40} />
+            <OrbitRing radius={102} modules={INNER} duration={18} reverse={false} iconSize={42} />
+            <div style={{ position:'absolute', top:'50%', left:'50%', width:80, height:80, marginTop:-40, marginLeft:-40, borderRadius:20, background:`linear-gradient(135deg,${TEAL2},${TEAL})`, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 28px rgba(13,92,92,0.3)', animation:'centerPulse 3s ease-in-out infinite', zIndex:10 }}>
+              <span style={{ fontSize:26, lineHeight:1 }}>⚡</span>
+              <span style={{ fontSize:8, fontWeight:800, color:'#fff', marginTop:4, letterSpacing:'0.08em' }}>EPSILON</span>
             </div>
-          ) : (
-            <>
-              {msg && (
-                <div style={{ padding:'9px 12px', borderRadius:6, fontSize:12, fontWeight:600, marginBottom:14,
-                  background: msg.type==='success'?'#ECFDF5':'#FEF2F2',
-                  color: msg.type==='success'?'#065F46':'#991B1B',
-                  border:`1px solid ${msg.type==='success'?'#A7F3D0':'#FECACA'}` }}>
-                  {msg.text}
-                </div>
-              )}
-
-              {step === 0 && (
-                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                  <div>
-                    <div style={{ fontSize:13, color:'#374151', fontWeight:600, marginBottom:4 }}>Registered Email Address</div>
-                    <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setMsg(null);}} placeholder="vendor@company.com" style={inp(!email && msg?.type==='error')} autoFocus />
-                  </div>
-                  <button onClick={sendOTP} disabled={loading} style={{ padding:'10px 0', borderRadius:8, cursor:loading?'not-allowed':'pointer', background:P, border:'none', color:'#fff', fontSize:13, fontWeight:700, fontFamily:F, opacity:loading?0.7:1 }}>
-                    {loading ? '⏳ Sending OTP…' : '📤 Send OTP'}
-                  </button>
-                </div>
-              )}
-
-              {step === 1 && (
-                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                  <div style={{ textAlign:'center', padding:'8px 0' }}>
-                    <div style={{ fontSize:32, marginBottom:6 }}>📧</div>
-                    <div style={{ fontSize:13.5, fontWeight:700, color:'#1E293B' }}>Check your inbox</div>
-                    <div style={{ fontSize:12, color:'#64748b', marginTop:3 }}>OTP sent to <strong>{email}</strong></div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 }}>Enter OTP</div>
-                    <input value={otp} onChange={e=>{setOtp(e.target.value);setMsg(null);}} maxLength={6} placeholder="6-digit OTP"
-                      style={{ ...inp(!otp && msg?.type==='error'), textAlign:'center', fontSize:22, fontWeight:800, letterSpacing:8 }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 }}>New Password</div>
-                    <input type="password" value={newPwd} onChange={e=>{setNewPwd(e.target.value);setMsg(null);}} placeholder="Min 6 characters" style={inp()} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 }}>Confirm New Password</div>
-                    <input type="password" value={confPwd} onChange={e=>{setConfPwd(e.target.value);setMsg(null);}} placeholder="Re-enter password" style={inp(confPwd && newPwd !== confPwd)} />
-                    {confPwd && newPwd !== confPwd && <div style={{ fontSize:11, color:'#EF4444', marginTop:3 }}>Passwords do not match</div>}
-                  </div>
-                  <button onClick={resetPwd} disabled={loading} style={{ padding:'10px 0', borderRadius:8, cursor:loading?'not-allowed':'pointer', background:'#059669', border:'none', color:'#fff', fontSize:13, fontWeight:700, fontFamily:F, opacity:loading?0.7:1 }}>
-                    {loading ? '⏳ Resetting…' : '🔒 Reset Password'}
-                  </button>
-                  <button onClick={()=>{setStep(0);setMsg(null);}} style={{ padding:'7px 0', borderRadius:8, cursor:'pointer', background:'#fff', border:'1px solid #D1D5DB', color:'#6B7280', fontSize:12.5, fontWeight:600, fontFamily:F }}>
-                    ← Change Email
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+          </div>
+          <div style={{ textAlign:'center', marginTop:20, position:'relative', zIndex:2 }}>
+            <div style={{ fontSize:24, fontWeight:800, color:TEAL, letterSpacing:'-0.3px' }}>Universal Core ERP Solutions</div>
+            <div style={{ fontSize:12.5, color:'#64748b', marginTop:6, fontWeight:500 }}>Enterprise Resource Planning · CRM · Production · Quality</div>
+          </div>
+          <div style={{ position:'absolute', bottom:14, fontSize:10.5, color:'#94a3b8' }}>© 2025 Epsilon Enterprise · epsilonprefab.org</div>
         </div>
 
-        <div style={{ padding:'12px 26px 18px', borderTop:'1px solid #F1F5F9', textAlign:'center' }}>
-          <button onClick={() => navigate('/login')} style={{ background:'none', border:'none', color:P, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:F, textDecoration:'underline' }}>
-            ← Back to Login
-          </button>
+        {/* RIGHT — Finacle-style panel */}
+        <div className="vfp-right" style={{ position:'relative', minHeight:'100vh', display:'flex', flexDirection:'column', background:'linear-gradient(160deg,#EDEAE4 0%,#EAE7E1 50%,#E3DFD8 100%)', boxShadow:'-6px 0 32px rgba(0,0,0,0.18)', overflow:'hidden', animation:'slideIn 0.5s ease both' }}>
+          <svg style={{ position:'absolute', bottom:0, left:0, zIndex:1 }} width="160" height="240" viewBox="0 0 160 240"><polygon points="0,240 160,240 0,0" fill="#CC0000"/></svg>
+          <div style={{ height:4, background:'linear-gradient(90deg,#CC0000,#3A6186)', position:'relative', zIndex:3 }} />
+
+          <div style={{ padding:'20px 28px 0', textAlign:'right', position:'relative', zIndex:3 }}>
+            <div style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+              <div style={{ textAlign:'right' }}><div style={{ fontSize:19, fontWeight:900, color:'#CC0000' }}>Finacle ERP</div><div style={{ fontSize:9, color:'#888', letterSpacing:'1px', fontStyle:'italic' }}>Transforming Business</div></div>
+              <div style={{ width:36, height:36, background:'#CC0000', borderRadius:4, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 3px 10px rgba(204,0,0,0.35)' }}><span style={{ fontSize:18, color:'#fff', fontWeight:900 }}>⚡</span></div>
+            </div>
+          </div>
+
+          <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', padding:'24px 52px 20px 52px', position:'relative', zIndex:3 }}>
+
+            <div style={{ marginBottom:32 }}>
+              <h1 style={{ fontSize:28, color:'#111', lineHeight:1.25, margin:0, letterSpacing:'-0.5px' }}>
+                <span style={{ fontWeight:300 }}>Vendor </span><span style={{ fontWeight:900 }}>Password Reset</span>
+              </h1>
+              <div style={{ fontSize:13, color:'#777', marginTop:5 }}>Universal Core ERP Solution — Vendor Portal</div>
+              <div style={{ width:'100%', height:1, background:'linear-gradient(90deg,transparent,#AAAAAA,transparent)', marginTop:14 }} />
+            </div>
+
+            {msg && (
+              <div style={{ marginBottom:16, padding:'7px 10px', background: msg.type==='error'?'#FEE2E2':'#ECFDF5', border:`1px solid ${msg.type==='error'?'#FCA5A5':'#A7F3D0'}`, borderLeft:`3px solid ${msg.type==='error'?'#DC2626':'#059669'}`, fontSize:12, color: msg.type==='error'?'#DC2626':'#065F46', borderRadius:2, display:'flex', gap:6, alignItems:'center' }}>
+                <span>{msg.type==='error'?'⚠':'✓'}</span> {msg.text}
+              </div>
+            )}
+
+            {done ? (
+              <table style={{ borderCollapse:'collapse', width:'100%' }}>
+                <tbody>
+                  <tr><td colSpan={2} style={{ padding:'8px 0 20px', textAlign:'center' }}>
+                    <div style={{ fontSize:44, marginBottom:10 }}>✅</div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'#111', marginBottom:6 }}>Password Reset Successful!</div>
+                    <div style={{ fontSize:13, color:'#555', lineHeight:1.7 }}>Your password has been updated. You can now log in.</div>
+                  </td></tr>
+                  <tr><td style={{ padding:'9px 0' }}><button className="vfp-btn" onClick={() => navigate('/login')} style={{ width:'100%' }}>← Back to Login</button></td></tr>
+                </tbody>
+              </table>
+            ) : step === 0 ? (
+              <table style={{ borderCollapse:'collapse', width:'100%' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:130 }}>Email Address:</td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <input type="email" autoFocus value={email} className="vfp-field" onChange={e=>{setEmail(e.target.value);setMsg(null);}} placeholder="vendor@company.com" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td></td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                        <button className="vfp-btn" onClick={sendOTP} disabled={loading}>{loading?'⏳ Sending…':'📤 Send OTP'}</button>
+                        <button className="vfp-link" onClick={() => navigate('/login')}>← Back to Login</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <table style={{ borderCollapse:'collapse', width:'100%' }}>
+                <tbody>
+                  <tr><td colSpan={2} style={{ padding:'4px 0 16px', textAlign:'center' }}>
+                    <div style={{ fontSize:32, marginBottom:6 }}>📧</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#111' }}>OTP sent to <strong>{email}</strong></div>
+                  </td></tr>
+                  <tr>
+                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:130 }}>Enter OTP:</td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <input className="vfp-field" value={otp} onChange={e=>{setOtp(e.target.value);setMsg(null);}} maxLength={6} placeholder="6-digit OTP" style={{ textAlign:'center', fontSize:18, fontWeight:700, letterSpacing:6 }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle' }}>New Password:</td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <input type="password" className="vfp-field" value={newPwd} onChange={e=>{setNewPwd(e.target.value);setMsg(null);}} placeholder="Min 6 characters" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle' }}>Confirm Password:</td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <input type="password" className="vfp-field" value={confPwd} onChange={e=>{setConfPwd(e.target.value);setMsg(null);}} placeholder="Re-enter password" />
+                      {confPwd && newPwd !== confPwd && <div style={{ fontSize:11, color:'#DC2626', marginTop:3 }}>Passwords do not match</div>}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td></td>
+                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
+                      <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                        <button className="vfp-btn-green" onClick={resetPwd} disabled={loading}>{loading?'⏳ Resetting…':'🔒 Reset Password'}</button>
+                        <button className="vfp-link" onClick={()=>{setStep(0);setMsg(null);}}>← Change Email</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={{ textAlign:'right', padding:'0 28px 10px', position:'relative', zIndex:3 }}>
+            <div style={{ fontSize:28, fontWeight:900, color:'#003580', fontStyle:'italic', letterSpacing:'-0.5px' }}>Epsilongroup</div>
+          </div>
+          <div style={{ textAlign:'center', fontSize:10, color:'#888', padding:'0 20px 14px', position:'relative', zIndex:3 }}>
+            Copyright © 2024–2025 Epsilon Group Limited. All rights reserved. epsilonprefab.org
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

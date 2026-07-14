@@ -6,7 +6,7 @@ import ActivityDrawer from '../../../components/ActivityDrawer';
 
 const F = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P = '#6d28d9'; const BD = '#E5EAF2';
-const fmt = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n) || 0).toFixed(2);
 const fmtD = ds => { if (!ds) return '—'; const d = new Date(ds); return isNaN(d) ? ds : `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`; };
 
 const STATUS_COLORS = {

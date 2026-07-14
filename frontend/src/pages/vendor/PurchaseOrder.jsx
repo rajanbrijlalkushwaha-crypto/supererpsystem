@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -190,7 +190,7 @@ const VendorPurchaseOrder = () => {
                       <td style={{ padding: '6px 10px', color: '#475569', whiteSpace: 'nowrap' }}>{order.deliveryDate || '—'}</td>
                       <td style={{ padding: '6px 10px', textAlign: 'center', color: '#475569', fontWeight: 600 }}>{(order.items || []).length}</td>
                       <td style={{ padding: '6px 10px', fontWeight: 700, color: '#1E293B', whiteSpace: 'nowrap' }}>
-                        ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ₹{total.toFixed(2)}
                       </td>
                       <td style={{ padding: '6px 10px' }}>
                         <span style={{ ...badge, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
@@ -223,7 +223,7 @@ const VendorPurchaseOrder = () => {
             }}>
               <span>Showing {filtered.length} of {orders.length} purchase orders</span>
               <span style={{ fontWeight: 700, color: HDR }}>
-                Total Value: ₹{totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Total Value: ₹{totalValue.toFixed(2)}
               </span>
             </div>
           </div>

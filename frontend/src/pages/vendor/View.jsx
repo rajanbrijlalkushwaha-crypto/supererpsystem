@@ -72,7 +72,7 @@ const VendorDetailModal = ({ vendor, company, onClose, onEdit }) => {
               <Field label="Business Type"  value={vendor.businessType} />
               <Field label="GSTIN"          value={vendor.gstin} />
               <Field label="PAN"            value={vendor.pan} />
-              <Field label="Opening Balance" value={vendor.openingBalance ? `₹${Number(vendor.openingBalance).toLocaleString('en-IN')}` : null} />
+              <Field label="Opening Balance" value={vendor.openingBalance ? `₹${Number(vendor.openingBalance).toFixed(2)}` : null} />
               <Field label="Credit Period"  value={vendor.creditPeriod ? `${vendor.creditPeriod} days` : null} />
             </div>
           </div>

@@ -1,6 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
 
 const SECTIONS = {
+  crm: {
+    label: 'CRM',
+    routes: ['/crm', '/communication'],
+    tabs: [
+      { label: 'Leads / CRM',      path: '/crm/view' },
+      { label: 'Communication',    path: '/communication/logs' },
+      { label: 'Proforma Invoice', path: '/proforma-invoice/view' },
+    ],
+  },
   sales: {
     label: 'Sales Orders',
     routes: ['/sales-order'],
@@ -8,6 +17,7 @@ const SECTIONS = {
       { label: 'All Sales Orders', path: '/sales-order/view' },
       { label: '+ Create SO',      path: '/sales-order/create', isCreate: true },
       { label: 'Pending',          path: '/sales-order/pending' },
+      { label: 'Proforma Invoice', path: '/proforma-invoice/view' },
     ],
   },
   purchase: {
@@ -24,6 +34,7 @@ const SECTIONS = {
     label: 'Clients',
     routes: ['/client', '/client-sap'],
     tabs: [
+      { label: '+ Create Client', path: '/client-sap', isCreate: true },
       { label: 'View Clients', path: '/client/view' },
       { label: 'Pending',      path: '/client/pending' },
     ],
@@ -32,9 +43,8 @@ const SECTIONS = {
     label: 'Items',
     routes: ['/items'],
     tabs: [
-      { label: 'Create Item',   path: '/items/create' },
-      { label: 'View Items',    path: '/items/view' },
-      { label: 'Order Tracker', path: '/items/tracker' },
+      { label: 'Create Item', path: '/items/create' },
+      { label: 'View Items',  path: '/items/view' },
     ],
   },
   vendor: {
@@ -116,11 +126,12 @@ const P = '#60A5FA';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const TAB_ICONS = {
-  sales:         { 'Create Order': '✏️', 'View / Edit': '📄', 'Pending': '⏳' },
+  crm:           { 'Leads / CRM': '👥', 'Communication': '💬', 'Proforma Invoice': '📋' },
+  sales:         { 'Create Order': '✏️', 'View / Edit': '📄', 'Pending': '⏳', 'Proforma Invoice': '📋' },
   purchase:      { 'Create PO': '✏️', 'View / Edit': '📄', 'Pending Approval': '⏳' },
   client:        { 'Create Client': '➕', 'View Clients': '👥', 'Pending': '⏳' },
   vendor:        { 'Create Vendor': '➕', 'View Vendors': '🏢', 'Pending': '⏳', 'Self Registrations': '🌐' },
-  items:         { 'Create Item': '➕', 'View Items': '📦', 'Order Tracker': '🔗' },
+  items:         { 'Create Item': '➕', 'View Items': '📦' },
   account:       { 'Expense': '🧾', 'Debit Note': '📋', 'Credit Note': '📄', 'Payment': '💳', 'Receipt': '📥', 'Journals': '📒', 'View Balance': '💰', 'Bank Accounts': '🏦', 'Statement': '📊', 'Approval': '✅', 'All Ledgers': '📚', 'Deposit': '🏧' },
   tally:         { 'Import': '📥', 'Pending Review': '🔍' },
   manufacturing: { 'Mfg Orders': '🏭', 'Job Sheets': '📋', 'Create Job Sheet': '➕', 'Locations': '📍' },
@@ -131,8 +142,7 @@ const TAB_ICONS = {
 
 export default function SubNav() {
   const { pathname } = useLocation();
-  // Account mode sidebar handles all account navigation — hide tab bar on account/tally pages
-  if (pathname.startsWith('/account') || pathname.startsWith('/tally')) return null;
+  if (pathname.startsWith('/account') || pathname.startsWith('/tally') || pathname.startsWith('/project') || pathname.startsWith('/client') || pathname.startsWith('/client-sap') || pathname.startsWith('/sales-order')) return null;
   const sectionEntry = Object.entries(SECTIONS).find(([, s]) => match(s.routes, pathname));
   if (!sectionEntry) return null;
   const [sectionKey, section] = sectionEntry;
@@ -142,8 +152,8 @@ export default function SubNav() {
   return (
     <nav style={{
       display: 'flex', alignItems: 'stretch',
-      background: '#104f4f',
-      borderBottom: '2px solid rgba(255,255,255,0.15)',
+      background: '#3A6186',
+      borderBottom: '2px solid #2A4D6E',
       flexShrink: 0, height: 40,
       fontFamily: F,
     }}>

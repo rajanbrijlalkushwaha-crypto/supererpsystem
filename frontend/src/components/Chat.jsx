@@ -621,7 +621,7 @@ export default function Chat() {
                       <div style={{ fontSize: 11.5, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{party}</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: P }}>₹{Number(amount).toLocaleString('en-IN')}</div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: P }}>₹{Number(amount).toFixed(2)}</div>
                       <div style={{ fontSize: 10, color: orderStatusColor(o.status), fontWeight: 600, textTransform: 'capitalize' }}>{o.status || '—'}</div>
                     </div>
                   </div>
@@ -924,7 +924,7 @@ export default function Chat() {
                           <div style={{ fontWeight: 700, fontSize: 13, color: isMine ? '#fff' : P }}>{m.order.number}</div>
                           <div style={{ fontSize: 11.5, color: isMine ? 'rgba(255,255,255,0.75)' : '#374151', marginTop: 1 }}>{m.order.party}</div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span style={{ fontWeight: 700, fontSize: 12, color: isMine ? '#6ee7b7' : '#16a34a' }}>₹{Number(m.order.amount).toLocaleString('en-IN')}</span>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: isMine ? '#6ee7b7' : '#16a34a' }}>₹{Number(m.order.amount).toFixed(2)}</span>
                             <span style={{ fontSize: 10, fontWeight: 600, color: orderStatusColor(m.order.status), textTransform: 'capitalize' }}>{m.order.status}</span>
                           </div>
                         </div>

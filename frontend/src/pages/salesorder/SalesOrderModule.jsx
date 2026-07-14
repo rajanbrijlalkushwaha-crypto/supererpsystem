@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Sales Order Module — Tab-by-Tab section navigation
  * Outer tabs : Create | View/Edit | Pending
  * Inner tabs  : Order Details → Item Details → Add-on Items →
@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
@@ -24,7 +24,7 @@ const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /* ── helpers ── */
 const api  = (url, cfg={}) => axios({url, ...cfg});
-const fmt  = n => `₹${(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const fmt  = n => `₹${(n||0).toFixed(2)}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
 
@@ -35,7 +35,7 @@ const getFY = (dateStr) => {
 };
 const makeSoNo = (id,dateStr) => `${getFY(dateStr)}/${id}`;
 
-const fmtN = n => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtN = n => Number(n||0).toFixed(2);
 const fmtDR = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
 const printReport = (title, subtitle, cols, rows, totalRow) => {
   const today2 = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
@@ -2294,12 +2294,13 @@ function TrendChart({ data, width=340, height=110, color='#6366f1' }) {
 }
 
 function ViewTab({ companyId, onEdit }) {
-  const [orders,    setOrders]    = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [q,         setQ]         = useState('');
-  const [fy,        setFy]        = useState(getFY());
-  const [statusFlt, setStatusFlt] = useState('all');
-  const [selected,  setSelected]  = useState(null);
+  const [orders,      setOrders]      = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [q,           setQ]           = useState('');
+  const [fy,          setFy]          = useState(getFY());
+  const [statusFlt,   setStatusFlt]   = useState('all');
+  const [selected,    setSelected]    = useState(null);
+  const [selectedRow, setSelectedRow] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2390,16 +2391,21 @@ function ViewTab({ companyId, onEdit }) {
   }), [tableRows, filtered]);
 
   const TH = ({children, right, style:sx={}}) => (
-    <th style={{ padding:'7px 9px', background:'#1e293b', color:'#f1f5f9', fontWeight:700,
+    <th style={{ padding:'6px 9px', background:'#3A6186', color:'#fff', fontWeight:700,
       fontSize:10.5, textAlign:right?'right':'left', whiteSpace:'nowrap',
-      borderRight:'1px solid #374151', borderBottom:'2px solid #0f172a',
+      borderRight:'1px solid #2A4D6E', borderBottom:'2px solid #2A4D6E',
       position:'sticky', top:0, zIndex:2, ...sx }}>
       {children}
     </th>
   );
 
+  const NAV_P  = '#3A6186';
+  const NAV_PD = '#2A4D6E';
+  const navigate2 = useNavigate();
+  const { pathname: soPath } = useLocation();
+
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:0,background:'#f8fafc',minHeight:'100%'}}>
+    <div style={{display:'flex',flexDirection:'column',gap:0,background:'#f8fafc',height:'100%',overflow:'hidden'}}>
 
       {selected && (
         <OrderModal order={selected} companyId={companyId}
@@ -2407,72 +2413,120 @@ function ViewTab({ companyId, onEdit }) {
           onEdit={o=>{setSelected(null);onEdit(o);}}/>
       )}
 
-      <div style={{padding:'10px 12px 0'}}>
+      {/* ══ Combined nav + toolbar bar ══ */}
+      <div style={{ flexShrink:0, height:40, background:NAV_P, borderBottom:`2px solid ${NAV_PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
 
-        {/* ── Stats Bar (compact single line) ── */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10,
-          background:'#fff', borderRadius:8, border:'1px solid #e5e7eb',
-          padding:'6px 14px', flexWrap:'wrap',
-          boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
-          <span style={{ fontSize:11, color:'#94a3b8', fontWeight:700, marginRight:2, whiteSpace:'nowrap' }}>
-            FY {fy==='all'?'All':fy}
-          </span>
-          <div style={{ width:1, height:18, background:'#e5e7eb', margin:'0 4px' }}/>
-          <StatChip label="Total Orders"     value={stats.total}           color="#4f46e5" bg="#eef2ff"/>
-          <StatChip label="Confirmed"        value={stats.confirmed}       color="#16a34a" bg="#dcfce7" sub={stats.pct(stats.confirmed)}/>
-          <StatChip label="In Progress"      value={stats.inProg}          color="#f97316" bg="#fff7ed" sub={stats.pct(stats.inProg)}/>
-          <StatChip label="Dispatch Pending" value={stats.dispatchPending} color="#7c3aed" bg="#ede9fe" sub={stats.pct(stats.dispatchPending)}/>
-          <StatChip label="Dispatched"       value={stats.dispatched}      color="#059669" bg="#ecfdf5" sub={stats.pct(stats.dispatched)}/>
-          <StatChip label="Completed"        value={stats.completed}       color="#15803d" bg="#f0fdf4" sub={stats.pct(stats.completed)}/>
+        {/* Section label */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          SALES ORDERS
         </div>
 
-        {/* ── Filter Bar ── */}
-        <div style={{background:'#fff',borderRadius:8,border:'1px solid #e5e7eb',
-          padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:14,
-          boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
-
-          <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,
-            background:'#f9fafb',height:34,padding:'0 10px',gap:6,flex:1,minWidth:200,maxWidth:320}}>
-            <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
-            <input value={q} onChange={e=>setQ(e.target.value)}
-              placeholder="Search order, client, product…"
-              style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
-            {q&&<button onClick={()=>setQ('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af',lineHeight:1}}>×</button>}
-          </div>
-
-          <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <span style={{fontSize:11,color:'#6b7280',fontWeight:600,whiteSpace:'nowrap'}}>Status</span>
-            <select value={statusFlt} onChange={e=>setStatusFlt(e.target.value)}
-              style={{height:34,padding:'0 8px',border:'1px solid #d1d5db',borderRadius:6,fontSize:12,
-                fontFamily:F,color:'#374151',background:'#f9fafb',outline:'none',cursor:'pointer'}}>
-              <option value="all">All</option>
-              {Object.entries(SO_STATUS).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </div>
-
-          <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
-            {fyList.map(f => {
-              const active = fy === f;
-              return (
-                <button key={f} onClick={()=>setFy(f)}
-                  style={{ height:30, padding:'0 10px', fontSize:11, fontWeight:active?700:500,
-                    fontFamily:F, cursor:'pointer', borderRadius:6,
-                    border:`1px solid ${active?'#6366f1':'#d1d5db'}`,
-                    background:active?'#6366f1':'#fff',
-                    color:active?'#fff':'#374151', whiteSpace:'nowrap', transition:'all 0.1s' }}>
-                  {f==='all'?'All FY':`FY ${f}`}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{marginLeft:'auto',display:'flex',gap:6}}>
-            <button onClick={load}
-              style={{height:34,padding:'0 12px',fontSize:12,fontFamily:F,cursor:'pointer',
-                borderRadius:6,border:'1px solid #d1d5db',background:'#fff',color:'#374151',fontWeight:600}}>
-              ↺ Refresh
+        {/* Nav tabs */}
+        {[
+          { label:'All Sales Orders', path:'/sales-order/view' },
+          { label:'+ Create SO',      path:'/sales-order/create', isCreate:true },
+          { label:'⏳ Pending',       path:'/sales-order/pending' },
+          { label:'📋 Proforma Invoice', path:'/proforma-invoice/view' },
+        ].map(tab => {
+          const isAct = soPath === tab.path;
+          if (tab.isCreate) return (
+            <button key={tab.path} onClick={() => navigate2(tab.path)}
+              style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight:700, color:'#fff', background:'#059669',
+                border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+                margin:'0 4px', borderRadius:5 }}
+              onMouseEnter={e=>{e.currentTarget.style.background='#047857';}}
+              onMouseLeave={e=>{e.currentTarget.style.background='#059669';}}>
+              {tab.label}
             </button>
-            <button onClick={()=>{
+          );
+          return (
+            <button key={tab.path} onClick={() => navigate2(tab.path)}
+              style={{ display:'flex', alignItems:'center', padding:'0 10px', height:'100%',
+                fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+                whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                color:isAct?'#fff':'rgba(255,255,255,0.65)',
+                background:isAct?'rgba(255,255,255,0.12)':'transparent',
+                borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
+                marginBottom:-2 }}
+              onMouseEnter={e=>{if(!isAct)e.currentTarget.style.background='rgba(255,255,255,0.08)';}}
+              onMouseLeave={e=>{if(!isAct)e.currentTarget.style.background='transparent';}}>
+              {tab.label}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div style={{width:1,height:20,background:'rgba(255,255,255,0.2)',alignSelf:'center',flexShrink:0,margin:'0 6px'}}/>
+
+        {/* Total orders count chip */}
+        <div style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'0 10px', height:24,
+          alignSelf:'center', borderRadius:20, flexShrink:0,
+          border:'1.5px solid rgba(255,255,255,0.4)', background:'rgba(255,255,255,0.12)' }}>
+          <span style={{fontSize:13,fontWeight:800,color:'#fff',lineHeight:1}}>{stats.total}</span>
+          <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.4px',color:'rgba(255,255,255,0.7)'}}>Total Orders</span>
+        </div>
+
+        {/* Divider */}
+        <div style={{width:1,height:20,background:'rgba(255,255,255,0.2)',alignSelf:'center',flexShrink:0,margin:'0 6px'}}/>
+
+        {/* Search */}
+        <div style={{position:'relative',flex:1,minWidth:140,maxWidth:240,alignSelf:'center'}}>
+          <span style={{position:'absolute',left:7,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(255,255,255,0.45)',pointerEvents:'none'}}>🔍</span>
+          <input value={q} onChange={e=>setQ(e.target.value)}
+            placeholder="Search order, client, product…"
+            className="so-search-inp"
+            style={{width:'100%',height:26,paddingLeft:22,paddingRight:q?20:8,
+              border:'1px solid rgba(255,255,255,0.22)',borderRadius:0,fontSize:11,fontFamily:F,
+              outline:'none',background:'rgba(255,255,255,0.1)',color:'#fff',boxSizing:'border-box'}}/>
+          {q&&<button onClick={()=>setQ('')} style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'rgba(255,255,255,0.55)',fontSize:12,padding:0,lineHeight:1}}>✕</button>}
+        </div>
+
+        {/* Status dropdown */}
+        <div style={{display:'flex',alignItems:'center',gap:4,alignSelf:'center',margin:'0 6px',flexShrink:0}}>
+          <span style={{fontSize:10,color:'rgba(255,255,255,0.6)',fontWeight:600,whiteSpace:'nowrap'}}>Status</span>
+          <select value={statusFlt} onChange={e=>setStatusFlt(e.target.value)}
+            style={{height:26,padding:'0 6px',border:'1px solid rgba(255,255,255,0.22)',borderRadius:0,fontSize:11,
+              fontFamily:F,color:'#fff',background:'rgba(255,255,255,0.1)',outline:'none',cursor:'pointer'}}>
+            <option value="all" style={{color:'#000',background:'#fff'}}>All</option>
+            {Object.entries(SO_STATUS).map(([k,v]) => <option key={k} value={k} style={{color:'#000',background:'#fff'}}>{v.label}</option>)}
+          </select>
+        </div>
+
+        {/* FY dropdown */}
+        <select value={fy} onChange={e=>setFy(e.target.value)}
+          style={{ height:26, padding:'0 6px', borderRadius:0, flexShrink:0, alignSelf:'center',
+            marginLeft:4, cursor:'pointer', fontFamily:F, fontSize:11, fontWeight:700,
+            border:'1px solid rgba(255,255,255,0.35)',
+            background:'rgba(255,255,255,0.12)', color:'#fff', outline:'none',
+            minWidth:90 }}>
+          {fyList.map(f => (
+            <option key={f} value={f} style={{color:'#111',background:'#fff',fontWeight:600}}>
+              {f==='all'?'All FY':`FY ${f}`}
+            </option>
+          ))}
+        </select>
+
+        {/* Count */}
+        <span style={{fontSize:10,color:'rgba(255,255,255,0.5)',alignSelf:'center',flexShrink:0,whiteSpace:'nowrap',margin:'0 6px'}}>
+          {filtered.length}/{orders.length}
+        </span>
+
+        {/* Refresh */}
+        <button onClick={load}
+          style={{height:24,padding:'0 10px',alignSelf:'center',flexShrink:0,marginRight:4,cursor:'pointer',fontFamily:F,
+            fontSize:11,fontWeight:700,borderRadius:0,
+            background:'rgba(255,255,255,0.1)',color:'rgba(255,255,255,0.88)',
+            border:'1px solid rgba(255,255,255,0.22)'}}>
+          ↺ Refresh
+        </button>
+
+        {/* Export */}
+        <button onClick={()=>{
               const fyLabel=fy==='all'?'All Financial Years':`FY ${fy}`;
               const cols=['#','Order ID','Order No','Client Name','Order Date','Cust PO No','Due Date','Product/Description','Qty','Rate (₹)','Taxable (₹)','GST%','Other Charges (₹)','Order Value (₹)','Status'];
               const rows=tableRows.map((r,i)=>[
@@ -2489,29 +2543,75 @@ function ViewTab({ companyId, onEdit }) {
                 r.isFirst?r.o.status||'—':'',
               ]);
               const tot=['','','','','','','','',totals.qty.toFixed(2),'',
-                '₹'+totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2}),'',
-                '₹'+totals.otherCh.toLocaleString('en-IN',{minimumFractionDigits:2}),
-                '₹'+totals.orderVal.toLocaleString('en-IN',{minimumFractionDigits:2}),''];
+                '₹'+totals.taxable.toFixed(2),'',
+                '₹'+totals.otherCh.toFixed(2),
+                '₹'+totals.orderVal.toFixed(2),''];
               printReport('Sales Orders Report',fyLabel,cols,rows,tot);
             }}
-              style={{height:34,padding:'0 12px',fontSize:12,fontFamily:F,cursor:'pointer',
-                borderRadius:6,border:'1px solid #6366f1',background:'#6366f1',color:'#fff',fontWeight:600}}>
+              style={{height:24,padding:'0 10px',alignSelf:'center',flexShrink:0,marginRight:8,cursor:'pointer',fontFamily:F,
+                fontSize:11,fontWeight:700,borderRadius:0,
+                background:'rgba(255,255,255,0.88)',color:NAV_P,border:'none'}}>
               ↓ Export
             </button>
-          </div>
-        </div>
+      </div>
 
-        {/* ── Table ── */}
-        <div style={{background:'#fff',borderRadius:10,border:'1px solid #d1d5db',
-          overflow:'auto',maxHeight:'calc(100vh - 280px)',
-          boxShadow:'0 1px 4px rgba(0,0,0,0.05)',marginBottom:14}}>
+      <style>{`.so-search-inp::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+
+      {/* ── Contextual Action Bar (shows on row select) ── */}
+      {selectedRow && (
+        <div style={{ flexShrink:0, background:`linear-gradient(90deg,#3A6186,#2A4D6E)`,
+          padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
+          boxShadow:'0 2px 6px rgba(0,0,0,0.18)' }}>
+          <span style={{fontSize:11,color:'rgba(255,255,255,0.7)'}}>▶</span>
+          <span style={{fontSize:12,fontWeight:700,color:'#fff',flex:1,
+            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+            {selectedRow.orderNo||`SO-${selectedRow.orderId}`} · {selectedRow.customerName||selectedRow.clientName||''}
+          </span>
+          {[
+            {label:'👁 View',   danger:false, action:()=>setSelected(selectedRow)},
+            {label:'✏️ Edit',   danger:false, action:()=>onEdit(selectedRow)},
+            {label:'🗑 Delete', danger:true,  action:()=>{ handleDelete(selectedRow); setSelectedRow(null); }},
+          ].map(btn => (
+            <button key={btn.label} onClick={btn.action}
+              style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+                fontWeight:700, borderRadius:5, whiteSpace:'nowrap', border:'none',
+                background:btn.danger?'rgba(220,38,38,0.35)':'rgba(255,255,255,0.18)',
+                color:'#fff' }}>
+              {btn.label}
+            </button>
+          ))}
+          <button onClick={()=>setSelectedRow(null)}
+            style={{ height:26, width:26, background:'rgba(255,255,255,0.15)', border:'none',
+              color:'#fff', borderRadius:5, cursor:'pointer', fontSize:13, flexShrink:0 }}>✕</button>
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      <div style={{background:'#fff',border:'1px solid #d1d5db',
+          overflow:'auto',flex:1,minHeight:0}}>
 
           {loading ? (
             <div style={{padding:40,textAlign:'center',color:'#6b7280',fontSize:13,fontFamily:F}}>
               Loading orders…
             </div>
           ) : (
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:1080}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,tableLayout:'fixed'}}>
+              <colgroup>
+                <col style={{width:'2.5%'}}/>
+                <col style={{width:'7.5%'}}/>
+                <col style={{width:'11%'}}/>
+                <col style={{width:'6.5%'}}/>
+                <col style={{width:'8.5%'}}/>
+                <col style={{width:'6.5%'}}/>
+                <col style={{width:'12%'}}/>
+                <col style={{width:'5%'}}/>
+                <col style={{width:'7%'}}/>
+                <col style={{width:'8%'}}/>
+                <col style={{width:'4%'}}/>
+                <col style={{width:'7%'}}/>
+                <col style={{width:'8%'}}/>
+                <col style={{width:'6.5%'}}/>
+              </colgroup>
               <thead>
                 <tr>
                   <TH>#</TH>
@@ -2525,10 +2625,9 @@ function ViewTab({ companyId, onEdit }) {
                   <TH right>Rate (₹)</TH>
                   <TH right>Taxable (₹)</TH>
                   <TH right>GST%</TH>
-                  <TH right>Other Charges (₹)</TH>
-                  <TH right>Order Value (₹)</TH>
-                  <TH>Status</TH>
-                  <TH style={{borderRight:'none'}}>Actions</TH>
+                  <TH right>Other Chg (₹)</TH>
+                  <TH right>Order Val (₹)</TH>
+                  <TH style={{borderRight:'none'}}>Status</TH>
                 </tr>
               </thead>
               <tbody>
@@ -2539,7 +2638,8 @@ function ViewTab({ companyId, onEdit }) {
                 )}
                 {tableRows.map((r, ridx) => {
                   const { o, item, rowSpan, isFirst, seq, otherCharges, orderVal } = r;
-                  const bg = seq%2===0 ? '#fff' : '#f8fbff';
+                  const isSel = selectedRow?.orderId === o.orderId;
+                  const bg = isSel ? '#EEF4FF' : seq%2===0 ? '#fff' : '#f8fbff';
                   const txAmt = item
                     ? (parseFloat(item.taxable) || (parseFloat(item.qty||item.quantity||0)*parseFloat(item.rate||item.unitPrice||0)))
                     : 0;
@@ -2548,13 +2648,20 @@ function ViewTab({ companyId, onEdit }) {
                       padding:'5px 8px', borderRight:'1px solid #d1d5db',
                       borderBottom:'1px solid #d1d5db', background:bg,
                       textAlign:right?'right':'left', verticalAlign:'middle',
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                      maxWidth:0,
+                      outline: isSel ? '2px solid #3A6186' : 'none', outlineOffset:'-1px',
                       ...extra }}>
                       {content}
                     </td>
                   ) : null;
 
                   return (
-                    <tr key={`${o.orderId}-${ridx}`}>
+                    <tr key={`${o.orderId}-${ridx}`}
+                      onClick={() => setSelectedRow(isSel ? null : o)}
+                      style={{ cursor:'pointer', transition:'background 0.1s' }}
+                      onMouseEnter={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background='#F5F8FF'); }}
+                      onMouseLeave={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background=bg); }}>
                       {C(<span style={{color:'#9ca3af',fontSize:11}}>{seq}</span>)}
                       {C(<span style={{fontWeight:700,color:'#1e293b'}}>{o.orderNo||'—'}</span>)}
                       {C(
@@ -2567,20 +2674,18 @@ function ViewTab({ companyId, onEdit }) {
                       {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.dueDate||o.deliveryDate)||'—'}</span>)}
 
                       {/* item-level cells */}
-                      <td style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151'}}>
+                      <td style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item
-                          ? <div>
-                              <div style={{fontSize:11}}>{item.description||item.name||item.itemName||'—'}</div>
-                            </div>
+                          ? <span style={{fontSize:11}}>{item.description||item.name||item.itemName||'—'}</span>
                           : <span style={{color:'#9ca3af',fontStyle:'italic',fontSize:11}}>No items</span>}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,whiteSpace:'nowrap'}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? `${parseFloat(item.qty||item.quantity||0).toFixed(2)} ${item.unit||''}`.trim() : '—'}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? fmtN(item.rate||item.unitPrice||0) : '—'}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,fontWeight:600,color:'#1e293b',fontSize:11}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,fontWeight:600,color:'#1e293b',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? fmtN(txAmt) : '—'}
                       </td>
                       <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',fontSize:11}}>
@@ -2590,35 +2695,22 @@ function ViewTab({ companyId, onEdit }) {
                       {/* order-level cols with rowspan */}
                       {rowSpan > 0 ? (
                         <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
-                          borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',verticalAlign:'middle',fontSize:11}}>
+                          borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',verticalAlign:'middle',fontSize:11,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                           {otherCharges > 0 ? fmtN(otherCharges) : '—'}
                         </td>
                       ) : null}
                       {rowSpan > 0 ? (
                         <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
-                          borderBottom:'1px solid #d1d5db',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'middle',whiteSpace:'nowrap',fontSize:11}}>
-                          ₹{orderVal.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                          borderBottom:'1px solid #d1d5db',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'middle',fontSize:11,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
+                          ₹{orderVal.toFixed(2)}
                         </td>
                       ) : null}
                       {rowSpan > 0 ? (
-                        <td rowSpan={rowSpan} style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',
                           borderBottom:'1px solid #d1d5db',background:bg,verticalAlign:'middle'}}>
                           <SoBadge s={o.status}/>
-                        </td>
-                      ) : null}
-                      {rowSpan > 0 ? (
-                        <td rowSpan={rowSpan} style={{padding:'5px 8px',borderBottom:'1px solid #d1d5db',background:bg,verticalAlign:'middle'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:3}}>
-                            <button title="View" onClick={()=>setSelected(o)}
-                              style={{width:24,height:24,borderRadius:5,border:'1px solid #d1d5db',background:'#f8fafc',
-                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>👁</button>
-                            <button title="Edit" onClick={()=>onEdit(o)}
-                              style={{width:24,height:24,borderRadius:5,border:'1px solid #d1d5db',background:'#f8fafc',
-                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>✏</button>
-                            <button title="Delete" onClick={()=>handleDelete(o)}
-                              style={{width:24,height:24,borderRadius:5,border:'1px solid #fecaca',background:'#fff5f5',
-                                cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>🗑</button>
-                          </div>
                         </td>
                       ) : null}
                     </tr>
@@ -2628,22 +2720,22 @@ function ViewTab({ companyId, onEdit }) {
               {tableRows.length > 0 && (
                 <tfoot>
                   <tr style={{background:'#eef2ff',position:'sticky',bottom:0,zIndex:2}}>
-                    <td colSpan={8} style={{padding:'7px 10px',borderTop:'2px solid #818cf8',color:'#4f46e5',fontWeight:700,fontSize:11,borderRight:'1px solid #c7d2fe'}}>
+                    <td colSpan={7} style={{padding:'7px 10px',borderTop:'2px solid #818cf8',color:'#4f46e5',fontWeight:700,fontSize:11,borderRight:'1px solid #c7d2fe'}}>
                       TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line item{tableRows.length!==1?'s':''}
                     </td>
                     <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>{totals.qty.toFixed(2)}</td>
                     <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
                     <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
-                      ₹{totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                      ₹{totals.taxable.toFixed(2)}
                     </td>
                     <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
                     <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
-                      ₹{totals.otherCh.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                      ₹{totals.otherCh.toFixed(2)}
                     </td>
                     <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#4f46e5',fontWeight:800,fontSize:12}}>
-                      ₹{totals.orderVal.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                      ₹{totals.orderVal.toFixed(2)}
                     </td>
-                    <td colSpan={2} style={{borderTop:'2px solid #818cf8'}}/>
+                    <td style={{borderTop:'2px solid #818cf8'}}/>
                   </tr>
                 </tfoot>
               )}
@@ -2651,7 +2743,6 @@ function ViewTab({ companyId, onEdit }) {
           )}
         </div>
 
-      </div>
     </div>
   );
 }
@@ -2662,7 +2753,12 @@ function PendingTab({ companyId }) {
   const [orders,   setOrders]   = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [msg,      setMsg]      = useState('');
+  const [search,   setSearch]   = useState('');
   const [selected, setSelected] = useState(null);
+  const { pathname: pPath } = useLocation();
+
+  const NAV_P  = '#3A6186';
+  const NAV_PD = '#2A4D6E';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2681,61 +2777,216 @@ function PendingTab({ companyId }) {
     } catch(e) { setMsg('Error: '+e.message); }
   };
 
-  const handleApprove = async (orderId) => {
-    await action(orderId, 'approved');
-    setSelected(null);
-  };
-  const handleReject = async (orderId) => {
-    await action(orderId, 'rejected');
-    setSelected(null);
-  };
+  const handleApprove = async (orderId) => { await action(orderId, 'approved'); setSelected(null); };
+  const handleReject  = async (orderId) => { await action(orderId, 'rejected'); setSelected(null); };
+
+  const NAV_TABS = [
+    { label:'All Sales Orders',    path:'/sales-order/view' },
+    { label:'+ Create SO',         path:'/sales-order/create', isCreate:true },
+    { label:'⏳ Pending',          path:'/sales-order/pending' },
+    { label:'📋 Proforma Invoice', path:'/proforma-invoice/view' },
+  ];
+
+  const filtered = orders.filter(o => {
+    const q = search.toLowerCase();
+    return !q || String(o.orderId).includes(q) ||
+      (o.customerName||o.party||'').toLowerCase().includes(q) ||
+      (o.orderNo||'').toLowerCase().includes(q);
+  });
+
+  const PTH = ({ children, right }) => (
+    <th style={{ padding:'6px 10px', background:NAV_P, color:'#fff', fontWeight:700,
+      fontSize:10.5, textAlign:right?'right':'left', whiteSpace:'nowrap',
+      borderRight:`1px solid ${NAV_PD}`, borderBottom:`2px solid ${NAV_PD}`,
+      position:'sticky', top:0, zIndex:2, fontFamily:F }}>
+      {children}
+    </th>
+  );
 
   return (
-    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden',fontFamily:F}}>
       {selected && <OrderModal order={selected} companyId={companyId} onClose={()=>setSelected(null)}
         onApprove={can(user,'salesOrder','approve') ? handleApprove : null}
         onReject={can(user,'salesOrder','approve') ? handleReject : null} />}
-      <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,padding:'4px 8px',display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-        <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>Pending / Draft Sales Orders — Approval Queue</span>
-        <Btn onClick={load} style={{marginLeft:'auto'}}>🔄 Refresh</Btn>
+
+      <style>{`.pt-search::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+
+      {/* ══ Combined Nav Bar ══ */}
+      <div style={{ flexShrink:0, height:40, background:NAV_P, borderBottom:`2px solid ${NAV_PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
+
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          SALES ORDERS
+        </div>
+
+        <div style={{ display:'flex', alignItems:'stretch', overflowX:'auto', flex:1,
+          scrollbarWidth:'none', msOverflowStyle:'none' }}>
+          {NAV_TABS.map(t => {
+            const isAct = pPath === t.path || pPath.startsWith(t.path+'/');
+            if (t.isCreate) return (
+              <Link key={t.path} to={t.path} style={{ display:'flex', alignItems:'center',
+                padding:'0 14px', height:26, fontSize:11, fontWeight:700, color:'#fff',
+                background: isAct ? '#047857' : '#059669', textDecoration:'none',
+                borderRadius:5, margin:'0 6px', alignSelf:'center', whiteSpace:'nowrap',
+                flexShrink:0, fontFamily:F }}>
+                {t.label}
+              </Link>
+            );
+            return (
+              <Link key={t.path} to={t.path} style={{ display:'flex', alignItems:'center', gap:4,
+                padding:'0 12px', height:'100%', fontSize:11,
+                fontWeight: isAct ? 700 : 400,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
+                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
+                textDecoration:'none',
+                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
+                marginBottom:-2, whiteSpace:'nowrap', flexShrink:0, fontFamily:F }}>
+                {t.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Count chip */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 8px',
+          borderLeft:'1px solid rgba(255,255,255,0.15)', flexShrink:0 }}>
+          <span style={{ background:'rgba(255,255,255,0.18)', color:'#fff',
+            fontSize:10.5, fontWeight:700, padding:'2px 10px', borderRadius:20,
+            whiteSpace:'nowrap', fontFamily:F }}>
+            {filtered.length} PENDING
+          </span>
+        </div>
+
+        {/* Search */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 6px',
+          borderLeft:'1px solid rgba(255,255,255,0.15)', flexShrink:0 }}>
+          <input className="pt-search" placeholder="🔍 Search order, client…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            style={{ height:26, padding:'0 8px', background:'rgba(255,255,255,0.12)',
+              border:'1px solid rgba(255,255,255,0.25)', borderRadius:0, color:'#fff',
+              fontSize:11, outline:'none', fontFamily:F, width:180 }}/>
+        </div>
+
+        {/* Refresh */}
+        <button onClick={load}
+          style={{ height:24, padding:'0 10px', alignSelf:'center', flexShrink:0,
+            marginRight:8, cursor:'pointer', fontFamily:F, fontSize:11, fontWeight:700,
+            borderRadius:0, background:'rgba(255,255,255,0.1)',
+            color:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.22)' }}>
+          ↺ Refresh
+        </button>
       </div>
-      {msg && <div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
-      <div style={{flex:1,overflow:'auto',background:W,position:'relative'}}>
+
+      {msg && (
+        <div style={{ flexShrink:0, padding:'5px 12px', fontSize:11, fontFamily:F,
+          background: msg.includes('Error') ? '#fee2e2' : '#dcfce7',
+          color: msg.includes('Error') ? '#dc2626' : '#16a34a',
+          borderBottom:'1px solid #e5e7eb' }}>
+          {msg}
+          <button onClick={()=>setMsg('')}
+            style={{ marginLeft:8, background:'none', border:'none', cursor:'pointer',
+              fontSize:11, color:'inherit', fontFamily:F }}>✕</button>
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{flex:1,overflow:'auto',background:W,border:'1px solid #d1d5db'}}>
         {loading ? <PageLoader text="Loading orders…"/> : (
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
-            <thead style={{position:'sticky',top:0,zIndex:2}}>
-              <tr style={{background:N}}>
-                {['Order ID','Date','Customer','Client PO','Total ₹','Status','Actions'].map((h,i)=>(
-                  <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,fontSize:10,textAlign:'left',borderRight:'1px solid #2a5a8a',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,tableLayout:'fixed'}}>
+            <colgroup>
+              <col style={{width:'7%'}}/><col style={{width:'8%'}}/><col style={{width:'22%'}}/>
+              <col style={{width:'8%'}}/><col style={{width:'15%'}}/><col style={{width:'10%'}}/>
+              <col style={{width:'8%'}}/><col style={{width:'22%'}}/>
+            </colgroup>
+            <thead>
+              <tr>
+                <PTH>Order ID</PTH>
+                <PTH>Order No</PTH>
+                <PTH>Client Name</PTH>
+                <PTH>Date</PTH>
+                <PTH>Client PO</PTH>
+                <PTH right>Total (₹)</PTH>
+                <PTH>Status</PTH>
+                <PTH>Actions</PTH>
               </tr>
             </thead>
             <tbody>
-              {orders.length===0 && <tr><td colSpan={7} style={{padding:'18px',textAlign:'center',color:'#666',fontFamily:F}}>No pending orders</td></tr>}
-              {orders.map((o,i)=>(
-                <tr key={o.orderId} style={{background:i%2===0?W:'#f5f8fc',cursor:'pointer'}}
-                  onClick={()=>setSelected(o)}
-                  onMouseEnter={e=>(e.currentTarget.style.background='#d0e4f8')}
-                  onMouseLeave={e=>(e.currentTarget.style.background=i%2===0?W:'#f5f8fc')}>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.orderId}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{o.orderDate||o.date||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700}}>{o.customerName||o.party||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>{o.customerPO||o.reference||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',textAlign:'right',fontWeight:700}}>{fmt(o.grandTotal)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}><Badge s={o.status}/></td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}} onClick={e=>e.stopPropagation()}>
-                    <div style={{display:'flex',gap:4}}>
-                      <Btn small onClick={()=>setSelected(o)}>👁 View</Btn>
-                      {can(user,'salesOrder','approve') && <Btn v="suc" small onClick={()=>action(o.orderId,'approved')}>✔ Approve</Btn>}
-                      {can(user,'salesOrder','approve') && <Btn v="dan" small onClick={()=>action(o.orderId,'rejected')}>✕ Reject</Btn>}
-                    </div>
+              {filtered.length===0 && (
+                <tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:'#9ca3af',fontFamily:F,fontSize:13}}>
+                  {search ? 'No orders match your search.' : 'No pending or draft orders.'}
+                </td></tr>
+              )}
+              {filtered.map((o,i)=>{
+                const bg = i%2===0 ? W : '#f8fbff';
+                const cell = (content, right=false, extra={}) => (
+                  <td style={{padding:'6px 10px',borderRight:'1px solid #d1d5db',
+                    borderBottom:'1px solid #e5e7eb',background:bg,
+                    textAlign:right?'right':'left',verticalAlign:'middle',
+                    overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                    maxWidth:0,...extra}}>
+                    {content}
                   </td>
-                </tr>
-              ))}
+                );
+                return (
+                  <tr key={o.orderId} style={{cursor:'pointer',transition:'background 0.1s'}}
+                    onClick={()=>setSelected(o)}
+                    onMouseEnter={e=>[...e.currentTarget.cells].forEach(c=>c.style.background='#F0F4FF')}
+                    onMouseLeave={e=>[...e.currentTarget.cells].forEach(c=>c.style.background=bg)}>
+                    {cell(<span style={{fontWeight:700,color:NAV_P}}>{o.orderId}</span>)}
+                    {cell(<span style={{fontWeight:600,color:'#1e293b'}}>{o.orderNo||'—'}</span>)}
+                    {cell(<span style={{fontWeight:600,color:'#111827'}}>{o.customerName||o.party||'—'}</span>)}
+                    {cell(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.orderDate||o.date)}</span>)}
+                    {cell(<span style={{color:'#6b7280'}}>{o.customerPO||o.reference||'—'}</span>)}
+                    {cell(<strong style={{color:'#1e293b'}}>{fmt(o.grandTotal)}</strong>, true)}
+                    <td style={{padding:'6px 10px',borderRight:'1px solid #d1d5db',
+                      borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'middle'}}>
+                      <Badge s={o.status}/>
+                    </td>
+                    <td style={{padding:'4px 8px',borderBottom:'1px solid #e5e7eb',background:bg,
+                      verticalAlign:'middle'}} onClick={e=>e.stopPropagation()}>
+                      <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+                        <button onClick={()=>setSelected(o)}
+                          style={{padding:'3px 10px',fontSize:10.5,fontWeight:600,fontFamily:F,
+                            cursor:'pointer',border:`1px solid ${NAV_P}`,borderRadius:4,
+                            background:'#fff',color:NAV_P}}>
+                          👁 View
+                        </button>
+                        {can(user,'salesOrder','approve') && (
+                          <button onClick={()=>action(o.orderId,'approved')}
+                            style={{padding:'3px 10px',fontSize:10.5,fontWeight:600,fontFamily:F,
+                              cursor:'pointer',border:'1px solid #16a34a',borderRadius:4,
+                              background:'#fff',color:'#16a34a'}}>
+                            ✓ Approve
+                          </button>
+                        )}
+                        {can(user,'salesOrder','approve') && (
+                          <button onClick={()=>action(o.orderId,'rejected')}
+                            style={{padding:'3px 10px',fontSize:10.5,fontWeight:600,fontFamily:F,
+                              cursor:'pointer',border:'1px solid #ef4444',borderRadius:4,
+                              background:'#fff',color:'#ef4444'}}>
+                            ✕ Reject
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Footer */}
+      {!loading && (
+        <div style={{flexShrink:0,padding:'5px 12px',background:'#f1f5f9',
+          borderTop:'1px solid #e2e8f0',fontSize:11,color:'#6b7280',fontFamily:F}}>
+          Showing {filtered.length} of {orders.length} pending / draft orders
+        </div>
+      )}
     </div>
   );
 }
@@ -3001,9 +3252,7 @@ export default function SalesOrderModule() {
       display:'flex', flexDirection:'column', fontFamily:F, background:'#fff',
       /* create tab: fixed height + overflow:hidden so bottom action bar stays sticky */
       /* view/pending tabs: min-height only — scrolling handled by parent .content-area */
-      ...(tab==='create'
-        ? { height:'100%', overflow:'hidden' }
-        : { minHeight:'100%' }),
+      height:'100%', overflow:'hidden',
     }}>
 
 

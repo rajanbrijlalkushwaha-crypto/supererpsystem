@@ -8,7 +8,7 @@ const P   = '#104f4f';
 const PD  = '#0b3d3d';
 const BD  = '#E5EAF2';
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
-const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n)||0).toFixed(2);
 
 const getOrderTotal = (o) => {
   if (!o) return 0;

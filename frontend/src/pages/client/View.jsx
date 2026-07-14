@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { printClientDetails } from '../../utils/printClient';
 import { useCompany } from '../../context/CompanyContext';
 import ActivityDrawer from '../../components/ActivityDrawer';
 
-const P  = '#104f4f';
-const PD = '#1A56D6';
+const P  = '#3A6186';
+const PD = '#2A4D6E';
 const BG = '#F5F7FB';
 const BD = '#E5EAF2';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -77,7 +77,7 @@ function ClientDetailModal({ client, onClose, onEdit, company }) {
             <Field label="Address"        value={client.address || client.billingAddr} />
             <Field label="Pincode"        value={client.pincode} />
             <Field label="Payment Terms"  value={client.paymentTerms} />
-            <Field label="Credit Limit"   value={client.creditLimit ? `₹${Number(client.creditLimit).toLocaleString('en-IN')}` : ''} />
+            <Field label="Credit Limit"   value={client.creditLimit ? `₹${Number(client.creditLimit).toFixed(2)}` : ''} />
           </div>
         </div>
         <div style={{ padding:'10px 20px', borderTop:`1px solid ${BD}`,
@@ -113,6 +113,7 @@ const ViewClients = () => {
   const [viewClient,  setViewClient]  = useState(null);
   const [activityRec, setActivityRec] = useState(null);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { selectedCompany } = useCompany();
 
   useEffect(() => { fetchClients(); }, [selectedCompany]);
@@ -161,10 +162,10 @@ const ViewClients = () => {
   const activeClient = selectedId ? filtered.find(c => c.clientId === selectedId) : null;
 
   const kpis = [
-    { label:'Total',    value: clients.length,                                          color:P,        fk:'all'      },
-    { label:'Approved', value: clients.filter(c => c.status === 'approved').length,    color:'#059669', fk:'approved' },
-    { label:'Pending',  value: clients.filter(c => c.status === 'pending').length,     color:'#D97706', fk:'pending'  },
-    { label:'Draft',    value: clients.filter(c => !c.status||c.status==='draft').length, color:'#6366F1', fk:'draft' },
+    { label:'Total',    value: clients.length,                                             color:'#fff',    fk:'all'      },
+    { label:'Approved', value: clients.filter(c => c.status === 'approved').length,        color:'#4ade80', fk:'approved' },
+    { label:'Pending',  value: clients.filter(c => c.status === 'pending').length,         color:'#fbbf24', fk:'pending'  },
+    { label:'Draft',    value: clients.filter(c => !c.status||c.status==='draft').length,  color:'#a78bfa', fk:'draft'    },
   ];
 
   if (loading) return (
@@ -176,6 +177,7 @@ const ViewClients = () => {
 
   return (
     <div style={{ background:BG, fontFamily:F, display:'flex', flexDirection:'column', height:'100%' }}>
+      <style>{`.cv-search::placeholder{color:rgba(255,255,255,0.45)}`}</style>
 
       {viewClient && (
         <ClientDetailModal
@@ -185,68 +187,121 @@ const ViewClients = () => {
         />
       )}
 
-      {/* ── KPI strip + Refresh (replaces the big header) ── */}
-      <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`,
-        display:'flex', alignItems:'stretch' }}>
-        {kpis.map((k, i) => (
-          <div key={i} onClick={() => setFilter(filter === k.fk ? 'all' : k.fk)}
-            style={{ flex:1, padding:'6px 14px', borderRight: i < 3 ? `1px solid ${BD}` : 'none',
-              cursor:'pointer', transition:'background 0.12s',
-              background: filter === k.fk ? '#EEF4FF' : '#fff',
-              borderBottom: filter === k.fk ? `2px solid ${k.color}` : '2px solid transparent',
-              display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ fontSize:20, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</div>
-            <div style={{ fontSize:10, color: filter === k.fk ? k.color : '#6B7280',
-              fontWeight:700, textTransform:'uppercase', letterSpacing:'0.3px' }}>{k.label}</div>
-          </div>
-        ))}
-        {/* Refresh button pinned right */}
-        <div style={{ display:'flex', alignItems:'center', padding:'0 12px', borderLeft:`1px solid ${BD}` }}>
-          <button onClick={fetchClients}
-            style={{ height:28, padding:'0 12px', fontSize:11, fontFamily:F, cursor:'pointer',
-              background:'#EEF4FF', color:P, border:`1px solid #BFDBFE`,
-              borderRadius:6, fontWeight:700 }}>↻ Refresh</button>
-        </div>
-      </div>
+      {/* ══ Combined nav + toolbar — single row, matches main nav colour ══ */}
+      <div style={{ flexShrink:0, height:40, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
 
-      {/* ── Toolbar ── */}
-      <div style={{ flexShrink:0, padding:'7px 14px', background:'#fff',
-        borderBottom:`1px solid ${BD}`, display:'flex', gap:8, alignItems:'center' }}>
-        <div style={{ position:'relative', flex:1, maxWidth:320 }}>
-          <span style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)',
-            fontSize:12, color:'#9CA3AF' }}>🔍</span>
+        {/* Section label */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          CLIENTS
+        </div>
+
+        {/* + Create Client */}
+        <button onClick={() => navigate('/client-sap')}
+          style={{ display:'flex', alignItems:'center', padding:'0 14px', height:'100%',
+            fontSize:11.5, fontWeight:700, color:'#fff', background:'#059669',
+            border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+            margin:'auto 6px', borderRadius:5, height:26 }}
+          onMouseEnter={e => { e.currentTarget.style.background='#047857'; }}
+          onMouseLeave={e => { e.currentTarget.style.background='#059669'; }}>
+          + Create Client
+        </button>
+
+        {/* View Clients tab */}
+        {[
+          { label:'👥 View Clients', path:'/client/view' },
+          { label:'⏳ Pending',      path:'/client/pending' },
+        ].map(tab => {
+          const isAct = pathname === tab.path;
+          return (
+            <button key={tab.path} onClick={() => navigate(tab.path)}
+              style={{ display:'flex', alignItems:'center', padding:'0 11px', height:'100%',
+                fontSize:11.5, fontWeight: isAct ? 700 : 400, border:'none', cursor:'pointer',
+                whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
+                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
+                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
+                marginBottom: -2 }}
+              onMouseEnter={e => { if (!isAct) e.currentTarget.style.background='rgba(255,255,255,0.08)'; }}
+              onMouseLeave={e => { if (!isAct) e.currentTarget.style.background='transparent'; }}>
+              {tab.label}
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 6px' }} />
+
+        {/* Count chips */}
+        {kpis.map((k, i) => (
+          <button key={i} onClick={() => setFilter(filter === k.fk ? 'all' : k.fk)}
+            style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'0 8px', height:24,
+              alignSelf:'center', borderRadius:20, cursor:'pointer', fontFamily:F, flexShrink:0,
+              transition:'all 0.12s', marginRight:3,
+              border: filter === k.fk ? '1.5px solid rgba(255,255,255,0.85)' : '1.5px solid rgba(255,255,255,0.22)',
+              background: filter === k.fk ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.07)' }}>
+            <span style={{ fontSize:11.5, fontWeight:800, color:k.color, lineHeight:1 }}>{k.value}</span>
+            <span style={{ fontSize:8.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.4px',
+              color: filter === k.fk ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.5)' }}>{k.label}</span>
+          </button>
+        ))}
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 6px' }} />
+
+        {/* Search */}
+        <div style={{ position:'relative', flex:1, minWidth:140, maxWidth:260, alignSelf:'center' }}>
+          <span style={{ position:'absolute', left:7, top:'50%', transform:'translateY(-50%)',
+            fontSize:11, color:'rgba(255,255,255,0.45)', pointerEvents:'none' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name, ID, GSTIN, city…"
-            style={{ width:'100%', height:30, paddingLeft:26, paddingRight:8,
-              border:`1px solid ${BD}`, borderRadius:6, fontSize:12, fontFamily:F,
-              outline:'none', background:'#F9FAFB', color:'#1F2937', boxSizing:'border-box' }} />
+            className="cv-search"
+            style={{ width:'100%', height:26, paddingLeft:23, paddingRight: search ? 22 : 8,
+              border:'1px solid rgba(255,255,255,0.22)', borderRadius:6, fontSize:11, fontFamily:F,
+              outline:'none', background:'rgba(255,255,255,0.1)', color:'#fff', boxSizing:'border-box' }} />
           {search && (
             <button onClick={() => setSearch('')}
-              style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)',
-                background:'none', border:'none', cursor:'pointer', color:'#9CA3AF', fontSize:13, padding:0 }}>✕</button>
+              style={{ position:'absolute', right:5, top:'50%', transform:'translateY(-50%)',
+                background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.55)',
+                fontSize:12, padding:0, lineHeight:1 }}>✕</button>
           )}
         </div>
-        {fyList.length > 0 && (
-          <div style={{ display:'flex', gap:4, alignItems:'center', flexShrink:0 }}>
-            {['all', ...fyList].map(f => (
-              <button key={f} onClick={() => setFy(f)}
-                style={{ height:28, padding:'0 10px', borderRadius:6, border:`1px solid ${fy===f ? P : BD}`, background: fy===f ? P : '#fff', color: fy===f ? '#fff' : '#374151', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap' }}>
-                {f === 'all' ? 'All FY' : `FY ${f}`}
-              </button>
-            ))}
-          </div>
-        )}
-        <button onClick={() => navigate('/client-sap')}
-          style={{ height:30, padding:'0 14px', fontSize:12, fontFamily:F, cursor:'pointer',
-            background:'#12B76A', color:'#fff', border:'none', borderRadius:6,
-            fontWeight:700, flexShrink:0 }}>+ Create Client</button>
-        <div style={{ marginLeft:'auto', fontSize:11, color:'#6B7280' }}>
-          {filtered.length} / {clients.length}
-        </div>
+
+        {/* FY buttons */}
+        {['all', ...fyList].map(f => (
+          <button key={f} onClick={() => setFy(f)}
+            style={{ height:24, padding:'0 9px', borderRadius:6, flexShrink:0, alignSelf:'center',
+              marginLeft:4, cursor:'pointer', fontFamily:F, whiteSpace:'nowrap', fontSize:11, fontWeight:700,
+              border: fy===f ? '1.5px solid rgba(255,255,255,0.88)' : '1px solid rgba(255,255,255,0.22)',
+              background: fy===f ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.07)',
+              color: fy===f ? P : 'rgba(255,255,255,0.8)' }}>
+            {f === 'all' ? 'All FY' : `FY ${f}`}
+          </button>
+        ))}
+
+        {/* Count */}
+        <span style={{ fontSize:10, color:'rgba(255,255,255,0.5)', alignSelf:'center',
+          flexShrink:0, whiteSpace:'nowrap', margin:'0 8px' }}>
+          {filtered.length}/{clients.length}
+        </span>
+
+        {/* Refresh */}
+        <button onClick={fetchClients}
+          style={{ display:'flex', alignItems:'center', gap:4, height:24, padding:'0 10px',
+            alignSelf:'center', marginRight:8, flexShrink:0, cursor:'pointer', fontFamily:F,
+            fontSize:11, fontWeight:700, borderRadius:6,
+            background:'rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.88)',
+            border:'1px solid rgba(255,255,255,0.22)' }}>
+          ↻ Refresh
+        </button>
       </div>
 
       {message && (
-        <div style={{ flexShrink:0, margin:'6px 14px 0', padding:'6px 12px', fontSize:12, fontFamily:F,
+        <div style={{ flexShrink:0, padding:'5px 12px', fontSize:12, fontFamily:F,
+          borderBottom:`1px solid ${BD}`,
           background: message.includes('Error') ? '#FEF2F2' : '#ECFDF5',
           color: message.includes('Error') ? '#DC2626' : '#059669',
           border:`1px solid ${message.includes('Error') ? '#FECACA' : '#A7F3D0'}`,
@@ -259,10 +314,10 @@ const ViewClients = () => {
 
       {/* ── Contextual Action Bar ── */}
       {activeClient && (
-        <div style={{ flexShrink:0, margin:'6px 14px 0',
-          background:'linear-gradient(90deg,#104f4f,#104f4f)', borderRadius:7,
+        <div style={{ flexShrink:0,
+          background:`linear-gradient(90deg,${P},${PD})`,
           padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
-          boxShadow:'0 2px 8px rgba(37,99,235,0.25)' }}>
+          boxShadow:'0 2px 6px rgba(0,0,0,0.18)' }}>
           <span style={{ fontSize:11, color:'rgba(255,255,255,0.8)' }}>▶</span>
           <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1,
             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -289,15 +344,14 @@ const ViewClients = () => {
       )}
 
       {/* ── Scrollable Table Area ── */}
-      <div style={{ flex:1, overflow:'auto', padding:'8px 14px 14px' }}>
+      <div style={{ flex:1, overflow:'auto' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign:'center', padding:'50px 20px', color:'#9CA3AF', fontSize:13,
-            background:'#fff', borderRadius:8, border:`1px solid ${BD}` }}>
+            background:'#fff', border:`1px solid ${BD}` }}>
             {search ? `No clients match "${search}"` : 'No clients found. Click [+ Create Client] to add one.'}
           </div>
         ) : (
-          <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`,
-            boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ background:'#fff' }}>
             <table style={{ width:'100%', minWidth:750, borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
                 <thead>
                   <tr>

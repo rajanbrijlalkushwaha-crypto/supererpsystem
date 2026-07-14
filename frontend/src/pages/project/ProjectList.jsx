@@ -1,6 +1,6 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 import * as XLSX from 'xlsx';
 
@@ -11,7 +11,7 @@ const BD  = '#c8d4e8';
 
 const getFY = d => { const dt=d?new Date(d):new Date(); const m=dt.getMonth()+1; const y=dt.getFullYear(); const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 
-const fmt   = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt   = n => (parseFloat(n)||0).toFixed(2);
 const fmtI  = n => { const v=parseFloat(n)||0; return v===0?'0':String(Math.round(v*100)/100); };
 const fmtD  = d => {
   if (!d) return '—';
@@ -76,7 +76,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
     if (tab !== 'expense' || expLoaded || !cid) return;
     setExpLoading(true);
     axios.get(`/api/accounts/expenses?companyId=${cid}`)
-      .then(r => setExpenses(r.data||[]))
+      .then(r => setExpenses((r.data||[]).filter(e => String(e.soId||e.orderId||'') === String(so?.orderId||''))))
       .catch(()=>setExpenses([]))
       .finally(()=>{ setExpLoading(false); setExpLoaded(true); });
   }, [tab, cid, expLoaded]);
@@ -99,10 +99,13 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
   const PG2 = '#1a6600';
   const PA  = '#7c3800';
 
+  const soDocCount  = (so?.attachments||[]).length;
+  const poDocCount  = (pos||[]).reduce((s,p)=>s+(p?.attachments||[]).length,0);
   const TABS = [
-    { key:'so',      label:'📋 Sales Order',               color:PB  },
-    { key:'po',      label:`🛒 Purchase Orders (${(pos||[]).length})`, color:PG2 },
-    { key:'expense', label:'💸 Expenses',                  color:PA  },
+    { key:'so',      label:'📋 Sales Order',                                       color:PB        },
+    { key:'po',      label:`🛒 Purchase Orders (${(pos||[]).length})`,              color:PG2       },
+    { key:'expense', label:'💸 Expenses',                                           color:PA        },
+    { key:'docs',    label:`📎 Docs${soDocCount+poDocCount>0?` (${soDocCount+poDocCount})`:''}`,  color:'#7c3aed' },
   ];
 
   const KV = ({ label, val, bold, color }) => (
@@ -510,7 +513,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
                       maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {ex.description||'—'}
                     </td>
-                    <td style={{ padding:'5px 9px', borderBottom:'1px solid #f5e8d0' }}>{ex.vendor||'—'}</td>
+                    <td style={{ padding:'5px 9px', borderBottom:'1px solid #f5e8d0' }}>{ex.vendorName||ex.vendor||ex.ledgerName||'—'}</td>
                     <td style={{ padding:'5px 9px', borderBottom:'1px solid #f5e8d0' }}>{ex.paymentMode||'—'}</td>
                     <td style={{ padding:'5px 9px', borderBottom:'1px solid #f5e8d0', textAlign:'right',
                       fontWeight:700, color:PA, fontSize:12 }}>₹{fmt(ex.grandTotal||ex.amount||0)}</td>
@@ -532,6 +535,75 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
             </table>
           </div>
         )}
+      </div>
+    );
+  };
+
+  /* ── Docs tab ── */
+  const renderDocs = () => {
+    const PV = '#7c3aed';
+    const soAtts = so?.attachments || [];
+    const poAtts = (pos||[]).flatMap(po =>
+      (po?.attachments||[]).map(a => ({ ...a, _poNo:po.poNo||po.poNumber||po.orderId, _poId:po.orderId }))
+    );
+    const allDocs = [
+      ...soAtts.map(a => ({ ...a, _source:`SO: ${so.orderNo||so.orderId}`, _orderId:so.orderId, _api:'sales-orders' })),
+      ...poAtts.map(a => ({ ...a, _source:`PO: ${a._poNo}`, _orderId:a._poId, _api:'purchase-orders' })),
+    ];
+    if (allDocs.length === 0) return (
+      <div style={{ padding:50, textAlign:'center', color:'#aaa', fontSize:13, fontStyle:'italic' }}>
+        No documents attached to this order or its purchase orders.
+      </div>
+    );
+    return (
+      <div style={{ padding:'16px 20px' }}>
+        <div style={{ fontSize:11, color:'#6b7280', marginBottom:12 }}>
+          {soAtts.length} SO doc{soAtts.length!==1?'s':''} &nbsp;·&nbsp; {poAtts.length} PO doc{poAtts.length!==1?'s':''}
+        </div>
+        {allDocs.map((a, i) => {
+          const fileName = a.fileName || a.name || '';
+          const ext = (fileName.split('.').pop()||'').toLowerCase();
+          const isPdf = ext==='pdf', isImg=/^(png|jpg|jpeg|gif|bmp|webp)$/.test(ext);
+          const isWord = ext==='docx'||ext==='doc', isExcel=ext==='xlsx'||ext==='xls';
+          const fileIcon = isPdf?'📄':isImg?'🖼️':isWord?'📝':isExcel?'📊':'📎';
+          const fileType = isPdf?'PDF':isImg?'Image':isWord?'Word':isExcel?'Excel':'File';
+          const dlUrl = cid && a._orderId && fileName
+            ? `/api/${a._api}/${a._orderId}/download/${encodeURIComponent(fileName)}?companyId=${cid}`
+            : null;
+          return (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
+              background:'#f5f3ff', border:'1px solid #ddd6fe', borderLeft:`4px solid ${PV}`,
+              borderRadius:5, marginBottom:8 }}>
+              <span style={{ background:PV, color:'#fff', borderRadius:'50%', width:22, height:22,
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:10,
+                fontWeight:700, flexShrink:0 }}>{i+1}</span>
+              <span style={{ fontSize:16, flexShrink:0 }}>{fileIcon}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#4c1d95', overflow:'hidden',
+                  textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {a.name||fileName||`Document ${i+1}`}
+                </div>
+                <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{fileType} · {a._source}</div>
+              </div>
+              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                {dlUrl && (
+                  <a href={dlUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ background:PV, color:'#fff', padding:'4px 12px', fontSize:10,
+                      fontWeight:700, textDecoration:'none', borderRadius:4 }}>
+                    👁 View
+                  </a>
+                )}
+                {dlUrl && (
+                  <a href={dlUrl} download target="_blank" rel="noopener noreferrer"
+                    style={{ background:'#f5f3ff', color:PV, padding:'4px 12px', fontSize:10,
+                      fontWeight:700, textDecoration:'none', borderRadius:4, border:`1px solid ${PV}40` }}>
+                    ⬇ Download
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -588,6 +660,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
           {tab==='so'      && renderSO()}
           {tab==='po'      && renderPO()}
           {tab==='expense' && renderExpense()}
+          {tab==='docs'    && renderDocs()}
         </div>
       </div>
     </div>
@@ -956,6 +1029,7 @@ export default function ProjectList() {
   const { selectedCompany } = useCompany();
   const cid      = selectedCompany?.companyId;
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const [salesOrders,    setSalesOrders]    = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -973,19 +1047,26 @@ export default function ProjectList() {
   const [modal,          setModal]          = useState(null); // {type:'so'|'po', order}
   const [rowModal,       setRowModal]       = useState(null); // {so, po, poBill, soDue, poDue}
   const [editingId,      setEditingId]      = useState(null); // { soId, value } — inline order-no edit
-  const tableRef = useRef(null);
+  const tableRef   = useRef(null);
+  const prefLoaded = useRef(false);
   const onRowEnter = useCallback((soId) => {
     if (!tableRef.current) return;
-    tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`).forEach(td => td.classList.add('row-hov'));
+    const tds = tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`);
+    tds.forEach(td => td.classList.add('row-hov'));
   }, []);
   const onRowLeave = useCallback((soId) => {
     if (!tableRef.current) return;
-    tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`).forEach(td => td.classList.remove('row-hov'));
+    const tds = tableRef.current.querySelectorAll(`tr[data-soid="${soId}"] td`);
+    tds.forEach(td => td.classList.remove('row-hov'));
   }, []);
-  const [hiddenCols, setHiddenCols] = useState(
-    new Set(['so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc','po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc',
-             'exp_mode','exp_gstPct','exp_gstAmt'])
-  );
+  const DEFAULT_HIDDEN = new Set([
+    'so_pnf','so_transport','so_billDate','so_orderDesc','so_itemDesc',
+    'so_billAmt','so_duesBill',
+    'po_otherChg','po_purchDate','po_purchNo','po_amount','po_gstStatus','po_poDesc','po_itemDesc',
+    'po_billAmt','po_duesBill',
+    'exp_mode','exp_gstPct','exp_gstAmt',
+  ]);
+  const [hiddenCols, setHiddenCols] = useState(DEFAULT_HIDDEN);
   const [colPanelOpen, setColPanelOpen] = useState(false);
   const [colPanelTab,  setColPanelTab]  = useState('so');
   const cv  = key => !hiddenCols.has(key);
@@ -1000,6 +1081,7 @@ export default function ProjectList() {
     { key:'so_taxable',   label:'Taxable'    }, { key:'so_gstPct',    label:'GST%'      },
     { key:'so_gstAmt',    label:'GST Amt'    }, { key:'so_ov',        label:'Order Val' },
     { key:'so_receipt',   label:'Receipt'    }, { key:'so_dues',      label:'Dues'      },
+    { key:'so_billAmt',   label:'Bill Amt'   }, { key:'so_duesBill', label:'Dues(Bill)'  },
     { key:'so_billDate',  label:'Bill Date'  }, { key:'so_billNo',    label:'Bill No'   },
     { key:'so_status',    label:'Status'     },
   ];
@@ -1011,7 +1093,8 @@ export default function ProjectList() {
     { key:'po_otherChg',  label:'Other Chg'  }, { key:'po_taxable',   label:'Taxable'   },
     { key:'po_gstPct',    label:'GST%'       }, { key:'po_gstAmt',    label:'GST Amt'   },
     { key:'po_ov',        label:'Order Val'  }, { key:'po_payment',   label:'Payment'   },
-    { key:'po_dues',      label:'PO Dues'    }, { key:'po_purchDate', label:'Purch Date' },
+    { key:'po_dues',      label:'PO Dues'    }, { key:'po_billAmt',   label:'Bill Amt'   },
+    { key:'po_duesBill', label:'Dues(Bill)'  }, { key:'po_purchDate', label:'Purch Date' },
     { key:'po_purchNo',   label:'Purch No'   }, { key:'po_amount',    label:'Amount'    },
     { key:'po_gstStatus', label:'GST Status' },
   ];
@@ -1051,6 +1134,24 @@ export default function ProjectList() {
   }, [cid]);
 
   useEffect(() => { load(); }, [load]);
+
+  /* ── Persist column/FY preferences per company ── */
+  useEffect(() => {
+    if (!cid || prefLoaded.current) return;
+    prefLoaded.current = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`ep_jobcode_${cid}`) || '{}');
+      if (saved.fy) setFy(saved.fy);
+      if (Array.isArray(saved.hiddenCols)) setHiddenCols(new Set(saved.hiddenCols));
+    } catch {}
+  }, [cid]);
+
+  useEffect(() => {
+    if (!cid || !prefLoaded.current) return;
+    try {
+      localStorage.setItem(`ep_jobcode_${cid}`, JSON.stringify({ fy, hiddenCols:[...hiddenCols] }));
+    } catch {}
+  }, [cid, fy, hiddenCols]);
 
   /* ── Save inline order-no edit ── */
   const saveOrderNo = async (so, newVal) => {
@@ -1104,13 +1205,17 @@ export default function ProjectList() {
         (o.customerName||o.clientName||'').toLowerCase().includes(q) ||
         String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q));
     }
-    return list;
+    return [...list].sort((a, b) => {
+      const da = new Date(a.orderDate||a.date||0).getTime();
+      const db = new Date(b.orderDate||b.date||0).getTime();
+      return db - da;
+    });
   }, [salesOrders, fy, search]);
 
   /* ── Build flat rows ── */
   const expByOrderId = {};
   for (const ex of expenses) {
-    const k = String(ex.orderId || '');
+    const k = String(ex.soId || ex.orderId || '');
     if (!k) continue;
     if (!expByOrderId[k]) expByOrderId[k] = [];
     expByOrderId[k].push(ex);
@@ -1118,7 +1223,9 @@ export default function ProjectList() {
 
   const allRows = [];
   const GT = { soTotal:0, pnf:0, transport:0, soTaxable:0, soGst:0, soOV:0, receipt:0, dues:0,
+               soGTtotal:0, soBillAmt:0,
                poTotal:0, otherC:0, poTaxable:0, poGst:0, poOV:0, payment:0, poDues:0,
+               poGTtotal:0, poBillAmt:0,
                expTotal:0, expGst:0, expCount:0 };
 
   for (const so of filteredSOs) {
@@ -1131,6 +1238,9 @@ export default function ProjectList() {
     const salesBill = getSalesBill(so);
     const receipt   = soDue ? parseFloat(soDue.received||soDue.totalPaid)||0 : 0;
     const soBalance = soDue ? parseFloat(soDue.due||soDue.balance)||0 : 0;
+
+    GT.soBillAmt += parseFloat(salesBill?.grandTotal||0);
+    GT.soGTtotal += parseFloat(so.grandTotal||so.amount||0);
 
     // GT — SO level (once per SO)
     GT.pnf       += pnf;
@@ -1156,8 +1266,11 @@ export default function ProjectList() {
     // GT — PO level (once per PO)
     poList.forEach(po => {
       if (!po) return;
-      const poDue  = getPODue(po);
-      const otherC = (parseFloat(po.packingCharges)||0)+(parseFloat(po.freightCharges)||0);
+      const poDue   = getPODue(po);
+      const poBill_ = getPOBill(po);
+      const otherC  = (parseFloat(po.packingCharges)||0)+(parseFloat(po.freightCharges)||0);
+      GT.poBillAmt += parseFloat(poBill_?.grandTotal||0);
+      GT.poGTtotal += parseFloat(po.grandTotal||po.amount||0);
       GT.otherC  += otherC;
       GT.payment += poDue ? parseFloat(poDue.paid||poDue.totalPaid)||0 : 0;
       GT.poDues  += poDue ? parseFloat(poDue.due||poDue.balance)||0 : 0;
@@ -1206,7 +1319,7 @@ export default function ProjectList() {
 
         allRows.push({
           key:`${so.orderId}-${pb}-${i}`,
-          isFirst:isSOFirst, isLast:isSOLast, rowCount:soTotalRows,  // keep for compat
+          isFirst:isSOFirst, isLast:isSOLast, rowCount:soTotalRows,
           isSOFirst, isSOLast, isPOFirst,
           soRowCount:soTotalRows, poBlockSize,
           so, soItem:soIt, soBase, soGst, soOV,
@@ -1220,6 +1333,31 @@ export default function ProjectList() {
         });
         absIdx++;
       }
+    }
+
+    /* ── Tail rows: when expenses or SO items exceed the total PO rows, generate
+       extra rows so the rowSpan on SO-level cells matches the rows we actually
+       produce. Without these, the rowSpan overflows into the next SO's rows and
+       shifts its cells into the wrong columns. ── */
+    while (absIdx < soTotalRows) {
+      const soIt     = soItems[absIdx] || null;
+      const isSOLast = absIdx === soTotalRows - 1;
+      const soBase   = soIt ? soIt.qty*soIt.rate : 0;
+      const soGst    = soBase*(soIt?soIt.gst:0)/100;
+      allRows.push({
+        key:`${so.orderId}-tail-${absIdx}`,
+        isFirst:false, isLast:isSOLast, rowCount:soTotalRows,
+        isSOFirst:false, isSOLast, isPOFirst:false,
+        soRowCount:soTotalRows, poBlockSize:0,
+        so, soItem:soIt, soBase, soGst, soOV:soBase+soGst,
+        pnf:0, transport:0,
+        po:null, poItem:null, poBase:0, poTaxable:0, poGst:0, poOV:0, otherC:0,
+        receipt, soBalance, payment:0, poBalance:0,
+        soDue, poDue:null,
+        poBill:null, salesBill:null,
+        expItem: soExps2[absIdx] || null,
+      });
+      absIdx++;
     }
   }
 
@@ -1261,125 +1399,85 @@ export default function ProjectList() {
 
   if (!cid) return null;
 
-  return (
-    <div style={{ fontFamily:F, fontSize:11, padding:8 }}>
-      <style>{`
-        .proj-row td { transition: background-color 0.28s ease; }
-        .proj-row td.row-hov { background-color: #dbeafe !important; }
-      `}</style>
+  const doExportOrders = () => {
+    const co = selectedCompany?.companyName || '';
+    const wb = XLSX.utils.book_new();
+    const soHdr = ['Order ID','Client Name','Order Date','Client PO No','Due Date',
+      'Product','Qty','Rate (₹)','Base Amt (₹)','P&F (₹)','Transport (₹)','Taxable (₹)',
+      'GST %','GST Amt (₹)','Order Value (₹)','Receipt (₹)','Dues (₹)',
+      'Sales Bill No','Sales Bill Date','SO Status'];
+    const poHdr = ['Vendor','PO Date','PO No','PO Product','PO Qty','PO Rate (₹)',
+      'PO Base (₹)','Other Charges (₹)','PO Taxable (₹)','PO GST %','PO GST Amt (₹)',
+      'PO Order Value (₹)','Payment (₹)','PO Dues (₹)',
+      'Bill No','Bill Date','Bill Amount (₹)','GST Type'];
+    const dataRows = allRows.map(row => [
+      row.so?.orderNo || `SO-${row.so?.orderId}` || '',
+      row.so?.customerName || row.so?.clientName || '',
+      row.so?.orderDate || row.so?.date || '',
+      row.so?.customerPO || '',
+      row.so?.dueDate || row.so?.deliveryDate || '',
+      row.soItem?.name || '',
+      row.soItem?.qty || '',
+      row.soItem?.rate || '',
+      parseFloat(row.soBase) || 0,
+      row.pnf || 0,
+      row.transport || 0,
+      parseFloat(row.soBase) || 0,
+      row.soItem?.gst || 0,
+      parseFloat(row.soGst) || 0,
+      parseFloat(row.soOV) || 0,
+      parseFloat(row.receipt) || 0,
+      parseFloat(row.soBalance) || 0,
+      row.salesBill?.billNo || '',
+      row.salesBill?.billDate || '',
+      row.so?.status || '',
+      row.po?.vendorName || '',
+      row.po?.poDate || row.po?.date || '',
+      row.po?.poNo || row.po?.poNumber || '',
+      row.poItem?.name || '',
+      row.poItem?.qty || '',
+      row.poItem?.rate || '',
+      parseFloat(row.poBase) || 0,
+      parseFloat(row.otherC) || 0,
+      parseFloat(row.poTaxable) || 0,
+      row.poItem?.gst || 0,
+      parseFloat(row.poGst) || 0,
+      parseFloat(row.poOV) || 0,
+      parseFloat(row.payment) || 0,
+      parseFloat(row.poBalance) || 0,
+      row.poBill?.billNo || '',
+      row.poBill?.billDate || '',
+      parseFloat(row.poBill?.grandTotal) || 0,
+      row.poBill?.gstType || '',
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([[...soHdr, ...poHdr], ...dataRows]);
+    ws['!cols'] = [...soHdr, ...poHdr].map((_,i) => ({ wch: i < 5 ? 18 : i === 5 || i === 23 ? 30 : 14 }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    XLSX.writeFile(wb, `${co ? co+'_' : ''}Orders_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
 
-      {/* ── Header ── */}
-      <div style={{ background:P, color:'#fff', padding:'6px 12px',
-        display:'flex', justifyContent:'space-between', alignItems:'center',
-        marginBottom:6, borderRadius:'6px 6px 0 0' }}>
-        <span style={{ fontWeight:800, fontSize:13 }}>
-          {view==='orders' ? '📦 Sales Orders & Purchase Orders' : '📁 Projects'}
-        </span>
-        <div style={{ display:'flex', gap:6 }}>
-          <button onClick={()=>setView(v=>v==='orders'?'projects':'orders')}
-            style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-              border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-              cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
-            {view==='orders' ? '📁 Projects' : '📦 Orders'}
-          </button>
-          {view==='orders' && (
-            <button onClick={()=>{
-              const co = selectedCompany?.companyName || '';
-              const wb = XLSX.utils.book_new();
-              const soHdr = ['Order ID','Client Name','Order Date','Client PO No','Due Date',
-                'Product','Qty','Rate (₹)','Base Amt (₹)','P&F (₹)','Transport (₹)','Taxable (₹)',
-                'GST %','GST Amt (₹)','Order Value (₹)','Receipt (₹)','Dues (₹)',
-                'Sales Bill No','Sales Bill Date','SO Status'];
-              const poHdr = ['Vendor','PO Date','PO No','PO Product','PO Qty','PO Rate (₹)',
-                'PO Base (₹)','Other Charges (₹)','PO Taxable (₹)','PO GST %','PO GST Amt (₹)',
-                'PO Order Value (₹)','Payment (₹)','PO Dues (₹)',
-                'Bill No','Bill Date','Bill Amount (₹)','GST Type'];
-              const dataRows = allRows.map(row => [
-                row.so?.orderNo || `SO-${row.so?.orderId}` || '',
-                row.so?.customerName || row.so?.clientName || '',
-                row.so?.orderDate || row.so?.date || '',
-                row.so?.customerPO || '',
-                row.so?.dueDate || row.so?.deliveryDate || '',
-                row.soItem?.name || '',
-                row.soItem?.qty || '',
-                row.soItem?.rate || '',
-                parseFloat(row.soBase) || 0,
-                row.pnf || 0,
-                row.transport || 0,
-                parseFloat(row.soBase) || 0,
-                row.soItem?.gst || 0,
-                parseFloat(row.soGst) || 0,
-                parseFloat(row.soOV) || 0,
-                parseFloat(row.receipt) || 0,
-                parseFloat(row.soBalance) || 0,
-                row.salesBill?.billNo || '',
-                row.salesBill?.billDate || '',
-                row.so?.status || '',
-                row.po?.vendorName || '',
-                row.po?.poDate || row.po?.date || '',
-                row.po?.poNo || row.po?.poNumber || '',
-                row.poItem?.name || '',
-                row.poItem?.qty || '',
-                row.poItem?.rate || '',
-                parseFloat(row.poBase) || 0,
-                parseFloat(row.otherC) || 0,
-                parseFloat(row.poTaxable) || 0,
-                row.poItem?.gst || 0,
-                parseFloat(row.poGst) || 0,
-                parseFloat(row.poOV) || 0,
-                parseFloat(row.payment) || 0,
-                parseFloat(row.poBalance) || 0,
-                row.poBill?.billNo || '',
-                row.poBill?.billDate || '',
-                parseFloat(row.poBill?.grandTotal) || 0,
-                row.poBill?.gstType || '',
-              ]);
-              const ws = XLSX.utils.aoa_to_sheet([[...soHdr, ...poHdr], ...dataRows]);
-              // Column widths
-              ws['!cols'] = [...soHdr, ...poHdr].map((_,i) => ({ wch: i < 5 ? 18 : i === 5 || i === 23 ? 30 : 14 }));
-              XLSX.utils.book_append_sheet(wb, ws, 'Orders');
-              XLSX.writeFile(wb, `${co ? co+'_' : ''}Orders_${new Date().toISOString().slice(0,10)}.xlsx`);
-            }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-              border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-              cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
-              📊 Excel
-            </button>
-          )}
-          {view==='projects' && (
-            <>
-              <button onClick={()=>{
-                const co = selectedCompany?.companyName || '';
-                const wb = XLSX.utils.book_new();
-                const headers = ['ID','Project Name','Client','Start Date','End Date','Budget (₹)','Status'];
-                const rows = projects.map(p => [
-                  p.projectId,
-                  p.projectName || '',
-                  p.clientName || '',
-                  p.startDate || '',
-                  p.endDate || '',
-                  parseFloat(p.budget) || 0,
-                  p.status || '',
-                ]);
-                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-                ws['!cols'] = [{ wch:10 },{ wch:30 },{ wch:25 },{ wch:14 },{ wch:14 },{ wch:16 },{ wch:14 }];
-                XLSX.utils.book_append_sheet(wb, ws, 'Projects');
-                XLSX.writeFile(wb, `${co ? co+'_' : ''}Projects_${new Date().toISOString().slice(0,10)}.xlsx`);
-              }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-                border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-                cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
-                📊 Excel
-              </button>
-              <button onClick={()=>{
-                const rowsHtml = projects.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f8ff'}">
-                  <td>${p.projectId}</td>
-                  <td style="font-weight:700">${p.projectName||'—'}</td>
-                  <td>${p.clientName||'—'}</td>
-                  <td>${fmtDFull(p.startDate)}</td>
-                  <td>${fmtDFull(p.endDate)}</td>
-                  <td style="text-align:right">${p.budget?'₹'+fmt(p.budget):'—'}</td>
-                  <td>${p.status||'—'}</td>
-                </tr>`).join('');
-                const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Projects</title>
+  const doExportProjects = () => {
+    const co = selectedCompany?.companyName || '';
+    const wb = XLSX.utils.book_new();
+    const headers = ['ID','Project Name','Client','Start Date','End Date','Budget (₹)','Status'];
+    const rows = projects.map(p => [
+      p.projectId, p.projectName || '', p.clientName || '',
+      p.startDate || '', p.endDate || '', parseFloat(p.budget) || 0, p.status || '',
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!cols'] = [{ wch:10 },{ wch:30 },{ wch:25 },{ wch:14 },{ wch:14 },{ wch:16 },{ wch:14 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Projects');
+    XLSX.writeFile(wb, `${co ? co+'_' : ''}Projects_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const doPrintProjects = () => {
+    const rowsHtml = projects.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f8ff'}">
+      <td>${p.projectId}</td><td style="font-weight:700">${p.projectName||'—'}</td>
+      <td>${p.clientName||'—'}</td><td>${fmtDFull(p.startDate)}</td>
+      <td>${fmtDFull(p.endDate)}</td>
+      <td style="text-align:right">${p.budget?'₹'+fmt(p.budget):'—'}</td>
+      <td>${p.status||'—'}</td></tr>`).join('');
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Projects</title>
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:9.5pt;}
 .hdr{background:#1a4a9a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
 table{width:100%;border-collapse:collapse;font-size:9pt;}
@@ -1393,183 +1491,182 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 <tbody>${rowsHtml}</tbody></table>
 <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
 </body></html>`;
-                const w=window.open('','_blank','width=1000,height=800');
-                if(!w){alert('Allow pop-ups.');return;}
-                w.document.write(html);w.document.close();
-              }} style={{ height:26, padding:'0 10px', background:'rgba(255,255,255,0.15)',
-                border:'1px solid rgba(255,255,255,0.3)', color:'#fff', borderRadius:4,
-                cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:F }}>
-                🖨️ PDF
-              </button>
-            </>
-          )}
-          <button onClick={load}
-            style={{ height:26, padding:'0 8px', background:'rgba(255,255,255,0.12)',
-              border:'1px solid rgba(255,255,255,0.25)', color:'#fff', borderRadius:4,
-              cursor:'pointer', fontSize:13 }}>↻</button>
-        </div>
+    const w=window.open('','_blank','width=1000,height=800');
+    if(!w){alert('Allow pop-ups.');return;}
+    w.document.write(html);w.document.close();
+  };
+
+  return (
+    <div style={{ fontFamily:F, fontSize:11 }}>
+      <style>{`
+        .proj-row td {
+          transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .proj-row td.row-hov {
+          background-color: #EEF4FF !important;
+          box-shadow: inset 0 1px 0 #c7d9ff, inset 0 -1px 0 #c7d9ff;
+          color: #1a3a8a !important;
+        }
+        .proj-row td.row-hov:first-child {
+          box-shadow: inset 4px 0 0 #3A6186, inset 0 1px 0 #c7d9ff, inset 0 -1px 0 #c7d9ff;
+        }
+        .proj-row:hover { z-index: 10; position: relative; }
+      `}</style>
+
+      {/* ── FINACLE-STYLE COMPACT TOOLBAR ── */}
+      <div style={{
+        background:'#f0f2f5', borderBottom:'1px solid #c0c4cc',
+        padding:'3px 8px', display:'flex', alignItems:'center',
+        flexWrap:'nowrap', overflowX:'auto', minHeight:36, gap:0,
+      }}>
+        {/* Page label */}
+        <span style={{ fontWeight:800, fontSize:13, color:P, paddingRight:8,
+          borderRight:'1px solid #bbb', marginRight:6, whiteSpace:'nowrap', flexShrink:0 }}>
+          PROJECT
+        </span>
+
+        {/* Tab: Jobcodes */}
+        <button onClick={()=>navigate('/project/list')} style={{
+          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:700, position:'relative',
+          background:'#fff', border:'1px solid #aaa',
+          borderBottom:'1px solid #f0f2f5',
+          color:P, zIndex:1, marginBottom:-1, borderRadius:'3px 3px 0 0',
+        }}>Jobcodes</button>
+
+        {/* Tab: Project Close */}
+        <button onClick={()=>navigate('/project/close')} style={{
+          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:400, position:'relative', marginRight:8,
+          background:'#e4e8ed', border:'1px solid #c8c8c8',
+          borderBottom:'1px solid #c8c8c8',
+          color:'#555', zIndex:0, marginBottom:0, borderRadius:'3px 3px 0 0',
+        }}>Project Close</button>
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'#bbb', margin:'0 8px', flexShrink:0 }}/>
+
+        {/* FY filter buttons — orders only */}
+        {fyList.map(f => {
+          const active = fy === f;
+          return (
+            <button key={f} onClick={() => setFy(f)} style={{
+              height:24, padding:'0 8px', fontSize:11, cursor:'pointer',
+              whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+              fontWeight: active ? 700 : 400, marginRight:3, borderRadius:3,
+              border:`1px solid ${active ? P : '#bbb'}`,
+              background: active ? P : '#fff',
+              color: active ? '#fff' : '#555',
+            }}>
+              {f === 'all' ? 'All' : `FY ${f}`}
+            </button>
+          );
+        })}
+
+        {/* Spacer */}
+        <div style={{ flex:1 }}/>
+
+        {/* Count */}
+        <span style={{ fontSize:10, color:'#666', marginRight:8, flexShrink:0, whiteSpace:'nowrap' }}>
+          {filteredSOs.length} SO{filteredSOs.length!==1?'s':''} · {purchaseOrders.length} PO{purchaseOrders.length!==1?'s':''}
+        </span>
+
+        {/* Search */}
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Search client / order…"
+          style={{ height:26, padding:'0 8px', border:'1px solid #bbb', borderRadius:3,
+            fontSize:11, fontFamily:F, outline:'none', width:180, background:'#fff',
+            marginRight:3, flexShrink:0 }} />
+        {search && (
+          <button onClick={()=>setSearch('')}
+            style={{ height:26, padding:'0 7px', background:'#f0f0f0', border:'1px solid #bbb',
+              borderRadius:3, cursor:'pointer', fontFamily:F, fontSize:11, marginRight:4, flexShrink:0 }}>✕</button>
+        )}
+
+        {/* Columns toggle button */}
+        <button onClick={()=>setColPanelOpen(o=>!o)} style={{
+          height:26, padding:'0 10px', marginRight:3, flexShrink:0,
+          background: colPanelOpen ? P : '#fff',
+          border: `1px solid ${colPanelOpen ? P : '#bbb'}`,
+          borderRadius:3, color: colPanelOpen ? '#fff' : '#374151',
+          fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F,
+          display:'flex', alignItems:'center', gap:5,
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
+          </svg>
+          Columns
+        </button>
+
+        {/* SO/PO/EXP quick tab buttons when col panel open */}
+        {colPanelOpen && (
+          <div style={{ display:'flex', gap:3, marginRight:6, flexShrink:0 }}>
+            {[['so','SO','#1a4a9a'],['po','PO','#2a6600'],['exp','EXP','#c2410c']].map(([t,l,c])=>(
+              <button key={t} onClick={()=>setColPanelTab(t)} style={{
+                padding:'0 9px', height:26, borderRadius:3, fontFamily:F,
+                border: `1px solid ${colPanelTab===t?c:'#bbb'}`,
+                background: colPanelTab===t ? c : '#fff',
+                color: colPanelTab===t ? '#fff' : '#6b7280',
+                fontSize:11, fontWeight:600, cursor:'pointer',
+              }}>{l}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Excel */}
+        <button onClick={doExportOrders}
+          style={{ height:26, padding:'0 8px', background:'#fff', marginRight:3,
+            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:12,
+            fontFamily:F, fontWeight:600, flexShrink:0 }}>📊</button>
+
+        {/* Refresh */}
+        <button onClick={load}
+          style={{ height:26, padding:'0 8px', background:'#fff', flexShrink:0,
+            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:13 }}>↻</button>
       </div>
 
-      {error && <div style={{ padding:'4px 8px', marginBottom:6, borderRadius:4, background:'#ffe0e0',
+      {error && <div style={{ padding:'4px 8px', borderRadius:4, background:'#ffe0e0',
         color:'#880000', border:'1px solid #cc4444', fontSize:11 }}>Error: {error}</div>}
 
       {loading ? (
         <div style={{ padding:50, textAlign:'center', color:'#888' }}>Loading…</div>
-      ) : view==='projects' ? (
-        /* ── Projects table ── */
-        <div style={{ border:`1px solid ${BD}`, borderRadius:6, overflow:'hidden' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
-            <thead>
-              <tr style={{ background:P }}>
-                {['ID','Project Name','Client','Start','End','Budget (₹)','Status','Actions'].map((h,i) => (
-                  <th key={i} style={th(i>=5?'right':'left')}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {projects.length===0 && (
-                <tr><td colSpan={8} style={{ ...td('center'), padding:30, color:'#888', fontStyle:'italic' }}>
-                  No projects — click + New Project.
-                </td></tr>
-              )}
-              {projects.map((p,i) => (
-                <tr key={p.projectId} style={{ background:i%2===0?'#fff':'#f9fbff' }}>
-                  <td style={td()}>{p.projectId}</td>
-                  <td style={{ ...td(), fontWeight:700 }}>{p.projectName}</td>
-                  <td style={td()}>{p.clientName||'—'}</td>
-                  <td style={td()}>{fmtDFull(p.startDate)}</td>
-                  <td style={td()}>{fmtDFull(p.endDate)}</td>
-                  <td style={td('right',{fontWeight:600})}>{p.budget?`₹${fmt(p.budget)}`:'—'}</td>
-                  <td style={td()}><StatusBadge s={p.status}/></td>
-                  <td style={td()}>
-                    <div style={{ display:'flex', gap:4 }}>
-                      <button onClick={async()=>{
-                        if(!window.confirm(`Delete "${p.projectName}"?`)) return;
-                        await axios.delete(`/api/projects/${p.projectId}?companyId=${cid}`).catch(()=>{});
-                        load();
-                      }} style={{ height:20, padding:'0 7px', fontSize:9, fontWeight:700, cursor:'pointer',
-                        background:'#fff3f3', border:'1px solid #ffb3b3', color:'#cc0000', borderRadius:3, fontFamily:F }}>🗑</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       ) : (
         /* ── Orders spreadsheet ── */
         <>
-          <div style={{ marginBottom:6, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            {/* FY chips */}
-            {fyList.map(f => {
-              const active = fy === f;
-              return (
-                <button key={f} onClick={() => setFy(f)}
-                  style={{
-                    height:24, padding:'0 10px', fontSize:11, fontWeight: active ? 700 : 500,
-                    fontFamily:F, cursor:'pointer', borderRadius:12, whiteSpace:'nowrap',
-                    border:`1px solid ${active ? P : BD}`,
-                    background: active ? P : '#fff',
-                    color: active ? '#fff' : '#555',
-                    transition:'all 0.12s',
-                  }}>
-                  {f === 'all' ? 'All' : `FY ${f}`}
-                </button>
-              );
-            })}
-            <div style={{ width:1, height:18, background:'#bbb', flexShrink:0 }}/>
-            <input value={search} onChange={e=>setSearch(e.target.value)}
-              placeholder="Search client / order no…"
-              style={{ height:26, padding:'0 8px', border:`1px solid ${BD}`, borderRadius:4,
-                fontSize:11, fontFamily:F, outline:'none', width:200 }} />
-            {search && (
-              <button onClick={()=>setSearch('')}
-                style={{ height:26, padding:'0 8px', background:'#f5f5f5', border:`1px solid ${BD}`,
-                  borderRadius:4, cursor:'pointer', fontFamily:F, fontSize:11 }}>✕</button>
-            )}
-            <span style={{ fontSize:10, color:'#666' }}>
-              {filteredSOs.length} SO{filteredSOs.length!==1?'s':''} · {purchaseOrders.length} PO{purchaseOrders.length!==1?'s':''}
-            </span>
-            <span style={{ fontSize:10, color:'#888', marginLeft:4 }}>
-              (Click order no for full detail · ✎ to edit order no · Click client name to add receipt · Click vendor name to add payment)
-            </span>
-          </div>
-
-          {/* ── Column Toggle — compact collapsible panel ── */}
-          <div style={{ marginBottom:8 }}>
-            {/* Toggle button row */}
-            <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom: colPanelOpen ? 0 : 0 }}>
-              <button onClick={()=>setColPanelOpen(o=>!o)}
-                style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 14px', height:28,
-                  background: colPanelOpen ? P : '#fff',
-                  border: `1.5px solid ${colPanelOpen ? P : BD}`,
-                  borderRadius: colPanelOpen ? '6px 6px 0 0' : 6,
-                  color: colPanelOpen ? '#fff' : '#374151',
-                  fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
-                  borderBottom: colPanelOpen ? `1.5px solid ${P}` : undefined }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/>
-                </svg>
-                Columns
-                <span style={{ fontSize:10, fontWeight:600, color: colPanelOpen ? 'rgba(255,255,255,0.75)' : '#9ca3af' }}>
-                  {colPanelOpen ? '▲' : '▼'}
-                </span>
-              </button>
-              {/* Quick-access tab buttons even when closed */}
-              {[['so','SO','#1a4a9a'],['po','PO','#2a6600'],['exp','EXP','#c2410c']].map(([t,l,c])=>(
-                <button key={t}
-                  onClick={()=>{ setColPanelTab(t); setColPanelOpen(true); }}
-                  style={{ padding:'4px 12px', height:28, borderRadius:6,
-                    border: `1.5px solid ${colPanelOpen&&colPanelTab===t?c:BD}`,
-                    background: colPanelOpen&&colPanelTab===t ? c : '#fff',
-                    color: colPanelOpen&&colPanelTab===t ? '#fff' : '#6b7280',
-                    fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-                  {l}
-                </button>
-              ))}
-              <span style={{ fontSize:10, color:'#9ca3af', marginLeft:4 }}>
-                {SO_BTNS.filter(b=>cv(b.key)).length} SO · {PO_BTNS.filter(b=>cv(b.key)).length} PO · {EXP_BTNS.filter(b=>cv(b.key)).length} EXP cols shown
-              </span>
-            </div>
-
-            {/* Collapsible panel */}
-            {colPanelOpen && (
-              <div style={{ background:'#f8faff', border:`1.5px solid ${P}`, borderRadius:'0 6px 6px 6px', padding:'8px 10px' }}>
-                {/* Tabs */}
-                <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
-                  {[['so','Sales Order (SO)','#1a4a9a'],['po','Purchase Order (PO)','#2a6600'],['exp','Expenses (EXP)','#c2410c']].map(([t,l,c])=>(
-                    <button key={t} onClick={()=>setColPanelTab(t)}
-                      style={{ padding:'5px 16px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
-                        border:'none', borderBottom: colPanelTab===t ? `2.5px solid ${c}` : '2.5px solid transparent',
-                        background:'transparent', color: colPanelTab===t ? c : '#6b7280',
-                        marginBottom:-1 }}>
-                      {l}
-                    </button>
-                  ))}
-                  <div style={{ flex:1 }}/>
-                  <button onClick={()=>setColPanelOpen(false)}
-                    style={{ padding:'2px 8px', border:'none', background:'transparent', cursor:'pointer', color:'#9ca3af', fontSize:16, lineHeight:'26px' }}>✕</button>
-                </div>
-                {/* Buttons for active tab */}
-                <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
-                  {(colPanelTab==='so' ? SO_BTNS : colPanelTab==='po' ? PO_BTNS : EXP_BTNS).map(b => {
-                    const ac = colPanelTab==='so' ? '#1a4a9a' : colPanelTab==='po' ? '#2a6600' : '#ea580c';
-                    return (
-                      <button key={b.key} onClick={()=>tcv(b.key)}
-                        style={{ padding:'3px 11px', fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:F,
-                          borderRadius:5, lineHeight:'18px',
-                          border: cv(b.key) ? `1.5px solid ${ac}` : '1.5px solid #d1d5db',
-                          background: cv(b.key) ? ac : '#fff',
-                          color:      cv(b.key) ? '#fff' : '#9ca3af',
-                          transition:'all 0.1s' }}>
-                        {b.label}
-                      </button>
-                    );
-                  })}
-                </div>
+          {/* Column toggle panel */}
+          {colPanelOpen && (
+            <div style={{ background:'#f8faff', border:`1px solid ${P}`, borderTop:'none', padding:'6px 10px' }}>
+              <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
+                {[['so','Sales Order (SO)','#1a4a9a'],['po','Purchase Order (PO)','#2a6600'],['exp','Expenses (EXP)','#c2410c']].map(([t,l,c])=>(
+                  <button key={t} onClick={()=>setColPanelTab(t)}
+                    style={{ padding:'5px 16px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
+                      border:'none', borderBottom: colPanelTab===t ? `2.5px solid ${c}` : '2.5px solid transparent',
+                      background:'transparent', color: colPanelTab===t ? c : '#6b7280', marginBottom:-1 }}>
+                    {l}
+                  </button>
+                ))}
+                <div style={{ flex:1 }}/>
+                <button onClick={()=>setColPanelOpen(false)}
+                  style={{ padding:'2px 8px', border:'none', background:'transparent', cursor:'pointer', color:'#9ca3af', fontSize:16 }}>✕</button>
               </div>
-            )}
-          </div>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+                {(colPanelTab==='so' ? SO_BTNS : colPanelTab==='po' ? PO_BTNS : EXP_BTNS).map(b => {
+                  const ac = colPanelTab==='so' ? '#1a4a9a' : colPanelTab==='po' ? '#2a6600' : '#ea580c';
+                  return (
+                    <button key={b.key} onClick={()=>tcv(b.key)}
+                      style={{ padding:'3px 11px', fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:F,
+                        borderRadius:5, lineHeight:'18px',
+                        border: cv(b.key) ? `1.5px solid ${ac}` : '1.5px solid #d1d5db',
+                        background: cv(b.key) ? ac : '#fff',
+                        color:      cv(b.key) ? '#fff' : '#9ca3af',
+                        transition:'all 0.1s' }}>
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {filteredSOs.length===0 ? (
             <div style={{ padding:40, textAlign:'center', color:'#888', fontStyle:'italic',
@@ -1577,22 +1674,11 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
               No sales orders found.
             </div>
           ) : (
-            <div style={{ overflow:'auto', maxHeight:'calc(100vh - 260px)', border:`1px solid ${BD}`, borderRadius:6 }}>
+            <div style={{ overflow:'auto', maxHeight:`calc(100vh - ${colPanelOpen ? 195 : 110}px)`, border:`1px solid ${BD}`, borderRadius:6 }}>
               <table ref={tableRef} style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
                 <thead style={{ position:'sticky', top:0, zIndex:10 }}>
                   <tr>
-                    <th colSpan={2+SO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#c8e6c9', color:'#1b5e20', fontSize:12, fontWeight:800, padding:'5px 8px', borderRight:'2px solid #fff', letterSpacing:1 }}>
-                      SALES ORDER
-                    </th>
-                    <th colSpan={PO_BTNS.filter(b=>cv(b.key)).length+1} style={{ ...th('center'), background:'#ffcdd2', color:'#b71c1c', fontSize:12, fontWeight:800, padding:'5px 8px', letterSpacing:1 }}>
-                      PURCHASE ORDER
-                    </th>
-                    <th colSpan={1+EXP_BTNS.filter(b=>cv(b.key)).length} style={{ padding:'5px 8px', background:'#fff3e0', color:'#e65100', fontSize:12, fontWeight:800, textAlign:'center', border:'1px solid #ffb74d', letterSpacing:1 }}>
-                      EXPENSES
-                    </th>
-                  </tr>
-                  <tr>
-                    <th style={{ ...th('left','90px'), position:'sticky', left:0, zIndex:12 }}>Order ID ✎</th>
+                    <th style={{ ...th('left','90px'), position:'sticky', left:0, zIndex:12 }}>Jobcode ✎</th>
                     <th style={{ ...th('left','160px'), whiteSpace:'normal', position:'sticky', left:92, zIndex:12 }}>Client Name</th>
                     {cv('so_orderDesc') && <th style={th('left','180px')}>Order Desc</th>}
                     {cv('so_orderDate') && <th style={th('center','60px')}>Order Date</th>}
@@ -1611,6 +1697,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     {cv('so_ov')        && <th style={th('right','85px')}>Order Value</th>}
                     {cv('so_receipt')   && <th style={th('right','70px')}>Receipt</th>}
                     {cv('so_dues')      && <th style={th('right','70px')}>Dues</th>}
+                    {cv('so_billAmt')   && <th style={th('right','80px')}>Bill Amt</th>}
+                    {cv('so_duesBill')  && <th style={th('right','85px')}>Dues (Bill)</th>}
                     {cv('so_billDate')  && <th style={th('center','60px')}>Bill Date</th>}
                     {cv('so_billNo')    && <th style={th('left','70px')}>Bill No</th>}
                     {cv('so_status')    && <th style={{ ...th('center','60px'), borderRight:'2px solid #5a7abf' }}>Status</th>}
@@ -1630,6 +1718,8 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     {cv('po_ov')        && <th style={pth('right','85px')}>Order Value</th>}
                     {cv('po_payment')   && <th style={pth('right','70px')}>Payment</th>}
                     {cv('po_dues')      && <th style={pth('right','70px')}>Dues</th>}
+                    {cv('po_billAmt')   && <th style={pth('right','80px')}>Bill Amt</th>}
+                    {cv('po_duesBill')  && <th style={pth('right','85px')}>Dues (Bill)</th>}
                     {cv('po_purchDate') && <th style={pth('center','60px')}>Purch. Date</th>}
                     {cv('po_purchNo')   && <th style={pth('left','90px')}>Purch. No</th>}
                     {cv('po_amount')    && <th style={pth('right','85px')}>Amount</th>}
@@ -1658,14 +1748,14 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                         onMouseLeave={() => onRowLeave(soId)}
                         style={{
                           background:bg,
-                          borderTop:    row.isSOFirst ? '2px solid #1a1a1a' : row.isPOFirst ? '1.5px solid #888' : undefined,
-                          borderBottom: row.isSOLast  ? '2px solid #1a1a1a' : undefined,
+                          borderTop:    row.isSOFirst ? '1px solid #bbb' : row.isPOFirst ? '1px solid #ddd' : undefined,
+                          borderBottom: row.isSOLast  ? '1px solid #bbb' : undefined,
                         }}>
                         {row.isFirst && (
                           <>
                             {/* ── Order ID — click to open detail, double-click to edit order no ── */}
                             <td rowSpan={row.rowCount}
-                              style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a', padding:'2px 4px', borderLeft:'2px solid #1a1a1a',
+                              style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb', padding:'2px 4px', borderLeft:'1px solid #bbb',
                                 position:'sticky', left:0, zIndex:2 }}>
                               {editingId?.soId === row.so.orderId ? (
                                 <input
@@ -1684,7 +1774,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                 <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                                   <span
                                     onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
-                                    style={{ fontWeight:700, color:'#1a3a8a', cursor:'pointer', fontSize:10 }}>
+                                    title="Click to show full order details"
+                                    style={{ fontWeight:700, color:'#1a3a8a', cursor:'pointer', fontSize:10,
+                                      textDecoration:'underline dotted', textUnderlineOffset:2 }}>
                                     {row.so.orderNo || row.so.orderId}
                                   </span>
                                   <button
@@ -1700,25 +1792,26 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             {/* Client Name */}
                             <td rowSpan={row.rowCount}
                               onClick={() => setModal({ type:'so', order:row.so })}
+                              title={row.so.customerName||row.so.clientName||''}
                               style={{ ...td('left'), fontWeight:700, color:'#1a3a8a', background:bg,
-                                borderBottom:'2px solid #1a1a1a', cursor:'pointer',
-                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160,
+                                borderBottom:'1px solid #bbb', cursor:'pointer',
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160,
                                 position:'sticky', left:92, zIndex:2 }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
-                            {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                            {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
                               maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
                               wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
                               {row.so.termsConditions||row.so.customerNotes||(row.so.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ')||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
                             </td>}
-                            {cv('so_orderDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
+                            {cv('so_orderDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>
                               {fmtD(row.so.orderDate||row.so.date)}
                             </td>}
-                            {cv('so_clientPO') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                            {cv('so_clientPO') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
                               color: row.so.customerPO ? '#111' : '#aaa', fontStyle: row.so.customerPO ? 'normal' : 'italic' }}>
                               {row.so.customerPO || '—'}
                             </td>}
-                            {cv('so_dueDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>
+                            {cv('so_dueDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>
                               {fmtD(row.so.dueDate||row.so.deliveryDate)}
                             </td>}
                           </>
@@ -1743,12 +1836,26 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 
                         {row.isFirst && (
                           <>
-                            {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
-                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700, color:'#16a34a', background:bg, borderBottom:'2px solid #1a1a1a' }}>{fmt(row.soBalance)}</td>}
-                            {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'2px solid #1a1a1a' }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
-                            {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'2px solid #1a1a1a',
+                            {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'1px solid #bbb' }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
+                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700, color:'#16a34a', background:bg, borderBottom:'1px solid #bbb' }}>{fmt(row.soBalance)}</td>}
+                            {cv('so_billAmt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), background:bg, borderBottom:'1px solid #bbb' }}>
+                              {row.salesBill ? fmt(parseFloat(row.salesBill.grandTotal)||0) : '—'}
+                            </td>}
+                            {cv('so_duesBill') && (() => {
+                              const soGT   = parseFloat(row.so.grandTotal||row.so.amount||0);
+                              const billed = parseFloat(row.salesBill?.grandTotal||0);
+                              const db     = soGT - billed;
+                              return (
+                                <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700,
+                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:bg, borderBottom:'1px solid #bbb' }}>
+                                  {fmt(db)}
+                                </td>
+                              );
+                            })()}
+                            {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
+                            {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
                               color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>{row.salesBill ? (row.salesBill.billNo || '—') : '—'}</td>}
-                            {cv('so_status')   && <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`2px solid ${BD}`, background:bg, borderBottom:'2px solid #1a1a1a' }}><StatusBadge s={row.so.status}/></td>}
+                            {cv('so_status')   && <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`1px solid ${BD}`, background:bg, borderBottom:'1px solid #bbb' }}><StatusBadge s={row.so.status}/></td>}
                           </>
                         )}
 
@@ -1756,18 +1863,19 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                           <>
                             {cv('po_vendor') && <td rowSpan={row.poBlockSize}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
-                              style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888', borderLeft:'2px solid #1a1a1a',
-                                whiteSpace:'normal', wordBreak:'break-word', maxWidth:160,
+                              title={row.po?.vendorName||''}
+                              style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd', borderLeft:'1px solid #bbb',
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160,
                                 ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#1a5500' } : { color:'#aaa', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
                             </td>}
-                            {cv('po_date') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888' }}>
+                            {cv('po_date') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd' }}>
                               {fmtD(row.po?.poDate||row.po?.date)}
                             </td>}
-                            {cv('po_no') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888' }}>
+                            {cv('po_no') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd' }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
                             </td>}
-                            {cv('po_poDesc') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888',
+                            {cv('po_poDesc') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd',
                               maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
                               wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
                               {row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
@@ -1793,12 +1901,26 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 
                         {row.isPOFirst && (
                           <>
-                            {cv('po_payment')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'2px solid #888' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
-                            {cv('po_dues')      && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'2px solid #888' }}>{fmt(row.poBalance)}</td>}
-                            {cv('po_purchDate') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
-                            {cv('po_purchNo')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
-                            {cv('po_amount')    && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'2px solid #888' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
-                            {cv('po_gstStatus') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'2px solid #888', borderRight:'2px solid #1a1a1a' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
+                            {cv('po_payment')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'1px solid #ddd' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
+                            {cv('po_dues')      && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'1px solid #ddd' }}>{fmt(row.poBalance)}</td>}
+                            {cv('po_billAmt')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), background:poBg, borderBottom:'1px solid #ddd' }}>
+                              {row.poBill ? fmt(parseFloat(row.poBill.grandTotal)||0) : '—'}
+                            </td>}
+                            {cv('po_duesBill')  && (() => {
+                              const poGT   = parseFloat(row.po?.grandTotal||row.po?.amount||0);
+                              const billed = parseFloat(row.poBill?.grandTotal||0);
+                              const db     = poGT - billed;
+                              return (
+                                <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700,
+                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:poBg, borderBottom:'1px solid #ddd' }}>
+                                  {fmt(db)}
+                                </td>
+                              );
+                            })()}
+                            {cv('po_purchDate') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
+                            {cv('po_purchNo')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
+                            {cv('po_amount')    && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
+                            {cv('po_gstStatus') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd', borderRight:'1px solid #bbb' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
                           </>
                         )}
 
@@ -1810,17 +1932,18 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                           const expGstAmt = expBase * expGstPct / 100;
                           const expTotal  = parseFloat(ex?.grandTotal) || (expBase + expGstAmt) || 0;
                           const expBg     = ex ? '#fff8f0' : 'transparent';
+                          const eb = (align, extra={}) => ({ ...etd(align, extra), ...(ex ? {} : { border:`1px solid ${BD}`, background:'transparent' }) });
                           return (<>
-                            {cv('exp_date')   && <td style={{ ...etd('center'), background:expBg }}>{ex ? fmtD(ex.date||ex.expenseDate||ex.createdAt) : ''}</td>}
-                            <td style={{ ...etd('left'), background:expBg, borderLeft:row.isFirst?'2px solid #e65100':undefined, fontWeight: ex?600:400, color: ex?'#7c3700':'#ccc' }}>
+                            {cv('exp_date')   && <td style={eb('center')}>{ex ? fmtD(ex.date||ex.expenseDate||ex.createdAt) : ''}</td>}
+                            <td style={{ ...eb('left'), background:expBg, borderLeft:ex?'1px solid #fed7aa':`1px solid ${BD}`, fontWeight: ex?600:400, color: ex?'#7c3700':'#ccc' }}>
                               {ex ? (ex.expenseCategory||ex.category||'—') : ''}
                             </td>
-                            {cv('exp_desc')   && <td style={{ ...etd('left'), background:expBg, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ex?.description||''}</td>}
-                            {cv('exp_vendor') && <td style={{ ...etd('left'), background:expBg }}>{ex?.vendor||''}</td>}
-                            {cv('exp_mode')   && <td style={{ ...etd('left'), background:expBg }}>{ex?.paymentMode||''}</td>}
-                            {cv('exp_gstPct') && <td style={{ ...etd('center'), background:expBg }}>{ex ? (expGstPct?expGstPct+'%':'No GST') : ''}</td>}
-                            {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:expBg }}>{ex && expGstAmt ? fmt(expGstAmt) : (ex?'—':'')}</td>}
-                            <td style={{ ...etd('right'), background:expBg, fontWeight:700, color: ex?'#c2410c':'#ccc' }}>{ex ? fmt(expTotal) : ''}</td>
+                            {cv('exp_desc')   && <td style={{ ...eb('left'), background:expBg, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ex?.description||''}</td>}
+                            {cv('exp_vendor') && <td style={{ ...eb('left'), background:expBg }}>{ex ? (ex.vendorName||ex.vendor||ex.ledgerName||'') : ''}</td>}
+                            {cv('exp_mode')   && <td style={{ ...eb('left'), background:expBg }}>{ex?.paymentMode||''}</td>}
+                            {cv('exp_gstPct') && <td style={{ ...eb('center'), background:expBg }}>{ex ? (expGstPct?expGstPct+'%':'No GST') : ''}</td>}
+                            {cv('exp_gstAmt') && <td style={{ ...eb('right'), background:expBg }}>{ex && expGstAmt ? fmt(expGstAmt) : (ex?'—':'')}</td>}
+                            <td style={{ ...eb('right'), background:expBg, fontWeight:700, color: ex?'#c2410c':'#ccc' }}>{ex ? fmt(expTotal) : ''}</td>
                           </>);
                         })()}
                       </tr>
@@ -1830,61 +1953,65 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                 <tfoot style={{ position:'sticky', bottom:0, zIndex:10 }}>
                   <tr style={{ background:'#E8EFFF', fontWeight:700, fontSize:10 }}>
                     {/* SO fixed cols */}
-                    <td colSpan={2} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'2px solid #9ab0e0' }}>TOTAL</td>
+                    <td colSpan={2} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'1px solid #c8d4e8' }}>TOTAL</td>
                     {/* SO toggle order-level cols */}
-                    {cv('so_orderDesc') && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_orderDate') && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_clientPO')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_dueDate')   && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_orderDesc') && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_orderDate') && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_clientPO')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_dueDate')   && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
                     {/* SO fixed product col */}
-                    <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>
+                    <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>
                     {/* SO toggle item-level cols */}
-                    {cv('so_itemDesc')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_qty')       && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_rate')      && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_total')     && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:700 }}>{fmt(GT.soTotal)}</td>}
-                    {cv('so_pnf')       && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.pnf)}</td>}
-                    {cv('so_transport') && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.transport)}</td>}
-                    {cv('so_taxable')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soTaxable)}</td>}
-                    {cv('so_gstPct')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_gstAmt')    && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}>{fmt(GT.soGst)}</td>}
-                    {cv('so_ov')        && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
-                    {cv('so_receipt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
-                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'2px solid #9ab0e0', color:'#16a34a', fontWeight:800 }}>{fmt(GT.dues)}</td>}
-                    {cv('so_billDate')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_billNo')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0' }}></td>}
-                    {cv('so_status')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'2px solid #9ab0e0', borderRight:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_itemDesc')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_qty')       && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_rate')      && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_total')     && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', fontWeight:700 }}>{fmt(GT.soTotal)}</td>}
+                    {cv('so_pnf')       && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.pnf)}</td>}
+                    {cv('so_transport') && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.transport)}</td>}
+                    {cv('so_taxable')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soTaxable)}</td>}
+                    {cv('so_gstPct')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_gstAmt')    && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soGst)}</td>}
+                    {cv('so_ov')        && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
+                    {cv('so_receipt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
+                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#16a34a', fontWeight:800 }}>{fmt(GT.dues)}</td>}
+                    {cv('so_billAmt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soBillAmt)}</td>}
+                    {cv('so_duesBill')  && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#b71c1c', fontWeight:800 }}>{fmt(GT.soGTtotal - GT.soBillAmt)}</td>}
+                    {cv('so_billDate')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_billNo')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_status')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8', borderRight:'2px solid #9ab0e0' }}></td>}
                     {/* PO toggle order-level cols */}
-                    {cv('po_vendor')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_date')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_no')        && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_poDesc')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
+                    {cv('po_vendor')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_date')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_no')        && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_poDesc')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
                     {/* PO fixed product col */}
-                    <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>
+                    <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>
                     {/* PO toggle item-level cols */}
-                    {cv('po_itemDesc')  && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_qty')       && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_rate')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_total')     && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:700 }}>{fmt(GT.poTotal)}</td>}
-                    {cv('po_otherChg')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.otherC)}</td>}
-                    {cv('po_taxable')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poTaxable)}</td>}
-                    {cv('po_gstPct')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_gstAmt')    && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}>{fmt(GT.poGst)}</td>}
-                    {cv('po_ov')        && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>}
-                    {cv('po_payment')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#2e7d32' }}>{fmt(GT.payment)}</td>}
-                    {cv('po_dues')      && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'2px solid #7ab07a', color:'#b71c1c' }}>{fmt(GT.poDues)}</td>}
-                    {cv('po_purchDate') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_purchNo')   && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_amount')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('po_gstStatus') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'2px solid #7ab07a' }}></td>}
-                    {cv('exp_date')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
-                    <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>
-                    {cv('exp_desc')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
-                    {cv('exp_vendor') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
-                    {cv('exp_mode')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
-                    {cv('exp_gstPct') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'2px solid #fb923c' }}></td>}
-                    {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'2px solid #fb923c', color:'#7c3700' }}>{GT.expGst?fmt(GT.expGst):'—'}</td>}
-                    <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'2px solid #fb923c', fontWeight:800, color:'#c2410c' }}>{GT.expTotal?fmt(GT.expTotal):'—'}</td>
+                    {cv('po_itemDesc')  && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_qty')       && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_rate')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_total')     && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', fontWeight:700 }}>{fmt(GT.poTotal)}</td>}
+                    {cv('po_otherChg')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.otherC)}</td>}
+                    {cv('po_taxable')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poTaxable)}</td>}
+                    {cv('po_gstPct')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_gstAmt')    && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poGst)}</td>}
+                    {cv('po_ov')        && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>}
+                    {cv('po_payment')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#2e7d32' }}>{fmt(GT.payment)}</td>}
+                    {cv('po_dues')      && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#b71c1c' }}>{fmt(GT.poDues)}</td>}
+                    {cv('po_billAmt')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poBillAmt)}</td>}
+                    {cv('po_duesBill')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#b71c1c', fontWeight:800 }}>{fmt(GT.poGTtotal - GT.poBillAmt)}</td>}
+                    {cv('po_purchDate') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_purchNo')   && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_amount')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_gstStatus') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('exp_date')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>
+                    {cv('exp_desc')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('exp_vendor') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('exp_mode')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('exp_gstPct') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'1px solid #c8d4e8', color:'#7c3700' }}>{GT.expGst?fmt(GT.expGst):'—'}</td>}
+                    <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#c2410c' }}>{GT.expTotal?fmt(GT.expTotal):'—'}</td>
                   </tr>
                 </tfoot>
               </table>

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 import { useAuth } from '../../../context/AuthContext';
 
-const fmt  = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt  = n => (parseFloat(n) || 0).toFixed(2);
 const fmtD = d => {
   if (!d) return '—';
   const dt = new Date(d);
@@ -12,7 +12,8 @@ const fmtD = d => {
 };
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const BD = '#E5EAF2';
-const P  = '#104f4f';
+const P  = '#3A6186';
+const PD = '#2A4D6E';
 const BG = '#F4F7FB';
 
 /* ── amount in words (Indian format) ── */
@@ -707,7 +708,7 @@ function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLoo
               borderBottom:`1px solid ${BD}`, cursor:'pointer', background:i%2===0?'#fff':'#f8faff' }}>
               <input type="checkbox" checked={!!checked[o.orderId]} onChange={()=>toggle(o.orderId)}
                 style={{ width:14, height:14, cursor:'pointer' }}/>
-              <span style={{ fontWeight:700, color:'#104f4f', fontSize:12, minWidth:72 }}>#{o.orderId}</span>
+              <span style={{ fontWeight:700, color:P, fontSize:12, minWidth:72 }}>#{o.orderId}</span>
               <span style={{ color:'#555', fontSize:11, flex:1 }}>{o.orderNo||'—'}</span>
               <span style={{ color:'#999', fontSize:11 }}>{fmtD(o.orderDate)}</span>
               <span style={{ fontWeight:600, fontSize:12 }}>₹{fmt(o.orderTotal)}</span>
@@ -729,6 +730,95 @@ function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLoo
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   COMBINED ENTITY SEARCH + SELECT BOX
+══════════════════════════════════════════════════════════ */
+function DuesSearchBox({ entityList, entityFlt, setEntityFlt, search, setSearch, activeTab }) {
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ]       = React.useState('');
+  const ref             = useRef();
+  const inputRef        = useRef();
+  const [pos, setPos]   = React.useState({ top:0, left:0, width:200 });
+
+  React.useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const openDrop = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: Math.max(r.width, 220) });
+    }
+    setQ(''); setOpen(true);
+  };
+
+  const filteredEnt = q.trim()
+    ? entityList.filter(n => n.toLowerCase().includes(q.toLowerCase()))
+    : entityList;
+
+  const handleSelect = name => {
+    setEntityFlt(name); setSearch(''); setQ(''); setOpen(false);
+  };
+  const handleClear = () => {
+    setEntityFlt('all'); setSearch(''); setQ(''); setOpen(false);
+  };
+  const handleType = e => {
+    const v = e.target.value;
+    setQ(v);
+    setSearch(v);
+    if (entityFlt !== 'all') setEntityFlt('all');
+    setOpen(true);
+  };
+
+  const displayVal = open ? q : (entityFlt !== 'all' ? entityFlt : search);
+  const placeholder = `${activeTab==='client'?'Client':'Vendor'} name or order…`;
+
+  return (
+    <div ref={ref} style={{ position:'relative', minWidth:160, maxWidth:220, alignSelf:'center', margin:'0 5px' }}>
+      <style>{`.dues-cb::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+      <input
+        ref={inputRef}
+        value={displayVal}
+        onChange={handleType}
+        onFocus={openDrop}
+        placeholder={placeholder}
+        className="dues-cb"
+        style={{ width:'100%', height:26, padding:`0 ${entityFlt!=='all'||search?'22px':'8px'} 0 8px`,
+          border:'1px solid rgba(255,255,255,0.25)', borderRadius:5, fontSize:11, fontFamily:F,
+          outline:'none', background:'rgba(255,255,255,0.12)', color:'#fff', boxSizing:'border-box' }}
+      />
+      {(entityFlt !== 'all' || search) && (
+        <button onMouseDown={e => { e.preventDefault(); handleClear(); }}
+          style={{ position:'absolute', right:5, top:'50%', transform:'translateY(-50%)',
+            background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', fontSize:11, padding:0, lineHeight:1 }}>
+          ✕
+        </button>
+      )}
+      {open && (
+        <div style={{ position:'fixed', top:pos.top, left:pos.left, width:pos.width,
+          zIndex:99999, background:'#fff', border:`1px solid ${BD}`, borderRadius:7,
+          maxHeight:220, overflowY:'auto', boxShadow:'0 6px 24px rgba(0,0,0,0.18)' }}>
+          {filteredEnt.length === 0
+            ? <div style={{ padding:'10px 14px', fontSize:12, color:'#999' }}>No match for "{q}"</div>
+            : filteredEnt.map(n => (
+              <div key={n} onMouseDown={() => handleSelect(n)}
+                style={{ padding:'7px 14px', cursor:'pointer', fontSize:12, fontFamily:F,
+                  background: n===entityFlt ? '#EEF4FF' : '#fff', color: n===entityFlt ? P : '#111',
+                  fontWeight: n===entityFlt ? 700 : 400, borderBottom:'1px solid #f1f5f9' }}
+                onMouseEnter={e => { if (n!==entityFlt) e.currentTarget.style.background='#f8faff'; }}
+                onMouseLeave={e => { if (n!==entityFlt) e.currentTarget.style.background='#fff'; }}>
+                {n}
+              </div>
+            ))
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -939,9 +1029,9 @@ const ViewDues = () => {
   }, [filtered, tableRows, activeTab]);
 
   const TH = ({children, right, style:sx={}}) => (
-    <th style={{ padding:'8px 9px', background:'#104f4f', color:'#fff', fontWeight:700,
-      fontSize:10.5, textAlign:right?'right':'left', whiteSpace:'nowrap',
-      borderRight:'1px solid #2a5080', position:'sticky', top:0, zIndex:2, ...sx }}>
+    <th style={{ padding:'6px 8px', background:P, color:'#fff', fontWeight:700,
+      fontSize:10, textAlign:right?'right':'left', whiteSpace:'nowrap',
+      borderRight:`1px solid ${PD}`, position:'sticky', top:0, zIndex:2, ...sx }}>
       {children}
     </th>
   );
@@ -1106,14 +1196,21 @@ const ViewDues = () => {
     setListPrintOpts(null);
   };
 
-  const tabBtn = (tab, label) => (
-    <button onClick={() => { setActiveTab(tab); setSearch(''); setEntityFlt('all'); }} style={{
-      padding:'7px 18px', fontWeight:tab===activeTab?700:500, fontSize:12, fontFamily:F,
-      background:tab===activeTab?'#fff':'transparent', color:tab===activeTab?P:'#6B7280',
-      border:'none', cursor:'pointer', borderBottom:tab===activeTab?`2px solid ${P}`:'2px solid transparent',
-      marginBottom:-2, position:'relative', zIndex:tab===activeTab?1:0,
-    }}>{label}</button>
-  );
+  const tabBtn = (tab, label) => {
+    const isAct = tab === activeTab;
+    return (
+      <button key={tab} onClick={() => { setActiveTab(tab); setSearch(''); setEntityFlt('all'); }}
+        style={{ display:'flex', alignItems:'center', padding:'0 14px', height:'100%',
+          fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+          whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+          color:isAct?'#fff':'rgba(255,255,255,0.65)',
+          background:isAct?'rgba(255,255,255,0.12)':'transparent',
+          borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
+          marginBottom:-2 }}>
+        {label}
+      </button>
+    );
+  };
 
   if (loading) return <div style={{ padding:40, textAlign:'center', fontFamily:F, color:'#666' }}>Loading…</div>;
 
@@ -1135,119 +1232,136 @@ const ViewDues = () => {
         />
       )}
 
-      {/* KPI strip */}
-      <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`, display:'flex', alignItems:'stretch', flexWrap:'wrap' }}>
+      {/* ══ Single combined nav row ══ */}
+      <div style={{ flexShrink:0, height:44, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', fontFamily:F, overflow:'visible' }}>
+
+        {/* Title */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 10px 0 12px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase', letterSpacing:'0.8px',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0, whiteSpace:'nowrap' }}>
+          💰 DUES
+        </div>
+
+        {/* KPI chips — removed Received/Paid, kept Order Value + Balance Due */}
         {[
-          { label:'Total Order Value', val:`₹${fmt(totals.orderVal)}`, color:'#104f4f' },
-          { label:activeTab==='client'?'Total Received':'Total Paid (Cash)', val:`₹${fmt(totals.received)}`, color:'#2e7d32' },
-          activeTab==='vendor' && totals.debitNotes>0 ? { label:'Debit Notes', val:`₹${fmt(totals.debitNotes)}`, color:'#b45309' } : null,
-          activeTab==='client' && totals.creditNotes>0 ? { label:'Credit Notes', val:`₹${fmt(totals.creditNotes)}`, color:'#7c3aed' } : null,
-          { label:'Balance Due', val:`₹${fmt(totals.due)}`, color: totals.due>0?(activeTab==='client'?'#16a34a':'#b71c1c'):'#6b7280' },
-          totals.advance>0 ? { label:'Advance / Credit', val:`₹${fmt(totals.advance)}`, color:'#0891b2' } : null,
+          { label:'Order Val', val:`₹${fmt(totals.orderVal)}`, color:'#fde68a' },
+          { label:'Balance Due', val:`₹${fmt(totals.due)}`, color:totals.due>0?'#fca5a5':'#6ee7b7' },
+          totals.advance>0 ? { label:'Advance', val:`₹${fmt(totals.advance)}`, color:'#7dd3fc' } : null,
+          activeTab==='vendor' && totals.debitNotes>0 ? { label:'Debit', val:`₹${fmt(totals.debitNotes)}`, color:'#fbbf24' } : null,
+          activeTab==='client' && totals.creditNotes>0 ? { label:'Credit', val:`₹${fmt(totals.creditNotes)}`, color:'#c4b5fd' } : null,
         ].filter(Boolean).map(k => (
-          <div key={k.label} style={{ padding:'6px 16px', borderRight:`1px solid ${BD}`, minWidth:130 }}>
-            <div style={{ fontSize:9.5, color:'#888', textTransform:'uppercase', letterSpacing:'0.5px' }}>{k.label}</div>
-            <div style={{ fontSize:14, fontWeight:800, color:k.color, marginTop:1 }}>{k.val}</div>
+          <div key={k.label} style={{ display:'flex', flexDirection:'column', justifyContent:'center',
+            padding:'0 10px', borderRight:'1px solid rgba(255,255,255,0.12)', flexShrink:0 }}>
+            <div style={{ fontSize:8.5, color:'rgba(255,255,255,0.55)', textTransform:'uppercase', letterSpacing:'0.4px', lineHeight:1 }}>{k.label}</div>
+            <div style={{ fontSize:12, fontWeight:800, color:k.color, lineHeight:1.5 }}>{k.val}</div>
           </div>
         ))}
-        <div style={{ flex:1 }}/>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'0 12px', borderLeft:`1px solid ${BD}` }}>
-          <label style={{ fontSize:11, display:'flex', alignItems:'center', gap:4, cursor:'pointer', color:'#555' }}>
-            <input type="checkbox" checked={showCleared} onChange={e => setShowCleared(e.target.checked)}/>
-            Show cleared
-          </label>
-          <button onClick={fetchAll} style={{ height:26, padding:'0 10px', fontSize:11, fontWeight:600,
-            fontFamily:F, background:'#EEF4FF', border:`1px solid ${BD}`, color:P, borderRadius:5, cursor:'pointer' }}>
-            ↻ Refresh
-          </button>
-        </div>
-      </div>
 
-      {/* Tabs + filter bar */}
-      <div style={{ flexShrink:0, background:'#fff', borderBottom:`2px solid ${BD}`, padding:'0 14px 8px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
-          <div style={{ display:'flex' }}>
-            {(!lockedTab || lockedTab==='client') && tabBtn('client', `📥 Receivable (Clients) — ${data.clientDues.length}`)}
-            {(!lockedTab || lockedTab==='vendor') && tabBtn('vendor', `📤 Payable (Vendors) — ${data.vendorDues.length}`)}
-          </div>
-          <div style={{ flex:1 }}/>
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name / order / product…"
-            style={{ height:26, width:220, borderRadius:5, border:`1px solid ${BD}`,
-              padding:'0 8px', fontSize:11, fontFamily:F, outline:'none' }}/>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-          <span style={{ fontSize:10, color:'#888', fontWeight:700 }}>FY:</span>
-          {fyList.map(f => {
-            const active = fy===f;
-            return (
-              <button key={f} onClick={() => setFy(f)}
-                style={{ height:24, padding:'0 10px', fontSize:10.5, fontWeight:active?700:500, fontFamily:F,
-                  cursor:'pointer', borderRadius:5, border:`1px solid ${active?P:BD}`,
-                  background:active?P:'#fff', color:active?'#fff':'#374151', whiteSpace:'nowrap' }}>
-                {f==='all'?'All FY':`FY ${f}`}
-              </button>
-            );
-          })}
-          <span style={{ fontSize:10, color:'#888', fontWeight:700, marginLeft:8 }}>
-            {activeTab==='client'?'Client':'Vendor'}:
-          </span>
-          <select value={entityFlt} onChange={e => setEntityFlt(e.target.value)}
-            style={{ height:26, padding:'0 6px', border:`1px solid ${BD}`, borderRadius:5,
-              fontSize:11, fontFamily:F, outline:'none', background:'#f9fafb', maxWidth:220 }}>
-            <option value="all">All</option>
-            {entityList.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <div style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center' }}>
-            {activeTab === 'vendor' && (
-              <label style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, cursor:'pointer', color:'#555', whiteSpace:'nowrap',
-                padding:'3px 8px', border:`1px solid ${BD}`, borderRadius:5, background:'#f9fafb' }}>
-                <input type="checkbox" checked={showClientInPrint} onChange={e => setShowClientInPrint(e.target.checked)}
-                  style={{ width:13, height:13, cursor:'pointer' }}/>
-                Client Name in Print
-              </label>
-            )}
-            <div style={{ position:'relative', display:'inline-block' }}>
-              <button onClick={() => setListPrintOpts(o => o ? null : { orient:'landscape' })}
-                style={{ height:26, padding:'0 12px', fontSize:11, fontFamily:F, cursor:'pointer',
-                  borderRadius:5, border:`1px solid ${listPrintOpts ? P : BD}`, background: listPrintOpts ? '#e8f0fe' : '#f0f4ff', color:P, fontWeight:600 }}>
-                🖨 Print List ▾
-              </button>
-              {listPrintOpts && (
-                <div style={{ position:'absolute', top:30, right:0, zIndex:200, background:'#fff', border:`1px solid ${BD}`, borderRadius:8, padding:14, width:220, boxShadow:'0 4px 16px rgba(0,0,0,0.14)', fontFamily:F }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:10 }}>Print Options</div>
-                  <div style={{ fontSize:11, fontWeight:600, color:'#6B7280', marginBottom:6 }}>Orientation</div>
-                  {[['landscape','A3 Landscape (wide)'],['portrait','A3 Portrait (tall)']].map(([val,label])=>(
-                    <label key={val} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, cursor:'pointer', fontSize:12 }}>
-                      <input type="radio" name="listOrient" value={val}
-                        checked={listPrintOpts.orient===val}
-                        onChange={()=>setListPrintOpts(o=>({...o,orient:val}))}
-                        style={{ accentColor:P, cursor:'pointer' }}/>
-                      <span style={{ color: listPrintOpts.orient===val ? P : '#374151', fontWeight: listPrintOpts.orient===val ? 700 : 400 }}>{label}</span>
-                    </label>
-                  ))}
-                  <div style={{ display:'flex', gap:6, marginTop:12 }}>
-                    <button onClick={()=>setListPrintOpts(null)}
-                      style={{ flex:1, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:`1px solid ${BD}`, borderRadius:5, background:'#fff', color:'#6B7280' }}>
-                      Cancel
-                    </button>
-                    <button onClick={handlePrintList}
-                      style={{ flex:2, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:'none', borderRadius:5, background:P, color:'#fff', fontWeight:700 }}>
-                      🖨 Print Now
-                    </button>
-                  </div>
-                </div>
-              )}
+        <div style={{ width:1, height:22, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 4px' }} />
+
+        {/* Client / Vendor tabs */}
+        {(!lockedTab || lockedTab==='client') && tabBtn('client', `📥 Clients (${data.clientDues.length})`)}
+        {(!lockedTab || lockedTab==='vendor') && tabBtn('vendor', `📤 Vendors (${data.vendorDues.length})`)}
+
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 4px' }} />
+
+        {/* FY filter */}
+        <span style={{ fontSize:9.5, color:'rgba(255,255,255,0.65)', fontWeight:700, alignSelf:'center', flexShrink:0 }}>FY:</span>
+        {fyList.map(f => {
+          const active = fy===f;
+          return (
+            <button key={f} onClick={() => setFy(f)}
+              style={{ height:22, padding:'0 7px', borderRadius:4, flexShrink:0, alignSelf:'center', marginLeft:3,
+                cursor:'pointer', fontFamily:F, whiteSpace:'nowrap', fontSize:10, fontWeight:active?700:400,
+                border:active?'1.5px solid rgba(255,255,255,0.88)':'1px solid rgba(255,255,255,0.2)',
+                background:active?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.07)',
+                color:active?PD:'rgba(255,255,255,0.8)' }}>
+              {f==='all'?'All':`FY ${f}`}
+            </button>
+          );
+        })}
+
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 4px' }} />
+
+        {/* Combined entity search + select */}
+        <DuesSearchBox
+          entityList={entityList}
+          entityFlt={entityFlt}
+          setEntityFlt={v => { setEntityFlt(v); }}
+          search={search}
+          setSearch={setSearch}
+          activeTab={activeTab}
+        />
+
+        {/* Show cleared */}
+        <label style={{ fontSize:10.5, display:'flex', alignItems:'center', gap:3, cursor:'pointer',
+          color:'rgba(255,255,255,0.85)', whiteSpace:'nowrap', flexShrink:0, margin:'0 5px' }}>
+          <input type="checkbox" checked={showCleared} onChange={e => setShowCleared(e.target.checked)}
+            style={{ accentColor:'#fff', cursor:'pointer' }}/>
+          Cleared
+        </label>
+
+        {/* Client in Print (vendor only) */}
+        {activeTab === 'vendor' && (
+          <label style={{ display:'flex', alignItems:'center', gap:3, fontSize:10, cursor:'pointer',
+            color:'rgba(255,255,255,0.75)', whiteSpace:'nowrap', flexShrink:0, margin:'0 4px' }}>
+            <input type="checkbox" checked={showClientInPrint} onChange={e => setShowClientInPrint(e.target.checked)}
+              style={{ accentColor:'#fff', cursor:'pointer' }}/>
+            Client in Print
+          </label>
+        )}
+
+        {/* 🖨 Advice — always visible, prints current entity filter or prompts */}
+        <button onClick={() => {
+            if (entityFlt !== 'all') { setPrintModal(entityFlt); }
+            else if (filtered.length > 0) { alert(`Select a specific ${activeTab==='client'?'client':'vendor'} from the search box to print Advice.`); }
+            else { alert('No data to print.'); }
+          }}
+          style={{ height:26, padding:'0 8px', alignSelf:'center', flexShrink:0, marginLeft:4,
+            cursor:'pointer', fontFamily:F, fontSize:10.5, fontWeight:700, borderRadius:4,
+            background:'rgba(255,255,255,0.18)', color:'#fff', border:'1px solid rgba(255,255,255,0.3)', whiteSpace:'nowrap' }}>
+          🖨 Advice
+        </button>
+
+        {/* 🖨 Print List */}
+        <div style={{ position:'relative', flexShrink:0, alignSelf:'center', margin:'0 4px' }}>
+          <button onClick={() => setListPrintOpts(o => o ? null : { orient:'landscape' })}
+            style={{ height:26, padding:'0 8px', fontSize:10.5, fontFamily:F, cursor:'pointer',
+              borderRadius:4, border:'1px solid rgba(255,255,255,0.3)',
+              background:listPrintOpts?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.12)',
+              color:'#fff', fontWeight:700, whiteSpace:'nowrap' }}>
+            🖨 List ▾
+          </button>
+          {listPrintOpts && (
+            <div style={{ position:'absolute', top:34, right:0, zIndex:9999, background:'#fff', border:`1px solid ${BD}`,
+              borderRadius:8, padding:14, width:220, boxShadow:'0 4px 16px rgba(0,0,0,0.18)', fontFamily:F }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:10 }}>Print Options</div>
+              {[['landscape','A3 Landscape (wide)'],['portrait','A3 Portrait (tall)']].map(([val,lbl])=>(
+                <label key={val} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, cursor:'pointer', fontSize:12 }}>
+                  <input type="radio" name="listOrient" value={val}
+                    checked={listPrintOpts.orient===val}
+                    onChange={()=>setListPrintOpts(o=>({...o,orient:val}))}
+                    style={{ accentColor:P, cursor:'pointer' }}/>
+                  <span style={{ color:listPrintOpts.orient===val?P:'#374151', fontWeight:listPrintOpts.orient===val?700:400 }}>{lbl}</span>
+                </label>
+              ))}
+              <div style={{ display:'flex', gap:6, marginTop:12 }}>
+                <button onClick={()=>setListPrintOpts(null)}
+                  style={{ flex:1, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:`1px solid ${BD}`, borderRadius:5, background:'#fff', color:'#6B7280' }}>Cancel</button>
+                <button onClick={handlePrintList}
+                  style={{ flex:2, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:'none', borderRadius:5, background:P, color:'#fff', fontWeight:700 }}>🖨 Print Now</button>
+              </div>
             </div>
-            {entityFlt !== 'all' && (
-              <button onClick={() => setPrintModal(entityFlt)}
-                style={{ height:26, padding:'0 12px', fontSize:11, fontFamily:F, cursor:'pointer',
-                  borderRadius:5, background:P, color:'#fff', border:'none', fontWeight:700 }}>
-                🖨 Print Advice
-              </button>
-            )}
-          </div>
+          )}
         </div>
+
+        {/* Refresh */}
+        <button onClick={fetchAll} style={{ height:26, padding:'0 8px', alignSelf:'center', margin:'0 6px', flexShrink:0,
+          cursor:'pointer', fontFamily:F, fontSize:11, fontWeight:700, borderRadius:4,
+          background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.22)', color:'#fff' }}>
+          ↻
+        </button>
       </div>
 
       {message && (
@@ -1256,18 +1370,17 @@ const ViewDues = () => {
       )}
 
       {/* Table */}
-      <div style={{ flex:1, overflow:'auto', padding:'8px 14px 14px' }}>
+      <div style={{ flex:1, overflow:'auto' }}>
         {tableRows.length === 0 ? (
           <div style={{ padding:40, textAlign:'center', color:'#888', fontStyle:'italic',
-            background:'#fff', border:`1px solid ${BD}`, borderRadius:8 }}>
+            background:'#fff' }}>
             {showCleared ? 'No linked orders found.' : 'No outstanding dues. Tick "Show cleared" to see all.'}
           </div>
         ) : (
-          <div style={{ background:'#fff', borderRadius:10, border:`1px solid ${BD}`,
-            overflow:'auto', maxHeight:'calc(100vh - 270px)', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ background:'#fff' }}>
             {activeTab === 'client' ? (
             /* ══ RECEIVABLE TABLE (client) ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1300 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1317,7 +1430,7 @@ const ViewDues = () => {
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {salesBills.length===0?<span style={{color:'#9ca3af'}}>—</span>:salesBills.map((b,bi)=>(
-                          <div key={bi} style={{marginBottom:bi<salesBills.length-1?4:0}}><div style={{fontWeight:600,color:'#104f4f',whiteSpace:'nowrap'}}>{b.billNo||`SB#${b.billId}`}</div>{b.billDate&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(b.billDate)}</div>}</div>
+                          <div key={bi} style={{marginBottom:bi<salesBills.length-1?4:0}}><div style={{fontWeight:600,color:P,whiteSpace:'nowrap'}}>{b.billNo||`SB#${b.billId}`}</div>{b.billDate&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(b.billDate)}</div>}</div>
                         ))}
                       </td>}
                       {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
@@ -1334,13 +1447,13 @@ const ViewDues = () => {
               </tbody>
               <tfoot>
                 <tr style={{ background:'#e8f0fe', position:'sticky', bottom:0, zIndex:2 }}>
-                  <td colSpan={5} style={{padding:'8px 10px',fontWeight:700,color:'#104f4f',fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
+                  <td colSpan={5} style={{padding:'8px 10px',fontWeight:700,color:P,fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#1e293b'}}>₹{fmt(totals.taxable)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:P,fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received + totals.creditNotes)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#16a34a':'#6b7280',fontSize:13}}>₹{fmt(totals.due)}</td>
@@ -1349,7 +1462,7 @@ const ViewDues = () => {
             </table>
             ) : (
             /* ══ PAYABLE TABLE (vendor) ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, minWidth:1400 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1420,13 +1533,13 @@ const ViewDues = () => {
               </tbody>
               <tfoot>
                 <tr style={{ background:'#e8f0fe', position:'sticky', bottom:0, zIndex:2 }}>
-                  <td colSpan={6} style={{padding:'8px 10px',fontWeight:700,color:'#104f4f',fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
+                  <td colSpan={6} style={{padding:'8px 10px',fontWeight:700,color:P,fontSize:12,borderTop:'2px solid #4a6a9a'}}>TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line items</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#1e293b'}}>₹{fmt(totals.taxable)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#7c2d12'}}>₹{fmt(totals.gst)}</td>
-                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#104f4f',fontSize:13}}>₹{fmt(totals.orderVal)}</td>
+                  <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:P,fontSize:13}}>₹{fmt(totals.orderVal)}</td>
                   <td style={{borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe'}}/>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:700,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:'#2e7d32'}}>₹{fmt(totals.received + totals.debitNotes)}</td>
                   <td style={{padding:'8px 9px',textAlign:'right',fontWeight:800,borderTop:'2px solid #4a6a9a',borderLeft:'1px solid #c7d2fe',color:totals.due>0?'#b71c1c':'#2e7d32',fontSize:13}}>₹{fmt(totals.due)}</td>

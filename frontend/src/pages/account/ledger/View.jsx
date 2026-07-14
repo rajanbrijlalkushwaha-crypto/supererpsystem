@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
@@ -6,8 +6,8 @@ import { useCompany } from '../../../context/CompanyContext';
 const F  = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P  = '#133d80';
 const BD = '#E5EAF2';
-const fmt  = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-const fmt2 = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt  = n => (parseFloat(n)||0).toFixed(2);
+const fmt2 = n => (parseFloat(n)||0).toFixed(2);
 const fmtD = ds => {
   if (!ds) return '—';
   const d = new Date(ds);

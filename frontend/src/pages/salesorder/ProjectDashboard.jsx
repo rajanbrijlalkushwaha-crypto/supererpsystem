@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -45,7 +45,7 @@ function fmtDate(d) {
 }
 
 function fmtMoney(n) {
-  return '₹' + (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:0 });
+  return '₹' + (parseFloat(n)||0).toFixed(2);
 }
 
 /* ═══════════════════════════════════
@@ -151,6 +151,7 @@ const ProjectDashboard = () => {
   const [order,     setOrder]     = useState(null);
   const [balance,   setBalance]   = useState(null);
   const [jobSheets, setJobSheets] = useState([]);
+  const [expenses,  setExpenses]  = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
 
@@ -163,11 +164,14 @@ const ProjectDashboard = () => {
         .catch(() => ({ data: null })),
       fetch(`/api/manufacturing/job-sheets?companyId=${companyId}`)
         .then(r => r.json()).catch(() => []),
-    ]).then(([r1, r2, jsAll]) => {
+      axios.get(`/api/accounts/expenses?companyId=${companyId}`).catch(() => ({ data: [] })),
+    ]).then(([r1, r2, jsAll, expRes]) => {
       setOrder(r1.data);
       setBalance(r2.data);
       const all = Array.isArray(jsAll) ? jsAll : [];
       setJobSheets(all.filter(j => String(j.soId) === String(orderId)));
+      const allExp = Array.isArray(expRes.data) ? expRes.data : [];
+      setExpenses(allExp.filter(e => String(e.soId || '') === String(orderId)));
     }).catch(err => {
       setError('Failed to load project: ' + (err.response?.data?.error || err.message));
     }).finally(() => setLoading(false));
@@ -648,6 +652,64 @@ const ProjectDashboard = () => {
             </div>
           </Section>
         )}
+
+        {/* ── SECTION 6: Linked Expenses ── */}
+        <Section title="Linked Expenses" icon="🧾" theme={C.red} count={expenses.length} defaultOpen={expenses.length > 0}>
+          {expenses.length === 0 ? (
+            <EmptyState msg="No expenses linked to this order." />
+          ) : (
+            <div className="thick-scroll" style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:C.shell }}>
+                    {['#','Voucher No.','Date','Category','Vendor / By','Amount (₹)','Status'].map(h => (
+                      <th key={h} style={{ padding:'6px 10px', color:'#fff', fontWeight:600, fontSize:11, textAlign:h==='Amount (₹)'?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.map((exp, i) => {
+                    const isPend = exp.status === 'pending_approval' || exp.status === 'pending';
+                    const expStatusColors = {
+                      approved:         { bg:'#E8F5E9', color:'#1B5E20', border:'#4CAF50' },
+                      pending_approval: { bg:'#FFF8E1', color:'#5D4037', border:'#FFC107' },
+                      pending:          { bg:'#FFF8E1', color:'#5D4037', border:'#FFC107' },
+                      rejected:         { bg:'#FEF0F0', color:'#7A0000', border:'#BB0000' },
+                      draft:            { bg:'#F0F0F0', color:'#555',    border:'#bbb'    },
+                    };
+                    const sc = expStatusColors[exp.status] || expStatusColors.draft;
+                    const vendorDisp = exp.vendorName || exp.vendor || exp.ledgerName || '—';
+                    const statusLabel = exp.status === 'pending_approval' ? '⏳ Pending Approval' : (exp.status || 'draft');
+                    return (
+                      <tr key={exp.expenseId} style={{ background:i%2===0?'#fff':'#FEF8F8', borderBottom:`1px solid ${C.border}` }}>
+                        <td style={{ padding:'6px 10px', color:C.muted }}>{i+1}</td>
+                        <td style={{ padding:'6px 10px', fontWeight:700, color:C.red.text, fontFamily:'monospace' }}>EXP-{exp.expenseId}</td>
+                        <td style={{ padding:'6px 10px', color:C.muted, whiteSpace:'nowrap' }}>{fmtDate(exp.date)}</td>
+                        <td style={{ padding:'6px 10px' }}>{exp.expenseCategory || exp.category || '—'}</td>
+                        <td style={{ padding:'6px 10px', fontWeight:600 }}>{vendorDisp}</td>
+                        <td style={{ padding:'6px 10px', textAlign:'right', fontWeight:700, color:C.red.text }}>
+                          {fmtMoney(exp.grandTotal || exp.totalAmount || 0)}
+                        </td>
+                        <td style={{ padding:'6px 10px' }}>
+                          <Badge label={statusLabel} bg={sc.bg} color={sc.color} border={sc.border} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background:'#FEF0F0', fontWeight:700 }}>
+                    <td colSpan={5} style={{ padding:'6px 10px', textAlign:'right', fontSize:12 }}>Total Expense:</td>
+                    <td style={{ padding:'6px 10px', textAlign:'right', color:C.red.text, fontSize:13 }}>
+                      {fmtMoney(expenses.reduce((s,e)=>s+(parseFloat(e.grandTotal||e.totalAmount)||0),0))}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </Section>
 
       </div>{/* end content */}
 

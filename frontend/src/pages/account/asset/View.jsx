@@ -51,16 +51,16 @@ const ViewAssets = () => {
                   <td>{r.date}</td>
                   <td>{r.assetName}</td>
                   <td>{r.category}</td>
-                  <td>₹{(r.purchaseAmount||0).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+                  <td>₹{(r.purchaseAmount||0).toFixed(2)}</td>
                   <td>{r.depreciationRate || 0}%</td>
-                  <td><strong>₹{(r.currentValue||0).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></td>
+                  <td><strong>₹{(r.currentValue||0).toFixed(2)}</strong></td>
                   <td><span className={`status-badge status-${r.status}`}>{r.status}</span></td>
                   <td><button className="delete-btn" onClick={() => handleDelete(r.assetId)}>🗑️ Delete</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="table-footer">{filtered.length} assets &nbsp;|&nbsp; Total Value: <strong>₹{totalValue.toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></div>
+          <div className="table-footer">{filtered.length} assets &nbsp;|&nbsp; Total Value: <strong>₹{totalValue.toFixed(2)}</strong></div>
         </div>
       )}
     </div>

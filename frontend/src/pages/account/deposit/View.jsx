@@ -189,8 +189,8 @@ function buildCoverLetter(dep, so) {
         <td style="text-align:center">${i + 1}</td>
         <td>${it.desc}</td>
         <td style="text-align:center">${it.qty || ''} ${it.unit}</td>
-        <td style="text-align:right">${it.rate ? Number(it.rate).toLocaleString('en-IN') : ''}</td>
-        <td style="text-align:right">${it.amt ? Number(it.amt).toLocaleString('en-IN') : ''}</td>
+        <td style="text-align:right">${it.rate ? Number(it.rate).toFixed(2) : ''}</td>
+        <td style="text-align:right">${it.amt ? Number(it.amt).toFixed(2) : ''}</td>
       </tr>`).join('')
     : `<tr><td colspan="5" style="text-align:center;color:#888;padding:10px">No items on this order</td></tr>`;
 
@@ -203,7 +203,7 @@ function buildCoverLetter(dep, so) {
     ['Order Date',                 fmtDash(orderDate)],
     ['Bank Guarantee No.',         dep.bgNo || ''],
     ['Bank Guarantee Date',        fmtDash(dep.startDate)],
-    ['Bank Guarantee Amount',      bgAmt ? Number(bgAmt).toLocaleString('en-IN') : ''],
+    ['Bank Guarantee Amount',      bgAmt ? Number(bgAmt).toFixed(2) : ''],
     ['Bank Guarantee Expiry Date', fmtDash(dep.expiryDate)],
     ['Remarks (if any)',           dep.remarks || ''],
   ];
@@ -238,7 +238,7 @@ function buildCoverLetter(dep, so) {
   ${itemRows}
   ${grandTotal ? `<tr>
     <td colspan="4" style="text-align:right;font-weight:bold;border-top:1.5pt solid #000">Grand Total</td>
-    <td style="text-align:right;font-weight:bold;border-top:1.5pt solid #000">${Number(grandTotal).toLocaleString('en-IN')}</td>
+    <td style="text-align:right;font-weight:bold;border-top:1.5pt solid #000">${Number(grandTotal).toFixed(2)}</td>
   </tr>` : ''}
 </table>
 
@@ -307,7 +307,7 @@ table td.center { text-align:center; }
       <div class="fd-line">Linked FD No.<br><span class="fd-blank"></span></div>
     </td>
     <td style="vertical-align:top;padding-top:8px">${clientName}</td>
-    <td class="center" style="vertical-align:top;padding-top:8px">${amt ? Number(amt).toLocaleString('en-IN') + '/-' : ''}</td>
+    <td class="center" style="vertical-align:top;padding-top:8px">${amt ? Number(amt).toFixed(2) + '/-' : ''}</td>
     <td class="center" style="vertical-align:top;padding-top:8px">${fmtDot(dep.expiryDate)}</td>
   </tr>
 </table>
@@ -650,7 +650,7 @@ export default function DepositView() {
                       </td>
 
                       <td style={{ padding:'8px 10px', fontWeight:600, fontSize:12, whiteSpace:'nowrap' }}>
-                        {dep?.amount ? `₹${Number(dep.amount).toLocaleString('en-IN')}` : '—'}
+                        {dep?.amount ? `₹${Number(dep.amount).toFixed(2)}` : '—'}
                       </td>
 
                       <td style={{ padding:'8px 10px', fontSize:11, whiteSpace:'nowrap', color:'#374151' }}>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -7,10 +7,11 @@ import AuditTrail from '../../components/AuditTrail';
 import ActivityDrawer from '../../components/ActivityDrawer';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P  = '#104f4f';
-const PL = '#e8f4f4';
+const P  = '#3A6186';
+const PD = '#2A4D6E';
+const PL = '#e8eef5';
 
-const fmt  = n => (parseFloat(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmt  = n => (parseFloat(n)||0).toFixed(2);
 const fmtD = d => { if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return d; return `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 const today = () => new Date().toISOString().split('T')[0];
 const billFileUrl = (billId, fileName, companyId, dl=false) =>
@@ -685,6 +686,7 @@ export default function SalesBill() {
   /* bill detail view */
   const [viewBill,    setViewBill]    = useState(null);
   const [selBill,     setSelBill]     = useState(null);
+  const [selRow,      setSelRow]      = useState(null);
   const [activityRec, setActivityRec] = useState(null);
   /* order bills modal */
   const [viewOrderBills, setViewOrderBills] = useState(null);
@@ -1200,7 +1202,7 @@ export default function SalesBill() {
 
   /* ═══════════════════════ LIST VIEW ═══════════════════════ */
   if (view==='list') return (
-    <div style={{ fontFamily:F, fontSize:12, padding:10 }}>
+    <div style={{ fontFamily:F, fontSize:12, display:'flex', flexDirection:'column', height:'100%' }}>
       {PdfConfirmModal}
 
       {/* ── PDF / Image Viewer ── */}
@@ -1274,7 +1276,7 @@ export default function SalesBill() {
                   ['Sales Order',  viewBill.orderNo||`SO-${viewBill.orderId}`],
                   ['Client',       viewBill.partyName||'—'],
                   ['GST Type',     viewBill.gstType==='intrastate'?'CGST+SGST':'IGST'],
-                  ['Grand Total',  `₹${Number(viewBill.grandTotal||0).toLocaleString('en-IN',{minimumFractionDigits:2})}`],
+                  ['Grand Total',  `₹${Number(viewBill.grandTotal||0).toFixed(2)}`],
                   ['E-way Bill',   viewBill.ewayBillNo||'—'],
                   ['IRN No',       viewBill.irnNo||'—'],
                   ['Ack No',       viewBill.acknNo||'—'],
@@ -1301,9 +1303,9 @@ export default function SalesBill() {
                           <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'center' }}>{i+1}</td>
                           <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2' }}>{it.description||it.itemName||'—'}</td>
                           <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'right' }}>{it.qty} {it.unit||''}</td>
-                          <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'right' }}>₹{Number(it.rate||0).toLocaleString('en-IN')}</td>
+                          <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'right' }}>₹{Number(it.rate||0).toFixed(2)}</td>
                           <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'center' }}>{it.gstPct||0}%</td>
-                          <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700 }}>₹{Number(it.total||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+                          <td style={{ padding:'4px 7px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700 }}>₹{Number(it.total||0).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1424,51 +1426,112 @@ export default function SalesBill() {
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ background:P, color:'#fff', padding:'8px 14px', borderRadius:'7px 7px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:20 }}>
-        <div>
-          <div style={{ fontSize:14, fontWeight:800 }}>🧾 Sales Bills (Tax Invoices)</div>
-          <div style={{ fontSize:10, opacity:0.7, marginTop:1 }}>Sales billing, delivery challans &amp; order-wise tracking</div>
+      {/* ══ Combined nav bar ══ */}
+      <div style={{ flexShrink:0, height:40, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F,
+        position:'sticky', top:0, zIndex:20 }}>
+        <style>{`.sb-srch::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+
+        {/* Label */}
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          🧾 SALES BILLS
         </div>
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={()=>openIssueDC()}
-            style={{ height:30,padding:'0 14px',background:'rgba(255,255,255,0.18)',border:'1px solid rgba(255,255,255,0.4)',borderRadius:6,cursor:'pointer',color:'#fff',fontSize:11,fontWeight:700,fontFamily:F }}>
+
+        {/* Tabs */}
+        {[
+          { key:'dashboard', label:'📊 Order Dashboard', count: dashboardRows.length },
+          { key:'bills',     label:'Tax Invoices',       count: bills.length },
+          { key:'pending-dc',label:'🚚 Delivery Challan', count: pendingDCs.length, alert: pendingDCs.filter(d=>d.status==='issued').length > 0 },
+        ].map(t => {
+          const isAct = listTab === t.key;
+          return (
+            <button key={t.key} onClick={() => { setListTab(t.key); setSbSearch(''); setBillStatusFilter('all'); setSelRow(null); }}
+              style={{ display:'flex', alignItems:'center', gap:5, padding:'0 12px', height:'100%',
+                fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+                whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                color:isAct?'#fff':'rgba(255,255,255,0.65)',
+                background:isAct?'rgba(255,255,255,0.12)':'transparent',
+                borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
+                marginBottom:-2 }}>
+              {t.label}
+              <span style={{ background:t.alert?'#DC2626':isAct?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)',
+                color:'#fff', borderRadius:10, fontSize:10, padding:'1px 7px', fontWeight:700 }}>
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 4px' }} />
+
+        {/* Search */}
+        <div style={{ position:'relative', flex:1, minWidth:120, maxWidth:220, alignSelf:'center', margin:'0 6px' }}>
+          <input value={sbSearch} onChange={e => setSbSearch(e.target.value)}
+            placeholder="Search…" className="sb-srch"
+            style={{ width:'100%', height:26, padding:'0 10px',
+              border:'1px solid rgba(255,255,255,0.22)', borderRadius:6, fontSize:11, fontFamily:F,
+              outline:'none', background:'rgba(255,255,255,0.1)', color:'#fff', boxSizing:'border-box' }} />
+        </div>
+
+        {/* Right buttons */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'0 10px', flexShrink:0, marginLeft:'auto' }}>
+          <button onClick={() => openIssueDC()}
+            style={{ height:26, padding:'0 12px', background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.35)',
+              borderRadius:5, cursor:'pointer', color:'#fff', fontSize:11, fontWeight:700, fontFamily:F, whiteSpace:'nowrap' }}>
             🚚 New DC
           </button>
-          <button onClick={()=>setView('create')}
-            style={{ height:30,padding:'0 16px',background:'#fff',border:'none',borderRadius:6,cursor:'pointer',color:P,fontSize:12,fontWeight:800,fontFamily:F }}>
+          <button onClick={() => setView('create')}
+            style={{ height:26, padding:'0 12px', background:'#fff', border:'none',
+              borderRadius:5, cursor:'pointer', color:P, fontSize:11, fontWeight:800, fontFamily:F, whiteSpace:'nowrap' }}>
             🧾 + New Invoice
           </button>
         </div>
       </div>
 
-      {/* Sub-tabs + search */}
-      <div style={{ display:'flex', background:'#e8f4f4', borderBottom:'2px solid #D1D5DB', alignItems:'center', position:'sticky', top:52, zIndex:19 }}>
-        {[
-          { key:'dashboard', label:'📊 Order Dashboard', count: dashboardRows.length },
-          { key:'bills',     label:'Tax Invoices',       count: bills.length },
-          { key:'pending-dc',label:'🚚 Delivery Challan', count: pendingDCs.length, alert: pendingDCs.filter(d=>d.status==='issued').length > 0 },
-        ].map(t => (
-          <button key={t.key} onClick={() => { setListTab(t.key); setSbSearch(''); setBillStatusFilter('all'); }}
-            style={{ padding:'6px 16px', fontSize:12, fontWeight:listTab===t.key?700:400, background:listTab===t.key?'#fff':'transparent',
-              border:'none', borderBottom:listTab===t.key?`2px solid ${P}`:'2px solid transparent',
-              color:listTab===t.key?P:'#374151', cursor:'pointer', fontFamily:F, marginBottom:-2, display:'flex', alignItems:'center', gap:6 }}>
-            {t.label}
-            <span style={{ background:t.alert?'#DC2626':listTab===t.key?P:'#6B7280', color:'#fff', borderRadius:10, fontSize:10, padding:'1px 7px', fontWeight:700 }}>
-              {t.count}
+      {/* Contextual action bar */}
+      {selRow && (
+        <div style={{ flexShrink:0, background:`linear-gradient(90deg,${P},${PD})`, padding:'5px 12px',
+          display:'flex', alignItems:'center', gap:8, boxShadow:'0 2px 6px rgba(0,0,0,0.18)', zIndex:19, position:'sticky', top:40 }}>
+          <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1,
+            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            ▶ {selRow.so?.orderNo||`SO-${selRow.orderId}`} · {selRow.clientName}
+          </span>
+          {selRow.orderedQty > 0 && selRow.billedQty >= selRow.orderedQty ? (
+            <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:10,
+              background:'rgba(16,185,129,0.3)', color:'#fff', border:'1px solid rgba(16,185,129,0.5)', whiteSpace:'nowrap' }}>
+              ✅ Fully Billed
             </span>
-          </button>
-        ))}
-        <div style={{ marginLeft:'auto', padding:'4px 10px' }}>
-          <input
-            value={sbSearch}
-            onChange={e => setSbSearch(e.target.value)}
-            placeholder="Search…"
-            style={{ height:26, padding:'0 10px', fontSize:12, border:'1px solid #c5d0e6', borderRadius:5,
-              fontFamily:F, outline:'none', minWidth:180, background:'#fff', color:'#111' }}
-          />
+          ) : (
+            <button onClick={() => { setSelOrder(String(selRow.orderId)); setView('create'); }}
+              style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+                fontWeight:700, borderRadius:5, border:'none', whiteSpace:'nowrap',
+                background:'rgba(255,255,255,0.18)', color:'#fff' }}>🧾 Bill</button>
+          )}
+          <button onClick={() => setViewOrderBills(selRow)}
+            style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+              fontWeight:700, borderRadius:5, border:'none', whiteSpace:'nowrap',
+              background:'rgba(255,255,255,0.18)', color:'#fff' }}>📋 View Bills</button>
+          {selRow.so && (
+            <button onClick={() => printCompletionCert(selRow.so, selectedCompany)}
+              style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+                fontWeight:700, borderRadius:5, border:'none', whiteSpace:'nowrap',
+                background:'rgba(255,255,255,0.18)', color:'#fff' }}>🏆 Completion</button>
+          )}
+          {selRow.billList?.[0] && (
+            <button onClick={() => printWarrantyCert(selRow.billList[0], selRow.so, selectedCompany, pendingDCs)}
+              style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+                fontWeight:700, borderRadius:5, border:'none', whiteSpace:'nowrap',
+                background:'rgba(255,255,255,0.18)', color:'#fff' }}>📜 Warranty</button>
+          )}
+          <button onClick={() => setSelRow(null)}
+            style={{ height:26, width:26, background:'rgba(255,255,255,0.15)', border:'none',
+              color:'#fff', borderRadius:5, cursor:'pointer', fontSize:13, flexShrink:0 }}>✕</button>
         </div>
-      </div>
+      )}
 
       {/* ── DASHBOARD TAB ── */}
       {listTab==='dashboard' && (() => {
@@ -1489,8 +1552,8 @@ export default function SalesBill() {
         );
 
         return (
-        <div style={{ border:'1px solid #E5EAF2', borderTop:'none', borderRadius:'0 0 7px 7px' }}>
-          <div style={{ background:'#F8FAFF', borderBottom:'1px solid #E5EAF2', padding:'7px 14px', display:'flex', flexWrap:'wrap', gap:8, justifyContent:'space-between', alignItems:'center', position:'sticky', top:90, zIndex:18 }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ background:'#F8FAFF', borderBottom:'1px solid #E5EAF2', padding:'6px 14px', display:'flex', flexWrap:'wrap', gap:8, justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
             <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
 
               {/* FY filter */}
@@ -1541,75 +1604,63 @@ export default function SalesBill() {
           {loading ? (
             <div style={{ padding:30, textAlign:'center', color:'#9CA3AF' }}>Loading…</div>
           ) : (
-            <div style={{ overflow:'auto', maxHeight:'calc(100vh - 240px)' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
+            <div style={{ flex:1, overflow:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed' }}>
+                <colgroup>
+                  <col style={{ width:'9%' }} />{/* Order No */}
+                  <col style={{ width:'7%' }} />{/* Order Date */}
+                  <col style={{ width:'8%' }} />{/* Client Order No */}
+                  <col style={{ width:'14%' }} />{/* Client Name */}
+                  <col style={{ width:'12%' }} />{/* Material */}
+                  <col style={{ width:'8%' }} />{/* Order Value */}
+                  <col style={{ width:'5%' }} />{/* Order Qty */}
+                  <col style={{ width:'6%' }} />{/* Dispatch Qty */}
+                  <col style={{ width:'5%' }} />{/* Due Qty */}
+                  <col style={{ width:'5%' }} />{/* Billed Qty */}
+                  <col style={{ width:'8%' }} />{/* Bill Amount */}
+                  <col style={{ width:'8%' }} />{/* Bill Pending */}
+                  <col style={{ width:'5%' }} />{/* Bills */}
+                </colgroup>
                 <thead style={{ position:'sticky', top:0, zIndex:2 }}>
                   <tr>
-                    {['Order No','Order Date','Client Order No','Client Name','Material','Order Value (₹)','Order Qty','Dispatch Qty','Due Qty','Billed Qty','Bill Amount (₹)','Bill Pending (₹)','Bills','Actions'].map((h,i)=>(
-                      <th key={h} style={{ padding:'6px 8px', background:P, color:'#fff', fontSize:10, fontWeight:700,
-                        textAlign:i>=5&&i<=11?'right':'left', border:'1px solid #1a3a9f', whiteSpace:'nowrap', position:'sticky', top:0 }}>{h}</th>
+                    {['Order No','Order Date','Client Order No','Client Name','Material','Order Value (₹)','Order Qty','Dispatch Qty','Due Qty','Billed Qty','Bill Amount (₹)','Bill Pending (₹)','Bills'].map((h,i)=>(
+                      <th key={h} style={{ padding:'5px 6px', background:P, color:'#fff', fontSize:9.5, fontWeight:700,
+                        textAlign:i>=5&&i<=11?'right':'left', border:`1px solid ${PD}`, whiteSpace:'nowrap', position:'sticky', top:0 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length===0 ? (
-                    <tr><td colSpan={14} style={{ textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch||billStatusFilter!=='all'||fyFilter!=='all'?'No results':'No sales orders found'}</td></tr>
-                  ) : rows.map((r,i)=>(
-                    <tr key={r.orderId} onClick={()=>setViewOrderBills(r)}
-                      style={{ background:i%2===0?'#fff':'#F8FAFF',cursor:'pointer' }}
-                      onMouseEnter={e=>e.currentTarget.style.background='#EEF4FF'}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#F8FAFF'}>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:700,color:P }}>{r.so?.orderNo||`SO-${r.orderId}`}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap' }}>{fmtD(r.so?.orderDate||r.so?.date)||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#555' }}>{r.clientOrderNo}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:600 }}>{r.clientName}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }} title={r.material}>{r.material}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:'#1e293b' }}>{r.orderValue>0?`₹${fmt(r.orderValue)}`:'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right' }}>{r.orderedQty||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:'#059669',fontWeight:600 }}>{r.dispatchQty||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:r.dueQty>0?'#DC2626':'#059669',fontWeight:600 }}>{r.dueQty||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',fontWeight:600 }}>{r.billedQty||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P }}>{r.billAmount>0?`₹${fmt(r.billAmount)}`:'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:r.pendingBillAmt>0?'#DC2626':'#059669' }}>{r.pendingBillAmt>0?`₹${fmt(r.pendingBillAmt)}`:'✓ Fully Billed'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'center' }}>
+                    <tr><td colSpan={13} style={{ textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch||billStatusFilter!=='all'||fyFilter!=='all'?'No results':'No sales orders found'}</td></tr>
+                  ) : rows.map((r,i)=>{
+                    const isSel = selRow?.orderId === r.orderId;
+                    const rowBg = isSel ? '#EEF4FF' : i%2===0?'#fff':'#F8FAFF';
+                    return (
+                    <tr key={r.orderId} onClick={()=>setSelRow(isSel?null:r)}
+                      style={{ background:rowBg, cursor:'pointer', outline:isSel?`2px solid ${P}`:'none', outlineOffset:'-2px' }}
+                      onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background='#EEF4FF'; }}
+                      onMouseLeave={e=>e.currentTarget.style.background=rowBg}>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',fontWeight:700,color:P,wordBreak:'break-all',fontSize:10.5 }}>{r.so?.orderNo||`SO-${r.orderId}`}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(r.so?.orderDate||r.so?.date)||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',color:'#555',wordBreak:'break-all',fontSize:10.5 }}>{r.clientOrderNo||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',fontWeight:600,lineHeight:1.3 }}>{r.clientName}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',lineHeight:1.3,color:'#374151' }} title={r.material}>{r.material}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:'#1e293b',whiteSpace:'nowrap' }}>{r.orderValue>0?`₹${fmt(r.orderValue)}`:'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right' }}>{r.orderedQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:'#059669',fontWeight:600 }}>{r.dispatchQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:r.dueQty>0?'#DC2626':'#059669',fontWeight:600 }}>{r.dueQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',fontWeight:600 }}>{r.billedQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P,whiteSpace:'nowrap' }}>{r.billAmount>0?`₹${fmt(r.billAmount)}`:'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:r.pendingBillAmt>0?'#DC2626':'#059669',fontSize:10 }}>{r.pendingBillAmt>0?`₹${fmt(r.pendingBillAmt)}`:'✓ Billed'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'center' }}>
                         {r.billCount>0?(
-                          <span style={{ fontSize:10,fontWeight:700,padding:'1px 8px',borderRadius:10,background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7' }}>{r.billCount} bill{r.billCount>1?'s':''}</span>
+                          <span style={{ fontSize:9.5,fontWeight:700,padding:'1px 6px',borderRadius:10,background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',whiteSpace:'nowrap' }}>{r.billCount}✓</span>
                         ):(
-                          <span style={{ fontSize:10,padding:'1px 8px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FDE68A' }}>No bill</span>
+                          <span style={{ fontSize:9.5,padding:'1px 6px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FDE68A' }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:'flex',flexDirection:'column',gap:4 }}>
-                          <div>
-                            {r.orderedQty > 0 && r.billedQty >= r.orderedQty ? (
-                              <span style={{ fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:10,background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',whiteSpace:'nowrap' }}>
-                                ✅ Fully Billed
-                              </span>
-                            ) : (
-                              <button onClick={()=>{ setSelOrder(String(r.orderId)); setView('create'); }}
-                                style={{ padding:'2px 10px',fontSize:10,cursor:'pointer',background:'#EFF6FF',color:P,border:`1px solid #b3c6e8`,borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
-                                🧾 Bill
-                              </button>
-                            )}
-                          </div>
-                          <div style={{ display:'flex',gap:4 }}>
-                            {r.so && (
-                              <button onClick={()=>printCompletionCert(r.so, selectedCompany)}
-                                style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#EFF6FF',color:'#133d80',border:'1px solid #b3c6e8',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
-                                🏆 Completion
-                              </button>
-                            )}
-                            {r.billList[0] && (
-                              <button onClick={()=>printWarrantyCert(r.billList[0], r.so, selectedCompany, pendingDCs)}
-                                style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#F0FDF4',color:'#059669',border:'1px solid #6EE7B7',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
-                                📜 Warranty
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -1635,13 +1686,13 @@ export default function SalesBill() {
         filteredBills = [...filteredBills].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
 
         return (
-        <div style={{ border:'1px solid #E5EAF2', borderTop:'none', borderRadius:'0 0 7px 7px' }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
 
           {/* ── Bill Selection Action Bar ── */}
           {selBill && (() => {
             const selSO = salesOrders.find(o=>String(o.orderId)===String(selBill.orderId));
             return (
-              <div style={{ background:'linear-gradient(90deg,#1D4ED8,#2563EB)', padding:'5px 12px', display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ background:`linear-gradient(90deg,${P},${PD})`, padding:'5px 12px', display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
                 <span style={{ fontSize:11, color:'rgba(255,255,255,0.8)' }}>▶</span>
                 <span style={{ fontSize:12, fontWeight:700, color:'#fff', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {selBill.billNo||'Draft'} · {selBill.partyName||''}
@@ -1664,8 +1715,8 @@ export default function SalesBill() {
             );
           })()}
 
-          {/* FY filter bar — sticky, outside the scroll container */}
-          <div style={{ background:'#F8FAFF', borderBottom:'1px solid #E5EAF2', padding:'7px 14px', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', position:'sticky', top:90, zIndex:18 }}>
+          {/* FY filter bar */}
+          <div style={{ background:'#F8FAFF', borderBottom:'1px solid #E5EAF2', padding:'6px 14px', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', flexShrink:0 }}>
             <span style={{ fontSize:10.5, fontWeight:700, color:'#374151' }}>Financial Year:</span>
             <select value={fyFilter} onChange={e=>setFyFilter(e.target.value)}
               style={{ height:28, padding:'0 8px', border:`1px solid ${fyFilter!=='all'?P:'#D1D5DB'}`, borderRadius:5, fontSize:11, fontFamily:F, cursor:'pointer', background:fyFilter!=='all'?'#EFF6FF':'#fff', color:fyFilter!=='all'?P:'#374151', minWidth:140, fontWeight:fyFilter!=='all'?700:400 }}>
@@ -1683,13 +1734,28 @@ export default function SalesBill() {
           </div>
 
           {/* scrollable table container */}
-          <div style={{ overflow:'auto', maxHeight:'calc(100vh - 240px)' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
-            <thead>
+          <div style={{ flex:1, overflow:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed' }}>
+            <colgroup>
+              <col style={{ width:'3%' }} />{/* # */}
+              <col style={{ width:'9%' }} />{/* Bill No */}
+              <col style={{ width:'6%' }} />{/* Bill Date */}
+              <col style={{ width:'9%' }} />{/* Order No */}
+              <col style={{ width:'6%' }} />{/* Order Date */}
+              <col style={{ width:'13%' }} />{/* Client */}
+              <col style={{ width:'8%' }} />{/* E-way */}
+              <col style={{ width:'12%' }} />{/* IRN No */}
+              <col style={{ width:'8%' }} />{/* Ack No */}
+              <col style={{ width:'7%' }} />{/* GST Type */}
+              <col style={{ width:'7%' }} />{/* Taxable */}
+              <col style={{ width:'6%' }} />{/* GST */}
+              <col style={{ width:'6%' }} />{/* Grand Total */}
+            </colgroup>
+            <thead style={{ position:'sticky', top:0, zIndex:2 }}>
               <tr>
                 {['#','Bill No','Bill Date','Order No','Order Date','Client','E-way Bill No','IRN No','Ack No','GST Type','Taxable (₹)','GST (₹)','Grand Total (₹)'].map((h,i) => (
-                  <th key={h} style={{ padding:'6px 8px', background:P, color:'#fff', fontSize:10, fontWeight:700,
-                    textAlign:i>=10&&i<=12?'right':(i===0?'center':'left'), border:'1px solid #1a3a9f', whiteSpace:'nowrap', ...(i===0?{width:36}:{}) }}>{h}</th>
+                  <th key={h} style={{ padding:'5px 6px', background:P, color:'#fff', fontSize:9.5, fontWeight:700,
+                    textAlign:i>=10&&i<=12?'right':(i===0?'center':'left'), border:`1px solid ${PD}`, whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1708,38 +1774,38 @@ export default function SalesBill() {
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background='#EEF4FF';}}
                   onMouseLeave={e=>{e.currentTarget.style.background=rowBg;}}>
                   {/* # select */}
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#9CA3AF',background:isSel?P:'transparent',cursor:'pointer',fontSize:11 }}
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#9CA3AF',background:isSel?P:'transparent',cursor:'pointer',fontSize:10 }}
                     onClick={e=>{e.stopPropagation();setSelBill(s=>s?.billId===b.billId?null:b);}}>
                     {isSel?'✓':i+1}
                   </td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:700,color:P }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontWeight:700,color:P,wordBreak:'break-all',fontSize:10.5 }}>
                     {b.billNo||<span style={{color:'#9CA3AF',fontStyle:'italic',fontWeight:400}}>Draft</span>}
-                    {(b.attachments||[]).length>0 && <span style={{marginLeft:4,fontSize:9,color:'#059669'}}>📎{(b.attachments||[]).length}</span>}
+                    {(b.attachments||[]).length>0 && <span style={{marginLeft:3,fontSize:9,color:'#059669'}}>📎{(b.attachments||[]).length}</span>}
                   </td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{fmtD(b.billDate)}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#2563eb',fontWeight:600 }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(b.billDate)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',color:P,fontWeight:600,wordBreak:'break-all',fontSize:10.5 }}>
                     {b.orderNo || (so?.orderNo ? so.orderNo : '—')}
                   </td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap' }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap',fontSize:10.5 }}>
                     {fmtD(so?.orderDate || so?.date) || '—'}
                   </td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:600 }}>{b.partyName}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontSize:10,color:'#555' }}>{b.ewayBillNo||'—'}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontSize:10,color:'#555',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis' }}>{b.irnNo||'—'}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontSize:10,color:'#555' }}>{b.acknNo||'—'}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
-                    <span style={{ padding:'1px 7px',borderRadius:4,fontSize:10,fontWeight:700,background:b.gstType==='intrastate'?'#DCFCE7':'#EEF2FF',color:b.gstType==='intrastate'?'#133d80':'#4338CA' }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontWeight:600,lineHeight:1.3 }}>{b.partyName}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:10,color:'#555',wordBreak:'break-all' }}>{b.ewayBillNo||'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:9.5,color:'#555',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }} title={b.irnNo||''}>{b.irnNo||'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:10,color:'#555',wordBreak:'break-all' }}>{b.acknNo||'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'center' }}>
+                    <span style={{ padding:'1px 5px',borderRadius:4,fontSize:9.5,fontWeight:700,background:b.gstType==='intrastate'?'#DCFCE7':'#EEF2FF',color:b.gstType==='intrastate'?'#133d80':'#4338CA',whiteSpace:'nowrap' }}>
                       {b.gstType==='intrastate'?'CGST+SGST':'IGST'}
                     </span>
                   </td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right' }}>{fmt(b.subTotal)}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED' }}>{fmt(b.totalGST)}</td>
-                  <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P }}>{fmt(b.grandTotal)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',whiteSpace:'nowrap' }}>{fmt(b.subTotal)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',whiteSpace:'nowrap' }}>{fmt(b.totalGST)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P,whiteSpace:'nowrap' }}>{fmt(b.grandTotal)}</td>
                 </tr>
               );})}
             </tbody>
             {filteredBills.length>0 && (
-              <tfoot>
+              <tfoot style={{ position:'sticky', bottom:0, zIndex:2 }}>
                 <tr style={{ background:'#e8eef8', fontWeight:700 }}>
                   <td colSpan={10} style={{ padding:'6px 8px',border:'1px solid #E5EAF2',fontWeight:800 }}>TOTAL ({filteredBills.length} bills{fyFilter!=='all'?` · FY ${fyFilter}`:''})</td>
                   <td style={{ padding:'6px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.subTotal)||0),0))}</td>
@@ -1756,7 +1822,7 @@ export default function SalesBill() {
 
       {/* ── DC TAB ── */}
       {listTab==='pending-dc' && (
-        <div style={{ border:'1px solid #E5EAF2', borderTop:'none', borderRadius:'0 0 7px 7px', overflow:'hidden' }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
           <div style={{ background:'#FFFBEB', borderBottom:'1px solid #FDE68A', padding:'7px 14px', display:'flex', alignItems:'center', gap:10 }}>
             <span style={{ fontSize:11, color:'#92400E', flex:1 }}><strong>Delivery Challans</strong> — "Invoice Pending" = invoice not yet created.</span>
             <span style={{ fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FDE68A' }}>

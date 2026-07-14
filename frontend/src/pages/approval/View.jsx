@@ -8,7 +8,7 @@ const P  = '#133d80';
 const BD = '#E5EAF2';
 
 const fmtD   = d => d ? new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-const fmtAmt = n => n != null && n !== '' ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
+const fmtAmt = n => n != null && n !== '' ? `₹${Number(n).toFixed(2)}` : '—';
 const camel  = k => k.replace(/([A-Z])/g,' $1').replace(/^./,c=>c.toUpperCase()).replace(/Id$/,'').trim();
 
 /* ── Module colours ── */
@@ -100,7 +100,7 @@ const fmtVal = v => {
   if (typeof v === 'number') {
     /* format numbers ≥ 100 as currency-style */
     return Math.abs(v) >= 100
-      ? Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+      ? Number(v).toFixed(2)
       : String(v);
   }
   return String(v).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -262,8 +262,8 @@ function PreviewModal({ item, cid, onClose, onApprove, onReject, canDoApprove })
                             <td style={{ padding:'5px 8px', color:'#9ca3af' }}>{i+1}</td>
                             <td style={{ padding:'5px 8px', color:'#111827' }}>{desc}</td>
                             <td style={{ padding:'5px 8px', textAlign:'center', color:'#374151' }}>{qty} {it.unit||''}</td>
-                            <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{rate ? Number(rate).toLocaleString('en-IN') : '—'}</td>
-                            <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:600, color:'#111827' }}>{amt ? Number(amt).toLocaleString('en-IN') : '—'}</td>
+                            <td style={{ padding:'5px 8px', textAlign:'right', color:'#374151' }}>{rate ? Number(rate).toFixed(2) : '—'}</td>
+                            <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:600, color:'#111827' }}>{amt ? Number(amt).toFixed(2) : '—'}</td>
                           </tr>
                         );
                       })}
@@ -295,8 +295,8 @@ function PreviewModal({ item, cid, onClose, onApprove, onReject, canDoApprove })
                     {entries.map((e, i) => (
                       <tr key={i} style={{ borderBottom:`1px solid ${BD}` }}>
                         <td style={{ padding:'5px 8px', color:'#111827' }}>{e.account||e.ledger||e.name||'—'}</td>
-                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#15803d' }}>{e.debit||e.dr ? Number(e.debit||e.dr).toLocaleString('en-IN') : ''}</td>
-                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#dc2626' }}>{e.credit||e.cr ? Number(e.credit||e.cr).toLocaleString('en-IN') : ''}</td>
+                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#15803d' }}>{e.debit||e.dr ? Number(e.debit||e.dr).toFixed(2) : ''}</td>
+                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#dc2626' }}>{e.credit||e.cr ? Number(e.credit||e.cr).toFixed(2) : ''}</td>
                       </tr>
                     ))}
                   </tbody>

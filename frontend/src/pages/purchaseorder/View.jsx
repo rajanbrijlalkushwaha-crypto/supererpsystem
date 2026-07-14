@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printPurchaseOrder } from '../../utils/printPurchaseOrder';
@@ -59,7 +59,7 @@ const POViewModal = ({ order, onClose, onEdit, onPrint, onDelete, selectedCompan
   };
 
   const gt     = getGrandTotal();
-  const fmt    = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits:2 });
+  const fmt    = n => '₹' + Number(n || 0).toFixed(2);
   const fmtD   = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
   const rawDate = order.poDate || order.orderDate || order.date;
   const status  = order.status || 'draft';
@@ -363,7 +363,7 @@ const ViewPurchaseOrders = () => {
     }, 0);
   };
 
-  const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const fmt = n => '₹' + Number(n || 0).toFixed(2);
   const fmtD = d => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
   const getFY = d => { if(!d) return null; const dt=new Date(d); if(isNaN(dt)) return null; const y=dt.getFullYear(),m=dt.getMonth()+1,s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 

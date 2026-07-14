@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printPurchaseOrder } from '../../utils/printPurchaseOrder';
@@ -9,7 +9,7 @@ import AttachmentPreviewModal from '../../components/AttachmentPreviewModal';
 import AuditTrail from '../../components/AuditTrail';
 
 /* ── helpers ── */
-const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = n => '₹' + Number(n || 0).toFixed(2);
 
 const getGrandTotal = (order) => {
   if (order.grandTotal) return parseFloat(order.grandTotal);

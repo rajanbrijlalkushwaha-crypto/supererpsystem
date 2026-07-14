@@ -27,7 +27,7 @@ const fmtD = v => {
   const dt = new Date(v);
   return isNaN(dt) ? String(v) : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`;
 };
-const fmtN = n => Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const fmtN = n => Number(n||0).toFixed(2);
 
 /* ── Amount in words ── */
 function numWords(n) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
 /* ═══════════════════════════════════════════════════
@@ -63,10 +63,10 @@ const validators = {
    DESIGN TOKENS
 ═══════════════════════════════════════════════════ */
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P  = '#2563EB';
-const PD = '#1D4ED8';
+const P  = '#3A6186';
+const PD = '#2A4D6E';
 const BD = '#D1D5DB';
-const BG = '#F5F7FA';
+const BG = '#F0F2F5';
 
 /* ═══════════════════════════════════════════════════
    INIT STATE
@@ -145,21 +145,21 @@ function MultiCheck({ options, selected, onChange, error }) {
    MAIN COMPONENT
 ═══════════════════════════════════════════════════ */
 /* ── Shared layout components — defined at module level so React never remounts them on re-render ── */
-const FR = ({ label, children, req, w=140 }) => (
-  <div style={{display:'flex',alignItems:'center',minHeight:30,borderBottom:'1px solid #CBD5E1',padding:'2px 6px',background:'#fff'}}>
-    <label style={{fontSize:11.5,fontWeight:700,color:'#000',minWidth:w,maxWidth:w,padding:'0 8px 0 0',textAlign:'left',flexShrink:0}}>
+const FR = ({ label, children, req, w=150 }) => (
+  <div style={{display:'flex',alignItems:'center',minHeight:32,borderBottom:'1px solid #E2E8EF',padding:'2px 0',background:'#fff'}}>
+    <label style={{fontSize:11.5,fontWeight:600,color:'#374151',minWidth:w,maxWidth:w,padding:'0 10px',textAlign:'left',flexShrink:0,borderRight:'1px solid #E2E8EF',alignSelf:'stretch',display:'flex',alignItems:'center'}}>
       {label}{req&&<span style={{color:'#DC2626',marginLeft:2}}>*</span>}
     </label>
-    <div style={{flex:1,display:'flex',gap:4,alignItems:'center'}}>{children}</div>
+    <div style={{flex:1,display:'flex',gap:4,alignItems:'center',padding:'2px 8px'}}>{children}</div>
   </div>
 );
 const PH = ({ title }) => (
-  <div style={{background:'#F1F5F9',color:'#1E293B',fontSize:12,fontWeight:700,padding:'6px 12px',letterSpacing:0.2,borderBottom:'1px solid #D1D5DB'}}>
+  <div style={{background:P,color:'#fff',fontSize:11.5,fontWeight:700,padding:'6px 10px',letterSpacing:0.3,borderBottom:`1px solid ${PD}`}}>
     {title}
   </div>
 );
 const VCard = ({ children }) => (
-  <div style={{border:'1px solid #D1D5DB',borderRadius:8,boxShadow:'0 1px 3px rgba(0,0,0,0.04)',overflow:'hidden',background:'#fff'}}>
+  <div style={{border:`1px solid ${BD}`,overflow:'hidden',background:'#fff',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
     {children}
   </div>
 );
@@ -167,6 +167,7 @@ const VCard = ({ children }) => (
 export default function ClientMasterDashboard() {
   const { clientId } = useParams();
   const navigate      = useNavigate();
+  const { pathname }  = useLocation();
   const isEdit        = !!clientId;
 
   const { selectedCompany } = useCompany();
@@ -420,12 +421,12 @@ export default function ClientMasterDashboard() {
 
   /* ── SO-style input / select styles ── */
   const ri = (err=false) => ({
-    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    height:26, padding:'0 7px', border:`1px solid ${err?'#EF4444':'#C9D0D8'}`, borderRadius:0,
     fontSize:12, fontFamily:F, color:'#111827', background:err?'#FFF5F5':'#fff',
     outline:'none', width:'100%', boxSizing:'border-box',
   });
   const rs = (err=false) => ({
-    height:28, padding:'0 8px', border:`1px solid ${err?'#EF4444':'#9CA3AF'}`, borderRadius:4,
+    height:26, padding:'0 7px', border:`1px solid ${err?'#EF4444':'#C9D0D8'}`, borderRadius:0,
     fontSize:12, fontFamily:F, color:'#111827', background:'#fff',
     outline:'none', cursor:'pointer', width:'100%', boxSizing:'border-box',
   });
@@ -442,8 +443,49 @@ export default function ClientMasterDashboard() {
   }
 
   return (
-    <div style={{ fontFamily: F, background: BG, minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily:F, background:BG, height:'100%', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      <style>{`.csap-input::placeholder{color:#9CA3AF}.csap-search::placeholder{color:rgba(255,255,255,0.45)}`}</style>
       {toast && <Toast type={toast.type} msg={toast.msg} onClose={() => setToast(null)} />}
+
+      {/* ══ CLIENTS nav bar — same as client/view ══ */}
+      <div style={{ flexShrink:0, height:40, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
+        <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+          fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+          letterSpacing:'0.8px', whiteSpace:'nowrap',
+          borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+          CLIENTS
+        </div>
+        <button onClick={() => navigate('/client-sap')}
+          style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
+            fontSize:11.5, fontWeight:700, color:'#fff', background:'#059669',
+            border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+            margin:'0 6px', borderRadius:5 }}
+          onMouseEnter={e => { e.currentTarget.style.background='#047857'; }}
+          onMouseLeave={e => { e.currentTarget.style.background='#059669'; }}>
+          + Create Client
+        </button>
+        {[
+          { label:'👥 View Clients', path:'/client/view' },
+          { label:'⏳ Pending',      path:'/client/pending' },
+        ].map(tab => {
+          const isAct = pathname === tab.path;
+          return (
+            <button key={tab.path} onClick={() => navigate(tab.path)}
+              style={{ display:'flex', alignItems:'center', padding:'0 11px', height:'100%',
+                fontSize:11.5, fontWeight: isAct ? 700 : 400, border:'none', cursor:'pointer',
+                whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
+                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
+                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
+                marginBottom:-2 }}
+              onMouseEnter={e => { if (!isAct) e.currentTarget.style.background='rgba(255,255,255,0.08)'; }}
+              onMouseLeave={e => { if (!isAct) e.currentTarget.style.background='transparent'; }}>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── Import Result Modal ── */}
       {importResult && (
@@ -489,39 +531,39 @@ export default function ClientMasterDashboard() {
 
       {/* ── Excel Import Toolbar (create mode only) ── */}
       {!isEdit && (
-        <div style={{ flexShrink:0, background:'#EFF6FF', borderBottom:'1px solid #BFDBFE', padding:'6px 14px', display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:11.5, color:'#1D4ED8', fontFamily:F, fontWeight:500, flex:1 }}>
+        <div style={{ flexShrink:0, background:'#E8EDF4', borderBottom:`1px solid ${BD}`, padding:'4px 10px', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:PD, fontFamily:F, fontWeight:500, flex:1 }}>
             📊 Bulk import clients from Excel — download the sample template, fill it in, then upload.
           </span>
-          <button type="button" onClick={downloadSample} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:'pointer', background:'#fff', border:'1px solid #93C5FD', color:'#1D4ED8', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4 }}>
+          <button type="button" onClick={downloadSample} style={{ height:24, padding:'0 12px', borderRadius:0, cursor:'pointer', background:'#fff', border:`1px solid ${BD}`, color:P, fontSize:11, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4 }}>
             📥 Download Sample
           </button>
-          <button type="button" onClick={() => xlInputRef.current?.click()} disabled={importing} style={{ height:27, padding:'0 12px', borderRadius:5, cursor:importing?'not-allowed':'pointer', background:importing?'#93C5FD':'#2563EB', border:'none', color:'#fff', fontSize:11.5, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4, opacity:importing?0.7:1 }}>
+          <button type="button" onClick={() => xlInputRef.current?.click()} disabled={importing} style={{ height:24, padding:'0 12px', borderRadius:0, cursor:importing?'not-allowed':'pointer', background:importing?'#6B8FAF':P, border:'none', color:'#fff', fontSize:11, fontWeight:600, fontFamily:F, display:'flex', alignItems:'center', gap:4, opacity:importing?0.7:1 }}>
             {importing ? '⏳ Importing…' : '📤 Import Excel'}
           </button>
           <input type="file" ref={xlInputRef} accept=".xlsx,.xls" style={{ display:'none' }} onChange={handleImportFile} />
         </div>
       )}
 
-      {/* ── Tab Bar — flat horizontal, same as Sales Order ── */}
-      <div style={{ flexShrink:0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
+      {/* ── Tab Bar ── */}
+      <div style={{ flexShrink:0, background:'#EEF2F7', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap' }}>
         {TABS.map(t => {
           const isActive = tab === t.id;
           const hasErr   = Object.keys(errs).length > 0 && tabHasErr(t.id, errs);
           return (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               display:'flex', alignItems:'center', justifyContent:'center', gap:5,
-              flex:1, height:36, padding:'0 6px', cursor:'pointer',
-              background: isActive ? '#DBEAFE' : 'transparent',
+              flex:1, height:34, padding:'0 6px', cursor:'pointer',
+              background: isActive ? '#fff' : 'transparent',
               border:'none', borderBottom: hasErr ? '2px solid #EF4444' : isActive ? `2px solid ${P}` : '2px solid transparent',
-              color: hasErr ? '#DC2626' : isActive ? P : '#111827',
-              fontSize:11.5, fontWeight: isActive ? 700 : 500, fontFamily:F,
+              color: hasErr ? '#DC2626' : isActive ? P : '#4B5563',
+              fontSize:11, fontWeight: isActive ? 700 : 500, fontFamily:F,
               whiteSpace:'nowrap', transition:'all 0.12s', marginBottom:-2, position:'relative',
             }}
-            onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background='#EFF6FF';e.currentTarget.style.color=PD;} }}
-            onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background='transparent';e.currentTarget.style.color=hasErr?'#DC2626':'#111827';} }}>
+            onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background='rgba(255,255,255,0.6)';} }}
+            onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background='transparent';} }}>
               {hasErr && <span style={{ position:'absolute', top:4, right:4, width:6, height:6, borderRadius:'50%', background:'#EF4444' }} />}
-              <span style={{fontSize:14}}>{t.icon}</span>
+              <span style={{fontSize:13}}>{t.icon}</span>
               {t.label}
             </button>
           );
@@ -529,11 +571,11 @@ export default function ClientMasterDashboard() {
       </div>
 
       {/* ── Form Body ── */}
-      <div style={{ flex:1, overflowY:'auto', padding:'12px 14px', background:'#F5F7FA' }}>
+      <div style={{ flex:1, overflowY:'auto', padding:'8px', background:BG }}>
 
         {/* ══ TAB 1: Basic Information ══ */}
         {tab === 'basic' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="👤  Client Identity"/>
               <FR label="Client Name" req>
@@ -615,7 +657,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 2: Contact Details ══ */}
         {tab === 'contact' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="📞  Contact Person"/>
               <FR label="Contact Person" req>
@@ -647,7 +689,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 3: Address Details ══ */}
         {tab === 'address' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="🏠  Billing Address"/>
               <div style={{display:'flex',alignItems:'flex-start',borderBottom:'1px solid #CBD5E1',padding:'4px 6px',background:'#fff',minHeight:64}}>
@@ -687,7 +729,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 4: Tax & Compliance ══ */}
         {tab === 'tax' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="📋  GST & Compliance"/>
               <FR label="GST Registered">
@@ -733,7 +775,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 5: Banking Details ══ */}
         {tab === 'bank' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="🏦  Bank Account"/>
               <FR label="Bank Name">
@@ -772,7 +814,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 6: Payment & Terms ══ */}
         {tab === 'payment' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="💳  Payment Terms"/>
               <FR label="Payment Terms">
@@ -796,7 +838,7 @@ export default function ClientMasterDashboard() {
               </div>
               {(form.paymentTerms||form.creditLimit)&&(
                 <div style={{margin:'0 10px 10px',display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toLocaleString('en-IN')}`:''},{l:'Currency',v:form.currency}].map(c=>(
+                  {[{l:'Terms',v:form.paymentTerms},{l:'Credit Limit',v:form.creditLimit?`₹ ${Number(form.creditLimit).toFixed(2)}`:''},{l:'Currency',v:form.currency}].map(c=>(
                     <div key={c.l} style={{padding:'6px 10px',background:'#EFF6FF',borderRadius:6,border:'1px solid #D1D5DB'}}>
                       <div style={{fontSize:10,fontWeight:700,color:P,textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:2,fontFamily:F}}>{c.l}</div>
                       <div style={{fontSize:12,color:'#1e293b',fontWeight:600,fontFamily:F}}>{c.v||'—'}</div>
@@ -810,7 +852,7 @@ export default function ClientMasterDashboard() {
 
         {/* ══ TAB 7: Additional Details ══ */}
         {tab === 'extra' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <VCard>
               <PH title="⚙️  Classification"/>
               <FR label="Client Category">
@@ -852,30 +894,29 @@ export default function ClientMasterDashboard() {
         )}
       </div>
 
-      {/* ── Footer (sticky, dark navy) ── */}
+      {/* ── Footer ── */}
       <div style={{
-        position:'sticky', bottom:0, zIndex:50,
-        padding:'10px 20px', background:'#1E293B', borderTop:'1px solid #334155',
-        display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0,
+        flexShrink:0, padding:'7px 16px', background:PD, borderTop:`1px solid ${P}`,
+        display:'flex', alignItems:'center', justifyContent:'space-between',
       }}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span style={{fontSize:11.5,color:'#94A3B8',fontFamily:F}}>
-            Step {tabIdx+1} of {TABS.length} — <strong style={{color:'#E2E8F0'}}>{TABS[tabIdx]?.label}</strong>
+          <span style={{fontSize:11,color:'rgba(255,255,255,0.65)',fontFamily:F}}>
+            Step {tabIdx+1} of {TABS.length} — <strong style={{color:'#fff'}}>{TABS[tabIdx]?.label}</strong>
           </span>
           {tabIdx>0&&(
-            <button type="button" onClick={()=>setTab(TABS[tabIdx-1].id)} style={{height:30,padding:'0 12px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#CBD5E1',fontSize:11.5,fontWeight:600,fontFamily:F}}>◀ Back</button>
+            <button type="button" onClick={()=>setTab(TABS[tabIdx-1].id)} style={{height:28,padding:'0 12px',borderRadius:0,cursor:'pointer',background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.25)',color:'#fff',fontSize:11.5,fontWeight:600,fontFamily:F}}>◀ Back</button>
           )}
           {tabIdx<TABS.length-1&&(
-            <button type="button" onClick={()=>setTab(TABS[tabIdx+1].id)} style={{height:30,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'#2563EB',border:'none',color:'#fff',fontSize:11.5,fontWeight:600,fontFamily:F}}>Next ▶</button>
+            <button type="button" onClick={()=>setTab(TABS[tabIdx+1].id)} style={{height:28,padding:'0 14px',borderRadius:0,cursor:'pointer',background:'rgba(255,255,255,0.9)',border:'none',color:P,fontSize:11.5,fontWeight:700,fontFamily:F}}>Next ▶</button>
           )}
         </div>
         <div style={{display:'flex',gap:8}}>
           {isEdit
-            ? <button type="button" onClick={() => navigate('/client/view')} style={{height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F}}>← Back to List</button>
-            : <button type="button" onClick={handleReset} style={{height:32,padding:'0 14px',borderRadius:6,cursor:'pointer',background:'transparent',border:'1px solid #475569',color:'#94A3B8',fontSize:11.5,fontWeight:600,fontFamily:F}}>Reset</button>
+            ? <button type="button" onClick={() => navigate('/client/view')} style={{height:28,padding:'0 14px',borderRadius:0,cursor:'pointer',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.8)',fontSize:11.5,fontWeight:600,fontFamily:F}}>← Back to List</button>
+            : <button type="button" onClick={handleReset} style={{height:28,padding:'0 14px',borderRadius:0,cursor:'pointer',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)',color:'rgba(255,255,255,0.8)',fontSize:11.5,fontWeight:600,fontFamily:F}}>Reset</button>
           }
-          {!isEdit && <button type="button" onClick={()=>setToast({type:'success',msg:'Draft saved!'})} style={{height:32,padding:'0 16px',borderRadius:6,cursor:'pointer',background:'#F59E0B',border:'none',color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:F}}>💾 Save Draft</button>}
-          <button type="button" onClick={handleSave} disabled={saving} style={{height:32,padding:'0 18px',borderRadius:6,cursor:saving?'not-allowed':'pointer',background:saving?'#93C5FD':'#2563EB',border:'none',color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:F,opacity:saving?0.7:1}}>{saving?'⏳ Saving…': isEdit ? '✅ Update Client' : '✅ Save Client'}</button>
+          {!isEdit && <button type="button" onClick={()=>setToast({type:'success',msg:'Draft saved!'})} style={{height:28,padding:'0 16px',borderRadius:0,cursor:'pointer',background:'#F59E0B',border:'none',color:'#fff',fontSize:11.5,fontWeight:700,fontFamily:F}}>💾 Save Draft</button>}
+          <button type="button" onClick={handleSave} disabled={saving} style={{height:28,padding:'0 18px',borderRadius:0,cursor:saving?'not-allowed':'pointer',background:saving?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.95)',border:'none',color:saving?'#fff':P,fontSize:11.5,fontWeight:700,fontFamily:F,opacity:saving?0.7:1}}>{saving?'⏳ Saving…': isEdit ? '✅ Update Client' : '✅ Save Client'}</button>
         </div>
       </div>
     </div>

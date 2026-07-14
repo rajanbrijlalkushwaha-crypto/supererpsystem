@@ -9,7 +9,7 @@ const P  = '#104f4f';
 const PL = '#e8eef8';
 const GN = '#065f46';
 
-const fmt  = n => (parseFloat(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmt  = n => (parseFloat(n)||0).toFixed(2);
 const fmtD = d => { if(!d) return '—'; const dt=new Date(d); if(isNaN(dt)) return d; return `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 const getFY = d => { if(!d) return null; const dt=new Date(d); if(isNaN(dt)) return null; const y=dt.getFullYear(),m=dt.getMonth()+1,s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 const today = () => new Date().toISOString().split('T')[0];
@@ -1043,13 +1043,13 @@ export default function PurchaseBill() {
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{po.vendorName||'—'}</td>
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',whiteSpace:'nowrap'}}>{fmtD(po.poDate)}</td>
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',fontWeight:600,whiteSpace:'nowrap'}}>{po.poNo||po.poNumber||`PO-${po.orderId}`}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:'#1E293B'}}>{oQty.toLocaleString('en-IN')}</td>
+                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:'#1E293B'}}>{oQty.toFixed(2)}</td>
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:bQty>=oQty&&oQty>0?'#166534':'#4338CA'}}>
-                        {bQty.toLocaleString('en-IN')}
+                        {bQty.toFixed(2)}
                         {oQty>0&&<div style={{fontSize:9,color:'#9CA3AF',marginTop:1}}>{Math.min(100,Math.round(bQty/oQty*100))}%</div>}
                       </td>
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:rQty>=oQty&&oQty>0?'#166534':'#065f46'}}>
-                        {rQty.toLocaleString('en-IN')}
+                        {rQty.toFixed(2)}
                         {oQty>0&&<div style={{fontSize:9,color:'#9CA3AF',marginTop:1}}>{Math.min(100,Math.round(rQty/oQty*100))}%</div>}
                       </td>
                       <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(po.grandTotal||po.totalAmount||0)}</td>
@@ -1233,7 +1233,7 @@ export default function PurchaseBill() {
                         <span style={{background:dtBg,color:dtC,padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{dtIcon} {destLabel}</span>
                       </td>
                       <td style={{padding:'6px 10px',border:'1px solid #d1fae5'}}>{g.receivedBy||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',fontWeight:700}}>{totalQty.toLocaleString('en-IN')}</td>
+                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',fontWeight:700}}>{totalQty.toFixed(2)}</td>
                       <td style={{padding:'6px 10px',border:'1px solid #d1fae5'}}>
                         <div style={{display:'flex',gap:4}}>
                           <button onClick={()=>openEditGRN(g)} style={{padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#d1fae5',color:GN,border:'1px solid #a7f3d0',borderRadius:4,fontFamily:F,fontWeight:600}}>✏ï¸</button>

@@ -7,7 +7,7 @@ const ORG  = '#EA580C';
 const ORG2 = '#C2410C';
 const BD   = '#e2e8f0';
 
-const fmtN = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtN = n => Number(n || 0).toFixed(2);
 const fmtD = v => { if (!v) return '—'; const d = new Date(v); return isNaN(d) ? v : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
 const normName = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const namesMatch = (a, b) => { const x=normName(a), y=normName(b); if(!x||!y) return false; return x===y||x.includes(y)||y.includes(x); };
@@ -426,7 +426,7 @@ export default function POTrackingView() {
                     )}
                     {itemTD(
                       <span style={{ fontWeight:700, color:'#1e293b' }}>
-                        {r.item ? r.item.qty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}
+                        {r.item ? r.item.qty.toFixed(2) : '—'}
                       </span>,
                       { textAlign:'center' }
                     )}
@@ -512,11 +512,11 @@ export default function POTrackingView() {
                   </td>
                   <td style={{ padding:'7px 9px', textAlign:'right', borderTop:'2px solid #818cf8',
                     borderRight:`1px solid ${BD}`, fontWeight:700, color:'#1e293b', fontSize:11 }}>
-                    ₹{totals.taxable.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                    ₹{totals.taxable.toFixed(2)}
                   </td>
                   <td style={{ padding:'7px 9px', textAlign:'right', borderTop:'2px solid #818cf8',
                     borderRight:`1px solid ${BD}`, fontWeight:800, color:'#4f46e5', fontSize:12 }}>
-                    ₹{totals.amount.toLocaleString('en-IN',{minimumFractionDigits:2})}
+                    ₹{totals.amount.toFixed(2)}
                   </td>
                   <td colSpan={2} style={{ borderTop:'2px solid #818cf8' }}/>
                 </tr>

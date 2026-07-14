@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 
@@ -144,7 +144,7 @@ export default function PurchaseDashboard() {
                   <td style={tdStyle}>{o.vendorName || '-'}</td>
                   <td style={tdStyle}>{o.poDate ? new Date(o.poDate).toLocaleDateString('en-IN') : '-'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    {o.grandTotal != null ? `₹ ${Number(o.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '-'}
+                    {o.grandTotal != null ? `₹ ${Number(o.grandTotal).toFixed(2)}` : '-'}
                   </td>
                   <td style={tdStyle}><Badge status={o.status} /></td>
                   <td style={{ ...tdStyle, textAlign: 'center' }} onClick={e => e.stopPropagation()}>

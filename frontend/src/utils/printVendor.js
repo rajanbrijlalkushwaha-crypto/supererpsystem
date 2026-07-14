@@ -215,7 +215,7 @@ export const printVendorDetails = async (vendor, company) => {
       <table class="form">
         <tr><td class="lbl">Payment Terms</td><td class="sep">:</td><td class="val">${dash(vendor.paymentTerms)}</td></tr>
         <tr><td class="lbl">Currency</td><td class="sep">:</td><td class="val">${dash(vendor.currency)}</td></tr>
-        <tr><td class="lbl">Credit Limit</td><td class="sep">:</td><td class="val">${vendor.creditLimit ? '₹ ' + Number(vendor.creditLimit).toLocaleString('en-IN') : ''}</td></tr>
+        <tr><td class="lbl">Credit Limit</td><td class="sep">:</td><td class="val">${vendor.creditLimit ? '₹ ' + Number(vendor.creditLimit).toFixed(2) : ''}</td></tr>
       </table>
     </div>
 

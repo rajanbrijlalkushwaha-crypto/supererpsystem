@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CRM Module — Quotes: Create | View | Pending
  */
 import { useState, useEffect, useCallback } from 'react';
@@ -11,7 +11,7 @@ const W = '#ffffff';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const api = (url, cfg = {}) => axios({ url, ...cfg });
-const fmt = n => `₹${(+n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = n => `₹${(+n || 0).toFixed(2)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const uid = () => Date.now() + Math.random();
 const fmtD = d => {
@@ -228,7 +228,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
   };
 
   const TH = ({ w, children }) => (
-    <th style={{ width: w, padding: '4px 6px', background: '#104f4f', color: W, fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: '1px solid #2a4c7e' }}>
+    <th style={{ width: w, padding: '4px 6px', background: '#3A6186', color: W, fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', border: '1px solid #2a4c7e' }}>
       {children}
     </th>
   );
@@ -236,7 +236,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
   return (
     <div style={{ fontFamily: F, fontSize: 12 }}>
       {/* Client Info */}
-      <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Client Information</div>
+      <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Client Information</div>
       <div style={{ border: '1px solid #CBD5E1', marginBottom: 8, position: 'relative' }}>
         <FR label="Client Name" req>
           <Inp value={d.clientName} onChange={e => { set('clientName', e.target.value); setShowSug(true); }} readOnly={readOnly} placeholder="Search or type client name" />
@@ -264,7 +264,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
       </div>
 
       {/* Quote Info */}
-      <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Quote Details</div>
+      <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Quote Details</div>
       <div style={{ border: '1px solid #CBD5E1', marginBottom: 8 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
           <FR label="Quote Date" req><Inp type="date" value={d.quoteDate} onChange={e => set('quoteDate', e.target.value)} readOnly={readOnly} /></FR>
@@ -279,7 +279,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
       </div>
 
       {/* Items */}
-      <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Items</span>
         {!readOnly && <Btn v="suc" small onClick={addItem}>+ Add Item</Btn>}
       </div>
@@ -334,7 +334,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
                       options={[0, 5, 12, 18, 28].map(v => ({ value: v, label: `${v}%` }))} />
                   </td>
                   <td style={{ padding: '3px 6px', textAlign: 'right', border: '1px solid #E2E8F0', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {(+total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {(+total || 0).toFixed(2)}
                   </td>
                   {!readOnly && (
                     <td style={{ padding: '2px 4px', border: '1px solid #E2E8F0', textAlign: 'center' }}>
@@ -349,7 +349,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
       </div>
 
       {/* Additional Charges */}
-      <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Additional Charges</span>
         {!readOnly && <Btn v="suc" small onClick={addCharge}>+ Add Charge</Btn>}
       </div>
@@ -394,7 +394,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
       {/* Totals + Terms */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 8, marginBottom: 8 }}>
         <div>
-          <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Terms & Notes</div>
+          <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Terms & Notes</div>
           <div style={{ border: '1px solid #CBD5E1', padding: 6 }}>
             <div style={{ marginBottom: 4 }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 2 }}>Terms & Conditions</label>
@@ -408,7 +408,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
         </div>
 
         <div>
-          <div style={{ background: '#104f4f', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Summary</div>
+          <div style={{ background: '#3A6186', color: W, fontSize: 12, fontWeight: 700, padding: '4px 10px', marginBottom: 1 }}>Summary</div>
           <div style={{ border: '1px solid #CBD5E1' }}>
             <FR label="Freight Charges" w={140}>
               <Inp type="number" value={d.freightCharges} onChange={e => set('freightCharges', e.target.value)} readOnly={readOnly} style={{ textAlign: 'right' }} />
@@ -427,7 +427,7 @@ function QuoteForm({ initial, onSave, onCancel, readOnly = false, clients = [] }
                 <span style={{ fontWeight: 600 }}>{val}</span>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#104f4f', color: W }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#3A6186', color: W }}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>Grand Total</span>
               <span style={{ fontSize: 14, fontWeight: 700 }}>{fmt(totals.grandTotal)}</span>
             </div>
@@ -485,7 +485,7 @@ function QuoteModal({ quote, onClose, onRefresh, companyId }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', overflowY: 'auto' }}>
       <div style={{ background: W, borderRadius: 6, width: '100%', maxWidth: 1100, boxShadow: '0 8px 40px rgba(0,0,0,0.3)', fontFamily: F }}>
         {/* Header */}
-        <div style={{ background: '#104f4f', color: W, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: '6px 6px 0 0' }}>
+        <div style={{ background: '#3A6186', color: W, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, borderRadius: '6px 6px 0 0' }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>{quote.quoteNo}</span>
           <StatusBadge status={quote.status} />
           <span style={{ flex: 1 }} />
@@ -553,7 +553,7 @@ function QuoteList({ quotes, onSelect, emptyMsg }) {
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
           <thead>
-            <tr style={{ background: '#104f4f', color: W }}>
+            <tr style={{ background: '#3A6186', color: W }}>
               {['Quote No', 'Client', 'Subject', 'Date', 'Valid Until', 'Amount', 'Status', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '7px 10px', fontWeight: 700, fontSize: 11, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
@@ -654,7 +654,7 @@ export default function CRMModule() {
       )}
 
       {/* Module header */}
-      <div style={{ background: '#104f4f', color: W, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: '#3A6186', color: W, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 16, fontWeight: 700 }}>CRM — Quotations</span>
         {mode === 'pending' && <span style={{ background: '#DC2626', color: W, borderRadius: 10, fontSize: 10, padding: '1px 7px', fontWeight: 700 }}>{pendingQuotes.length}</span>}
       </div>

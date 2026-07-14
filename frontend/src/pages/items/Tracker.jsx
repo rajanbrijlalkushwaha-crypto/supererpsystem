@@ -5,7 +5,7 @@ import { useCompany } from '../../context/CompanyContext';
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P   = '#104f4f';
 const BD  = '#E5EAF2';
-const fmt = n => (parseFloat(n)||0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt = n => (parseFloat(n)||0).toFixed(2);
 const fmtD = d => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt) ? d : `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
 
 const TYPE_META = {

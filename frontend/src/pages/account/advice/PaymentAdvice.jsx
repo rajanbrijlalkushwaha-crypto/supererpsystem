@@ -7,7 +7,7 @@ const BD = '#E5EAF2';
 const BG = '#F4F7FB';
 const P  = '#133d80';
 
-const fmt  = n => (parseFloat(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+const fmt  = n => (parseFloat(n) || 0).toFixed(2);
 const fmtD = d => {
   if (!d) return '—';
   const dt = new Date(d);

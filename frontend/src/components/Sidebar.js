@@ -157,9 +157,8 @@ const NAV = [
   {
     key:'inventory', label:'Items / Products', path:'/items/view', routes:['/items'],
     sub:[
-      { label:'Items / Products', path:'/items/view',    permKey:'items' },
-      { label:'Create Item',      path:'/items/create',  permKey:'items' },
-      { label:'Order Tracker',    path:'/items/tracker', permKey:'orderTracker' },
+      { label:'Items / Products', path:'/items/view',   permKey:'items' },
+      { label:'Create Item',      path:'/items/create', permKey:'items' },
     ],
   },
   {

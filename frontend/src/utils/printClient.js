@@ -224,7 +224,7 @@ export const printClientDetails = async (client, company) => {
       <table class="form">
         <tr><td class="lbl">Payment Terms</td><td class="sep">:</td><td class="val">${dash(client.paymentTerms)}</td></tr>
         <tr><td class="lbl">Currency</td><td class="sep">:</td><td class="val">${dash(client.currency)}</td></tr>
-        <tr><td class="lbl">Credit Limit</td><td class="sep">:</td><td class="val">${client.creditLimit ? '₹ ' + Number(client.creditLimit).toLocaleString('en-IN') : '—'}</td></tr>
+        <tr><td class="lbl">Credit Limit</td><td class="sep">:</td><td class="val">${client.creditLimit ? '₹ ' + Number(client.creditLimit).toFixed(2) : '—'}</td></tr>
       </table>
     </div>
 
