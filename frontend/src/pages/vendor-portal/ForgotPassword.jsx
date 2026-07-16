@@ -98,35 +98,20 @@ function OrbitRing({ radius, modules, duration, reverse, iconSize=42 }) {
 
 export default function VendorForgotPassword() {
   const navigate = useNavigate();
-  const [step, setStep]       = useState(0);
-  const [email, setEmail]     = useState('');
-  const [otp, setOtp]         = useState('');
-  const [newPwd, setNewPwd]   = useState('');
-  const [confPwd, setConfPwd] = useState('');
+  const [email,   setEmail]   = useState('');
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg]         = useState(null);
-  const [done, setDone]       = useState(false);
+  const [msg,     setMsg]     = useState(null);
+  const [sent,    setSent]    = useState(false);
 
-  const sendOTP = async () => {
+  const sendLink = async () => {
     if (!email.trim()) { setMsg({ type:'error', text:'Enter your registered email address.' }); return; }
     setLoading(true); setMsg(null);
     try {
-      const res = await axios.post('/api/vendor-portal/forgot-password/send-otp', { email: email.trim() });
-      setStep(1);
-      setMsg({ type:'success', text: res.data.devOtp ? `OTP: ${res.data.devOtp} (use this OTP)` : res.data.message || `OTP sent to ${email}.` });
-    } catch (e) {
-      setMsg({ type:'error', text: e.response?.data?.error || e.message });
-    } finally { setLoading(false); }
-  };
-
-  const resetPwd = async () => {
-    if (!otp.trim()) { setMsg({ type:'error', text:'Enter the OTP.' }); return; }
-    if (!newPwd || newPwd.length < 6) { setMsg({ type:'error', text:'Password must be at least 6 characters.' }); return; }
-    if (newPwd !== confPwd) { setMsg({ type:'error', text:'Passwords do not match.' }); return; }
-    setLoading(true); setMsg(null);
-    try {
-      await axios.post('/api/vendor-portal/forgot-password/reset', { email: email.trim(), otp: otp.trim(), newPassword: newPwd });
-      setDone(true);
+      const res = await axios.post('/api/vendor-portal/forgot-password/request', { email: email.trim() });
+      setSent(true);
+      if (res.data.devLink) {
+        setMsg({ type:'success', text:`Dev mode — link: ${res.data.devLink}` });
+      }
     } catch (e) {
       setMsg({ type:'error', text: e.response?.data?.error || e.message });
     } finally { setLoading(false); }
@@ -184,32 +169,24 @@ export default function VendorForgotPassword() {
               </div>
             )}
 
-            {done ? (
+            {sent ? (
               <table style={{ borderCollapse:'collapse', width:'100%' }}>
                 <tbody>
                   <tr><td colSpan={2} style={{ padding:'8px 0 20px', textAlign:'center' }}>
-                    <div style={{ fontSize:44, marginBottom:10 }}>✅</div>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#111', marginBottom:6 }}>Password Reset Successful!</div>
-                    <div style={{ fontSize:13, color:'#555', lineHeight:1.7 }}>Your password has been updated. You can now log in.</div>
+                    <div style={{ fontSize:44, marginBottom:10 }}>📧</div>
+                    <div style={{ fontSize:15, fontWeight:700, color:'#111', marginBottom:8 }}>Check Your Email</div>
+                    <div style={{ fontSize:13, color:'#555', lineHeight:1.8 }}>
+                      We sent a password reset link to<br/>
+                      <strong style={{ color:'#3A6186' }}>{email}</strong><br/>
+                      <span style={{ fontSize:12, color:'#777' }}>The link expires in 1 hour. Check your spam folder if needed.</span>
+                    </div>
                   </td></tr>
-                  <tr><td style={{ padding:'9px 0' }}><button className="vfp-btn" onClick={() => navigate('/login')} style={{ width:'100%' }}>← Back to Login</button></td></tr>
-                </tbody>
-              </table>
-            ) : step === 0 ? (
-              <table style={{ borderCollapse:'collapse', width:'100%' }}>
-                <tbody>
                   <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:130 }}>Email Address:</td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <input type="email" autoFocus value={email} className="vfp-field" onChange={e=>{setEmail(e.target.value);setMsg(null);}} placeholder="vendor@company.com" />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td></td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                        <button className="vfp-btn" onClick={sendOTP} disabled={loading}>{loading?'⏳ Sending…':'📤 Send OTP'}</button>
-                        <button className="vfp-link" onClick={() => navigate('/login')}>← Back to Login</button>
+                    <td colSpan={2} style={{ padding:'9px 0', textAlign:'center' }}>
+                      <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'center' }}>
+                        <button className="vfp-link" onClick={()=>{setSent(false);setEmail('');setMsg(null);}}>← Use a different email</button>
+                        <span style={{ color:'#ccc' }}>|</span>
+                        <button className="vfp-link" onClick={() => navigate('/login')}>Back to Login</button>
                       </div>
                     </td>
                   </tr>
@@ -218,35 +195,24 @@ export default function VendorForgotPassword() {
             ) : (
               <table style={{ borderCollapse:'collapse', width:'100%' }}>
                 <tbody>
-                  <tr><td colSpan={2} style={{ padding:'4px 0 16px', textAlign:'center' }}>
-                    <div style={{ fontSize:32, marginBottom:6 }}>📧</div>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#111' }}>OTP sent to <strong>{email}</strong></div>
+                  <tr><td colSpan={2} style={{ padding:'0 0 14px', fontSize:13, color:'#555', lineHeight:1.7 }}>
+                    Enter your registered vendor email address and we will send you a secure reset link.
                   </td></tr>
                   <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:130 }}>Enter OTP:</td>
+                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:130 }}>Email Address:</td>
                     <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <input className="vfp-field" value={otp} onChange={e=>{setOtp(e.target.value);setMsg(null);}} maxLength={6} placeholder="6-digit OTP" style={{ textAlign:'center', fontSize:18, fontWeight:700, letterSpacing:6 }} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle' }}>New Password:</td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <input type="password" className="vfp-field" value={newPwd} onChange={e=>{setNewPwd(e.target.value);setMsg(null);}} placeholder="Min 6 characters" />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle' }}>Confirm Password:</td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <input type="password" className="vfp-field" value={confPwd} onChange={e=>{setConfPwd(e.target.value);setMsg(null);}} placeholder="Re-enter password" />
-                      {confPwd && newPwd !== confPwd && <div style={{ fontSize:11, color:'#DC2626', marginTop:3 }}>Passwords do not match</div>}
+                      <input type="email" autoFocus value={email} className="vfp-field"
+                        onChange={e=>{setEmail(e.target.value);setMsg(null);}}
+                        onKeyDown={e=>e.key==='Enter'&&sendLink()}
+                        placeholder="vendor@company.com" />
                     </td>
                   </tr>
                   <tr>
                     <td></td>
                     <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
                       <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                        <button className="vfp-btn-green" onClick={resetPwd} disabled={loading}>{loading?'⏳ Resetting…':'🔒 Reset Password'}</button>
-                        <button className="vfp-link" onClick={()=>{setStep(0);setMsg(null);}}>← Change Email</button>
+                        <button className="vfp-btn" onClick={sendLink} disabled={loading}>{loading?'⏳ Sending…':'📤 Send Reset Link'}</button>
+                        <button className="vfp-link" onClick={() => navigate('/login')}>← Back to Login</button>
                       </div>
                     </td>
                   </tr>

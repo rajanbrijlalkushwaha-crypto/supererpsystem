@@ -491,11 +491,16 @@ const CreateVendor = () => {
         purchasePerson: form.purchasePerson, remarks: form.remarks, status,
       }).forEach(([k, v]) => fd.append(k, v));
       fd.append('paymentModes', JSON.stringify(form.paymentModes));
+      fd.append('contactPersons', JSON.stringify([{
+        name: form.contactPerson, mobileNumber: form.mobile,
+        altMobile: form.altMobile, email: form.email,
+      }]));
+      fd.append('companyId', selectedCompany?.companyId || '');
       const docMeta = documents.filter(d => d.name).map(d => ({ name: d.name }));
       fd.append('documents', JSON.stringify(docMeta));
       documents.forEach(doc => { if (doc.file) fd.append('documents', doc.file); });
       if (isEdit) {
-        await axios.put(`/api/vendors/${vendorId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await axios.put(`/api/vendors/${vendorId}?companyId=${selectedCompany?.companyId || ''}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         setToast({ type: 'success', msg: `Vendor "${form.vendorName}" (${vendorId}) updated successfully!` });
         setTimeout(() => navigate('/vendor/view'), 1800);
       } else {

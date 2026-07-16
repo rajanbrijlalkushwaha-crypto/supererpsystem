@@ -433,10 +433,116 @@ function ActivationPending({ vendor, vendorLogout }) {
   );
 }
 
+/* ════════════════════════ DASHBOARD TAB ════════════════════════ */
+function DashboardTab({ vendor, pos, payments }) {
+  const totalPOVal    = pos.reduce((s,p)=>s+(Number(p.totalAmount)||0),0);
+  const pendingCount  = pos.filter(p=>['pending','draft'].includes(p.status)).length;
+  const completedCount= pos.filter(p=>['completed','approved'].includes(p.status)).length;
+  const amtReceived   = payments.reduce((s,p)=>s+(Number(p.amount)||0),0);
+  const outstanding   = Math.max(0, totalPOVal - amtReceived);
+
+  const recentPOs  = [...pos].sort((a,b)=>new Date(b.date||0)-new Date(a.date||0)).slice(0,5);
+  const recentPays = [...payments].sort((a,b)=>new Date(b.date||b.createdAt||0)-new Date(a.date||a.createdAt||0)).slice(0,5);
+
+  const statCards = [
+    { label:'Total POs',       val:pos.length,               icon:'📋', color:P,         sub:'purchase orders' },
+    { label:'Pending',         val:pendingCount,             icon:'⏳', color:O,         sub:'awaiting completion' },
+    { label:'Completed',       val:completedCount,           icon:'✅', color:G,         sub:'fulfilled orders' },
+    { label:'Total PO Value',  val:`₹ ${totalPOVal.toFixed(2)}`,  icon:'🧾', color:'#7C3AED', sub:'gross value' },
+    { label:'Amount Received', val:`₹ ${amtReceived.toFixed(2)}`, icon:'💰', color:G,         sub:'payments received' },
+    { label:'Outstanding',     val:`₹ ${outstanding.toFixed(2)}`, icon:'⚠', color:outstanding>0?R:'#9CA3AF', sub:'amount pending' },
+  ];
+
+  return (
+    <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:20 }}>
+
+      {/* Welcome */}
+      <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, borderRadius:10, padding:'18px 24px', display:'flex', alignItems:'center', gap:16 }}>
+        <div style={{ width:52, height:52, borderRadius:14, background:'rgba(255,255,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0 }}>🏢</div>
+        <div>
+          <div style={{ fontSize:18, fontWeight:800, color:'#fff' }}>Welcome back, {vendor?.name}!</div>
+          <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', marginTop:3 }}>Vendor ID: {vendor?.vendorId} · {vendor?.email}</div>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+        {statCards.map((c,i)=>(
+          <div key={i} style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, padding:'14px 18px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+              <span style={{ fontSize:18 }}>{c.icon}</span>
+              <span style={{ fontSize:11, fontWeight:600, color:'#6B7280', fontFamily:F }}>{c.label}</span>
+            </div>
+            <div style={{ fontSize:22, fontWeight:800, color:c.color, fontFamily:F }}>{c.val}</div>
+            <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3, fontFamily:F }}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+
+        {/* Recent POs */}
+        <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden' }}>
+          <div style={{ background:P, padding:'10px 14px', fontSize:12, fontWeight:700, color:'#fff' }}>📋 Recent Purchase Orders</div>
+          {recentPOs.length === 0
+            ? <div style={{ padding:'20px', textAlign:'center', fontSize:12, color:'#9CA3AF' }}>No purchase orders yet.</div>
+            : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                <thead>
+                  <tr style={{ background:'#F8FAFC' }}>
+                    {['PO No.','Date','Amount','Status'].map(h=>(
+                      <th key={h} style={{ padding:'6px 10px', fontWeight:600, color:'#374151', textAlign:'left', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentPOs.map((po,i)=>(
+                    <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, fontWeight:600, color:P, fontFamily:F }}>{po.poNumber}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, color:'#6B7280', fontFamily:F }}>{fmtD(po.date)}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>{fmt(po.totalAmount)}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, fontFamily:F }}><Badge s={po.status}/></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
+        </div>
+
+        {/* Recent Payments */}
+        <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden' }}>
+          <div style={{ background:'#065F46', padding:'10px 14px', fontSize:12, fontWeight:700, color:'#fff' }}>💰 Recent Payments</div>
+          {recentPays.length === 0
+            ? <div style={{ padding:'20px', textAlign:'center', fontSize:12, color:'#9CA3AF' }}>No payment records yet.</div>
+            : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                <thead>
+                  <tr style={{ background:'#F8FAFC' }}>
+                    {['Date','Description','Amount','Mode'].map(h=>(
+                      <th key={h} style={{ padding:'6px 10px', fontWeight:600, color:'#374151', textAlign:'left', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentPays.map((p,i)=>(
+                    <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, color:'#6B7280', fontFamily:F }}>{fmtD(p.date||p.createdAt)}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, fontFamily:F, maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.description||p.narration||'—'}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toFixed(2)}</td>
+                      <td style={{ padding:'7px 10px', borderBottom:`1px solid ${BD}`, color:'#6B7280', fontFamily:F }}>{p.mode||p.paymentMode||'—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════════ MAIN PORTAL ════════════════════════ */
 export default function VendorPortal() {
   const { vendor, vendorLogout } = useVendorAuth();
-  const [tab,      setTab]      = useState('pos');
+  const [tab,      setTab]      = useState('dashboard');
   const [pos,      setPOs]      = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -456,11 +562,11 @@ export default function VendorPortal() {
 
   if (vendor?.pending) return <ActivationPending vendor={vendor} vendorLogout={vendorLogout}/>;
 
-  const kpis = [
-    { label:'My POs',       val: pos.length,                                        icon:'📋', color:P        },
-    { label:'Pending',      val: pos.filter(p=>p.status==='pending'||p.status==='draft').length, icon:'⏳', color:O },
-    { label:'Completed',    val: pos.filter(p=>p.status==='completed'||p.status==='approved').length, icon:'✅', color:G },
-    { label:'Amt Received', val: `₹ ${payments.reduce((s,p)=>s+(Number(p.amount)||0),0).toFixed(2)}`, icon:'💰', color:'#7C3AED' },
+  const TABS = [
+    { id:'dashboard', label:'🏠 Dashboard' },
+    { id:'pos',       label:'📋 Purchase Orders' },
+    { id:'payments',  label:'💰 Payments' },
+    { id:'profile',   label:'👤 Profile' },
   ];
 
   return (
@@ -469,92 +575,94 @@ export default function VendorPortal() {
       {/* Header */}
       <div style={{ background:'linear-gradient(135deg,#1E293B,#1D4ED8)', padding:'11px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:'#fff', background:'rgba(255,255,255,0.12)', padding:'5px 10px', borderRadius:6 }}>🏢 Epsilon Enterprise</div>
+          <div style={{ fontSize:12, fontWeight:700, color:'#fff', background:'rgba(255,255,255,0.12)', padding:'5px 10px', borderRadius:6 }}>⚡ Universal Core ERP</div>
           <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)' }}>Vendor Portal</div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ textAlign:'right' }}>
             <div style={{ fontSize:13, fontWeight:700, color:'#fff' }}>{vendor?.name}</div>
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.6)' }}>ID: {vendor?.vendorId}</div>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.6)' }}>ID: {vendor?.vendorId} · {vendor?.email}</div>
           </div>
           <button onClick={vendorLogout} style={{ padding:'5px 12px', borderRadius:6, cursor:'pointer', background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', fontSize:12, fontFamily:F }}>Logout</button>
         </div>
       </div>
 
-      {/* KPI */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', background:'#fff', borderBottom:`1px solid ${BD}`, flexShrink:0 }}>
-        {kpis.map((k,i)=>(
-          <div key={i} style={{ padding:'12px 18px', borderRight:i<3?`1px solid ${BD}`:'none' }}>
-            <div style={{ fontSize:11, color:'#6B7280', fontWeight:600 }}>{k.icon} {k.label}</div>
-            <div style={{ fontSize:20, fontWeight:800, color:k.color, marginTop:2 }}>{k.val}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Tabs */}
       <div style={{ background:'#fff', borderBottom:`1px solid ${BD}`, display:'flex', padding:'0 20px', flexShrink:0 }}>
-        {[{id:'pos',label:'📋 Purchase Orders'},{id:'payments',label:'💰 Payments'},{id:'profile',label:'👤 Profile'}].map(t=>(
+        {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:'10px 16px', cursor:'pointer', fontFamily:F, fontWeight:tab===t.id?700:500, fontSize:12, background:'transparent', border:'none', borderBottom:tab===t.id?`2px solid ${P}`:'2px solid transparent', color:tab===t.id?P:'#64748B', marginBottom:-1 }}>{t.label}</button>
         ))}
       </div>
 
       {/* Body */}
-      <div style={{ flex:1, padding:'16px 20px', overflowY:'auto' }}>
+      <div style={{ flex:1, overflowY:'auto' }}>
         {loading ? (
-          <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:14 }}>Loading…</div>
+          <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:14 }}>Loading your data…</div>
         ) : (
           <>
+            {tab === 'dashboard' && <DashboardTab vendor={vendor} pos={pos} payments={payments}/>}
+
             {/* PO Cards */}
             {tab === 'pos' && (
-              pos.length === 0
-                ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No purchase orders found for your account.</div>
-                : pos.map(po => <POCard key={po.orderId} po={po} token={token} payments={payments}/>)
+              <div style={{ padding:'16px 20px' }}>
+                {pos.length === 0
+                  ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No purchase orders found for your account.</div>
+                  : pos.map(po => <POCard key={po.orderId} po={po} token={token} payments={payments}/>)
+                }
+              </div>
             )}
 
             {/* Payments */}
             {tab === 'payments' && (
-              payments.length === 0
-                ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No payment records found.</div>
-                : (
-                <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                    <thead>
-                      <tr>
-                        {['Date','Description','Amount','Mode','Status'].map(h=>(
-                          <th key={h} style={{ padding:'9px 12px', background:P, color:'#fff', fontSize:11, fontWeight:700, textAlign:'left', fontFamily:F }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payments.map((p,i)=>(
-                        <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{fmtD(p.date||p.createdAt)}</td>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.description||p.narration||'—'}</td>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toFixed(2)}</td>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.mode||p.paymentMode||'—'}</td>
-                          <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}><Badge s={p.status}/></td>
+              <div style={{ padding:'16px 20px' }}>
+                {payments.length === 0
+                  ? <div style={{ textAlign:'center', padding:60, color:'#94A3B8', fontSize:13 }}>No payment records found.</div>
+                  : (
+                  <div style={{ background:'#fff', borderRadius:8, border:`1px solid ${BD}`, overflow:'hidden' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                      <thead>
+                        <tr>
+                          {['Date','Description','Amount','Mode','Status'].map(h=>(
+                            <th key={h} style={{ padding:'9px 12px', background:P, color:'#fff', fontSize:11, fontWeight:700, textAlign:'left', fontFamily:F }}>{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
+                      </thead>
+                      <tbody>
+                        {payments.map((p,i)=>(
+                          <tr key={i} style={{ background:i%2===0?'#fff':'#F8FAFC' }}>
+                            <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{fmtD(p.date||p.createdAt)}</td>
+                            <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.description||p.narration||'—'}</td>
+                            <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontWeight:700, color:G, fontFamily:F }}>₹ {Number(p.amount||0).toFixed(2)}</td>
+                            <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}>{p.mode||p.paymentMode||'—'}</td>
+                            <td style={{ padding:'9px 12px', borderBottom:`1px solid ${BD}`, fontFamily:F }}><Badge s={p.status}/></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Profile */}
             {tab === 'profile' && (
-              <div style={{ maxWidth:480, background:'#fff', borderRadius:10, border:`1px solid ${BD}`, overflow:'hidden' }}>
-                <div style={{ background:P, padding:'14px 18px' }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:'#fff' }}>{vendor?.name}</div>
-                  <div style={{ fontSize:11, color:'rgba(255,255,255,0.7)', marginTop:2 }}>Vendor ID: {vendor?.vendorId}</div>
-                </div>
-                <div style={{ padding:'14px 18px' }}>
-                  {[['Email',vendor?.email],['Company ID',vendor?.companyId],['Vendor ID',vendor?.vendorId]].map(([l,v])=>(
-                    <div key={l} style={{ display:'flex', padding:'8px 0', borderBottom:`1px solid #F1F5F9` }}>
-                      <span style={{ fontSize:12, color:'#6B7280', fontWeight:600, minWidth:130 }}>{l}</span>
-                      <span style={{ fontSize:12, color:'#1E293B' }}>{v||'—'}</span>
+              <div style={{ padding:'16px 20px' }}>
+                <div style={{ maxWidth:480, background:'#fff', borderRadius:10, border:`1px solid ${BD}`, overflow:'hidden' }}>
+                  <div style={{ background:`linear-gradient(135deg,#1E293B,${P})`, padding:'18px 20px', display:'flex', alignItems:'center', gap:14 }}>
+                    <div style={{ width:48, height:48, borderRadius:12, background:'rgba(255,255,255,0.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>🏢</div>
+                    <div>
+                      <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{vendor?.name}</div>
+                      <div style={{ fontSize:11, color:'rgba(255,255,255,0.65)', marginTop:2 }}>Vendor ID: {vendor?.vendorId}</div>
                     </div>
-                  ))}
+                  </div>
+                  <div style={{ padding:'14px 18px' }}>
+                    {[['Email', vendor?.email],['Company ID', vendor?.companyId],['Vendor ID', vendor?.vendorId],['Portal Access','Active']].map(([l,v])=>(
+                      <div key={l} style={{ display:'flex', padding:'9px 0', borderBottom:`1px solid #F1F5F9` }}>
+                        <span style={{ fontSize:12, color:'#6B7280', fontWeight:600, minWidth:140 }}>{l}</span>
+                        <span style={{ fontSize:12, color:'#1E293B' }}>{v||'—'}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

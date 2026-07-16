@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
+import { useLock } from '../context/LockContext';
 import axios from 'axios';
 import {
   Search, ChevronDown, Building2, LogOut, Settings,
@@ -1198,6 +1199,7 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
 const Header = ({ username: usernameProp, onLogout }) => {
   const { user }   = useAuth();
   const { openPanel, total: chatUnread } = useChat() || {};
+  const lockCtx = useLock();
   const username  = user?.name || user?.username || usernameProp || 'User';
   const userRole  = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'User';
   const initials  = username ? username.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : 'AD';
@@ -1385,6 +1387,21 @@ const Header = ({ username: usernameProp, onLogout }) => {
             <div style={{ borderRight: '1px solid #DDDDDD', display: 'flex', alignItems: 'center', padding: '0 3px', height: 36 }}>
               <NotificationCentre companyId={selectedCompany?.companyId} />
             </div>
+
+            {/* Lock screen button */}
+            {lockCtx?.hasPin && (
+              <button onClick={() => lockCtx.lock()} title="Lock Screen"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 36,
+                  background: 'transparent', border: 'none', borderRight: '1px solid #DDDDDD',
+                  cursor: 'pointer', color: '#555', flexShrink: 0 }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#3b82f6'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#555'; }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </button>
+            )}
 
             {/* Time */}
             <div style={{ padding: '0 10px', textAlign: 'center', flexShrink: 0, lineHeight: 1.25,

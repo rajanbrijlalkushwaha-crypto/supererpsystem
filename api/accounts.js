@@ -270,6 +270,7 @@ router.get('/dues', (req, res) => {
     const salesOrders    = readAllRecords(coDir(companyId, 'SalesOrder'));
     const purchaseOrders = readAllRecords(coDir(companyId, 'PurchaseOrder'));
     const payments       = readAll(coDir(companyId, 'Payments'));
+    const expenses       = readAll(coDir(companyId, 'Expenses'));
     const soMap = {};
     salesOrders.forEach(so => { soMap[String(so.orderId || so.id)] = so; });
 
@@ -446,7 +447,55 @@ router.get('/dues', (req, res) => {
       })
       .filter(r => r.orderTotal > 0);
 
-    res.json({ clientDues, vendorDues });
+    // Expense dues — approved/pending expenses that have a vendor party
+    const expenseDues = expenses
+      .filter(e => !['rejected', 'draft'].includes(e.status))
+      .map(e => {
+        const eid        = e.expenseId;
+        const entityName = e.vendorName || e.vendor || e.ledgerName || '';
+        if (!entityName) return null;                         // skip expenses with no vendor/party
+        const orderTotal = parseFloat(e.grandTotal) || 0;
+        if (!orderTotal) return null;
+
+        // Find payments linked to this expense (by expenseId or orderId)
+        const linkedPayments = payments.filter(p =>
+          p.type === 'payment' && p.status !== 'rejected' && (
+            String(p.expenseId) === String(eid) ||
+            String(p.orderId)   === String(eid)
+          )
+        );
+        const paid = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+        return {
+          orderId:     eid,
+          orderNo:     `EXP-${eid}`,
+          poNo:        `EXP-${eid}`,
+          orderDate:   e.date || e.createdAt,
+          vendorId:    e.vendorId || '',
+          entityName,
+          poType:      'expense',
+          expenseType: e.expenseType || e.expType || '',
+          category:    e.expenseCategory || e.category || '',
+          status:      e.status || 'approved',
+          orderTotal,
+          paid,
+          debitNotesAmt:   0,
+          linkedDebitNotes:[],
+          linkedPayments,
+          items:       [],
+          addOnItems:  [],
+          charges:     [],
+          due:         orderTotal - paid,
+          description: e.description || '',
+          soId:        e.soId || '',
+          invoiceNo:   e.invoiceNo || '',
+          clientName:  e.clientName || '',
+          linkedSalesOrderId: e.soId || '',
+        };
+      })
+      .filter(Boolean)
+      .filter(r => r.orderTotal > 0);
+
+    res.json({ clientDues, vendorDues: [...vendorDues, ...expenseDues] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -1504,9 +1504,13 @@ const ViewDues = () => {
                       {C(<div style={{fontWeight:600,color:'#1e40af'}}>{clientName||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}</div>)}
                       {C(<div><div style={{fontWeight:600,color:'#111827'}}>{row.entityName||'—'}</div></div>)}
                       {C(<span style={{color:'#6b7280',whiteSpace:'nowrap',fontSize:10.5}}>{fmtD(row.orderDate)||'—'}</span>)}
-                      {C(<div style={{fontWeight:700,color:'#1e293b',whiteSpace:'nowrap'}}>{row.orderNo||'—'}</div>)}
+                      {C(<div style={{whiteSpace:'nowrap'}}>
+                        <span style={{fontWeight:700,color:'#1e293b'}}>{row.orderNo||'—'}</span>
+                        {row.poType==='expense'&&<span style={{marginLeft:5,fontSize:9,padding:'1px 5px',background:'#fff7ed',color:'#c2410c',border:'1px solid #fed7aa',borderRadius:3,fontWeight:700,verticalAlign:'middle'}}>EXP</span>}
+                        {row.category&&<div style={{fontSize:9.5,color:'#9ca3af',marginTop:1}}>{row.category}</div>}
+                      </div>)}
                       <td style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#374151'}}>
-                        {item ? <div>{item.itemName||item.description||item.name||'—'}{item.isAddon&&<span style={{fontSize:9,marginLeft:4,padding:'1px 4px',background:'#fff3e0',color:'#b45309',border:'1px solid #fbbf24',borderRadius:2,fontWeight:700}}>Add-on</span>}</div> : <span style={{color:'#9ca3af',fontStyle:'italic'}}>No items</span>}
+                        {item ? <div>{item.itemName||item.description||item.name||'—'}{item.isAddon&&<span style={{fontSize:9,marginLeft:4,padding:'1px 4px',background:'#fff3e0',color:'#b45309',border:'1px solid #fbbf24',borderRadius:2,fontWeight:700}}>Add-on</span>}</div> : row.description ? <div style={{color:'#374151'}}>{row.description}{row.invoiceNo&&<span style={{marginLeft:6,fontSize:9.5,color:'#9ca3af'}}>Inv: {row.invoiceNo}</span>}</div> : <span style={{color:'#9ca3af',fontStyle:'italic'}}>No items</span>}
                       </td>
                       <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(rate):'—'}</td>
                       <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>

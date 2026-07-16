@@ -11,6 +11,7 @@ import ResetPassword from './pages/auth/ResetPassword';
 import SetPassword from './pages/auth/SetPassword';
 import VendorRegister from './pages/vendor-portal/Register';
 import ForgotPassword from './pages/vendor-portal/ForgotPassword';
+import VendorResetPassword from './pages/vendor-portal/VendorResetPassword';
 import VendorPortal from './pages/vendor-portal/VendorPortal';
 import SelfRegistrations from './pages/vendor/SelfRegistrations';
 
@@ -96,6 +97,8 @@ import StockOut from './pages/stock/StockOut';
 
 import { ChatProvider } from './context/ChatContext';
 import Chat from './components/Chat';
+import { LockProvider, useLock } from './context/LockContext';
+import LockScreen from './components/LockScreen';
 
 import './App.css';
 
@@ -158,12 +161,24 @@ function RequireAuth() {
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
+function LockGate({ children }) {
+  const { isLocked } = useLock();
+  return (
+    <>
+      {isLocked && <LockScreen />}
+      {children}
+    </>
+  );
+}
+
 // Inner component so it can use useCompany (which requires CompanyProvider above it)
 function AppContent() {
   const { selectedCompany } = useCompany();
   const { user, logout }    = useAuth();
 
   return (
+    <LockProvider user={user}>
+      <LockGate>
     <ChatProvider>
       <div className="app-container" style={{ flexDirection:'column' }}>
           <Header username={user?.name || user?.username || 'User'} onLogout={logout} />
@@ -310,6 +325,8 @@ function AppContent() {
       <Chat />
     </div>
     </ChatProvider>
+      </LockGate>
+    </LockProvider>
   );
 }
 
@@ -339,6 +356,7 @@ function App() {
               <Route path="/set-password"             element={<SetPassword />} />
               <Route path="/vendor-register"          element={<VendorRegister />} />
               <Route path="/vendor-forgot-password"   element={<ForgotPassword />} />
+              <Route path="/vendor-reset-password"    element={<VendorResetPassword />} />
 
               {/* Vendor portal — requires vendor auth */}
               <Route element={<RequireVendorAuth />}>

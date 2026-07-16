@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useLock, hashPin, PIN_KEY } from '../../context/LockContext';
 import axios from 'axios';
 import { MODULES, GROUP_ORDER } from '../../utils/permissions';
 
@@ -243,7 +244,7 @@ export default function UserProfile() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '0 20px', gap: 4 }}>
-          {[['info','👤 Profile'], ['permissions','🔐 Permissions'], ['dashboard','📊 Dashboard']].map(([k, l]) => (
+          {[['info','👤 Profile'], ['permissions','🔐 Permissions'], ['dashboard','📊 Dashboard'], ['security','🔒 Screen Lock']].map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
               style={{ padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: tab === k ? 700 : 500, color: tab === k ? TEAL2 : '#64748b', borderBottom: tab === k ? `2px solid ${TEAL}` : '2px solid transparent', marginBottom: -1, fontFamily: F }}>
               {l}
@@ -315,6 +316,9 @@ export default function UserProfile() {
           {/* ── Tab: Permissions ── */}
           {tab === 'permissions' && <PermissionsPanel user={user} />}
 
+          {/* ── Tab: Screen Lock ── */}
+          {tab === 'security' && <ScreenLockPanel />}
+
           {/* ── Tab: Dashboard Preferences ── */}
           {tab === 'dashboard' && (
             <div>
@@ -343,6 +347,184 @@ export default function UserProfile() {
           )}
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Screen Lock PIN Panel ─── */
+function ScreenLockPanel() {
+  const lock = useLock();
+  const [mode, setMode]       = useState('view'); // view | set | change | remove
+  const [pin1, setPin1]       = useState('');
+  const [pin2, setPin2]       = useState('');
+  const [curPin, setCurPin]   = useState('');
+  const [msg, setMsg]         = useState({ text: '', ok: true });
+  const [busy, setBusy]       = useState(false);
+
+  // lock context may be null on vendor portal / outside provider
+  const hasPin = lock?.hasPin ?? !!localStorage.getItem(PIN_KEY);
+
+  const showMsg = (text, ok = true) => {
+    setMsg({ text, ok });
+    setTimeout(() => setMsg({ text: '', ok: true }), 3500);
+  };
+
+  const reset = () => { setMode('view'); setPin1(''); setPin2(''); setCurPin(''); };
+
+  const handleSetPin = async () => {
+    if (!/^\d{4}$/.test(pin1)) { showMsg('PIN must be exactly 4 digits', false); return; }
+    if (pin1 !== pin2)          { showMsg('PINs do not match', false); return; }
+    setBusy(true);
+    await lock.savePin(pin1);
+    setBusy(false);
+    showMsg('Screen lock PIN set! Lock icon will appear in the header.', true);
+    reset();
+  };
+
+  const handleChangePin = async () => {
+    if (!curPin)                { showMsg('Enter your current PIN', false); return; }
+    if (!/^\d{4}$/.test(pin1)) { showMsg('New PIN must be exactly 4 digits', false); return; }
+    if (pin1 !== pin2)          { showMsg('New PINs do not match', false); return; }
+    setBusy(true);
+    const stored = localStorage.getItem(PIN_KEY);
+    const hash   = await hashPin(curPin);
+    if (hash !== stored) { setBusy(false); showMsg('Current PIN is incorrect', false); return; }
+    await lock.savePin(pin1);
+    setBusy(false);
+    showMsg('PIN changed successfully', true);
+    reset();
+  };
+
+  const handleRemovePin = async () => {
+    if (!curPin) { showMsg('Enter your current PIN to confirm removal', false); return; }
+    setBusy(true);
+    const stored = localStorage.getItem(PIN_KEY);
+    const hash   = await hashPin(curPin);
+    if (hash !== stored) { setBusy(false); showMsg('Incorrect PIN', false); return; }
+    lock.removePin();
+    setBusy(false);
+    showMsg('Screen lock PIN removed', true);
+    reset();
+  };
+
+  const pinInput = (label, val, set, ph = '••••') => (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>{label}</label>
+      <input
+        type="password" inputMode="numeric" maxLength={4}
+        value={val} onChange={e => set(e.target.value.replace(/\D/g,'').slice(0,4))}
+        placeholder={ph}
+        style={{ width: 120, padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 20, letterSpacing: 8, fontFamily: 'monospace', outline: 'none', textAlign: 'center' }}
+        onFocus={e => e.target.style.borderColor = '#3A6186'}
+        onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+      />
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Info banner */}
+      <div style={{ padding: '14px 18px', borderRadius: 10, background: 'linear-gradient(135deg,#f0f4ff,#e8eeff)', border: '1px solid #c7d2fe', marginBottom: 20, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 28, lineHeight: 1 }}>🔒</span>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>Screen Lock — Universal Core ERP</div>
+          <div style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.6 }}>
+            Set a 4-digit PIN to automatically lock the screen after <strong>2 minutes of inactivity</strong>.<br />
+            You can also lock instantly by clicking the 🔒 icon in the header.
+          </div>
+        </div>
+      </div>
+
+      {/* Status pill */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Status:</span>
+        {hasPin ? (
+          <span style={{ background: '#dcfce7', color: '#15803d', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>✅ PIN Active</span>
+        ) : (
+          <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>⚠ No PIN Set</span>
+        )}
+      </div>
+
+      {msg.text && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: msg.ok ? '#f0fdf4' : '#fef2f2', color: msg.ok ? '#15803d' : '#dc2626', border: `1px solid ${msg.ok ? '#bbf7d0' : '#fecaca'}`, fontSize: 13, fontWeight: 600, marginBottom: 16 }}>{msg.text}</div>
+      )}
+
+      {/* Actions */}
+      {mode === 'view' && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {!hasPin ? (
+            <button onClick={() => setMode('set')}
+              style={{ background: '#3A6186', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+              🔒 Set Screen Lock PIN
+            </button>
+          ) : (
+            <>
+              <button onClick={() => setMode('change')}
+                style={{ background: '#3A6186', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+                🔑 Change PIN
+              </button>
+              <button onClick={() => setMode('remove')}
+                style={{ background: '#fff', color: '#dc2626', border: '1.5px solid #fca5a5', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+                🗑 Remove PIN
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === 'set' && (
+        <div style={{ maxWidth: 280 }}>
+          <h4 style={{ margin: '0 0 16px', fontSize: 14, color: '#1e293b' }}>Set New PIN</h4>
+          {pinInput('New 4-digit PIN', pin1, setPin1)}
+          {pinInput('Confirm PIN', pin2, setPin2)}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={handleSetPin} disabled={busy}
+              style={{ background: '#3A6186', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+              {busy ? 'Saving…' : 'Set PIN'}
+            </button>
+            <button onClick={reset} style={{ background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 18px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: F }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'change' && (
+        <div style={{ maxWidth: 280 }}>
+          <h4 style={{ margin: '0 0 16px', fontSize: 14, color: '#1e293b' }}>Change PIN</h4>
+          {pinInput('Current PIN', curPin, setCurPin)}
+          {pinInput('New PIN', pin1, setPin1)}
+          {pinInput('Confirm New PIN', pin2, setPin2)}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={handleChangePin} disabled={busy}
+              style={{ background: '#3A6186', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+              {busy ? 'Saving…' : 'Change PIN'}
+            </button>
+            <button onClick={reset} style={{ background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 18px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: F }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'remove' && (
+        <div style={{ maxWidth: 280 }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14, color: '#dc2626' }}>Remove PIN</h4>
+          <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#64748b' }}>Enter your current PIN to confirm removal. The screen lock will be disabled.</p>
+          {pinInput('Current PIN', curPin, setCurPin)}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={handleRemovePin} disabled={busy}
+              style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: F }}>
+              {busy ? 'Removing…' : 'Remove PIN'}
+            </button>
+            <button onClick={reset} style={{ background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 18px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: F }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 24, padding: '12px 16px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, color: '#64748b', lineHeight: 1.7 }}>
+        <strong style={{ color: '#374151' }}>How it works:</strong><br />
+        • PIN is stored locally on this device only (never sent to server)<br />
+        • After 2 min of inactivity, screen locks automatically<br />
+        • Click 🔒 in the header to lock instantly<br />
+        • Clearing browser data will reset the PIN
       </div>
     </div>
   );

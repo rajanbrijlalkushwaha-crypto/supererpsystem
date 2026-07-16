@@ -212,33 +212,98 @@ router.post('/forgot-password', async (req, res) => {
     const resetUrl = `${frontendUrl(req)}/reset-password?token=${token}`;
 
     await transport.sendMail({
-      from:    `"Epsilon ERP" <${cfg.email}>`,
+      from:    `"Universal Core ERP Solutions" <${cfg.email}>`,
       to:      user.email,
-      subject: 'Password Reset — Epsilon ERP',
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-          <div style="background:#133d80;padding:24px 32px">
-            <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.3px">⚡ Epsilon ERP</div>
-            <div style="font-size:13px;color:#93c5fd;margin-top:4px">Password Reset Request</div>
-          </div>
-          <div style="padding:32px">
-            <p style="font-size:15px;color:#111827;margin:0 0 12px">Hi <strong>${user.name}</strong>,</p>
-            <p style="font-size:13px;color:#374151;line-height:1.6;margin:0 0 24px">
-              We received a request to reset your Epsilon ERP password.<br>
-              Click the button below to set a new password. This link expires in <strong>1 hour</strong>.
-            </p>
-            <a href="${resetUrl}" style="display:inline-block;background:#133d80;color:#fff;padding:13px 32px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.2px">
-              Reset My Password →
+      subject: 'Password Reset Request — Universal Core ERP Solutions',
+      html: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0ede8;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0ede8;padding:32px 16px">
+<tr><td align="center">
+<table width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:6px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.12)">
+
+  <!-- Top accent bar -->
+  <tr><td style="background:linear-gradient(90deg,#CC0000,#3A6186);height:4px;font-size:0">&nbsp;</td></tr>
+
+  <!-- Header: brand left, badge right -->
+  <tr>
+    <td style="padding:0">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <!-- Left: title -->
+          <td style="padding:22px 24px 16px;vertical-align:bottom">
+            <div style="font-size:22px;color:#111;line-height:1.2">
+              <span style="font-weight:300">⚡ Universal Core </span><strong>ERP Solutions</strong>
+            </div>
+            <div style="font-size:12px;color:#888;margin-top:4px">Password Reset Request</div>
+          </td>
+          <!-- Right: red badge (like Finacle) -->
+          <td align="right" style="vertical-align:top;padding:0">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#CC0000;padding:14px 18px;border-bottom-left-radius:10px">
+                  <div style="font-size:16px;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.3px">Finacle ERP</div>
+                  <div style="font-size:9px;color:rgba(255,255,255,0.75);font-style:italic;margin-top:3px;letter-spacing:0.5px">Transforming Business</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- Divider -->
+  <tr><td style="padding:0 24px"><div style="height:1px;background:#e5e7eb"></div></td></tr>
+
+  <!-- Body -->
+  <tr>
+    <td style="padding:28px 24px 20px">
+      <p style="font-size:15px;color:#111827;margin:0 0 10px">Hi <strong>${user.name}</strong>,</p>
+      <p style="font-size:13px;color:#374151;line-height:1.7;margin:0 0 24px">
+        We received a request to reset your <strong>Universal Core ERP Solutions</strong> password.<br>
+        Click the button below to set a new password. This link expires in <strong>1 hour</strong>.
+      </p>
+
+      <!-- CTA Button -->
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+        <tr>
+          <td style="border-radius:4px;background:linear-gradient(180deg,#4A7FAA 0%,#2D5F8A 100%);border:1px solid #1E4A70;box-shadow:0 2px 6px rgba(0,0,0,0.25)">
+            <a href="${resetUrl}" style="display:inline-block;color:#ffffff;padding:11px 32px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px;font-family:Arial,sans-serif">
+              Reset My Password &rarr;
             </a>
-            <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;line-height:1.6">
-              If you didn't request this, you can safely ignore this email — your password won't change.<br>
-              Link: <a href="${resetUrl}" style="color:#133d80">${resetUrl}</a>
-            </p>
-          </div>
-          <div style="background:#f9fafb;padding:12px 32px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb">
-            © Epsilon ERP · This is an automated message, do not reply
-          </div>
-        </div>`,
+          </td>
+        </tr>
+      </table>
+
+      <!-- Info / disclaimer -->
+      <p style="font-size:12px;color:#9ca3af;margin:0;line-height:1.7">
+        If you didn't request this, you can safely ignore this email — your password won't change.<br>
+        Link: <a href="${resetUrl}" style="color:#3A6186;word-break:break-all">${resetUrl}</a>
+      </p>
+    </td>
+  </tr>
+
+  <!-- Footer -->
+  <tr>
+    <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:12px 24px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="font-size:10px;color:#9CA3AF;line-height:1.5">
+            Copyright &copy; 2024&ndash;2025 Epsilon Group Limited. All rights reserved. epsilonprefab.org
+          </td>
+          <td align="right" style="font-size:16px;font-weight:900;color:#003580;font-style:italic;white-space:nowrap;letter-spacing:-0.3px">
+            Epsilongroup
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`,
     });
 
     res.json({ success: true, message: 'Password reset link sent to your email.' });

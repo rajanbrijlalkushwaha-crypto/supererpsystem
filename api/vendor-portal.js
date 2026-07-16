@@ -11,6 +11,8 @@ const router = express.Router();
 const OTP_STORE = new Map();
 // In-memory vendor sessions: token → session
 const VENDOR_SESSIONS = new Map();
+// In-memory password reset tokens: token → { email, expires }
+const VENDOR_RESET_TOKENS = new Map();
 
 const REG_FILE        = path.join(ROOT, 'Database', 'vendor-registrations.json');
 const EMAIL_CFG_FILE  = path.join(ROOT, 'Database', 'email-config.json');
@@ -283,6 +285,222 @@ router.post('/forgot-password/reset', (req, res) => {
     writeRegs(regs);
 
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── Vendor password reset email HTML ── */
+const vendorResetEmailHtml = (vendorName, resetUrl) => `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0ede8;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0ede8;padding:32px 16px">
+<tr><td align="center">
+<table width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;background:#ffffff;border-radius:6px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.12)">
+  <tr><td style="background:linear-gradient(90deg,#CC0000,#1D4ED8);height:4px;font-size:0">&nbsp;</td></tr>
+  <tr>
+    <td style="padding:0">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:22px 24px 16px;vertical-align:bottom">
+            <div style="font-size:22px;color:#111;line-height:1.2">
+              <span style="font-weight:300">⚡ Vendor </span><strong>Portal Reset</strong>
+            </div>
+            <div style="font-size:12px;color:#888;margin-top:4px">Universal Core ERP Solutions — Vendor Portal</div>
+          </td>
+          <td align="right" style="vertical-align:top;padding:0">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#1D4ED8;padding:14px 18px;border-bottom-left-radius:10px">
+                  <div style="font-size:16px;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.3px">Vendor Portal</div>
+                  <div style="font-size:9px;color:rgba(255,255,255,0.75);font-style:italic;margin-top:3px;letter-spacing:0.5px">Epsilon Enterprise</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr><td style="padding:0 24px"><div style="height:1px;background:#e5e7eb"></div></td></tr>
+  <tr>
+    <td style="padding:28px 24px 20px">
+      <p style="font-size:15px;color:#111827;margin:0 0 10px">Hi <strong>${vendorName}</strong>,</p>
+      <p style="font-size:13px;color:#374151;line-height:1.7;margin:0 0 24px">
+        We received a request to reset your <strong>Vendor Portal</strong> password.<br>
+        Click the button below to proceed. You will be asked to confirm your <strong>registered business name</strong> as a security step.<br>
+        This link expires in <strong>1 hour</strong>.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+        <tr>
+          <td style="border-radius:4px;background:linear-gradient(180deg,#3B82F6 0%,#1D4ED8 100%);border:1px solid #1E40AF;box-shadow:0 2px 6px rgba(0,0,0,0.25)">
+            <a href="${resetUrl}" style="display:inline-block;color:#ffffff;padding:11px 32px;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.3px;font-family:Arial,sans-serif">
+              Reset My Password &rarr;
+            </a>
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:12px;color:#9ca3af;margin:0;line-height:1.7">
+        If you didn't request this, you can safely ignore this email.<br>
+        Link: <a href="${resetUrl}" style="color:#1D4ED8;word-break:break-all">${resetUrl}</a>
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:12px 24px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="font-size:10px;color:#9CA3AF;line-height:1.5">
+            Copyright &copy; 2024&ndash;2025 Epsilon Group Limited. All rights reserved.
+          </td>
+          <td align="right" style="font-size:16px;font-weight:900;color:#003580;font-style:italic;white-space:nowrap;letter-spacing:-0.3px">
+            Epsilongroup
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+
+/* ── Helper: search vendor JSON files across all companies by email ── */
+const findVendorInFiles = (email) => {
+  const companiesDir = path.join(ROOT, 'Database', 'Companies');
+  if (!fs.existsSync(companiesDir)) return null;
+  try {
+    const companies = fs.readdirSync(companiesDir).filter(d => {
+      try { return fs.statSync(path.join(companiesDir, d)).isDirectory(); } catch { return false; }
+    });
+    for (const companyId of companies) {
+      const vendors = jstore.readAll('Vendor', companyId);
+      const found = vendors.find(v => v && (v.email || '').toLowerCase() === email.toLowerCase().trim());
+      if (found) return { ...found, companyId };
+    }
+  } catch {}
+  return null;
+};
+
+/* ── POST /api/vendor-portal/forgot-password/request — send email link ── */
+router.post('/forgot-password/request', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+    const normalEmail = email.toLowerCase().trim();
+    let vendorName, resolvedEmail, source;
+
+    // 1. Check vendor-registrations.json first
+    const regs = readRegs();
+    const reg  = regs.find(r => r.email.toLowerCase() === normalEmail);
+    if (reg) {
+      if (reg.status === 'rejected') return res.status(400).json({ error: 'This account has been rejected. Contact admin.' });
+      vendorName    = reg.vendorName || reg.companyName || reg.email;
+      resolvedEmail = reg.email;
+      source        = 'registration';
+    } else {
+      // 2. Search vendor JSON files (admin-created vendors)
+      const vf = findVendorInFiles(normalEmail);
+      if (!vf) return res.status(404).json({ error: 'No vendor account found with this email address.' });
+      vendorName    = vf.vendorName || vf.companyName || vf.email;
+      resolvedEmail = vf.email;
+      source        = 'vendor';
+      // Store extra info in token so reset can create a registration entry
+      var vendorFileInfo = { vendorId: vf.vendorId, companyId: vf.companyId };
+    }
+
+    const token   = crypto.randomBytes(32).toString('hex');
+    const expires = Date.now() + 60 * 60 * 1000; // 1 hour
+    VENDOR_RESET_TOKENS.set(token, {
+      email: resolvedEmail, vendorName, source, expires,
+      ...(vendorFileInfo || {}),
+    });
+
+    const baseUrl  = `${req.protocol}://${req.get('host')}`;
+    const resetUrl = `${baseUrl}/vendor-reset-password?token=${token}`;
+
+    try {
+      await sendEmail(
+        resolvedEmail,
+        'Password Reset Request — Vendor Portal',
+        vendorResetEmailHtml(vendorName, resetUrl)
+      );
+      res.json({ success: true, message: `Password reset link sent to ${resolvedEmail}. Please check your inbox.` });
+    } catch (mailErr) {
+      console.error('[VENDOR RESET EMAIL]', mailErr.message);
+      res.json({ success: true, message: 'Reset link generated (email delivery failed — check server console).', devLink: resetUrl });
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── GET /api/vendor-portal/verify-reset-token/:token ── */
+router.get('/verify-reset-token/:token', (req, res) => {
+  try {
+    const entry = VENDOR_RESET_TOKENS.get(req.params.token);
+    if (!entry || Date.now() > entry.expires) {
+      VENDOR_RESET_TOKENS.delete(req.params.token);
+      return res.status(400).json({ valid: false, error: 'Reset link has expired or is invalid. Please request a new one.' });
+    }
+    const name = entry.vendorName || '';
+    const nameHint = name.length > 2
+      ? name[0] + '*'.repeat(Math.max(0, name.length - 2)) + name.slice(-1)
+      : name;
+    res.json({ valid: true, nameHint, email: entry.email });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── POST /api/vendor-portal/forgot-password/reset-with-name ── */
+router.post('/forgot-password/reset-with-name', (req, res) => {
+  try {
+    const { token, confirmName, newPassword } = req.body;
+    if (!token || !confirmName || !newPassword) return res.status(400).json({ error: 'All fields are required.' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+    const entry = VENDOR_RESET_TOKENS.get(token);
+    if (!entry || Date.now() > entry.expires) {
+      VENDOR_RESET_TOKENS.delete(token);
+      return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+    }
+
+    // Confirm business name matches
+    const storedName = (entry.vendorName || '').trim().toLowerCase();
+    if (storedName !== confirmName.trim().toLowerCase()) {
+      return res.status(400).json({ error: 'Business name does not match. Please enter your exact registered business name.' });
+    }
+
+    const salt         = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPwd(newPassword, salt);
+    const now          = new Date().toISOString();
+
+    const regs = readRegs();
+    const idx  = regs.findIndex(r => r.email.toLowerCase() === entry.email.toLowerCase());
+
+    if (idx !== -1) {
+      // Existing registration entry — update password
+      regs[idx].passwordHash    = passwordHash;
+      regs[idx].salt            = salt;
+      regs[idx].passwordResetAt = now;
+      // Upgrade status if still self-registered (allow login after reset)
+      if (regs[idx].status === 'self-registered') regs[idx].status = 'approved';
+    } else {
+      // Admin-created vendor with no registration entry — create one so they can login
+      regs.push({
+        id:           Date.now(),
+        vendorId:     entry.vendorId,
+        companyId:    entry.companyId,
+        vendorName:   entry.vendorName,
+        email:        entry.email,
+        passwordHash, salt,
+        status:       'approved',
+        importSource: 'admin-created',
+        createdAt:    now,
+        passwordResetAt: now,
+      });
+    }
+
+    writeRegs(regs);
+    VENDOR_RESET_TOKENS.delete(token);
+
+    res.json({ success: true, message: 'Password set successfully. You can now log in to the Vendor Portal.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
