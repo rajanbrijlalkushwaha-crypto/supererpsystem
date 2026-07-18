@@ -48,7 +48,7 @@ export default function ViewJournals() {
   if (statusFilter !== 'all') rows = rows.filter(r => r.status === statusFilter);
   if (search) {
     const q = search.toLowerCase();
-    rows = rows.filter(r => String(r.journalId).includes(q) || (r.narration || '').toLowerCase().includes(q) || (r.refNo || '').toLowerCase().includes(q));
+    rows = rows.filter(r => String(r.journalId).includes(q) || (r.narration || '').toLowerCase().includes(q) || (r.refNo || '').toLowerCase().includes(q) || (r.type || '').toLowerCase().includes(q));
   }
 
   return (
@@ -93,8 +93,8 @@ export default function ViewJournals() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
               <thead>
                 <tr style={{ background: '#f8faff' }}>
-                  {['#', 'Date', 'Ref No.', 'Narration', 'Total Debit (₹)', 'Total Credit (₹)', 'Status', 'Actions'].map((h, i) => (
-                    <th key={i} style={{ padding: '8px 10px', border: `1px solid ${BD}`, fontWeight: 700, color: '#374151', textAlign: i >= 4 ? 'right' : 'left', whiteSpace: 'nowrap', fontSize: 11 }}>{h}</th>
+                  {['#', 'Type', 'Date', 'Ref No.', 'Narration', 'Linked Order', 'Total Debit (₹)', 'Total Credit (₹)', 'Status', 'Actions'].map((h, i) => (
+                    <th key={i} style={{ padding: '8px 10px', border: `1px solid ${BD}`, fontWeight: 700, color: '#374151', textAlign: i >= 6 ? 'right' : 'left', whiteSpace: 'nowrap', fontSize: 11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -108,9 +108,21 @@ export default function ViewJournals() {
                     <React.Fragment key={r.journalId}>
                       <tr style={{ background: ri % 2 === 0 ? '#fff' : '#f8faff' }}>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, fontWeight: 700, color: P }}>#{r.journalId}</td>
+                        <td style={{ padding: '8px 10px', border: `1px solid ${BD}` }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                            background: r.type==='order'?'#fef3c7':r.type==='manufacturing'?'#ede9fe':'#f0fdf4',
+                            color: r.type==='order'?'#92400e':r.type==='manufacturing'?'#5b21b6':'#15803d' }}>
+                            {r.type==='order'?'📦 Order':r.type==='manufacturing'?'🏭 Mfg':'🏢 Office'}
+                          </span>
+                        </td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}` }}>{fmtD(r.date)}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, color: '#6b7280' }}>{r.refNo || '—'}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}` }}>{r.narration}</td>
+                        <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, color: '#6b7280', fontSize: 11 }}>
+                          {r.type === 'order' && r.orderId
+                            ? <span style={{ color: P, fontWeight: 600 }}>[{r.orderLinkType||'PO'}] #{r.orderId}</span>
+                            : '—'}
+                        </td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>₹{fmt(debit)}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, textAlign: 'right', fontWeight: 600, color: '#7c3aed' }}>₹{fmt(credit)}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, textAlign: 'right' }}>
@@ -122,12 +134,13 @@ export default function ViewJournals() {
                           <button onClick={() => setExpanded(isOpen ? null : r.journalId)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 5, color: P, padding: '3px 8px', fontSize: 11, cursor: 'pointer', marginRight: 4, fontFamily: F }}>
                             {isOpen ? '▲ Hide' : '▼ Details'}
                           </button>
+                          <button onClick={() => navigate(`/account/journal/create?edit=${r.journalId}`)} style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 5, color: '#15803d', padding: '3px 8px', fontSize: 11, cursor: 'pointer', marginRight: 4, fontFamily: F }}>✏ Edit</button>
                           <button onClick={() => handleDelete(r.journalId)} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 5, color: '#dc2626', padding: '3px 8px', fontSize: 11, cursor: 'pointer', fontFamily: F }}>🗑</button>
                         </td>
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={8} style={{ padding: 0, border: `1px solid ${BD}` }}>
+                          <td colSpan={10} style={{ padding: 0, border: `1px solid ${BD}` }}>
                             <div style={{ background: '#f0f4fb', padding: '12px 14px' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                                 <thead>

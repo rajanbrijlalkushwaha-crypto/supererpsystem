@@ -10,6 +10,12 @@ const AC = '#7c2d12';   // amber/brown for expenses
 const BD = '#e2e8f0';
 
 const fmt   = n => (parseFloat(n)||0).toFixed(2);
+const getFY = d => {
+  const dt = d ? new Date(d) : new Date();
+  const y = dt.getFullYear(), m = dt.getMonth();
+  const start = m >= 3 ? y : y - 1;
+  return `${String(start).slice(2)}-${String(start+1).slice(2)}`;
+};
 const fmtD  = d => {
   if (!d) return '—';
   const dt = new Date(d);
@@ -45,180 +51,276 @@ const Pill = ({ ok, label, val, green = false }) => {
 function printReport(so, pos, expenses, clientDue, vendorDues, companyName) {
   const soTotal   = parseFloat(so.grandTotal || 0);
   const received  = parseFloat(clientDue?.received || clientDue?.paymentsReceived || 0);
+  const clientBal = Math.max(0, soTotal - received);
   const poTotal   = pos.reduce((s,p) => s + (parseFloat(p.grandTotal)||0), 0);
   const expTotal  = expenses.reduce((s,e) => s + (parseFloat(e.grandTotal||e.amount)||0), 0);
-  const revenue   = soTotal;
-  const cogs      = poTotal;
-  const profit    = revenue - cogs - expTotal;
+  const profit    = soTotal - poTotal - expTotal;
+  const today     = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
 
-  const thS = `border:1px solid #ccc;padding:5px 8px;background:#104f4f;color:#fff;font-size:10px;font-weight:700;text-align:left;`;
-  const tdS = `border:1px solid #ddd;padding:4px 8px;font-size:10px;`;
-  const tdR = `border:1px solid #ddd;padding:4px 8px;font-size:10px;text-align:right;`;
-
-  const itemRows = (items=[]) => items.map((it,i) => `
-    <tr style="background:${i%2===0?'#fff':'#f8faff'}">
-      <td style="${tdS}">${i+1}</td>
-      <td style="${tdS}">${it.itemName||it.description||it.name||'—'}</td>
-      <td style="${tdR}">${parseFloat(it.qty||it.quantity)||0}</td>
-      <td style="${tdS}">${it.unit||'NOS'}</td>
-      <td style="${tdR}">₹${fmt(parseFloat(it.rate)||0)}</td>
-      <td style="${tdR}">${parseFloat(it.gst||it.gstPercent)||0}%</td>
-      <td style="${tdR}">₹${fmt((parseFloat(it.qty||1))*(parseFloat(it.rate)||0))}</td>
-    </tr>`).join('');
+  const itemRows = (items=[]) => items.length === 0
+    ? `<tr><td colspan="7" style="padding:8px;text-align:center;color:#9ca3af;font-style:italic;">No items</td></tr>`
+    : items.map((it,i) => {
+        const base = (parseFloat(it.qty||it.quantity)||0) * (parseFloat(it.rate)||0);
+        const gst  = parseFloat(it.gst||it.gstPercent)||0;
+        return `<tr style="background:${i%2===0?'#fff':'#f9fafb'}">
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;color:#6b7280">${i+1}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">${it.itemName||it.description||it.name||'—'}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right">${parseFloat(it.qty||it.quantity)||0}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb">${it.unit||'NOS'}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right">₹${fmt(parseFloat(it.rate)||0)}</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center">${gst}%</td>
+          <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700">₹${fmt(base + base*gst/100)}</td>
+        </tr>`;
+      }).join('');
 
   const poSection = pos.map((p,pi) => {
-    const due = vendorDues.find(d => String(d.orderId)===String(p.orderId) || d.orderNo===p.poNo);
-    return `
-    <h4 style="margin:14px 0 4px;color:#7c2d12;font-size:11px;">PO ${pi+1}: ${p.poNo||p.poNumber||`#${p.orderId}`} — ${p.vendorName||'—'}</h4>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:6px;">
-      <thead><tr>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">#</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">Description</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">Qty</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">Unit</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">Rate</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">GST</th>
-        <th style="${thS.replace('#104f4f','#7c2d12')}">Amount</th>
-      </tr></thead>
-      <tbody>${itemRows(p.items||[])}</tbody>
-      <tfoot>
-        <tr style="background:#fff8f0;font-weight:700;">
-          <td colspan="6" style="${tdS}">PO Grand Total</td>
-          <td style="${tdR};font-weight:800;">₹${fmt(p.grandTotal||0)}</td>
-        </tr>
-        <tr style="background:#fff8f0;">
-          <td colspan="6" style="${tdS}">Paid to Vendor</td>
-          <td style="${tdR};color:#15803d;">₹${fmt(due?.paid||due?.totalPaid||0)}</td>
-        </tr>
-      </tfoot>
-    </table>`;
+    const due    = vendorDues.find(d => String(d.orderId)===String(p.orderId) || d.orderNo===p.poNo);
+    const poBal  = parseFloat(due?.due||due?.balance)||0;
+    const poPaid = parseFloat(due?.paid||due?.totalPaid)||0;
+    return `<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:12px;break-inside:avoid">
+      <div style="background:#7c2d12;color:#fff;padding:8px 14px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:800;font-size:10pt">PO ${pi+1}: ${p.poNo||p.poNumber||`#${p.orderId}`}</span>
+        <span style="font-size:9.5pt;opacity:0.9">${p.vendorName||'—'}</span>
+        <span style="font-size:9pt;opacity:0.8">${fmtD(p.poDate||p.createdAt)}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:9pt">
+        <thead><tr style="background:#fff0ec">
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:left;font-weight:700;color:#7c2d12">#</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:left;font-weight:700;color:#7c2d12">Description</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:right;font-weight:700;color:#7c2d12">Qty</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:left;font-weight:700;color:#7c2d12">Unit</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:right;font-weight:700;color:#7c2d12">Rate</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:center;font-weight:700;color:#7c2d12">GST</th>
+          <th style="padding:5px 8px;border:1px solid #fecaca;text-align:right;font-weight:700;color:#7c2d12">Amount</th>
+        </tr></thead>
+        <tbody>${itemRows(p.items||[])}</tbody>
+      </table>
+      <div style="background:#fff8f4;padding:8px 14px;display:flex;gap:24px;border-top:1px solid #fecaca">
+        <div><span style="color:#6b7280;font-size:8.5pt">PO Value: </span><span style="font-weight:800;color:#7c2d12;font-size:10pt">₹${fmt(p.grandTotal||0)}</span></div>
+        <div><span style="color:#6b7280;font-size:8.5pt">Paid: </span><span style="font-weight:700;color:#15803d;font-size:10pt">₹${fmt(poPaid)}</span></div>
+        <div><span style="color:#6b7280;font-size:8.5pt">Balance: </span><span style="font-weight:700;color:${poBal>0.5?'#dc2626':'#15803d'};font-size:10pt">${poBal>0.5?'₹'+fmt(poBal):'✓ Cleared'}</span></div>
+      </div>
+    </div>`;
   }).join('');
 
-  const expRows = expenses.map((e,i) => `
-    <tr style="background:${i%2===0?'#fff':'#fff8f0'}">
-      <td style="${tdS}">${i+1}</td>
-      <td style="${tdS}">${fmtD(e.date||e.expenseDate||e.createdAt)}</td>
-      <td style="${tdS}">${e.expenseCategory||e.category||'—'}</td>
-      <td style="${tdS}">${e.description||'—'}</td>
-      <td style="${tdS}">${e.vendor||'—'}</td>
-      <td style="${tdR}">₹${fmt(e.grandTotal||e.amount||0)}</td>
-      <td style="${tdS}">${e.status||'—'}</td>
-    </tr>`).join('');
-
-  const plRows = [
-    ['Revenue (SO Value)',    `₹${fmt(revenue)}`,  '#1f2937'],
-    ['Cost of Goods (POs)',   `₹${fmt(cogs)}`,     '#7c2d12'],
-    ['Other Expenses',        `₹${fmt(expTotal)}`, '#b45309'],
-    ['Net Profit / Loss',     `₹${fmt(profit)}`,   profit>=0?'#15803d':'#dc2626'],
-  ].map(([l,v,c]) => `<tr>
-    <td style="padding:6px 10px;border:1px solid #ddd;font-size:11px;font-weight:600;">${l}</td>
-    <td style="padding:6px 10px;border:1px solid #ddd;font-size:12px;font-weight:800;text-align:right;color:${c};">${v}</td>
-  </tr>`).join('');
+  const expRows = expenses.map((e,i) => {
+    const total = parseFloat(e.grandTotal||e.amount)||0;
+    return `<tr style="background:${i%2===0?'#fff':'#fffbeb'}">
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;color:#6b7280">${i+1}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;color:#6b7280;white-space:nowrap">${fmtD(e.date||e.expenseDate||e.createdAt)}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:600;color:#92400e">${e.expenseCategory||e.category||'—'}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;color:#374151">${e.description||'—'}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">${e.vendorName||e.vendor||e.ledgerName||'—'}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700">₹${fmt(total)}</td>
+      <td style="padding:5px 8px;border:1px solid #e5e7eb">${e.paymentMode||e.mode||'—'}</td>
+    </tr>`;
+  }).join('');
 
   const html = `<!DOCTYPE html><html><head>
-    <meta charset="utf-8">
-    <title>Project Close Report — ${so.orderNo||so.orderId}</title>
-    <style>
-      *{box-sizing:border-box;font-family:'Inter',Arial,sans-serif;margin:0;padding:0}
-      body{padding:20px;color:#1f2937;font-size:10px;background:#fff;}
-      h3{font-size:13px;color:#104f4f;border-bottom:2px solid #104f4f;padding-bottom:4px;margin-bottom:10px;}
-      h4{font-size:11px;margin-bottom:4px;}
-      .sig{border-top:1px solid #666;width:180px;margin-top:30px;padding-top:4px;font-size:9px;color:#555;}
-      @media print{body{padding:6px;} .noprint{display:none}}
-    </style>
-  </head><body>
-    <div style="border-bottom:3px solid #104f4f;padding-bottom:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end;">
-      <div>
-        <div style="font-size:16px;font-weight:800;color:#104f4f;">${companyName||'Company'}</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Project Close Report</div>
-      </div>
-      <div style="text-align:right;font-size:10px;color:#6b7280;">
-        Generated: ${fmtD(new Date().toISOString())}
-      </div>
-    </div>
+<meta charset="utf-8">
+<title>Project Close Report — ${so.orderNo||so.orderId}</title>
+<style>
+*{box-sizing:border-box;font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:0}
+body{background:#fff;color:#1f2937;font-size:9.5pt;line-height:1.4;}
+.page{max-width:210mm;margin:0 auto;padding:14px;}
+.section{margin-bottom:20px;break-inside:avoid;}
+.sec-title{font-size:10.5pt;font-weight:800;color:#fff;background:#104f4f;padding:6px 14px;border-radius:6px 6px 0 0;letter-spacing:0.3px;}
+.sec-title.po{background:#7c2d12;}
+.sec-title.exp{background:#92400e;}
+.sec-title.pl{background:#1a3a8a;}
+.sec-body{border:1px solid #d1d5db;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;font-size:9pt;}
+th{padding:6px 8px;text-align:left;border:1px solid #d1d5db;font-size:8.5pt;font-weight:700;}
+td{padding:5px 8px;border:1px solid #e5e7eb;}
+.ra{text-align:right!important}.ca{text-align:center!important}
+tfoot td{background:#f8faff;font-weight:700;border-top:2px solid #c0ccee;}
+tfoot td.po{background:#fff8f4;}tfoot td.exp{background:#fffbeb;}
+.sig-line{border-top:1.5px solid #374151;padding-top:5px;font-size:8pt;color:#6b7280;width:160px;margin-top:36px;text-align:center;}
+@media print{
+  @page{size:A4 portrait;margin:8mm;}
+  body{font-size:8.5pt;}
+  .page{padding:0;}
+  .no-break{break-inside:avoid;}
+}
+</style>
+</head><body>
+<div class="page">
 
-    <!-- SO Overview -->
-    <h3>Sales Order</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
-      ${[
-        ['Order No', so.orderNo||'—'],
-        ['Client', so.customerName||so.clientName||'—'],
-        ['Order Date', fmtD(so.orderDate)],
-        ['Delivery Date', fmtD(so.deliveryDate||so.dueDate||'')],
-        ['Grand Total', `₹${fmt(so.grandTotal||0)}`],
-        ['Received', `₹${fmt(received)}`],
-        ['Outstanding', `₹${fmt(Math.max(0,soTotal-received))}`],
-        ['Status', so.status||'—'],
-      ].map(([l,v])=>`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:5px;padding:6px 8px;">
-        <div style="font-size:8px;color:#6b7280;text-transform:uppercase;">${l}</div>
-        <div style="font-size:11px;font-weight:700;color:#104f4f;margin-top:1px;">${v}</div>
-      </div>`).join('')}
-    </div>
+<!-- ══ LETTERHEAD ══ -->
+<div style="background:linear-gradient(135deg,#104f4f 0%,#1a3a8a 100%);color:#fff;padding:16px 20px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end;">
+  <div>
+    <div style="font-size:9pt;opacity:0.75;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">${companyName||'Company'}</div>
+    <div style="font-size:17pt;font-weight:900;letter-spacing:0.5px;line-height:1">PROJECT CLOSE REPORT</div>
+    <div style="font-size:9pt;opacity:0.8;margin-top:4px">Order: <b>${so.orderNo||so.orderId||'—'}</b> &nbsp;|&nbsp; Client: <b>${so.customerName||so.clientName||'—'}</b></div>
+  </div>
+  <div style="text-align:right;font-size:8.5pt;opacity:0.8;line-height:1.6">
+    <div>Date of Report: ${today}</div>
+    <div>Order Date: ${fmtD(so.orderDate||so.date)}</div>
+    <div>Status: <b style="text-transform:uppercase">${so.status||'—'}</b></div>
+  </div>
+</div>
 
-    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
-      <thead><tr>
-        <th style="${thS}">#</th>
-        <th style="${thS}">Description</th>
-        <th style="${thS}">Qty</th>
-        <th style="${thS}">Unit</th>
-        <th style="${thS}">Rate</th>
-        <th style="${thS}">GST</th>
-        <th style="${thS}">Amount</th>
+<!-- ══ FINANCIAL SUMMARY CARDS ══ -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;" class="no-break">
+  ${[
+    ['SO Value',         `₹${fmt(soTotal)}`,    '#1a3a8a','#eef2ff','#c7d2fe'],
+    ['Received',         `₹${fmt(received)}`,   '#15803d','#f0fdf4','#86efac'],
+    ['Client Balance',   clientBal>0.5 ? `₹${fmt(clientBal)}`:'✓ Cleared', clientBal>0.5?'#dc2626':'#15803d','#fff',clientBal>0.5?'#fecaca':'#86efac'],
+    ['PO Total',         `₹${fmt(poTotal)}`,    '#7c2d12','#fff8f4','#fecaca'],
+    ['Expenses',         `₹${fmt(expTotal)}`,   '#92400e','#fffbeb','#fcd34d'],
+    ['Total Cost',       `₹${fmt(poTotal+expTotal)}`,'#374151','#f9fafb','#d1d5db'],
+    ['Gross Profit',     `₹${fmt(soTotal-(poTotal+expTotal))}`, profit>=0?'#15803d':'#dc2626', profit>=0?'#f0fdf4':'#fef2f2', profit>=0?'#86efac':'#fecaca'],
+    ['Margin',           soTotal>0?`${((profit/soTotal)*100).toFixed(1)}%`:'—', profit>=0?'#15803d':'#dc2626','#fff','#d1d5db'],
+  ].map(([l,v,fc,bg,bc])=>`
+    <div style="background:${bg};border:1.5px solid ${bc};border-radius:8px;padding:8px 12px;text-align:center;">
+      <div style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;letter-spacing:0.4px;font-weight:600">${l}</div>
+      <div style="font-size:13pt;font-weight:900;color:${fc};margin-top:3px;line-height:1">${v}</div>
+    </div>`).join('')}
+</div>
+
+<!-- ══ SALES ORDER ══ -->
+<div class="section no-break">
+  <div class="sec-title">Sales Order Details</div>
+  <div class="sec-body" style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <table style="width:100%;font-size:9pt;border-collapse:collapse;">
+        <tbody>
+          ${[
+            ['Order Number',    so.orderNo||'—'],
+            ['Customer Name',   so.customerName||so.clientName||'—'],
+            ['Customer PO No',  so.customerPO||'—'],
+            ['Order Date',      fmtD(so.orderDate||so.date)],
+            ['Delivery Date',   fmtD(so.deliveryDate||so.dueDate||'')],
+            ['Status',          so.status||'—'],
+          ].map(([l,v])=>`<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;width:38%;background:#f9fafb;font-weight:600;font-size:8.5pt;color:#374151">${l}</td><td style="padding:4px 8px;border:1px solid #e5e7eb;font-weight:700;color:#1f2937">${v}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <table style="width:100%;font-size:9pt;border-collapse:collapse;">
+        <tbody>
+          ${[
+            ['Sub Total',     `₹${fmt(so.subTotal||0)}`],
+            ['GST Amount',    `₹${fmt(so.totalGST||so.gstAmount||0)}`],
+            ['P&F Charges',   `₹${fmt(so.packingCharges||0)}`],
+            ['Transport',     `₹${fmt(so.freightCharges||0)}`],
+            ['Grand Total',   `₹${fmt(so.grandTotal||0)}`],
+            ['Amount Received',`₹${fmt(received)}`],
+            ['Balance Due',   clientBal>0.5?`₹${fmt(clientBal)}`:'✓ Fully Received'],
+          ].map(([l,v],i)=>`<tr${i===4?` style="background:#e0f2fe;font-weight:800;"`:i===6?` style="background:${clientBal>0.5?'#fef2f2':'#f0fdf4'};font-weight:800;"`:''}>
+            <td style="padding:4px 8px;border:1px solid #e5e7eb;width:38%;background:${i===4||i===6?'inherit':'#f9fafb'};font-weight:600;font-size:8.5pt;color:#374151">${l}</td>
+            <td style="padding:4px 8px;border:1px solid #e5e7eb;font-weight:700;text-align:right;color:${i===6&&clientBal>0.5?'#dc2626':i===6?'#15803d':'#1f2937'}">${v}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  ${so.items&&so.items.length>0?`
+  <table style="width:100%;border-collapse:collapse;font-size:8.5pt;border-top:1px solid #d1d5db;">
+    <thead><tr style="background:#104f4f;color:#fff">
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;width:28px">#</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a">Item / Description</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;text-align:right;width:50px">Qty</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;width:45px">Unit</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;text-align:right;width:80px">Rate (₹)</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;text-align:center;width:50px">GST%</th>
+      <th style="padding:5px 8px;border:1px solid #0d3a3a;text-align:right;width:90px">Amount (₹)</th>
+    </tr></thead>
+    <tbody>${itemRows(so.items||[])}</tbody>
+    <tfoot><tr style="background:#e0f2fe;font-weight:800;">
+      <td colspan="6" style="padding:6px 8px;border:1px solid #d1d5db;font-weight:800">Grand Total</td>
+      <td style="padding:6px 8px;border:1px solid #d1d5db;text-align:right">₹${fmt(so.grandTotal||0)}</td>
+    </tr></tfoot>
+  </table>`:''}
+</div>
+
+<!-- ══ PURCHASE ORDERS ══ -->
+<div class="section">
+  <div class="sec-title po">Purchase Orders (${pos.length})</div>
+  <div class="sec-body" style="padding:${pos.length===0?'12px':'10px'};">
+    ${pos.length===0
+      ? '<div style="color:#9ca3af;font-style:italic;font-size:9.5pt;padding:8px 4px;">No linked purchase orders for this project.</div>'
+      : poSection}
+  </div>
+</div>
+
+<!-- ══ EXPENSES ══ -->
+${expenses.length>0?`
+<div class="section">
+  <div class="sec-title exp">Expenses (${expenses.length})</div>
+  <div class="sec-body">
+    <table>
+      <thead><tr style="background:#92400e;color:#fff">
+        <th style="padding:5px 8px;border:1px solid #78350f;width:28px">#</th>
+        <th style="padding:5px 8px;border:1px solid #78350f;width:65px">Date</th>
+        <th style="padding:5px 8px;border:1px solid #78350f;width:90px">Category</th>
+        <th style="padding:5px 8px;border:1px solid #78350f">Description</th>
+        <th style="padding:5px 8px;border:1px solid #78350f;width:110px">Vendor / Party</th>
+        <th style="padding:5px 8px;border:1px solid #78350f;text-align:right;width:85px">Amount (₹)</th>
+        <th style="padding:5px 8px;border:1px solid #78350f;width:70px">Pay Mode</th>
       </tr></thead>
-      <tbody>${itemRows(so.items||[])}</tbody>
-      <tfoot>
-        <tr style="background:#e0f2fe;font-weight:800;">
-          <td colspan="6" style="${tdS}">Grand Total</td>
-          <td style="${tdR}">₹${fmt(so.grandTotal||0)}</td>
-        </tr>
-      </tfoot>
+      <tbody>${expRows}</tbody>
+      <tfoot><tr class="exp">
+        <td colspan="5" style="padding:6px 8px;border:1px solid #e5e7eb;font-weight:800">Total Expenses</td>
+        <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:#92400e">₹${fmt(expTotal)}</td>
+        <td style="padding:6px 8px;border:1px solid #e5e7eb"></td>
+      </tr></tfoot>
     </table>
+  </div>
+</div>`:''}
 
-    <!-- Purchase Orders -->
-    <h3>Purchase Orders (${pos.length})</h3>
-    ${pos.length===0 ? '<p style="color:#9ca3af;font-style:italic;margin-bottom:12px;">No linked purchase orders</p>' : poSection}
-
-    <!-- Expenses -->
-    <h3 style="margin-top:16px;">Expenses (${expenses.length})</h3>
-    ${expenses.length===0
-      ? '<p style="color:#9ca3af;font-style:italic;margin-bottom:12px;">No linked expenses</p>'
-      : `<table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
-          <thead><tr>
-            <th style="${thS.replace('#104f4f','#b45309')}">#</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Date</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Category</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Description</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Vendor</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Amount</th>
-            <th style="${thS.replace('#104f4f','#b45309')}">Status</th>
-          </tr></thead>
-          <tbody>${expRows}</tbody>
-          <tfoot>
-            <tr style="background:#fff8f0;font-weight:800;">
-              <td colspan="5" style="${tdS}">Total Expenses</td>
-              <td style="${tdR}">₹${fmt(expTotal)}</td>
-              <td style="${tdS}"></td>
-            </tr>
-          </tfoot>
-        </table>`}
-
-    <!-- P&L -->
-    <h3 style="margin-top:16px;">Profit &amp; Loss Summary</h3>
-    <table style="width:320px;border-collapse:collapse;margin-bottom:20px;">
-      <tbody>${plRows}</tbody>
-    </table>
-
-    <!-- Signatures -->
-    <div style="display:flex;gap:60px;margin-top:40px;padding-top:10px;">
-      <div><div class="sig">Generated by</div></div>
-      <div><div class="sig">Checked by</div></div>
-      <div><div class="sig">Authorised by</div></div>
+<!-- ══ P&L SUMMARY ══ -->
+<div class="section no-break" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+  <div>
+    <div class="sec-title pl">Profit &amp; Loss Summary</div>
+    <div class="sec-body">
+      <table>
+        <tbody>
+          ${[
+            ['Revenue (SO Grand Total)',  `₹${fmt(soTotal)}`,         '#1a3a8a', ''],
+            ['Purchase Cost (POs)',       `₹${fmt(poTotal)}`,         '#7c2d12', ''],
+            ['Other Expenses',           `₹${fmt(expTotal)}`,         '#92400e', ''],
+            ['Gross Profit / (Loss)',     `₹${fmt(profit)}`,           profit>=0?'#15803d':'#dc2626', 'border-top:2px solid #c7d2fe;font-weight:800;background:#f8faff;font-size:11pt;'],
+            ['Margin %',                 soTotal>0?`${((profit/soTotal)*100).toFixed(2)}%`:'—', profit>=0?'#15803d':'#dc2626', ''],
+          ].map(([l,v,c,extra])=>`<tr>
+            <td style="padding:7px 12px;border:1px solid #e5e7eb;font-weight:600;${extra}font-size:9pt">${l}</td>
+            <td style="padding:7px 12px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:${c};${extra}font-size:9pt">${v}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
     </div>
+  </div>
+  <div style="padding:12px 16px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;">
+    <div style="font-size:10pt;font-weight:800;color:#92400e;margin-bottom:8px">Payment Summary</div>
+    ${[
+      ['SO Value (Receivable)',    `₹${fmt(soTotal)}`,   '#1a3a8a'],
+      ['Received from Client',     `₹${fmt(received)}`,  '#15803d'],
+      ['Client Balance Due',       clientBal>0.5?`₹${fmt(clientBal)}`:'✓ Fully Cleared', clientBal>0.5?'#dc2626':'#15803d'],
+      ['Total PO Payments Due',    `₹${fmt(poTotal)}`,   '#7c2d12'],
+      ['Total Expenses Due',       `₹${fmt(expTotal)}`,  '#92400e'],
+    ].map(([l,v,c])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #fde68a;font-size:9pt;">
+      <span style="color:#6b7280">${l}</span><span style="font-weight:700;color:${c}">${v}</span>
+    </div>`).join('')}
+  </div>
+</div>
 
-    <script>window.onload=()=>{ window.print(); }</script>
-  </body></html>`;
+<!-- ══ SIGNATURES ══ -->
+<div style="display:flex;justify-content:space-between;margin-top:50px;padding-top:14px;border-top:1px solid #d1d5db;">
+  <div class="sig-line">Generated by</div>
+  <div class="sig-line">Checked by</div>
+  <div class="sig-line">Approved by</div>
+  <div class="sig-line">Authorised Signatory</div>
+</div>
+<div style="margin-top:16px;text-align:center;font-size:7.5pt;color:#9ca3af;border-top:1px solid #f0f0f0;padding-top:8px;">
+  This is a system-generated report. ${companyName||''} — Generated on ${today}
+</div>
 
-  const w = window.open('', '_blank', 'width=1100,height=800');
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=1100,height=900');
+  if (!w) { alert('Allow pop-ups to print the report.'); return; }
   w.document.write(html);
   w.document.close();
 }
@@ -237,9 +339,11 @@ export default function ProjectClose() {
   const [clientDues,   setClientDues]   = useState([]);
   const [vendorDues,   setVendorDues]   = useState([]);
   const [expenses,     setExpenses]     = useState([]);
+  const [payments,     setPayments]     = useState([]);
   const [loading,      setLoading]      = useState(false);
   const [search,       setSearch]       = useState('');
   const [filter,       setFilter]       = useState('all'); // all | open | closed
+  const [fy,           setFy]           = useState(getFY());
   const [expanded,     setExpanded]     = useState({});
   const [saving,       setSaving]       = useState({});
   const [reporting,    setReporting]    = useState({});
@@ -248,11 +352,12 @@ export default function ProjectClose() {
     if (!cid) return;
     setLoading(true);
     try {
-      const [soR, poR, duesR, expR] = await Promise.all([
+      const [soR, poR, duesR, expR, payR] = await Promise.all([
         axios.get(`/api/sales-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/purchase-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/accounts/dues?companyId=${cid}`).catch(()=>({data:{}})),
         axios.get(`/api/accounts/expenses?companyId=${cid}`).catch(()=>({data:[]})),
+        axios.get(`/api/accounts/payments?companyId=${cid}`).catch(()=>({data:[]})),
       ]);
       setSalesOrders(Array.isArray(soR.data) ? soR.data : []);
       setPurchOrders(Array.isArray(poR.data) ? poR.data : []);
@@ -260,6 +365,7 @@ export default function ProjectClose() {
       setClientDues(Array.isArray(duesData.clientDues) ? duesData.clientDues : (Array.isArray(duesData) ? duesData : []));
       setVendorDues(Array.isArray(duesData.vendorDues) ? duesData.vendorDues : []);
       setExpenses(Array.isArray(expR.data) ? expR.data : []);
+      setPayments(Array.isArray(payR.data) ? payR.data : []);
     } catch(e) { console.error(e); }
     setLoading(false);
   }, [cid]);
@@ -289,6 +395,17 @@ export default function ProjectClose() {
       String(e.soId)===String(soId)
     );
 
+  const expVendorName = e =>
+    e.vendorName || e.vendor || e.ledgerName || '—';
+
+  const expPaid = (e) => {
+    const eid = String(e.expenseId);
+    return payments
+      .filter(p => p.type==='payment' && p.status!=='rejected' &&
+        (String(p.expenseId)===eid || String(p.orderId)===eid))
+      .reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+  };
+
   /* ── Close conditions per SO ── */
   const getConditions = so => {
     const soDue   = getSODue(so);
@@ -306,7 +423,11 @@ export default function ProjectClose() {
     const totalPODue = posDue.reduce((s,v)=>s+v, 0);
 
     const exps       = soExpenses(so.orderId);
-    const unpaidExps = exps.filter(e => (e.status||'').toLowerCase() !== 'paid');
+    const unpaidExps = exps.filter(e => {
+      const paid = expPaid(e);
+      const total = parseFloat(e.grandTotal||e.amount)||0;
+      return total > 0 && paid < total - 0.5;
+    });
     const expOk      = unpaidExps.length === 0;
 
     return { clientOk, clientBal, vendorOk, totalPODue, expOk, unpaidExps: unpaidExps.length,
@@ -337,8 +458,13 @@ export default function ProjectClose() {
   };
 
   /* ── Filtered list ── */
+  const fyList = useMemo(() => {
+    const set = new Set(salesOrders.map(o => getFY(o.orderDate||o.date)));
+    return ['all', ...[...set].sort().reverse()];
+  }, [salesOrders]);
+
   const filtered = useMemo(() => {
-    let list = salesOrders;
+    let list = fy === 'all' ? salesOrders : salesOrders.filter(o => getFY(o.orderDate||o.date) === fy);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter(o =>
@@ -350,7 +476,7 @@ export default function ProjectClose() {
     if (filter === 'open')   list = list.filter(o => o.status !== 'closed');
     if (filter === 'closed') list = list.filter(o => o.status === 'closed');
     return list;
-  }, [salesOrders, search, filter]);
+  }, [salesOrders, search, filter, fy]);
 
   const closedCount = salesOrders.filter(o=>o.status==='closed').length;
   const openCount   = salesOrders.length - closedCount;
@@ -390,6 +516,27 @@ export default function ProjectClose() {
           borderBottom:'1px solid #f0f2f5',
           color:P, zIndex:1, marginBottom:-1, borderRadius:'3px 3px 0 0',
         }}>Project Close</button>
+
+        {/* Divider */}
+        <div style={{ width:1, height:20, background:'#bbb', margin:'0 8px', flexShrink:0 }}/>
+
+        {/* FY filter buttons */}
+        {fyList.map(f => {
+          const active = fy === f;
+          return (
+            <button key={f} onClick={() => setFy(f)} style={{
+              height:24, padding:'0 8px', fontSize:11, cursor:'pointer',
+              whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+              fontWeight: active ? 700 : 400, marginRight:3, borderRadius:3,
+              border:`1px solid ${active ? P : '#bbb'}`,
+              background: active ? P : '#fff',
+              color: active ? '#fff' : '#555',
+            }}>
+              {f === 'all' ? 'All' : `FY ${f}`}
+            </button>
+          );
+        })}
+
         <div style={{ flex:1 }}/>
         <input
           placeholder="Search by order no, client…"
@@ -618,30 +765,50 @@ export default function ProjectClose() {
                         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                           <thead>
                             <tr style={{ background:'#b45309' }}>
-                              {['Date','Category','Description','Vendor','Amount','Status'].map((h,i)=>(
+                              {['Date','Category','Description','Vendor / Party','Amount (₹)','Paid (₹)','Balance (₹)','Status'].map((h,i)=>(
                                 <th key={h} style={{ padding:'6px 10px', color:'#fff', fontWeight:700,
-                                  textAlign:i===4?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
+                                  textAlign:i>=4?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
-                            {conds.exps.map((e,ri)=>(
+                            {conds.exps.map((e,ri)=>{
+                              const paid  = expPaid(e);
+                              const total = parseFloat(e.grandTotal||e.amount)||0;
+                              const bal   = Math.max(0, total - paid);
+                              return (
                               <tr key={e.expenseId||ri} style={{ background:ri%2===0?'#fff':'#fff8f0' }}>
-                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, color:'#6b7280' }}>{fmtD(e.date||e.expenseDate||e.createdAt)}</td>
+                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, color:'#6b7280', whiteSpace:'nowrap' }}>{fmtD(e.date||e.expenseDate||e.createdAt)}</td>
                                 <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, fontWeight:600, color:'#b45309' }}>{e.expenseCategory||e.category||'—'}</td>
                                 <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, color:'#555' }}>{e.description||'—'}</td>
-                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}` }}>{e.vendor||'—'}</td>
-                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700 }}>₹{fmt(e.grandTotal||e.amount||0)}</td>
+                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, fontWeight:600 }}>{expVendorName(e)}</td>
+                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700 }}>₹{fmt(total)}</td>
+                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, textAlign:'right', color:'#15803d', fontWeight:paid>0?700:400 }}>
+                                  {paid > 0 ? `₹${fmt(paid)}` : '—'}
+                                </td>
+                                <td style={{ padding:'5px 10px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:700, color:bal>0.5?'#dc2626':'#15803d' }}>
+                                  {bal <= 0.5 ? '✓ Paid' : `₹${fmt(bal)}`}
+                                </td>
                                 <td style={{ padding:'5px 10px', border:`1px solid ${BD}` }}>
                                   <span style={{ fontSize:9.5, fontWeight:700, padding:'1px 6px', borderRadius:3,
-                                    background:e.status?.toLowerCase()==='paid'?'#dcfce7':'#fef9c3',
-                                    color:e.status?.toLowerCase()==='paid'?'#15803d':'#854d0e' }}>
-                                    {e.status||'—'}
+                                    background:bal<=0.5?'#dcfce7':'#fef9c3',
+                                    color:bal<=0.5?'#15803d':'#854d0e' }}>
+                                    {bal<=0.5?'Paid':e.status||'Pending'}
                                   </span>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
+                          <tfoot>
+                            <tr style={{ background:'#fff8f0', fontWeight:800 }}>
+                              <td colSpan={4} style={{ padding:'6px 10px', border:`1px solid ${BD}`, fontSize:11 }}>Total</td>
+                              <td style={{ padding:'6px 10px', border:`1px solid ${BD}`, textAlign:'right', color:'#b45309' }}>₹{fmt(conds.exps.reduce((s,e)=>s+(parseFloat(e.grandTotal||e.amount)||0),0))}</td>
+                              <td style={{ padding:'6px 10px', border:`1px solid ${BD}`, textAlign:'right', color:'#15803d' }}>₹{fmt(conds.exps.reduce((s,e)=>s+expPaid(e),0))}</td>
+                              <td style={{ padding:'6px 10px', border:`1px solid ${BD}`, textAlign:'right', color:'#dc2626' }}>₹{fmt(conds.exps.reduce((s,e)=>s+Math.max(0,(parseFloat(e.grandTotal||e.amount)||0)-expPaid(e)),0))}</td>
+                              <td style={{ border:`1px solid ${BD}` }}/>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                   }

@@ -71,6 +71,12 @@ export default function LedgerMaster() {
   const [ob,        setOb]        = useState('0');
   const [obNature,  setObNature]  = useState('Dr');
   const [notes,     setNotes]     = useState('');
+  const [gstin,     setGstin]     = useState('');
+  const [address,   setAddress]   = useState('');
+  const [state,     setState]     = useState('');
+  const [pincode,   setPincode]   = useState('');
+  const [contact,   setContact]   = useState('');
+  const [email,     setEmail]     = useState('');
   const [saving,    setSaving]    = useState(false);
   const [msg,       setMsg]       = useState('');
   const [deleting,  setDeleting]  = useState(null);
@@ -91,13 +97,17 @@ export default function LedgerMaster() {
 
   const resetForm = () => {
     setEditId(null); setName(''); setGroupId(''); setAccType('general');
-    setOb('0'); setObNature('Dr'); setNotes(''); setMsg('');
+    setOb('0'); setObNature('Dr'); setNotes('');
+    setGstin(''); setAddress(''); setState(''); setPincode(''); setContact(''); setEmail('');
+    setMsg('');
   };
 
   const openEdit = (a) => {
     setEditId(a.id); setName(a.name); setGroupId(a.groupId);
     setAccType(a.accountType || 'general'); setOb(String(a.openingBalance || 0));
     setObNature(a.openingBalanceNature || 'Dr'); setNotes(a.notes || '');
+    setGstin(a.gstin || ''); setAddress(a.address || ''); setState(a.state || '');
+    setPincode(a.pincode || ''); setContact(a.contact || ''); setEmail(a.email || '');
     setMsg(''); setShowForm(true);
   };
 
@@ -107,7 +117,9 @@ export default function LedgerMaster() {
     try {
       const body = { name: name.trim(), groupId, accountType: accType,
         openingBalance: parseFloat(ob)||0, openingBalanceNature: obNature,
-        notes, companyId: cid };
+        notes, gstin: gstin.trim(), address: address.trim(), state: state.trim(),
+        pincode: pincode.trim(), contact: contact.trim(), email: email.trim(),
+        companyId: cid };
       if (editId) await axios.put(`/api/ledger/accounts/${editId}?companyId=${cid}`, body);
       else        await axios.post(`/api/ledger/accounts?companyId=${cid}`, body);
       setMsg('Saved!'); setShowForm(false); resetForm(); load();
@@ -192,6 +204,13 @@ export default function LedgerMaster() {
             )}
           </div>
           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{a.groupName}</div>
+          {(a.email || a.contact) && (
+            <div style={{ fontSize: 10, color: '#64748b', marginTop: 1, display: 'flex', gap: 8 }}>
+              {a.email && <span>✉ {a.email}</span>}
+              {a.contact && <span>📞 {a.contact}</span>}
+            </div>
+          )}
+          {a.gstin && <div style={{ fontSize: 10, color: '#7c3aed', marginTop: 1 }}>GST: {a.gstin}</div>}
         </div>
 
         {/* Account Type */}
@@ -327,7 +346,8 @@ export default function LedgerMaster() {
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ background: '#fff', borderRadius: 12, width: 500, maxWidth: '95vw',
+          <div style={{ background: '#fff', borderRadius: 12, width: 580, maxWidth: '95vw',
+            maxHeight: '92vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 8px 32px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
             <div style={{ background: P, color: '#fff', padding: '14px 20px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -338,7 +358,7 @@ export default function LedgerMaster() {
                 style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', flex: 1 }}>
               <div>
                 <label style={lbl}>Account Name *</label>
                 <input value={name} onChange={e => setName(e.target.value)}
@@ -402,6 +422,46 @@ export default function LedgerMaster() {
                     <option value="Dr">Dr (Debit)</option>
                     <option value="Cr">Cr (Credit)</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Contact Details Section */}
+              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase',
+                  letterSpacing: '0.5px', marginBottom: 10 }}>Contact Details</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={lbl}>GST No (GSTIN)</label>
+                    <input value={gstin} onChange={e => setGstin(e.target.value.toUpperCase())}
+                      placeholder="22AAAAA0000A1Z5" maxLength={15} style={inp()} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Contact / Phone</label>
+                    <input value={contact} onChange={e => setContact(e.target.value)}
+                      placeholder="9876543210" style={inp()} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={lbl}>Email ID</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="party@example.com" style={inp()} />
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={lbl}>Address</label>
+                  <input value={address} onChange={e => setAddress(e.target.value)}
+                    placeholder="Street / Building / Area" style={inp()} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10 }}>
+                  <div>
+                    <label style={lbl}>State</label>
+                    <input value={state} onChange={e => setState(e.target.value)}
+                      placeholder="e.g. Telangana" style={inp()} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Pincode</label>
+                    <input value={pincode} onChange={e => setPincode(e.target.value)}
+                      placeholder="500001" maxLength={6} style={inp()} />
+                  </div>
                 </div>
               </div>
 

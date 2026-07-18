@@ -100,7 +100,8 @@ const srcLabel = s =>
   s==='payment'          ? 'Payment'          :
   s==='credit-note'      ? 'Credit Note'      :
   s==='debit-note'       ? 'Debit Note'       :
-  s==='security-deposit' ? 'Security Deposit' : 'Journal';
+  s==='security-deposit' ? 'Security Deposit' :
+  s==='expense'          ? 'Expense'          : 'Journal';
 
 /* Print individual ledger statements (one per page) */
 const printSelectedLedgers = (selected, company) => {
@@ -321,11 +322,12 @@ export default function LedgerView() {
   }, [enriched, showCleared]);
 
   const rows = useMemo(() => {
-    let list = baseList;
+    // When searching, look across all ledgers (including zero-balance); otherwise respect showCleared filter
+    let list = search.trim() ? enriched : baseList;
     if (group !== 'All') list = list.filter(l => l.group === group);
     if (search.trim()) { const q = search.toLowerCase(); list = list.filter(l => l.ledger.toLowerCase().includes(q)); }
     return list;
-  }, [baseList, group, search]);
+  }, [enriched, baseList, group, search]);
 
   const toggleSelect = (name) => setSelected(s => {
     const n = new Set(s);
@@ -590,6 +592,7 @@ export default function LedgerView() {
                                             :src==='purchase-bill'?{label:'Purchase Bill',bg:'#fff7ed',color:'#9a3412'}
                                             :src==='receipt'?{label:'Receipt',bg:'#f0fdf4',color:'#15803d'}
                                             :src==='payment'?{label:'Payment',bg:'#fdf4ff',color:'#7e22ce'}
+                                            :src==='expense'?{label:'Expense',bg:'#fff7ed',color:'#b45309'}
                                             :{label:'Journal',bg:'#f8faff',color:'#374151'};
                                           return (
                                             <tr key={ii} style={{ background:ii%2===0?'#fff':'#f0f4fb' }}>

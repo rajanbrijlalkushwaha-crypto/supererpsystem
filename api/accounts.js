@@ -6,7 +6,7 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, saveJson, auditEntry, pushAudit } = require('./helpers');
+const { ROOT, saveJson, auditEntry, pushAudit, upload, saveUploadedFiles } = require('./helpers');
 const { addSystemLog } = require('./communication');
 
 const router = express.Router();
@@ -220,12 +220,214 @@ router.get('/journals/:id', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.put('/journals/:id', (req, res) => {
+  try {
+    const fp = coFile(cid(req), 'Journals', req.params.id);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+    const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const updated  = { ...existing, ...req.body, journalId: existing.journalId, updatedAt: new Date().toISOString() };
+    saveJson(fp, updated);
+    res.json({ success: true, journalId: existing.journalId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/journals/:id', (req, res) => {
   try {
     const fp = coFile(cid(req), 'Journals', req.params.id);
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
     fs.unlinkSync(fp);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Upload docs to a journal */
+router.post('/journals/:id/upload', upload.array('files', 20), (req, res) => {
+  try {
+    const companyId = cid(req);
+    const fp = coFile(companyId, 'Journals', req.params.id);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Journal not found' });
+    const rec = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Journals', `docs-${req.params.id}`);
+    ensureDir(docsPath);
+    const saved = saveUploadedFiles(req.files || [], docsPath);
+    rec.attachments = [...(rec.attachments || []), ...saved];
+    rec.updatedAt = new Date().toISOString();
+    saveJson(fp, rec);
+    res.json({ success: true, attachments: rec.attachments });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Download a journal attachment */
+router.get('/journals/:id/download/:fileName', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Journals', `docs-${req.params.id}`);
+    const filePath = path.join(docsPath, req.params.fileName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    req.query.inline ? res.sendFile(filePath) : res.download(filePath);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Delete a journal attachment */
+router.delete('/journals/:id/docs/:fileName', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const fp = coFile(companyId, 'Journals', req.params.id);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+    const rec = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Journals', `docs-${req.params.id}`);
+    const filePath = path.join(docsPath, req.params.fileName);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    rec.attachments = (rec.attachments || []).filter(a => a.fileName !== req.params.fileName);
+    rec.updatedAt = new Date().toISOString();
+    saveJson(fp, rec);
+    res.json({ success: true, attachments: rec.attachments });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ════════════════════════════════════════════════════════
+   PAYMENT ADVICE EMAIL
+════════════════════════════════════════════════════════ */
+router.post('/send-payment-advice', async (req, res) => {
+  try {
+    const { paymentId, toEmail, companyId: cidBody } = req.body;
+    const companyId = cidBody || cid(req);
+    if (!toEmail) return res.status(400).json({ error: 'toEmail is required' });
+
+    const EMAIL_CFG_FILE = path.join(ROOT, 'Database', 'email-config.json');
+    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    if (!cfg.email || !cfg.password)
+      return res.status(500).json({ error: 'Email is not configured. Set up email in Admin → Settings.' });
+
+    // Load payment
+    const payFile = coFile(companyId, 'Payments', String(paymentId));
+    if (!fs.existsSync(payFile)) return res.status(404).json({ error: 'Payment not found' });
+    const pay = JSON.parse(fs.readFileSync(payFile, 'utf8'));
+
+    // Load company info
+    const compFile = path.join(ROOT, 'Database', 'Companies', companyId, `${companyId}.json`);
+    const comp = fs.existsSync(compFile) ? JSON.parse(fs.readFileSync(compFile, 'utf8')) : {};
+    const companyName = comp.companyName || comp.name || 'Epsilon Enterprise';
+
+    // Load ledger account (for name/contact)
+    const lAccsFile = path.join(ROOT, 'Database', 'Companies', companyId, 'Ledger', 'accounts.json');
+    const lAccs = fs.existsSync(lAccsFile) ? JSON.parse(fs.readFileSync(lAccsFile, 'utf8')) : [];
+    const partyName = pay.entityName || pay.party || 'Party';
+    const ledgerAcc = lAccs.find(a => a.name === partyName) || {};
+
+    // Load linked expenses
+    const linkedExps = (pay.linkedExpenses || []).map(le => {
+      const ef = coFile(companyId, 'Expenses', String(le.expenseId));
+      if (!fs.existsSync(ef)) return le;
+      return { ...JSON.parse(fs.readFileSync(ef, 'utf8')), _paidAmt: le.amount };
+    });
+
+    const fmtD = d => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt)?d:`${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`; };
+    const fmt2 = n => (parseFloat(n)||0).toFixed(2);
+    const today = fmtD(new Date().toISOString());
+
+    const expRows = linkedExps.map((e, i) => `
+      <tr style="background:${i%2===0?'#fff':'#fffbeb'}">
+        <td style="padding:6px 10px;border:1px solid #e5e7eb">${i+1}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600;color:#92400e">${e.expenseCategory||e.category||'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb">${e.description||'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb">${e.orderNo||'—'}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700">₹${fmt2(e.grandTotal||e.amount||0)}</td>
+        <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#15803d;font-weight:700">₹${fmt2(e._paidAmt||0)}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 16px">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.10)">
+
+  <!-- Header -->
+  <tr><td style="background:linear-gradient(135deg,#104f4f 0%,#1a3a8a 100%);padding:20px 28px">
+    <div style="font-size:11pt;color:rgba(255,255,255,0.7);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px">${companyName}</div>
+    <div style="font-size:20pt;font-weight:900;color:#fff;letter-spacing:0.5px">PAYMENT ADVICE</div>
+    <div style="font-size:10pt;color:rgba(255,255,255,0.8);margin-top:4px">Reference: PMT-${pay.paymentId} &nbsp;|&nbsp; Date: ${today}</div>
+  </td></tr>
+
+  <!-- To / From -->
+  <tr><td style="padding:20px 28px;border-bottom:1px solid #e5e7eb">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td width="50%" valign="top">
+          <div style="font-size:9pt;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:5px">To</div>
+          <div style="font-size:13pt;font-weight:800;color:#1f2937">${partyName}</div>
+          ${ledgerAcc.address ? `<div style="font-size:10pt;color:#4b5563;margin-top:3px">${(ledgerAcc.address||'').replace(/\n/g,'<br>')}</div>` : ''}
+          ${ledgerAcc.gstin ? `<div style="font-size:10pt;color:#6b7280;margin-top:2px">GSTIN: <b>${ledgerAcc.gstin}</b></div>` : ''}
+          ${ledgerAcc.contact ? `<div style="font-size:10pt;color:#6b7280">Contact: ${ledgerAcc.contact}</div>` : ''}
+        </td>
+        <td width="50%" valign="top" style="text-align:right">
+          <div style="font-size:9pt;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;font-weight:700;margin-bottom:5px">Payment Details</div>
+          <div style="font-size:12pt;color:#104f4f;font-weight:700">₹${fmt2(pay.amount)}</div>
+          <div style="font-size:10pt;color:#4b5563;margin-top:3px">Mode: <b>${pay.paymentMode||'—'}</b></div>
+          ${pay.referenceNo||pay.reference ? `<div style="font-size:10pt;color:#4b5563">Ref No: <b>${pay.referenceNo||pay.reference}</b></div>` : ''}
+          <div style="font-size:10pt;color:#4b5563">Date: <b>${fmtD(pay.date)}</b></div>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <!-- Payment summary box -->
+  <tr><td style="padding:16px 28px;background:#f0fdf4;border-bottom:1px solid #bbf7d0">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="font-size:11pt;font-weight:700;color:#15803d">✓ Payment Confirmed</td>
+        <td style="text-align:right;font-size:14pt;font-weight:900;color:#15803d">₹${fmt2(pay.amount)}</td>
+      </tr>
+    </table>
+  </td></tr>
+
+  ${linkedExps.length > 0 ? `
+  <!-- Expenses -->
+  <tr><td style="padding:20px 28px">
+    <div style="font-size:11pt;font-weight:800;color:#92400e;margin-bottom:10px;border-bottom:2px solid #fcd34d;padding-bottom:5px">Bills / Expenses Covered</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:10pt">
+      <thead><tr style="background:#92400e;color:#fff">
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:left;width:28px">#</th>
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:left">Category</th>
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:left">Description</th>
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:left">Order No</th>
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:right">Bill Amt</th>
+        <th style="padding:6px 10px;border:1px solid #78350f;text-align:right">Paid Now</th>
+      </tr></thead>
+      <tbody>${expRows}</tbody>
+    </table>
+  </td></tr>` : ''}
+
+  ${pay.purpose ? `
+  <tr><td style="padding:4px 28px 16px">
+    <div style="font-size:10pt;color:#6b7280"><b>Purpose:</b> ${pay.purpose}</div>
+  </td></tr>` : ''}
+
+  <!-- Footer -->
+  <tr><td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e5e7eb;text-align:center">
+    <div style="font-size:9pt;color:#9ca3af">This is a system-generated payment advice from <b>${companyName}</b>.</div>
+    <div style="font-size:9pt;color:#9ca3af;margin-top:2px">Please retain this for your records. For queries, contact us.</div>
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>`;
+
+    const nodemailer = require('nodemailer');
+    const transport = nodemailer.createTransport({
+      service: cfg.service && cfg.service !== 'custom' ? cfg.service : undefined,
+      host:    cfg.host    || undefined,
+      port:    cfg.port    ? Number(cfg.port) : undefined,
+      secure:  cfg.secure  !== undefined ? cfg.secure : undefined,
+      auth:    { user: cfg.email, pass: cfg.password },
+    });
+    await transport.sendMail({
+      from:    `"${cfg.fromName || companyName}" <${cfg.email}>`,
+      to:      toEmail,
+      subject: `Payment Advice — ₹${fmt2(pay.amount)} — PMT-${pay.paymentId}`,
+      html,
+    });
+    res.json({ ok: true, message: `Payment advice sent to ${toEmail}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -271,6 +473,9 @@ router.get('/dues', (req, res) => {
     const purchaseOrders = readAllRecords(coDir(companyId, 'PurchaseOrder'));
     const payments       = readAll(coDir(companyId, 'Payments'));
     const expenses       = readAll(coDir(companyId, 'Expenses'));
+    // Order journals — posted journals tagged with a specific orderId
+    const orderJournals  = readAll(coDir(companyId, 'Journals'))
+      .filter(j => j.type === 'order' && j.orderId && j.status === 'posted');
     const soMap = {};
     salesOrders.forEach(so => { soMap[String(so.orderId || so.id)] = so; });
 
@@ -396,8 +601,11 @@ router.get('/dues', (req, res) => {
           p.type === 'payment' && p.status !== 'rejected' &&
           (String(p.orderId) === String(oid) || String(p.orderId) === String(o.voucherNumber))
         );
-        const paid         = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-        const debitNotesAmt = dnByOrder[String(oid)] || 0;
+        // Add posted order journals linked to this PO
+        const linkedJournals = orderJournals.filter(j => String(j.orderId) === String(oid));
+        const journalPaid    = linkedJournals.reduce((s, j) => s + Math.min(parseFloat(j.totalDebit)||0, parseFloat(j.totalCredit)||0), 0);
+        const paid           = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0) + journalPaid;
+        const debitNotesAmt  = dnByOrder[String(oid)] || 0;
         return {
           orderId:          oid,
           orderNo:          o.poNo || o.poNumber || o.voucherNumber || `PO-${oid}`,
@@ -464,7 +672,10 @@ router.get('/dues', (req, res) => {
             String(p.orderId)   === String(eid)
           )
         );
-        const paid = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+        // Add posted order journals linked to this expense
+        const linkedExpJournals = orderJournals.filter(j => String(j.orderId) === String(eid));
+        const journalExpPaid    = linkedExpJournals.reduce((s, j) => s + Math.min(parseFloat(j.totalDebit)||0, parseFloat(j.totalCredit)||0), 0);
+        const paid = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0) + journalExpPaid;
         return {
           orderId:     eid,
           orderNo:     `EXP-${eid}`,
@@ -645,6 +856,51 @@ router.delete('/expenses/:id', (req, res) => {
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
     fs.unlinkSync(fp);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Upload docs to an expense */
+router.post('/expenses/:id/upload', upload.array('files', 20), (req, res) => {
+  try {
+    const companyId = cid(req);
+    const fp = coFile(companyId, 'Expenses', req.params.id);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Expense not found' });
+    const rec = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Expenses', `docs-${req.params.id}`);
+    ensureDir(docsPath);
+    const saved = saveUploadedFiles(req.files || [], docsPath);
+    rec.attachments = [...(rec.attachments || []), ...saved];
+    rec.updatedAt = new Date().toISOString();
+    saveJson(fp, rec);
+    res.json({ success: true, attachments: rec.attachments });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Download an expense attachment */
+router.get('/expenses/:id/download/:fileName', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Expenses', `docs-${req.params.id}`);
+    const filePath = path.join(docsPath, req.params.fileName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    req.query.inline ? res.sendFile(filePath) : res.download(filePath);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* Delete an expense attachment */
+router.delete('/expenses/:id/docs/:fileName', (req, res) => {
+  try {
+    const companyId = cid(req);
+    const fp = coFile(companyId, 'Expenses', req.params.id);
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+    const rec = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const docsPath = path.join(ROOT, 'Database', 'Companies', companyId, 'Expenses', `docs-${req.params.id}`);
+    const filePath = path.join(docsPath, req.params.fileName);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    rec.attachments = (rec.attachments || []).filter(a => a.fileName !== req.params.fileName);
+    rec.updatedAt = new Date().toISOString();
+    saveJson(fp, rec);
+    res.json({ success: true, attachments: rec.attachments });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -871,6 +1127,51 @@ router.get('/ledger', (req, res) => {
       if (!name || name.trim() === '') return;
       ensure(name, 'vendor');
     });
+
+    /* 10. Expenses → Credit vendor/ledger party (we owe them) */
+    const expensesList = readAll(coDir(companyId, 'Expenses'))
+      .filter(e => e.status !== 'rejected');
+    expensesList.forEach(e => {
+      const name = e.vendorName || e.vendor || e.ledgerName;
+      if (!name || name.trim() === '') return;
+      const amt = parseFloat(e.grandTotal || e.amount) || 0;
+      if (amt <= 0) return;
+      ensure(name);
+      map[name].totalCredit += amt;
+      map[name].entries.push({
+        journalId: `EXP-${e.expenseId}`,
+        date: e.date || e.expenseDate || e.createdAt,
+        narration: `Expense: ${e.expenseCategory || e.category || ''}${e.description ? ' — ' + e.description : ''}${e.orderNo ? ' [' + e.orderNo + ']' : ''}`,
+        refNo: `EXP-${e.expenseId}`,
+        status: e.status || 'pending',
+        debit: 0, credit: amt,
+        source: 'expense',
+      });
+    });
+
+    /* 11. Manual ledger master accounts (Ledger/accounts.json) */
+    const lAccsFile = path.join(ROOT, 'Database', 'Companies', companyId, 'Ledger', 'accounts.json');
+    if (fs.existsSync(lAccsFile)) {
+      try {
+        const manualAccs = JSON.parse(fs.readFileSync(lAccsFile, 'utf-8'));
+        manualAccs.forEach(acc => {
+          const name = acc.name;
+          if (!name || name.trim() === '') return;
+          ensure(name);
+          const ob = parseFloat(acc.openingBalance) || 0;
+          if (ob > 0) {
+            if ((acc.openingBalanceNature || 'Dr') === 'Cr') {
+              map[name].totalCredit += ob;
+            } else {
+              map[name].totalDebit += ob;
+            }
+          }
+          if (!map[name].ledgerGroup) map[name].ledgerGroup = acc.groupName || '';
+          if (!map[name].ledgerMasterId) map[name].ledgerMasterId = acc.id || '';
+          map[name].isManualLedger = true;
+        });
+      } catch {}
+    }
 
     /* 7. Bank accounts — enrich with current balance */
     banks.forEach(b => {

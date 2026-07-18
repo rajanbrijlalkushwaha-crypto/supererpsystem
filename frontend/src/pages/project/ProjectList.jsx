@@ -1201,16 +1201,29 @@ export default function ProjectList() {
     let list = fy === 'all' ? salesOrders : salesOrders.filter(o => getFY(o.orderDate||o.date) === fy);
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(o =>
-        (o.customerName||o.clientName||'').toLowerCase().includes(q) ||
-        String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q));
+      list = list.filter(o => {
+        if ((o.customerName||o.clientName||'').toLowerCase().includes(q)) return true;
+        if (String(o.orderId).includes(q) || (o.orderNo||'').toLowerCase().includes(q)) return true;
+        if ((o.customerPO||'').toLowerCase().includes(q)) return true;
+        if ((o.items||[]).some(i => (i.name||'').toLowerCase().includes(q) || (i.desc||i.description||'').toLowerCase().includes(q))) return true;
+        const lpos = purchaseOrders.filter(p =>
+          String(p.linkedSalesOrderId)===String(o.orderId) ||
+          String(p.salesOrderId)===String(o.orderId) ||
+          String(p.soRef)===String(o.orderId));
+        for (const p of lpos) {
+          if ((p.vendorName||'').toLowerCase().includes(q)) return true;
+          if ((p.poNo||p.poNumber||'').toLowerCase().includes(q)) return true;
+          if ((p.items||[]).some(i => (i.name||'').toLowerCase().includes(q))) return true;
+        }
+        return false;
+      });
     }
     return [...list].sort((a, b) => {
       const da = new Date(a.orderDate||a.date||0).getTime();
       const db = new Date(b.orderDate||b.date||0).getTime();
       return db - da;
     });
-  }, [salesOrders, fy, search]);
+  }, [salesOrders, purchaseOrders, fy, search]);
 
   /* ── Build flat rows ── */
   const expByOrderId = {};
@@ -1470,6 +1483,138 @@ export default function ProjectList() {
     XLSX.writeFile(wb, `${co ? co+'_' : ''}Projects_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
+  const doPrintOrders = () => {
+    const co = selectedCompany?.companyName || '';
+    const fyLabel = fy === 'all' ? 'All Financial Years' : `FY ${fy}`;
+    const soCount = filteredSOs.length;
+    const poCount = allRows.filter(r => r.isPOFirst && r.po).length;
+    const rows = allRows.map((row, i) => {
+      const expBase   = parseFloat(row.expItem?.amount) || 0;
+      const expGstPct = parseFloat(row.expItem?.taxRate) || 0;
+      const expTotal  = parseFloat(row.expItem?.grandTotal) || (expBase + expBase * expGstPct / 100);
+      const bgSO = row.isFirst ? (filteredSOs.indexOf(row.so) % 2 === 0 ? '#EEF3FF' : '#F7F5FF') : 'transparent';
+      return `<tr style="border-bottom:1px solid #e0e7ef">
+        <td style="font-weight:700;color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed;white-space:nowrap">${row.isFirst ? (row.so?.orderNo||row.so?.orderId||'') : ''}</td>
+        <td style="font-weight:${row.isFirst?700:400};color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed">${row.isFirst ? (row.so?.customerName||row.so?.clientName||'') : ''}</td>
+        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed;white-space:nowrap">${row.isFirst ? fmtD(row.so?.orderDate||row.so?.date) : ''}</td>
+        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed">${row.isFirst ? (row.so?.customerPO||'') : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #d1d9ed">${row.soItem?.name||''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed">${row.soItem?.qty||''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed;font-weight:700">${row.soOV ? '₹'+fmt(row.soOV) : ''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed;color:#15803d">${row.isFirst && row.receipt ? '₹'+fmt(row.receipt) : ''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:2px solid #9ab0e0;color:#dc2626;font-weight:700">${row.isFirst ? '₹'+fmt(row.soBalance) : ''}</td>
+        <td style="color:#1a5500;font-weight:${row.isPOFirst?700:400};padding:4px 6px;border-right:1px solid #c0e4c0">${row.isPOFirst ? (row.po?.vendorName||'') : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #c0e4c0;white-space:nowrap">${row.isPOFirst ? (row.po?.poNo||row.po?.poNumber||'') : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #c0e4c0">${row.poItem?.name||''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #c0e4c0;font-weight:700;color:#1a5500">${row.poOV ? '₹'+fmt(row.poOV) : ''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #c0e4c0;color:#15803d">${row.isPOFirst ? '₹'+fmt(row.payment||0) : ''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:2px solid #aad4aa;color:#dc2626">${row.isPOFirst ? '₹'+fmt(row.poBalance||0) : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #fdd9aa;color:#7c3700;font-weight:600">${row.expItem ? (row.expItem.expenseCategory||row.expItem.category||'') : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #fdd9aa">${row.expItem ? (row.expItem.vendorName||row.expItem.vendor||row.expItem.ledgerName||'') : ''}</td>
+        <td style="text-align:right;padding:4px 6px;color:#c2410c;font-weight:700">${row.expItem ? '₹'+fmt(expTotal) : ''}</td>
+      </tr>`;
+    }).join('');
+
+    const soTotals = {
+      ov: allRows.reduce((s,r) => s + (r.soOV||0), 0),
+      receipt: filteredSOs.reduce((s,so) => {
+        const due = (Array.isArray(clientDues)?clientDues:[]).find(d => String(d.orderId)===String(so.orderId)||d.orderNo===so.orderNo);
+        return s + (parseFloat(due?.received||due?.totalPaid)||0);
+      }, 0),
+      dues: allRows.filter(r=>r.isFirst).reduce((s,r) => s+(r.soBalance||0), 0),
+    };
+    const poTotals = {
+      ov: allRows.reduce((s,r) => s+(r.poOV||0), 0),
+      paid: allRows.filter(r=>r.isPOFirst).reduce((s,r) => s+(r.payment||0), 0),
+      dues: allRows.filter(r=>r.isPOFirst).reduce((s,r) => s+(r.poBalance||0), 0),
+    };
+    const expTotal2 = allRows.reduce((s,r) => {
+      if (!r.expItem) return s;
+      const b = parseFloat(r.expItem.amount)||0;
+      const g = b*(parseFloat(r.expItem.taxRate)||0)/100;
+      return s + (parseFloat(r.expItem.grandTotal)||(b+g));
+    }, 0);
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Orders — ${co}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:8.5pt;background:#fff;color:#1f2937;}
+.hdr{background:linear-gradient(135deg,#1a3a8a 0%,#104f4f 100%);color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;}
+.hdr h1{font-size:14pt;font-weight:900;letter-spacing:0.5px;}
+.hdr .sub{font-size:8.5pt;opacity:0.85;margin-top:3px;}
+.cards{display:flex;gap:10px;padding:10px 18px;background:#f0f4ff;border-bottom:1px solid #dde4f5;}
+.card{background:#fff;border:1px solid #d1daf5;border-radius:6px;padding:7px 14px;flex:1;text-align:center;}
+.card .lbl{font-size:7.5pt;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;}
+.card .val{font-size:12pt;font-weight:900;margin-top:2px;}
+.card.so .val{color:#1a3a8a}.card.recv .val{color:#15803d}.card.dues .val{color:#dc2626}.card.exp .val{color:#c2410c}
+table{width:100%;border-collapse:collapse;font-size:7.5pt;}
+.grp-hdr{font-size:8.5pt;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:5px 8px 2px;color:#555;border-top:2px solid #dde;background:#fafbff;}
+th{padding:5px 6px;text-align:left;border:1px solid #c8d4ed;font-size:7pt;font-weight:700;}
+th.so-h{background:#1a3a8a;color:#fff;}
+th.po-h{background:#2a6600;color:#fff;}
+th.exp-h{background:#c2410c;color:#fff;}
+th.ra{text-align:right;}
+td{vertical-align:top;}
+tfoot td{background:#eef2ff;font-weight:700;font-size:7.5pt;padding:4px 6px;border-top:2px solid #9ab0e0;}
+tfoot td.po{background:#e8f5e9;}tfoot td.exp{background:#fff3e0;}
+@media print{@page{size:A3 landscape;margin:6mm;}body{font-size:7.5pt;}}
+</style></head><body>
+<div class="hdr">
+  <div><div class="sub" style="font-size:10pt;opacity:0.7;margin-bottom:2px">${co}</div><h1>PROJECT ORDERS REPORT</h1><div class="sub">${fyLabel} &nbsp;|&nbsp; ${soCount} Sales Orders &nbsp;|&nbsp; ${poCount} Purchase Orders</div></div>
+  <div style="text-align:right;font-size:8pt;opacity:0.8">Printed: ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+</div>
+<div class="cards">
+  <div class="card so"><div class="lbl">SO Value</div><div class="val">₹${fmt(soTotals.ov)}</div></div>
+  <div class="card recv"><div class="lbl">Received</div><div class="val">₹${fmt(soTotals.receipt)}</div></div>
+  <div class="card dues"><div class="lbl">SO Dues</div><div class="val">₹${fmt(soTotals.dues)}</div></div>
+  <div class="card so" style="border-color:#aad4aa"><div class="lbl">PO Value</div><div class="val" style="color:#1a5500">₹${fmt(poTotals.ov)}</div></div>
+  <div class="card recv"><div class="lbl">PO Paid</div><div class="val">₹${fmt(poTotals.paid)}</div></div>
+  <div class="card dues"><div class="lbl">PO Dues</div><div class="val">₹${fmt(poTotals.dues)}</div></div>
+  <div class="card exp"><div class="lbl">Expenses</div><div class="val">₹${fmt(expTotal2)}</div></div>
+</div>
+<table>
+<thead><tr>
+  <th class="so-h" style="width:70px">Order No</th>
+  <th class="so-h" style="width:110px">Client</th>
+  <th class="so-h" style="width:55px">Date</th>
+  <th class="so-h" style="width:70px">Client PO</th>
+  <th class="so-h" style="width:100px">SO Product</th>
+  <th class="so-h ra" style="width:35px">Qty</th>
+  <th class="so-h ra" style="width:70px">SO Value</th>
+  <th class="so-h ra" style="width:65px">Received</th>
+  <th class="so-h ra" style="width:65px">SO Dues</th>
+  <th class="po-h" style="width:90px">Vendor</th>
+  <th class="po-h" style="width:70px">PO No</th>
+  <th class="po-h" style="width:90px">PO Product</th>
+  <th class="po-h ra" style="width:65px">PO Value</th>
+  <th class="po-h ra" style="width:60px">Paid</th>
+  <th class="po-h ra" style="width:60px">PO Dues</th>
+  <th class="exp-h" style="width:70px">Exp Category</th>
+  <th class="exp-h" style="width:80px">Exp Vendor</th>
+  <th class="exp-h ra" style="width:60px">Exp Amt</th>
+</tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr>
+  <td colspan="6" class="so" style="text-align:right">TOTAL</td>
+  <td class="so" style="text-align:right">₹${fmt(soTotals.ov)}</td>
+  <td class="so" style="text-align:right">₹${fmt(soTotals.receipt)}</td>
+  <td class="so" style="text-align:right;color:#dc2626">₹${fmt(soTotals.dues)}</td>
+  <td colspan="2" class="po"></td>
+  <td class="po"></td>
+  <td class="po" style="text-align:right">₹${fmt(poTotals.ov)}</td>
+  <td class="po" style="text-align:right">₹${fmt(poTotals.paid)}</td>
+  <td class="po" style="text-align:right;color:#dc2626">₹${fmt(poTotals.dues)}</td>
+  <td colspan="2" class="exp"></td>
+  <td class="exp" style="text-align:right;color:#c2410c">₹${fmt(expTotal2)}</td>
+</tr></tfoot>
+</table>
+<script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
+</body></html>`;
+    const w = window.open('', '_blank', 'width=1400,height=900');
+    if (!w) { alert('Allow pop-ups to print.'); return; }
+    w.document.write(html); w.document.close();
+  };
+
   const doPrintProjects = () => {
     const rowsHtml = projects.map((p,i)=>`<tr style="background:${i%2===0?'#fff':'#f5f8ff'}">
       <td>${p.projectId}</td><td style="font-weight:700">${p.projectName||'—'}</td>
@@ -1573,7 +1718,7 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 
         {/* Search */}
         <input value={search} onChange={e=>setSearch(e.target.value)}
-          placeholder="Search client / order…"
+          placeholder="Search client, SO/PO no, vendor, product…"
           style={{ height:26, padding:'0 8px', border:'1px solid #bbb', borderRadius:3,
             fontSize:11, fontFamily:F, outline:'none', width:180, background:'#fff',
             marginRight:3, flexShrink:0 }} />
@@ -1612,6 +1757,12 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
             ))}
           </div>
         )}
+
+        {/* Print */}
+        <button onClick={doPrintOrders}
+          style={{ height:26, padding:'0 8px', background:'#fff', marginRight:3,
+            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:12,
+            fontFamily:F, fontWeight:600, flexShrink:0 }}>🖨</button>
 
         {/* Excel */}
         <button onClick={doExportOrders}

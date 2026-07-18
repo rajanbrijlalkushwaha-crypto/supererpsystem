@@ -226,11 +226,14 @@ router.post('/accounts', (req, res) => {
       return res.status(409).json({ error: 'Account with this name already exists' });
     const id  = nextAccId(co);
     const now = new Date().toISOString();
+    const { gstin='', address='', state='', pincode='', contact='', email='' } = req.body;
     const rec = {
       id, name, groupId, groupName: group.name, groupNature: group.nature,
       openingBalance: parseFloat(openingBalance) || 0,
       openingBalanceNature: openingBalanceNature || group.nature,
-      accountType, notes, companyId: co, createdAt: now, updatedAt: now,
+      accountType, notes,
+      gstin, address, state, pincode, contact, email,
+      companyId: co, createdAt: now, updatedAt: now,
     };
     accounts.push(rec);
     fs.writeFileSync(accsFile(co), JSON.stringify(accounts, null, 2));

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
+import DocAttachments from '../../../components/DocAttachments';
 
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const BD  = '#d1d9e6';
@@ -174,8 +175,10 @@ export default function CreateExpense() {
   const [ledgerId,    setLedgerId]    = useState('');
   const [ledgerLabel, setLedgerLabel] = useState('');
 
-  const [saving, setSaving] = useState(false);
-  const [msg,    setMsg]    = useState({ text:'', ok:true });
+  const [saving,       setSaving]       = useState(false);
+  const [msg,          setMsg]          = useState({ text:'', ok:true });
+  const [savedId,      setSavedId]      = useState(null); // new record ID after first save
+  const [attachments,  setAttachments]  = useState([]);
 
   const base       = parseFloat(amount) || 0;
   const gstAmt     = base * (parseFloat(gstPct) || 0) / 100;
@@ -219,6 +222,7 @@ export default function CreateExpense() {
       setSoLabel(e.orderNo ? `${e.orderNo} — ${e.clientName||''}` : '');
       setLedgerId(String(e.ledgerId || ''));
       setLedgerLabel(e.ledgerName || '');
+      setAttachments(e.attachments || []);
     }).catch(() => setMsg({ text:'Failed to load.', ok:false }));
   }, [isEdit, expenseId, cid]);
 
@@ -305,7 +309,9 @@ export default function CreateExpense() {
         setTimeout(() => navigate('/account/expense/view'), 1200);
       } else {
         const res = await axios.post(`/api/accounts/expenses?companyId=${cid}`, payload);
-        setMsg({ text:`Expense #${res.data.expenseId} ${status==='pending_approval'?'submitted for approval':'saved'} ✓`, ok:true });
+        const newId = res.data.expenseId;
+        setSavedId(newId);
+        setMsg({ text:`Expense #${newId} ${status==='pending_approval'?'submitted for approval':'saved'} ✓ — You can now attach documents below.`, ok:true });
         resetForm();
       }
     } catch (e) {
@@ -524,7 +530,7 @@ export default function CreateExpense() {
             )}
 
             {/* ── Action Buttons ── */}
-            <div style={{ display:'flex', gap:12, justifyContent:'flex-end', padding:'4px 0 20px' }}>
+            <div style={{ display:'flex', gap:12, justifyContent:'flex-end', padding:'4px 0 14px' }}>
               <button onClick={() => navigate('/account/expense/view')}
                 style={{ height:42, padding:'0 22px', background:'#fff', border:`1px solid ${BD}`, borderRadius:7, fontSize:13, cursor:'pointer', fontFamily:F, fontWeight:600, color:'#374151' }}>
                 Cancel
@@ -534,6 +540,17 @@ export default function CreateExpense() {
                 {saving ? 'Saving…' : expType==='order' ? '📤  Submit for Approval' : isEdit ? '💾  Save Changes' : '✅  Save Expense'}
               </button>
             </div>
+
+            {/* ── Doc Attachments (edit mode or after first save) ── */}
+            {(isEdit || savedId) && (
+              <DocAttachments
+                entityType="expense"
+                entityId={isEdit ? expenseId : savedId}
+                companyId={cid}
+                attachments={attachments}
+                onUpdate={setAttachments}
+              />
+            )}
           </>
         )}
       </div>
