@@ -5,7 +5,7 @@ color 0B
 cd /d "%~dp0"
 
 rem  Run this on YOUR PC after making changes. It uploads the code (not the Database) to GitHub.
-set REPO=https://github.com/rajanbrijlalkushwaha-crypto/supererpsystem.git
+set REPO=https://rajanbrijlalkushwaha-crypto@github.com/rajanbrijlalkushwaha-crypto/supererpsystem.git
 set REMOTE=supererp
 
 echo ============================================
