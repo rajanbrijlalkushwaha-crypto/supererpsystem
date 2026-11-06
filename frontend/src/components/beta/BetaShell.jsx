@@ -30,6 +30,8 @@ import BetaReturns from '../../pages/beta/BetaReturns';
 import BetaStock from '../../pages/beta/BetaStock';
 import BetaRawMaterial, { RawStock } from '../../pages/beta/BetaRawMaterial';
 import BetaItems from '../../pages/beta/BetaItems';
+import BetaBG from '../../pages/beta/BetaBG';
+import BetaWarranty from '../../pages/beta/BetaWarranty';
 import ApprovalView from '../../pages/approval/View';
 import Companies from '../../pages/admin/Companies';
 import AdminUsers from '../../pages/admin/Users';
@@ -45,7 +47,7 @@ const SIDE_NAV = [
     sub: [
       { label: 'Client', path: '/beta/client' },
       { label: 'Order', path: '/beta/order' }, { label: 'Proforma Invoice', path: '/beta/proforma' }, { label: 'Receipt', path: '/beta/receipt' }, { label: 'Sales', path: '/beta/sales' }, { label: 'Delivery Challan', path: '/beta/delivery-challan' }, { label: 'Return Note', path: '/beta/return-note' },
-      { label: 'Warranty Certificate' }, { label: 'Bank Guarantee' }, { label: 'Dues', path: '/beta/dues' },
+      { label: 'Warranty Certificate', path: '/beta/warranty' }, { label: 'Bank Guarantee', path: '/beta/bank-guarantee', perm: 'accDeposit' }, { label: 'Dues', path: '/beta/dues' },
     ] },
   { key: 'po', label: 'Purchase Order', icon: 'cart', perm: 'purchaseOrder',
     sub: [
@@ -383,6 +385,8 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/stock') && <BetaStock key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/raw-stock') && <RawStock key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/items') && <BetaItems key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/warranty') && <BetaWarranty key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/bank-guarantee') && <BetaBG key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/mfg/raw-material') && <BetaRawMaterial key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/admin/') && (
             <div style={{ height: '100%', overflow: 'auto', padding: 16, background: '#fff' }}>

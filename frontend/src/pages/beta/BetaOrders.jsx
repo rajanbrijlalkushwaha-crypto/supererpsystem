@@ -72,8 +72,8 @@ const searchText = o => [
 
 const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-/* Order list in the Sales Order print format (company header centred, thin black lines, Times New Roman),
-   A4 landscape, printed from a hidden frame on this page */
+/* Order list print — A4 landscape, same look as the Beta documents (Arial, thin black lines, grey heads).
+   One block per order: order no + date, client with its PO, then one line per product. */
 async function printOrderList({ rows, company, user, totValue, totGrand, filter }) {
   const co = company || {};
   let logo = '';
@@ -84,86 +84,83 @@ async function printOrderList({ rows, company, user, totValue, totGrand, filter 
     } catch { logo = ''; }
   }
   const coAddr = [co.address, co.city, co.state, co.pincode].filter(Boolean).join(', ');
-  const coLine = [co.gstin && 'GSTIN: ' + esc(co.gstin), co.phone && 'Ph: ' + esc(co.phone), co.email && 'Email: ' + esc(co.email)].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;');
+  const coLine = [co.gstin && 'GSTIN: ' + esc(co.gstin), co.phone && 'Ph: ' + esc(co.phone), co.email && esc(co.email)].filter(Boolean).join('&nbsp; · &nbsp;');
   const today = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  /* dd-mm-yyyy, never wraps */
   const d = v => { const x = v ? new Date(v) : null; return x && !isNaN(x) ? `${String(x.getDate()).padStart(2, '0')}-${String(x.getMonth() + 1).padStart(2, '0')}-${x.getFullYear()}` : ''; };
+  const inr = v => (Number(v) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const rate = v => (Number(v) || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+  // status counts for the summary strip
+  const cnt = {};
+  rows.forEach(o => { const k = (STATUS[o.status] || STATUS.draft).label; cnt[k] = (cnt[k] || 0) + 1; });
+  const stLine = Object.entries(cnt).map(([k, v]) => `${esc(k)} <b>${v}</b>`).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
 
   const body = rows.map((o, i) => {
     const its = soItems(o);
     const lines = its.length ? its : [null];
     const n = lines.length;
     const st = (STATUS[o.status] || STATUS.draft).label;
-    return lines.map((it, j) => '<tr>'
-      + (j === 0 ? `<td rowspan="${n}" class="c">${i + 1}</td><td rowspan="${n}" class="nw"><b>${esc(o.orderNo)}</b></td><td rowspan="${n}" class="c nw">${d(o.orderDate)}</td>`
-        + `<td rowspan="${n}">${esc(o.customerName || o.party)}</td><td rowspan="${n}">${esc(o.customerPO)}</td>`
-        + `<td rowspan="${n}" class="c nw">${d(o.poDate)}</td><td rowspan="${n}" class="c nw">${d(o.dueDate || o.deliveryDate)}</td>` : '')
-      + (it ? `<td>${esc(it.name)}</td><td class="r">${esc(fmtQty(it.qty))}${it.unit ? ' ' + esc(it.unit) : ''}</td><td class="r">${money(it.rate)}</td><td class="c">${it.gst ? it.gst + '%' : ''}</td>`
-        : '<td colspan="4" class="c">—</td>')
-      + (j === 0 ? `<td rowspan="${n}" class="r"><b>${money(orderValue(o))}</b></td><td rowspan="${n}" class="r">${money(o.grandTotal)}</td><td rowspan="${n}" class="c nw">${esc(st)}</td>` : '')
+    const off = ['cancelled', 'rejected'].includes(o.status) ? ' off' : '';
+    return lines.map((it, j) => `<tr class="${j === 0 ? 'top' : ''}${off}${i % 2 ? ' alt' : ''}">`
+      + (j === 0 ? `<td rowspan="${n}" class="c">${i + 1}</td>
+          <td rowspan="${n}" class="nw"><b>${esc(o.orderNo)}</b><div class="sm">${d(o.orderDate)}</div></td>
+          <td rowspan="${n}"><b>${esc(o.customerName || o.party)}</b>${o.customerPO ? `<div class="sm">PO: ${esc(o.customerPO)}${o.poDate ? ' · ' + d(o.poDate) : ''}</div>` : ''}</td>
+          <td rowspan="${n}" class="c nw">${d(o.dueDate || o.deliveryDate) || '—'}</td>` : '')
+      + (it ? `<td>${esc(it.name)}</td><td class="r">${esc(fmtQty(it.qty))}${it.unit ? ' <span class="u">' + esc(it.unit) + '</span>' : ''}</td><td class="r">${rate(it.rate)}</td><td class="c">${it.gst ? it.gst + '%' : ''}</td>`
+        : '<td colspan="4" class="c sm">No product</td>')
+      + (j === 0 ? `<td rowspan="${n}" class="r"><b>${inr(orderValue(o))}</b></td><td rowspan="${n}" class="r">${inr(o.grandTotal)}</td><td rowspan="${n}" class="c nw st">${esc(st)}</td>` : '')
       + '</tr>').join('');
   }).join('');
 
-  /* Every page gets the outer border (a fixed frame repeats on each printed page). The empty first header
-     row and the empty footer row repeat on each page too, so the list never touches the frame. */
-  const L = 'linear-gradient(#000,#000)', HW = '0.4pt';   // hairline: black, 0.4pt
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sales Order List</title>
 <style>
-/* Hairlines: browsers print any CSS border at 1px (0.75pt) minimum, so every line here is a 0.4pt black
-   background stripe instead (same weight as a Tally invoice). print-color-adjust makes them always print. */
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-body { font-family:'Times New Roman', Times, Georgia, serif; font-size:9.5pt; color:#000; background:#fff; }
-.frame { position:fixed; top:0; left:0; right:0; bottom:0; pointer-events:none;
-  background-image:${L},${L},${L},${L}; background-repeat:no-repeat;
-  background-size:100% ${HW},100% ${HW},${HW} 100%,${HW} 100%; background-position:0 0,0 100%,0 0,100% 0; }
-.wrap { padding:0 4mm; }
-.head { text-align:center; padding:4mm 0 2mm; background:${L} 0 100% / 100% ${HW} no-repeat; }
-.title { text-align:center; font-size:13pt; font-weight:bold; padding:4px 0; background:${L} 0 100% / 100% ${HW} no-repeat; }
-.meta { display:flex; justify-content:space-between; font-size:9pt; padding:3px 0 5px; }
-.lst { width:100%; border-collapse:collapse; font-size:9pt; }
-.lst th, .lst td { background-repeat:no-repeat; }
-/* every cell draws its right + bottom line; header cells also the top; the first cell of a row also the left */
-.lst td { padding:2px 4px; vertical-align:middle;
-  background-image:${L},${L}; background-size:100% ${HW},${HW} 100%; background-position:0 100%,100% 0; }
-.lst td:first-child { background-image:${L},${L},${L}; background-size:100% ${HW},${HW} 100%,${HW} 100%; background-position:0 100%,100% 0,0 0; }
-.lst th { padding:4px 4px; font-weight:bold; text-align:center; white-space:nowrap;
-  background-image:${L},${L},${L}; background-size:100% ${HW},${HW} 100%,100% ${HW}; background-position:0 100%,100% 0,0 0; }
-.lst th:first-child { background-image:${L},${L},${L},${L}; background-size:100% ${HW},${HW} 100%,100% ${HW},${HW} 100%; background-position:0 100%,100% 0,0 0,0 0; }
-.lst tr.gap th, .lst tr.gap td { background:none; padding:0; height:4mm; }
-.lst tr.tot td { font-weight:bold; }
+body { font-family:Arial, Helvetica, sans-serif; font-size:8.4pt; color:#000; background:#fff; line-height:1.3; }
+table { width:100%; border-collapse:collapse; }
+.hdr td { border:0.6pt solid #000; padding:6px 8px; vertical-align:middle; }
+.hdr .lg { width:120px; text-align:center; } .hdr .lg img { max-height:46px; max-width:110px; object-fit:contain; }
+.hdr .co { text-align:center; }
+.hdr .co .nm { font-size:14pt; font-weight:bold; letter-spacing:.2px; }
+.hdr .co .ad { font-size:8pt; margin-top:2px; }
+.hdr .ttl { width:210px; padding:0; }
+.hdr .ttl .t { background:#E9E9E9; border-bottom:0.6pt solid #000; text-align:center; font-size:11.5pt; font-weight:bold; padding:6px 4px; letter-spacing:.6px; }
+.hdr .ttl .k { display:flex; justify-content:space-between; padding:3px 8px; font-size:8pt; }
+.sum { display:flex; justify-content:space-between; gap:12px; border:0.6pt solid #000; border-top:0; padding:4px 8px; font-size:8.2pt; }
+.lst { margin-top:5px; }
+.lst th { background:#E9E9E9; border:0.6pt solid #000; padding:4px 4px; font-size:7.8pt; font-weight:bold; text-align:center; white-space:nowrap; text-transform:uppercase; letter-spacing:.2px; }
+.lst td { border-left:0.6pt solid #000; border-right:0.6pt solid #000; border-bottom:0.3pt solid #999; padding:3px 4px; vertical-align:top; }
+.lst tr.top td { border-top:0.6pt solid #000; }
+.lst tr.alt td { background:#FAFAFA; }
+.lst tr.off td { color:#777; } .lst tr.off td b { text-decoration:line-through; }
+.lst tr.tot td { border:0.6pt solid #000; background:#E9E9E9; font-weight:bold; padding:5px 4px; }
 .lst .c { text-align:center; } .lst .r { text-align:right; white-space:nowrap; } .lst .nw { white-space:nowrap; }
-.foot { display:flex; justify-content:space-between; font-size:8.5pt; color:#444; padding:4px 0; }
+.sm { font-size:7.4pt; color:#333; margin-top:1px; } .u { font-size:7pt; color:#444; } .st { font-size:7.6pt; font-weight:bold; }
+.foot { display:flex; justify-content:space-between; font-size:7.6pt; color:#333; padding:5px 0 0; }
 @media print {
-  @page { margin:8mm; size:A4 landscape; }
+  @page { margin:8mm 8mm 10mm; size:A4 landscape; @bottom-right { content:"Page " counter(page) " of " counter(pages); font:7.5pt Arial, sans-serif; color:#444; } }
   thead { display:table-header-group; } tfoot { display:table-footer-group; }
-  tr { page-break-inside:avoid; break-inside:avoid; }
+  tr { break-inside:avoid; }
 }
 </style></head><body>
-<div class="frame"></div>
-<div class="wrap">
-  <div class="head">
-    ${logo ? `<img src="${logo}" style="height:44px; max-width:110px; object-fit:contain; display:block; margin:0 auto 4px;">` : ''}
-    <div style="font-size:14pt; font-weight:bold;">${esc(co.companyName || co.name)}</div>
-    ${coAddr ? `<div style="font-size:9pt;">${esc(coAddr)}</div>` : ''}
-    ${coLine ? `<div style="font-size:9pt;">${coLine}</div>` : ''}
-  </div>
-  <div class="title">Sales Order List</div>
-  <div class="meta"><span>${esc(filter)}</span><span>${rows.length} orders</span></div>
-  <table class="lst">
-    <thead>
-      <tr class="gap"><th colspan="14"></th></tr>
-      <tr><th style="width:24px">Sr</th><th>Order No</th><th>Order Date</th><th>Client Name</th><th>Customer PO</th><th>PO Date</th><th>Due Date</th>
-        <th>Product</th><th>Qty</th><th>Rate</th><th>GST</th><th>Order Value</th><th>Grand Total</th><th>Status</th></tr>
-    </thead>
-    <tfoot><tr class="gap"><td colspan="14"></td></tr></tfoot>
-    <tbody>
-      ${body}
-      <tr class="tot"><td colspan="11">Total (${rows.length} orders)</td><td class="r">${money(totValue)}</td><td class="r">${money(totGrand)}</td><td></td></tr>
-    </tbody>
-  </table>
-  <div class="foot"><span>${brandLine(user)}</span><span>Printed: ${esc(today)}</span></div>
-  ${legalNoteHtml().replace('border-top:1px solid #000', `border-top:0; background:${L} 0 0 / 100% ${HW} no-repeat`)}
-</div>
+<table class="hdr"><tr>
+  <td class="lg">${logo ? `<img src="${logo}">` : ''}</td>
+  <td class="co"><div class="nm">${esc(co.companyName || co.name)}</div>${coAddr ? `<div class="ad">${esc(coAddr)}</div>` : ''}${coLine ? `<div class="ad">${coLine}</div>` : ''}</td>
+  <td class="ttl"><div class="t">SALES ORDER LIST</div>
+    <div class="k"><span>Period</span><b>${esc(filter || 'All')}</b></div>
+    <div class="k"><span>Orders</span><b>${rows.length}</b></div>
+    <div class="k"><span>Printed</span><b>${esc(today)}</b></div></td>
+</tr></table>
+<div class="sum"><span>${stLine}</span><span>Order value <b>₹ ${inr(totValue)}</b>&nbsp;&nbsp;·&nbsp;&nbsp;Grand total <b>₹ ${inr(totGrand)}</b></span></div>
+<table class="lst">
+  <thead><tr><th style="width:22px">Sr</th><th style="width:96px">Order No / Date</th><th>Client / Client PO</th><th style="width:66px">Due Date</th>
+    <th>Product</th><th style="width:62px">Qty</th><th style="width:66px">Rate</th><th style="width:34px">GST</th><th style="width:86px">Order Value</th><th style="width:86px">Grand Total</th><th style="width:66px">Status</th></tr></thead>
+  <tbody>
+    ${body}
+    <tr class="tot"><td colspan="8" class="r">TOTAL — ${rows.length} orders</td><td class="r">₹ ${inr(totValue)}</td><td class="r">₹ ${inr(totGrand)}</td><td></td></tr>
+  </tbody>
+</table>
+<div class="foot"><span>${brandLine(user)}</span><span>Order value = products + charges, before GST</span></div>
+${legalNoteHtml()}
 </body></html>`;
 
   document.getElementById('bo-print-frame')?.remove();

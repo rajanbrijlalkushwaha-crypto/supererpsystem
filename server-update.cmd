@@ -55,15 +55,24 @@ popd
 echo.
 echo [4/4] Restarting the ERP...
 rem  stop only the ERP server (the program on port %PORT%), not other Node programs
+rem  started with pm2-start.cmd? then PM2 restarts it (and keeps auto start); else the old way in its own window
+set PM2_HOME=C:\ProgramData\pm2
+set USEPM2=
+if exist "%PM2_HOME%\dump.pm2" findstr /C:"epsilon-erp" "%PM2_HOME%\dump.pm2" >nul 2>nul && set USEPM2=1
+if defined USEPM2 (
+  call pm2 restart epsilon-erp --update-env
+  goto started
+)
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%PORT% .*LISTENING"') do taskkill /F /PID %%p >nul 2>nul
 timeout /t 2 /nobreak >nul
 start "Epsilon ERP" cmd /k "cd /d %~dp0 && node server.js"
+:started
 
 echo.
 echo ============================================
 echo   UPDATE COMPLETE
 echo   Open: http://localhost   or   http://localhost:%PORT%
-echo   Keep the "Epsilon ERP" window open.
+if not defined USEPM2 echo   Keep the "Epsilon ERP" window open.
 echo ============================================
 pause
 exit /b 0

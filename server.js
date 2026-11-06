@@ -57,6 +57,7 @@ app.use('/api/delivery-challans', require('./api/deliveryChallans'));
 app.use('/api/grn',               require('./api/grn'));
 app.use('/api/returns',           require('./api/returns'));
 app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
+app.use('/api/warranty-certs',    require('./api/warrantyCerts'));   // Warranty Certificates
 app.use('/api/raw-materials',     require('./api/rawMaterials'));   // Raw Material master (manufacturing)   // Return Note (client) / Return to Vendor
 app.use('/api/gdn',               require('./api/gdn'));
 app.use('/api/passwords',         require('./api/passwords'));
