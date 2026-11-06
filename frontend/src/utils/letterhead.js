@@ -28,7 +28,7 @@ const WATERMARK_SVG = `
     fill="none" stroke="#354A5E" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
 </svg>`;
 
-export const letterheadPage = (bodyHtml, title = 'Epsilon ERP') => `<!DOCTYPE html>
+export const letterheadPage = (bodyHtml, title = 'Super ERP System') => `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">

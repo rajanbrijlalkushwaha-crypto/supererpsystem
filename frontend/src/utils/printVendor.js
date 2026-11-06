@@ -1,3 +1,4 @@
+import { withPrintFont } from './printFont';
 /* Fetch a URL and return a base64 data URI */
 const fetchBase64 = async (url) => {
   try {
@@ -277,7 +278,7 @@ export const printVendorDetails = async (vendor, company) => {
 </body>`);
 
   const win = window.open('', '_blank', 'width=860,height=900');
-  win.document.write(htmlWithFooter);
+  win.document.write(withPrintFont(htmlWithFooter));
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 600);

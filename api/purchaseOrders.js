@@ -1,8 +1,9 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit, resolveUser } = require('./helpers');
 const jstore  = require('./json-store');
+const { notifyApprovers } = require('./notifications');
 
 const poJsonPath = (companyId, orderId) =>
   path.join(ROOT, 'Database', 'Companies', companyId, 'PurchaseOrder', String(orderId), `${orderId}.json`);
@@ -49,6 +50,42 @@ async function autoAdvanceSoToInProgress(companyId, linkedSalesOrderId) {
   } catch (e) { console.error('autoAdvanceSoToInProgress:', e.message); }
 }
 
+/* uploads: attachments + item-wise spec files (drawings) */
+const poUploadFields = upload.fields([{ name: 'attachmentFiles', maxCount: 30 }, { name: 'specUploadFiles', maxCount: 30 }]);
+const filesOf = (req, k) => (Array.isArray(req.files) ? (k === 'attachmentFiles' ? req.files : []) : ((req.files && req.files[k]) || []));
+/* meta entries without a file yet get the saved uploads, in order; the rest are added at the end */
+const mergeIntoMeta = (meta, saved) => {
+  let si = 0;
+  for (let mi = 0; mi < meta.length && si < saved.length; mi++) {
+    if (meta[mi] && !meta[mi].filePath) { meta[mi] = { ...meta[mi], filePath: saved[si].filePath, fileName: saved[si].fileName }; si++; }
+  }
+  while (si < saved.length) { meta.push(saved[si]); si++; }
+  return meta;
+};
+/* files of the sales order (specs / attachments) chosen for this PO: copied into the PO's own folder,
+   so the PO keeps them even if the order changes. Only files inside that order's folder are copied. */
+function copySoFiles(companyId, docsPath, list) {
+  const out = { spec: [], att: [] };
+  (Array.isArray(list) ? list : []).forEach((f, i) => {
+    try {
+      const soDir = path.resolve(path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(f.orderId)));
+      const rel = String(f.filePath || (f.fileName ? 'docs/' + f.fileName : ''));
+      let src = path.resolve(soDir, rel);
+      if (!src.startsWith(soDir + path.sep) || !fs.existsSync(src)) {
+        const alt = path.resolve(soDir, 'docs', 'specs', path.basename(rel));   // spec files live in docs/specs
+        if (!alt.startsWith(soDir + path.sep) || !fs.existsSync(alt)) return;
+        src = alt;
+      }
+      fs.mkdirSync(docsPath, { recursive: true });
+      const fileName = Date.now() + i + '-' + path.basename(src).replace(/^\d+-/, '');
+      fs.copyFileSync(src, path.join(docsPath, fileName));
+      const meta = { name: f.name || path.basename(src), fileName, filePath: 'docs/' + fileName, usedFor: `From SO ${f.orderNo || f.orderId}`, ...(f.itemName ? { itemName: f.itemName } : {}) };
+      (f.kind === 'spec' ? out.spec : out.att).push(meta);
+    } catch { /* a missing file is skipped */ }
+  });
+  return out;
+}
+
 // GET - Next ID
 router.get('/next-id', async (req, res) => {
   try {
@@ -89,7 +126,7 @@ router.get('/:orderId', async (req, res) => {
 });
 
 // POST - Create purchase order
-router.post('/', upload.array('attachmentFiles'), async (req, res) => {
+router.post('/', poUploadFields, async (req, res) => {
   try {
     const b = req.body;
     const companyId = req.query.companyId || (Array.isArray(b.companyId) ? b.companyId[0] : b.companyId);
@@ -107,12 +144,19 @@ router.post('/', upload.array('attachmentFiles'), async (req, res) => {
     const docsPath = docsBase(companyId, orderId);
 
     let attMeta = jp('attachments');
-    if (req.files && req.files.length > 0) {
+    const attUp = filesOf(req, 'attachmentFiles'), specUp = filesOf(req, 'specUploadFiles');
+    if (attUp.length > 0) {
       fs.mkdirSync(docsPath, { recursive: true });
-      saveUploadedFiles(req.files, docsPath).forEach((s, i) => {
+      saveUploadedFiles(attUp, docsPath).forEach((s, i) => {
         if (attMeta[i]) { attMeta[i].filePath = s.filePath; attMeta[i].fileName = s.fileName; } else attMeta.push(s);
       });
     }
+    let specMeta = jp('specFiles');
+    if (specUp.length > 0) { fs.mkdirSync(docsPath, { recursive: true }); specMeta = mergeIntoMeta(specMeta, saveUploadedFiles(specUp, docsPath)); }
+    specMeta = specMeta.filter(x => x && x.filePath);
+    const fromSo = copySoFiles(companyId, docsPath, jp('copySoFiles'));
+    attMeta = [...attMeta, ...fromSo.att];
+    specMeta = [...specMeta, ...fromSo.spec];
 
     const data = {
       orderId, status: str('status') || 'draft',
@@ -144,6 +188,7 @@ router.post('/', upload.array('attachmentFiles'), async (req, res) => {
       clientScope: str('clientScope'), epsilonScope: str('epsilonScope'), vendorScope: str('vendorScope'),
       scopeItems: jp('scopeItems'),
       items: jp('items'), charges: jp('charges'), attachments: attMeta, documents: attMeta,
+      specSheet: str('specSheet'), specFiles: specMeta,
     };
 
     if (db.connected) {
@@ -159,12 +204,24 @@ router.post('/', upload.array('attachmentFiles'), async (req, res) => {
 
     await autoAdvanceSoToInProgress(companyId, data.linkedSalesOrderId);
 
+    if (data.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'purchaseorder', recordId: orderId,
+        recordLabel: `Purchase Order ${data.poNo || orderId} — ${data.vendorName || 'Vendor'}`,
+        message: `Purchase Order ${data.poNo || orderId} (${data.vendorName || 'Vendor'}) needs your approval`,
+        link: '/purchase-order/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
+
     res.json({ success: true, orderId, message: `Purchase Order created with ID: ${orderId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT - Update purchase order
-router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
+router.put('/:orderId', poUploadFields, async (req, res) => {
   try {
     const { orderId } = req.params;
     const b = req.body;
@@ -194,9 +251,15 @@ router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
     fs.mkdirSync(docsPath, { recursive: true });
 
     let attMeta = jp('attachments', ex.attachments || []);
-    saveUploadedFiles(req.files, docsPath).forEach((s, i) => {
+    saveUploadedFiles(filesOf(req, 'attachmentFiles'), docsPath).forEach((s, i) => {
       if (attMeta[i]) { attMeta[i].filePath = s.filePath; attMeta[i].fileName = s.fileName; } else attMeta.push(s);
     });
+    // spec files: sent → saved list + new uploads; not sent (classic form) → kept as they are
+    let specMeta = str('specFiles') ? jp('specFiles', ex.specFiles || []) : (ex.specFiles || []);
+    specMeta = mergeIntoMeta(specMeta, saveUploadedFiles(filesOf(req, 'specUploadFiles'), docsPath)).filter(x => x && x.filePath);
+    const fromSo = copySoFiles(companyId, docsPath, jp('copySoFiles', []));
+    attMeta = [...attMeta, ...fromSo.att];
+    specMeta = [...specMeta, ...fromSo.spec];
 
     const data = {
       ...ex,
@@ -258,6 +321,7 @@ router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
       items: jp('items', ex.items || []),
       charges: jp('charges', ex.charges || []),
       attachments: attMeta, documents: attMeta,
+      specSheet: b.specSheet !== undefined ? str('specSheet') : (ex.specSheet || ''), specFiles: specMeta,
     };
 
     if (db.connected) {
@@ -277,6 +341,18 @@ router.put('/:orderId', upload.array('attachmentFiles'), async (req, res) => {
       audit: pushAudit(ex, req, poAction, poExtra) });
 
     await autoAdvanceSoToInProgress(companyId, data.linkedSalesOrderId);
+
+    if (poNewStatus === 'pending' && poOldStatus !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'purchaseorder', recordId: orderId,
+        recordLabel: `Purchase Order ${data.poNo || orderId} — ${data.vendorName || 'Vendor'}`,
+        message: `Purchase Order ${data.poNo || orderId} (${data.vendorName || 'Vendor'}) needs your approval`,
+        link: '/purchase-order/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
 
     res.json({ success: true, message: 'Purchase order updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -300,12 +376,75 @@ router.delete('/:orderId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* POST - print pack: the PO (its HTML, laid out by the browser) as a PDF, followed by its spec files and
+   attachments — PDF pages as they are, images one per page. Files that cannot be printed (Word, Excel, DWG …)
+   are listed in the X-Not-Printed header. Read-only: nothing is saved. */
+router.post('/:orderId/print-pack', async (req, res) => {
+  const companyId = req.query.companyId || req.body?.companyId;
+  const html = String(req.body?.html || '');
+  if (!resolveUser(req)) return res.status(401).json({ error: 'Please sign in again.' });
+  if (!companyId || !html) return res.status(400).json({ error: 'companyId and html are needed.' });
+  let browser;
+  try {
+    const po = jstore.readOne('PurchaseOrder', companyId, req.params.orderId);
+    if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    const puppeteer = require('puppeteer');
+    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'load' });
+    const poPdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+    await browser.close(); browser = null;
+
+    const out = await PDFDocument.load(poPdf);
+    const font = await out.embedFont(StandardFonts.HelveticaBold);
+    const docsDir = path.resolve(docsBase(companyId, req.params.orderId));
+    const files = [...(po.specFiles || []).map(f => ({ ...f, kind: 'Specification' })), ...(po.attachments || []).map(f => ({ ...f, kind: 'Attachment' }))]
+      .filter(f => f && f.fileName);
+    const seen = new Set(), notPrinted = [];
+    for (const f of files) {
+      if (seen.has(f.fileName)) continue;
+      seen.add(f.fileName);
+      const fp = path.resolve(docsDir, path.basename(String(f.fileName)));
+      const label = f.name || f.fileName;
+      if (!fp.startsWith(docsDir + path.sep) || !fs.existsSync(fp)) { notPrinted.push(`${label} (missing)`); continue; }
+      const ext = path.extname(fp).toLowerCase();
+      try {
+        const buf = fs.readFileSync(fp);
+        if (ext === '.pdf') {
+          const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+          (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+        } else if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+          const img = ext === '.png' ? await out.embedPng(buf) : await out.embedJpg(buf);
+          const W = 595.28, H = 841.89, M = 28, top = 24;   // A4 in points
+          const pg = out.addPage([W, H]);
+          const title = `${f.kind}: ${label}${f.itemName ? ` (${f.itemName})` : ''} — PO ${po.poNo || po.orderId}`.replace(/[^\x20-\x7E]/g, ' ');
+          pg.drawText(title.slice(0, 110), { x: M, y: H - M - 10, size: 9, font, color: rgb(0, 0, 0) });
+          const k = Math.min((W - 2 * M) / img.width, (H - 2 * M - top) / img.height, 1.6);
+          const w = img.width * k, h = img.height * k;
+          pg.drawImage(img, { x: (W - w) / 2, y: H - M - top - h, width: w, height: h });
+        } else notPrinted.push(label);
+      } catch { notPrinted.push(`${label} (could not be read)`); }
+    }
+    const bytes = await out.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Not-Printed', encodeURIComponent(JSON.stringify(notPrinted)));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Not-Printed');
+    res.send(Buffer.from(bytes));
+  } catch (e) {
+    if (browser) { try { await browser.close(); } catch { /* closed */ } }
+    res.status(500).json({ error: 'Could not make the print: ' + e.message });
+  }
+});
+
 // GET - Download file
 router.get('/:orderId/download/:fileName', (req, res) => {
   try {
     const fp = path.join(docsBase(req.query.companyId, req.params.orderId), req.params.fileName);
-    if (fs.existsSync(fp)) res.download(fp);
-    else res.status(404).json({ error: 'File not found' });
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
+    // ?inline=1 renders in the browser; otherwise force a download.
+    if (req.query.inline) res.sendFile(path.resolve(fp));
+    else res.download(fp);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

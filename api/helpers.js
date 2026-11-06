@@ -61,11 +61,16 @@ const readAllRecords = (dir) => {
   return records;
 };
 
+// Required lazily: sqlite.js depends on ROOT from this module.
+const index = () => require('./sqlite');
+
 // Write data as a JSON file (creates folder if needed). Silent on error.
 const saveJson = (filePath, data) => {
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    // Index synchronously so a read straight after this write is never stale.
+    index().indexFile(filePath);
   } catch (e) {
     console.warn('[saveJson] Failed to write', filePath, e.message);
   }
@@ -73,7 +78,10 @@ const saveJson = (filePath, data) => {
 
 // Delete a JSON file silently
 const deleteJson = (filePath) => {
-  try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    index().removePath(filePath);
+  } catch {}
 };
 
 /* ── Audit trail helpers ── */

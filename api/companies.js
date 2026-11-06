@@ -26,6 +26,7 @@ const toApiRow = r => ({
   bankName:     r.bank_name || r.bankName,
   bankAccount:  r.bank_account || r.bankAccount,
   bankIfsc:     r.bank_ifsc || r.bankIfsc,
+  bankBranch:   r.bank_branch || r.bankBranch,
   isDefault:    r.is_default !== undefined ? !!r.is_default : !!r.isDefault,
   logoFileName: r.logo_file || r.logoFileName || '',
   createdAt:    r.created_at || r.createdAt,
@@ -46,7 +47,7 @@ router.get('/', async (_req, res) => {
 // POST - Create company
 router.post('/', upload.single('logo'), async (req, res) => {
   try {
-    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, isDefault } = req.body;
+    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault } = req.body;
 
     let companyId;
     if (db.connected) {
@@ -77,7 +78,7 @@ router.post('/', upload.single('logo'), async (req, res) => {
     const now = new Date().toISOString();
     saveJson(companyJsonPath(companyId), {
       companyId, companyName, address, city, state, pincode, gstin, pan,
-      email, phone, website, bankName, bankAccount, bankIfsc,
+      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch,
       isDefault: isDefault === 'true', logoFileName: logoFile,
       createdAt: now, updatedAt: now,
     });
@@ -97,7 +98,7 @@ router.post('/', upload.single('logo'), async (req, res) => {
 router.put('/:companyId', upload.single('logo'), async (req, res) => {
   try {
     const { companyId } = req.params;
-    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, isDefault } = req.body;
+    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault } = req.body;
 
     let logoFile = '';
     if (db.connected) {
@@ -124,10 +125,20 @@ router.put('/:companyId', upload.single('logo'), async (req, res) => {
       );
     }
 
+    /* keep every other field already saved for the company; store / factory locations come as a JSON list */
+    const prev = jstore.readOneCompany(companyId) || {};
+    let locations = prev.locations || [];
+    if (req.body.locations != null) {
+      try {
+        const l = JSON.parse(req.body.locations);
+        if (Array.isArray(l)) locations = l.map(x => ({ name: String(x?.name || '').trim().slice(0, 120), type: x?.type === 'Factory' ? 'Factory' : 'Store', address: String(x?.address || '').trim().slice(0, 300) })).filter(x => x.name);
+      } catch { /* keep the saved list */ }
+    }
     saveJson(companyJsonPath(companyId), {
+      ...prev,
       companyId, companyName, address, city, state, pincode, gstin, pan,
-      email, phone, website, bankName, bankAccount, bankIfsc,
-      isDefault: isDefault === 'true', logoFileName: logoFile,
+      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch,
+      isDefault: isDefault === 'true', logoFileName: logoFile, locations,
       updatedAt: new Date().toISOString(),
     });
 

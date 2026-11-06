@@ -10,6 +10,7 @@ const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
 const { ROOT } = require('./helpers');
+const sqlite   = require('./sqlite');
 
 const router = express.Router();
 
@@ -28,53 +29,29 @@ function saveRegistry(co, reg) {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(aprFile(co), JSON.stringify(reg, null, 2));
 }
-function getOrAssign(co, moduleKey, refId) {
-  const reg = getRegistry(co);
+/* Assign into an already-loaded registry. Returns the id; caller saves once.
+   Kept separate from getOrAssign so listing N records costs one write, not N. */
+function assignInto(reg, moduleKey, refId) {
   const key = `${moduleKey}:${refId}`;
   if (!reg.items[key]) {
     reg.counter = (reg.counter || 0) + 1;
     reg.items[key] = { approvalId: `APR${String(reg.counter).padStart(5,'0')}`, registeredAt: new Date().toISOString(), module: moduleKey, refId };
-    saveRegistry(co, reg);
+    reg._dirty = true;
   }
   return reg.items[key].approvalId;
 }
 
-/* ── File readers ── */
-function readFlat(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.json'))
-    .map(f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')); } catch { return null; } })
-    .filter(Boolean);
+function getOrAssign(co, moduleKey, refId) {
+  const reg = getRegistry(co);
+  const id  = assignInto(reg, moduleKey, refId);
+  if (reg._dirty) { delete reg._dirty; saveRegistry(co, reg); }
+  return id;
 }
 
-function readSubdirNumeric(dir) {
-  /* {dir}/{numericId}/{numericId}.json  — json-store pattern */
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter(e => e.isDirectory())
-    .map(e => {
-      const canonical = path.join(dir, e.name, `${e.name}.json`);
-      if (fs.existsSync(canonical)) { try { return JSON.parse(fs.readFileSync(canonical,'utf-8')); } catch { return null; } }
-      /* vendor/client style: {id}-{name}.json */
-      const files = fs.readdirSync(path.join(dir, e.name)).filter(f => f.endsWith('.json') && !f.includes('communication'));
-      if (!files.length) return null;
-      try { return JSON.parse(fs.readFileSync(path.join(dir, e.name, files[0]),'utf-8')); } catch { return null; }
-    })
-    .filter(Boolean);
-}
-
-function readSubdirDeposit(dir) {
-  /* {dir}/{depositId}/{depositId}.json */
-  if (!fs.existsSync(dir)) return [];
-  const results = [];
-  fs.readdirSync(dir, { withFileTypes: true }).forEach(e => {
-    if (!e.isDirectory()) return;
-    const f = path.join(dir, e.name, `${e.name}.json`);
-    if (fs.existsSync(f)) { try { results.push(JSON.parse(fs.readFileSync(f,'utf-8'))); } catch {} }
-  });
-  return results;
-}
+/* ── File readers — served from the SQLite index, same records and order ── */
+const readFlat           = dir => sqlite.listFlatByDir(dir);
+const readSubdirNumeric  = dir => sqlite.listSubPreferCanonicalByDir(dir);
+const readSubdirDeposit  = dir => sqlite.listSubCanonicalByDir(dir);
 
 /* ── Module configuration ── */
 const MODULES = [
@@ -243,7 +220,7 @@ router.get('/', (req, res) => {
         if (!include) return;
 
         const refId = String(rec[mod.idField] || '');
-        const approvalId = getOrAssign(co, mod.key, refId);
+        const approvalId = assignInto(reg, mod.key, refId);
         const regEntry   = reg.items[`${mod.key}:${refId}`] || {};
 
         results.push({
@@ -268,6 +245,9 @@ router.get('/', (req, res) => {
         });
       });
     });
+
+    /* One registry write for the whole listing, not one per record. */
+    if (reg._dirty) { delete reg._dirty; saveRegistry(co, reg); }
 
     /* Sort: pending first, then by date desc */
     results.sort((a, b) => {
@@ -312,6 +292,7 @@ router.put('/approve', (req, res) => {
       updatedAt:  new Date().toISOString(),
     };
     fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+    sqlite.indexFile(filePath);
 
     /* Update registry */
     const reg = getRegistry(co);
@@ -352,6 +333,7 @@ router.put('/reject', (req, res) => {
       updatedAt:    new Date().toISOString(),
     };
     fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+    sqlite.indexFile(filePath);
 
     const reg = getRegistry(co);
     const key = `${moduleKey}:${refId}`;
@@ -359,6 +341,71 @@ router.put('/reject', (req, res) => {
     saveRegistry(co, reg);
 
     res.json({ success: true, status: 'rejected' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ─────────────────────────────────────────────
+   PUT /api/approvals/bulk?companyId=X
+   Body: { action: 'approve'|'reject', items: [{module, refId}], by, reason }
+   Groups by module so each module's records are read once for the whole batch.
+───────────────────────────────────────────────*/
+router.put('/bulk', (req, res) => {
+  try {
+    const co = cid(req);
+    const { action = 'approve', items = [], by = 'Admin', reason = '' } = req.body;
+    if (!co) return res.status(400).json({ error: 'companyId required' });
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items required' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'action must be approve or reject' });
+
+    const byModule = new Map();
+    items.forEach(it => {
+      if (!it || !it.module || it.refId === undefined) return;
+      if (!byModule.has(it.module)) byModule.set(it.module, []);
+      byModule.get(it.module).push(String(it.refId));
+    });
+
+    const reg  = getRegistry(co);
+    const now  = new Date().toISOString();
+    const done = [], failed = [];
+
+    for (const [moduleKey, refIds] of byModule) {
+      const mod = MODULES.find(m => m.key === moduleKey);
+      if (!mod) { refIds.forEach(r => failed.push({ module: moduleKey, refId: r, error: 'Unknown module' })); continue; }
+
+      let records = [];
+      try { records = mod.reader(co); } catch {}
+      const index = new Map(records.map(r => [String(r[mod.idField]), r]));
+
+      for (const refId of refIds) {
+        const record = index.get(refId);
+        if (!record) { failed.push({ module: moduleKey, refId, error: 'Record not found' }); continue; }
+
+        const filePath = mod.getFile(co, record);
+        if (!filePath || !fs.existsSync(filePath)) { failed.push({ module: moduleKey, refId, error: 'File not found' }); continue; }
+
+        try {
+          const current = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+          const updated = action === 'approve'
+            ? { ...current, status: mod.approvedStatus, approvedBy: by, approvedAt: now, updatedAt: now }
+            : { ...current, status: 'rejected', rejectedBy: by, rejectedAt: now, rejectReason: reason, updatedAt: now };
+          fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+          sqlite.indexFile(filePath);
+
+          const key = `${moduleKey}:${refId}`;
+          assignInto(reg, moduleKey, refId);
+          if (action === 'approve') { reg.items[key].approvedAt = now; reg.items[key].approvedBy = by; }
+          else                      { reg.items[key].rejectedAt = now; }
+          reg._dirty = true;
+
+          done.push({ module: moduleKey, refId, approvalId: reg.items[key].approvalId, status: updated.status });
+        } catch (e) {
+          failed.push({ module: moduleKey, refId, error: e.message });
+        }
+      }
+    }
+
+    if (reg._dirty) { delete reg._dirty; saveRegistry(co, reg); }
+    res.json({ success: failed.length === 0, action, approved: done.length, failedCount: failed.length, done, failed });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

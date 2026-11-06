@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
@@ -23,8 +24,6 @@ const INDUSTRY_TYPES = [
   'Manufacturing','Media & Entertainment','Mining','Pharmaceuticals',
   'Real Estate','Retail','Telecom','Textile','Trading','Others',
 ];
-
-const SALES_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
 
 const STATE_GST_MAP = {
   1:'Jammu and Kashmir',2:'Himachal Pradesh',3:'Punjab',4:'Chandigarh',
@@ -202,6 +201,7 @@ const EditClient = () => {
   const { clientId } = useParams();
   const navigate     = useNavigate();
   const { selectedCompany } = useCompany();
+  const SALES_PERSONS = useStaffNames();
 
   const [activeTab, setActiveTab] = useState('basic');
   const [loading,   setLoading]   = useState(true);

@@ -3,11 +3,14 @@ import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 import * as XLSX from 'xlsx';
+import { withPrintFont } from '../../utils/printFont';
+import FyDropdown from '../../components/FyDropdown';
+import { useNavTheme, NEU } from '../../utils/navTheme';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P   = '#1a4a9a';
 const PG  = '#2a6600';
-const BD  = '#c8d4e8';
+const BD  = '#000000';
 
 const getFY = d => { const dt=d?new Date(d):new Date(); const m=dt.getMonth()+1; const y=dt.getFullYear(); const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`; };
 
@@ -36,6 +39,23 @@ const normPOItem = it => ({
   discount:     parseFloat(it.discount) || 0,
   discountType: it.discountType || '%',
 });
+
+/* ── Soft (neumorphic) look — used when the SOFT switch in the top bar is on ── */
+const softBtn = (active = false, extra = {}) => ({
+  height: 28, padding: '0 12px', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+  fontFamily: F, fontWeight: active ? 700 : 600, margin: '0 5px', borderRadius: 10, border: 'none',
+  background: NEU.base, color: active ? NEU.accent : NEU.text,
+  boxShadow: active ? NEU.inset : NEU.raisedSm, transition: 'box-shadow 0.15s',
+  ...extra,
+});
+const NEU_LINE = '#C5CEDB';   // soft grid line
+const NEU_ROW  = '#E9EDF3';   // data row surface (a touch lighter than the page)
+const softPress = {
+  onMouseDown:  e => { e.currentTarget.style.boxShadow = NEU.inset; },
+  onMouseUp:    e => { e.currentTarget.style.boxShadow = NEU.raisedSm; },
+  onMouseLeave: e => { e.currentTarget.style.boxShadow = NEU.raisedSm; },
+};
+
 
 /* ── Small helpers ── */
 const Lbl = ({ children }) => (
@@ -587,7 +607,7 @@ function RowDetailModal({ so, pos, purchaseBills, vendorDues, soDue, cid, onClos
               </div>
               <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                 {dlUrl && (
-                  <a href={dlUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={`${dlUrl}&inline=1`} target="_blank" rel="noopener noreferrer"
                     style={{ background:PV, color:'#fff', padding:'4px 12px', fontSize:10,
                       fontWeight:700, textDecoration:'none', borderRadius:4 }}>
                     👁 View
@@ -1026,6 +1046,8 @@ function OrderModal({ type, order, dueRecord, cid, onClose, onSaved }) {
    MAIN COMPONENT
 ══════════════════════════════════════════════ */
 export default function ProjectList() {
+  const [navTheme] = useNavTheme();
+  const neu = navTheme === 'neu';
   const { selectedCompany } = useCompany();
   const cid      = selectedCompany?.companyId;
   const navigate = useNavigate();
@@ -1194,6 +1216,7 @@ export default function ProjectList() {
   /* ── Filter ── */
   const fyList = useMemo(() => {
     const set = new Set(salesOrders.map(o => getFY(o.orderDate||o.date)));
+    set.add(getFY());   // current FY is the default, so it is always in the list
     return ['all', ...[...set].sort().reverse()];
   }, [salesOrders]);
 
@@ -1375,34 +1398,46 @@ export default function ProjectList() {
   }
 
   /* ── Cell styles ── */
+  /* Soft look: soft hairlines instead of black, header = surface colour with the
+     section colour as text + underline (SO green, PO red, EXP orange). */
+  const BDX    = neu ? NEU_LINE : BD;                       // grid line colour
+  const LINE_B = `1px solid ${BDX}`;
+  const softTh = (color) => ({ background:NEU.base, color, border:`1px solid ${NEU_LINE}`, borderBottom:`2px solid ${color}`, fontWeight:800 });
   const th  = (align='left',w,ex={}) => ({
     padding:'4px 6px', background:'#3d8b40', color:'#fff',
     fontSize:11, fontWeight:700, textAlign:align,
     border:'1px solid #2e7d32', whiteSpace:'nowrap',
+    ...(neu ? softTh('#2E7D32') : {}),
     ...(w?{width:w,minWidth:w}:{}), ...ex,
   });
   const pth = (align='left',w,ex={}) => ({
     padding:'4px 6px', background:'#d32f2f', color:'#fff',
     fontSize:11, fontWeight:700, textAlign:align,
     border:'1px solid #b71c1c', whiteSpace:'nowrap',
+    ...(neu ? softTh('#C62828') : {}),
     ...(w?{width:w,minWidth:w}:{}), ...ex,
   });
   const td  = (align='left',ex={}) => ({
-    padding:'2px 5px', fontSize:10, fontFamily:F, border:`1px solid ${BD}`,
+    padding:'2px 5px', fontSize:10, fontFamily:F, border:`1px solid ${BDX}`,
     verticalAlign:'middle', textAlign:align, ...ex,
   });
   const ptd = (align='left',ex={}) => ({...td(align,ex)});
   const etd = (align='left',ex={}) => ({
-    padding:'2px 5px', fontSize:10, fontFamily:F, border:'1px solid #fed7aa',
+    padding:'2px 5px', fontSize:10, fontFamily:F, border: neu ? `1px solid ${NEU_LINE}` : '1px solid #fed7aa',
     verticalAlign:'middle', textAlign:align, ...ex,
   });
   const eth = (align='left',w,ex={}) => ({
     padding:'4px 6px', background:'#f97316', color:'#fff',
     fontSize:11, fontWeight:700, textAlign:align,
     border:'1px solid #ea580c', whiteSpace:'nowrap',
+    ...(neu ? softTh('#EA580C') : {}),
     ...(w?{width:w,minWidth:w}:{}), ...ex,
   });
-  const SOBg = idx => idx%2===0 ? '#ffffff' : '#f9f9f9';
+  const SOBg = () => neu ? NEU_ROW : '#ffffff'; // all rows one colour — no zebra striping
+  /* TOTAL row tints per section */
+  const TOT_SO = neu ? '#D5DDEB' : '#dce6ff';
+  const TOT_PO = neu ? '#D3E1D7' : '#d0ecd0';
+  const TOT_EX = neu ? '#E8DCCF' : '#fff3e0';
 
   /* ── Projects view ── */
   const fmtDFull = d => {
@@ -1494,14 +1529,14 @@ export default function ProjectList() {
       const expTotal  = parseFloat(row.expItem?.grandTotal) || (expBase + expBase * expGstPct / 100);
       const bgSO = row.isFirst ? (filteredSOs.indexOf(row.so) % 2 === 0 ? '#EEF3FF' : '#F7F5FF') : 'transparent';
       return `<tr style="border-bottom:1px solid #e0e7ef">
-        <td style="font-weight:700;color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed;white-space:nowrap">${row.isFirst ? (row.so?.orderNo||row.so?.orderId||'') : ''}</td>
-        <td style="font-weight:${row.isFirst?700:400};color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed">${row.isFirst ? (row.so?.customerName||row.so?.clientName||'') : ''}</td>
-        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed;white-space:nowrap">${row.isFirst ? fmtD(row.so?.orderDate||row.so?.date) : ''}</td>
-        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #d1d9ed">${row.isFirst ? (row.so?.customerPO||'') : ''}</td>
-        <td style="padding:4px 6px;border-right:1px solid #d1d9ed">${row.soItem?.name||''}</td>
-        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed">${row.soItem?.qty||''}</td>
-        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed;font-weight:700">${row.soOV ? '₹'+fmt(row.soOV) : ''}</td>
-        <td style="text-align:right;padding:4px 6px;border-right:1px solid #d1d9ed;color:#15803d">${row.isFirst && row.receipt ? '₹'+fmt(row.receipt) : ''}</td>
+        <td style="font-weight:700;color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #000000;white-space:nowrap">${row.isFirst ? (row.so?.orderNo||row.so?.orderId||'') : ''}</td>
+        <td style="font-weight:${row.isFirst?700:400};color:#1a3a8a;background:${bgSO};padding:4px 6px;border-right:1px solid #000000">${row.isFirst ? (row.so?.customerName||row.so?.clientName||'') : ''}</td>
+        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #000000;white-space:nowrap">${row.isFirst ? fmtD(row.so?.orderDate||row.so?.date) : ''}</td>
+        <td style="background:${bgSO};padding:4px 6px;border-right:1px solid #000000">${row.isFirst ? (row.so?.customerPO||'') : ''}</td>
+        <td style="padding:4px 6px;border-right:1px solid #000000">${row.soItem?.name||''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #000000">${row.soItem?.qty||''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #000000;font-weight:700">${row.soOV ? '₹'+fmt(row.soOV) : ''}</td>
+        <td style="text-align:right;padding:4px 6px;border-right:1px solid #000000;color:#15803d">${row.isFirst && row.receipt ? '₹'+fmt(row.receipt) : ''}</td>
         <td style="text-align:right;padding:4px 6px;border-right:2px solid #9ab0e0;color:#dc2626;font-weight:700">${row.isFirst ? '₹'+fmt(row.soBalance) : ''}</td>
         <td style="color:#1a5500;font-weight:${row.isPOFirst?700:400};padding:4px 6px;border-right:1px solid #c0e4c0">${row.isPOFirst ? (row.po?.vendorName||'') : ''}</td>
         <td style="padding:4px 6px;border-right:1px solid #c0e4c0;white-space:nowrap">${row.isPOFirst ? (row.po?.poNo||row.po?.poNumber||'') : ''}</td>
@@ -1543,13 +1578,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:8.5pt;background:#fff;col
 .hdr h1{font-size:14pt;font-weight:900;letter-spacing:0.5px;}
 .hdr .sub{font-size:8.5pt;opacity:0.85;margin-top:3px;}
 .cards{display:flex;gap:10px;padding:10px 18px;background:#f0f4ff;border-bottom:1px solid #dde4f5;}
-.card{background:#fff;border:1px solid #d1daf5;border-radius:6px;padding:7px 14px;flex:1;text-align:center;}
+.card{background:#fff;border:1px solid #000000;border-radius:6px;padding:7px 14px;flex:1;text-align:center;}
 .card .lbl{font-size:7.5pt;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;}
 .card .val{font-size:12pt;font-weight:900;margin-top:2px;}
 .card.so .val{color:#1a3a8a}.card.recv .val{color:#15803d}.card.dues .val{color:#dc2626}.card.exp .val{color:#c2410c}
 table{width:100%;border-collapse:collapse;font-size:7.5pt;}
 .grp-hdr{font-size:8.5pt;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:5px 8px 2px;color:#555;border-top:2px solid #dde;background:#fafbff;}
-th{padding:5px 6px;text-align:left;border:1px solid #c8d4ed;font-size:7pt;font-weight:700;}
+th{padding:5px 6px;text-align:left;border:1px solid #000000;font-size:7pt;font-weight:700;}
 th.so-h{background:#1a3a8a;color:#fff;}
 th.po-h{background:#2a6600;color:#fff;}
 th.exp-h{background:#c2410c;color:#fff;}
@@ -1612,7 +1647,7 @@ tfoot td.po{background:#e8f5e9;}tfoot td.exp{background:#fff3e0;}
 </body></html>`;
     const w = window.open('', '_blank', 'width=1400,height=900');
     if (!w) { alert('Allow pop-ups to print.'); return; }
-    w.document.write(html); w.document.close();
+    w.document.write(withPrintFont(html)); w.document.close();
   };
 
   const doPrintProjects = () => {
@@ -1627,7 +1662,7 @@ tfoot td.po{background:#e8f5e9;}tfoot td.exp{background:#fff3e0;}
 .hdr{background:#1a4a9a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;}
 table{width:100%;border-collapse:collapse;font-size:9pt;}
 th{background:#1a4a9a;color:#fff;padding:6px 10px;text-align:left;border:1px solid #0d2d6b;}
-td{padding:5px 10px;border:1px solid #d1d9ed;}
+td{padding:5px 10px;border:1px solid #000000;}
 @media print{@page{size:A4 landscape;margin:8mm;}}</style></head><body>
 <div class="hdr"><div><h1 style="font-size:14pt;font-weight:900">PROJECTS LIST</h1>
 <div style="font-size:9pt;opacity:0.8;margin-top:2px">${selectedCompany?.companyName||''} &nbsp;|&nbsp; ${projects.length} projects</div></div>
@@ -1638,15 +1673,28 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 </body></html>`;
     const w=window.open('','_blank','width=1000,height=800');
     if(!w){alert('Allow pop-ups.');return;}
-    w.document.write(html);w.document.close();
+    w.document.write(withPrintFont(html));w.document.close();
   };
 
   return (
-    <div style={{ fontFamily:F, fontSize:11 }}>
+    <div className="neu-native" style={{ fontFamily:F, fontSize:11, display:'flex', flexDirection:'column', height:'100%', ...(neu ? { background:NEU.base } : {}) }}>
       <style>{`
         .proj-row td {
           transition: background-color 0.15s ease, box-shadow 0.15s ease;
         }
+        ${neu ? `
+        /* Soft look: the whole hovered jobcode looks like one pressed-in button —
+           pressed surface + orange text, inner shadow on its top/left edge and a
+           light edge at the bottom (no per-cell shadows, no bar on every line). */
+        .proj-row td.row-hov { background-color: #D9DFE8 !important; color: #C2410C !important; }
+        .proj-row td.row-hov * { color: #C2410C !important; }
+        .proj-row.so-first td.row-hov { box-shadow: inset 0 5px 7px -4px #A3B1C6 !important; }
+        .proj-row.so-last td.row-hov { box-shadow: inset 0 -5px 7px -4px #FFFFFF !important; }
+        .proj-row.so-first.so-last td.row-hov { box-shadow: inset 0 5px 7px -4px #A3B1C6, inset 0 -5px 7px -4px #FFFFFF !important; }
+        /* frozen Jobcode / Client cells keep their right-hand line; Jobcode also gets the left edge */
+        .proj-row.so-first td.row-hov:first-child { box-shadow: inset 5px 5px 7px -4px #A3B1C6, inset -1px 0 0 ${NEU_LINE} !important; }
+        .proj-row.so-first td.row-hov:nth-child(2) { box-shadow: inset 0 5px 7px -4px #A3B1C6, inset -1px 0 0 ${NEU_LINE} !important; }
+        ` : `
         .proj-row td.row-hov {
           background-color: #EEF4FF !important;
           box-shadow: inset 0 1px 0 #c7d9ff, inset 0 -1px 0 #c7d9ff;
@@ -1655,84 +1703,97 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
         .proj-row td.row-hov:first-child {
           box-shadow: inset 4px 0 0 #3A6186, inset 0 1px 0 #c7d9ff, inset 0 -1px 0 #c7d9ff;
         }
-        .proj-row:hover { z-index: 10; position: relative; }
+        `}
+        .proj-row:hover { z-index: 5; position: relative; }   /* below the pinned header (10) and TOTAL row (9) */
+        /* Header row pinned to the top and TOTAL row pinned to the bottom while the
+           table scrolls. Set on the cells (not on thead/tfoot) — that works the
+           same in Chrome, Edge and Firefox. */
+        .proj-tbl thead th { position: sticky; top: 0; z-index: 10; }
+        .proj-tbl tfoot td { position: sticky; bottom: 0; z-index: 9; }
+        /* Inside an order only the column lines show; one full-width line marks
+           where each order starts (and so closes the one above). Cells spanning
+           the whole order sit in its first row, so they get the same line. */
+        .proj-tbl tbody tr { border-top: none !important; border-bottom: none !important; }
+        .proj-tbl tbody td { border-top: none !important; border-bottom: none !important; }
+        .proj-tbl tbody tr.so-first td { border-top: 1px solid ${neu ? NEU_LINE : BD} !important; }
       `}</style>
 
-      {/* ── FINACLE-STYLE COMPACT TOOLBAR ── */}
-      <div style={{
-        background:'#f0f2f5', borderBottom:'1px solid #c0c4cc',
+      {/* ── TOOLBAR — classic-button style, matching the sidebar/SubNav ── */}
+      <div style={neu ? {
+        background:NEU.base, padding:'9px 12px', display:'flex', alignItems:'center',
+        flexWrap:'nowrap', overflowX:'auto', minHeight:48, gap:0, flexShrink:0,
+        boxShadow:'0 4px 10px rgba(163,177,198,0.45)', position:'relative', zIndex:3,
+      } : {
+        background:'#3A6186', borderBottom:'2px solid #2A4D6E',
         padding:'3px 8px', display:'flex', alignItems:'center',
-        flexWrap:'nowrap', overflowX:'auto', minHeight:36, gap:0,
+        flexWrap:'nowrap', overflowX:'auto', minHeight:36, gap:0, flexShrink:0,
       }}>
         {/* Page label */}
-        <span style={{ fontWeight:800, fontSize:13, color:P, paddingRight:8,
-          borderRight:'1px solid #bbb', marginRight:6, whiteSpace:'nowrap', flexShrink:0 }}>
+        <span style={{ fontWeight:800, fontSize:12, color: neu ? NEU.strong : '#fff', paddingRight:10,
+          borderRight: neu ? '1px solid rgba(163,177,198,0.6)' : '2px solid rgba(255,255,255,0.18)', marginRight:6, whiteSpace:'nowrap', flexShrink:0,
+          textTransform:'uppercase', letterSpacing:'0.8px' }}>
           PROJECT
         </span>
 
         {/* Tab: Jobcodes */}
-        <button onClick={()=>navigate('/project/list')} style={{
-          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
-          fontFamily:F, fontWeight:700, position:'relative',
-          background:'#fff', border:'1px solid #aaa',
-          borderBottom:'1px solid #f0f2f5',
-          color:P, zIndex:1, marginBottom:-1, borderRadius:'3px 3px 0 0',
+        <button onClick={()=>navigate('/project/list')} style={neu ? softBtn(true) : {
+          height:26, padding:'0 12px', fontSize:11.5, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:700, margin:'0 4px', borderRadius:6,
+          background:'rgba(255,255,255,0.22)', border:'1px solid rgba(255,255,255,0.55)',
+          boxShadow:'0 2px 6px rgba(0,0,0,0.22)', color:'#fff',
         }}>Jobcodes</button>
 
+        {/* Tab: Report */}
+        <button onClick={()=>navigate('/project/report')} {...(neu ? softPress : {})} style={neu ? softBtn(false) : {
+          height:26, padding:'0 12px', fontSize:11.5, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:600, margin:'0 4px', borderRadius:6,
+          background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.22)',
+          boxShadow:'0 1px 2px rgba(0,0,0,0.12)', color:'rgba(255,255,255,0.85)',
+        }}>Report</button>
+
         {/* Tab: Project Close */}
-        <button onClick={()=>navigate('/project/close')} style={{
-          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
-          fontFamily:F, fontWeight:400, position:'relative', marginRight:8,
-          background:'#e4e8ed', border:'1px solid #c8c8c8',
-          borderBottom:'1px solid #c8c8c8',
-          color:'#555', zIndex:0, marginBottom:0, borderRadius:'3px 3px 0 0',
+        <button onClick={()=>navigate('/project/close')} {...(neu ? softPress : {})} style={neu ? softBtn(false, { marginRight:10 }) : {
+          height:26, padding:'0 12px', fontSize:11.5, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:600, margin:'0 4px 0', marginRight:8, borderRadius:6,
+          background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.22)',
+          boxShadow:'0 1px 2px rgba(0,0,0,0.12)', color:'rgba(255,255,255,0.85)',
         }}>Project Close</button>
 
         {/* Divider */}
-        <div style={{ width:1, height:20, background:'#bbb', margin:'0 8px', flexShrink:0 }}/>
+        <div style={{ width:1, height:20, background: neu ? 'rgba(163,177,198,0.6)' : 'rgba(255,255,255,0.2)', margin:'0 8px', flexShrink:0 }}/>
 
-        {/* FY filter buttons — orders only */}
-        {fyList.map(f => {
-          const active = fy === f;
-          return (
-            <button key={f} onClick={() => setFy(f)} style={{
-              height:24, padding:'0 8px', fontSize:11, cursor:'pointer',
-              whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-              fontWeight: active ? 700 : 400, marginRight:3, borderRadius:3,
-              border:`1px solid ${active ? P : '#bbb'}`,
-              background: active ? P : '#fff',
-              color: active ? '#fff' : '#555',
-            }}>
-              {f === 'all' ? 'All' : `FY ${f}`}
-            </button>
-          );
-        })}
+        {/* FY filter — dropdown list (orders only); current FY is selected by default */}
+        <FyDropdown value={fy} options={fyList} onChange={setFy} neu={neu} current={getFY()} />
 
         {/* Spacer */}
         <div style={{ flex:1 }}/>
 
         {/* Count */}
-        <span style={{ fontSize:10, color:'#666', marginRight:8, flexShrink:0, whiteSpace:'nowrap' }}>
+        <span style={{ fontSize:10, color: neu ? NEU.muted : 'rgba(255,255,255,0.75)', fontWeight: neu ? 600 : undefined, marginRight:8, flexShrink:0, whiteSpace:'nowrap' }}>
           {filteredSOs.length} SO{filteredSOs.length!==1?'s':''} · {purchaseOrders.length} PO{purchaseOrders.length!==1?'s':''}
         </span>
 
         {/* Search */}
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="Search client, SO/PO no, vendor, product…"
-          style={{ height:26, padding:'0 8px', border:'1px solid #bbb', borderRadius:3,
+          className={neu ? 'neu-field' : undefined}
+          style={neu ? { height:30, padding:'0 12px', border:'none', borderRadius:11, boxShadow:NEU.inset,
+            fontSize:11, fontFamily:F, outline:'none', width:220, background:NEU.base, color:NEU.strong,
+            marginRight:6, flexShrink:0 } : { height:26, padding:'0 8px', border:'1px solid #000000', borderRadius:3,
             fontSize:11, fontFamily:F, outline:'none', width:180, background:'#fff',
             marginRight:3, flexShrink:0 }} />
         {search && (
           <button onClick={()=>setSearch('')}
-            style={{ height:26, padding:'0 7px', background:'#f0f0f0', border:'1px solid #bbb',
+            {...(neu ? softPress : {})}
+            style={neu ? softBtn(false, { padding:'0 9px', margin:'0 6px 0 0' }) : { height:26, padding:'0 7px', background:'#f0f0f0', border:'1px solid #000000',
               borderRadius:3, cursor:'pointer', fontFamily:F, fontSize:11, marginRight:4, flexShrink:0 }}>✕</button>
         )}
 
         {/* Columns toggle button */}
-        <button onClick={()=>setColPanelOpen(o=>!o)} style={{
+        <button onClick={()=>setColPanelOpen(o=>!o)} style={neu ? softBtn(colPanelOpen, { display:'flex', alignItems:'center', gap:5, margin:'0 5px' }) : {
           height:26, padding:'0 10px', marginRight:3, flexShrink:0,
           background: colPanelOpen ? P : '#fff',
-          border: `1px solid ${colPanelOpen ? P : '#bbb'}`,
+          border: `1px solid ${colPanelOpen ? P : '#000000'}`,
           borderRadius:3, color: colPanelOpen ? '#fff' : '#374151',
           fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:F,
           display:'flex', alignItems:'center', gap:5,
@@ -1747,9 +1808,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
         {colPanelOpen && (
           <div style={{ display:'flex', gap:3, marginRight:6, flexShrink:0 }}>
             {[['so','SO','#1a4a9a'],['po','PO','#2a6600'],['exp','EXP','#c2410c']].map(([t,l,c])=>(
-              <button key={t} onClick={()=>setColPanelTab(t)} style={{
+              <button key={t} onClick={()=>setColPanelTab(t)} style={neu ? softBtn(colPanelTab===t, { padding:'0 10px', margin:'0 3px', color: colPanelTab===t ? c : NEU.text }) : {
                 padding:'0 9px', height:26, borderRadius:3, fontFamily:F,
-                border: `1px solid ${colPanelTab===t?c:'#bbb'}`,
+                border: `1px solid ${colPanelTab===t?c:'#000000'}`,
                 background: colPanelTab===t ? c : '#fff',
                 color: colPanelTab===t ? '#fff' : '#6b7280',
                 fontSize:11, fontWeight:600, cursor:'pointer',
@@ -1759,25 +1820,30 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
         )}
 
         {/* Print */}
-        <button onClick={doPrintOrders}
-          style={{ height:26, padding:'0 8px', background:'#fff', marginRight:3,
-            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:12,
+        <button onClick={doPrintOrders} title="Print" {...(neu ? softPress : {})}
+          style={neu ? softBtn(false, { padding:'0 10px', fontSize:12 }) : { height:26, padding:'0 8px', background:'#fff', marginRight:3,
+            border:'1px solid #000000', borderRadius:3, cursor:'pointer', fontSize:12,
             fontFamily:F, fontWeight:600, flexShrink:0 }}>🖨</button>
 
         {/* Excel */}
-        <button onClick={doExportOrders}
-          style={{ height:26, padding:'0 8px', background:'#fff', marginRight:3,
-            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:12,
+        <button onClick={doExportOrders} title="Export to Excel" {...(neu ? softPress : {})}
+          style={neu ? softBtn(false, { padding:'0 10px', fontSize:12 }) : { height:26, padding:'0 8px', background:'#fff', marginRight:3,
+            border:'1px solid #000000', borderRadius:3, cursor:'pointer', fontSize:12,
             fontFamily:F, fontWeight:600, flexShrink:0 }}>📊</button>
 
         {/* Refresh */}
-        <button onClick={load}
-          style={{ height:26, padding:'0 8px', background:'#fff', flexShrink:0,
-            border:'1px solid #bbb', borderRadius:3, cursor:'pointer', fontSize:13 }}>↻</button>
+        <button onClick={load} title="Refresh" {...(neu ? softPress : {})}
+          style={neu ? softBtn(false, { padding:'0 10px', fontSize:13, margin:'0 2px 0 5px' }) : { height:26, padding:'0 8px', background:'#fff', flexShrink:0,
+            border:'1px solid #000000', borderRadius:3, cursor:'pointer', fontSize:13 }}>↻</button>
       </div>
 
+      {/* Everything below the toolbar shares the remaining height exactly —
+          no hardcoded pixel offset to keep in sync with the toolbar's own
+          height, which drifts whenever its padding/border/shadow changes. */}
+      <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}>
+
       {error && <div style={{ padding:'4px 8px', borderRadius:4, background:'#ffe0e0',
-        color:'#880000', border:'1px solid #cc4444', fontSize:11 }}>Error: {error}</div>}
+        color:'#880000', border:'1px solid #cc4444', fontSize:11, flexShrink:0 }}>Error: {error}</div>}
 
       {loading ? (
         <div style={{ padding:50, textAlign:'center', color:'#888' }}>Loading…</div>
@@ -1786,8 +1852,10 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
         <>
           {/* Column toggle panel */}
           {colPanelOpen && (
-            <div style={{ background:'#f8faff', border:`1px solid ${P}`, borderTop:'none', padding:'6px 10px' }}>
-              <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BD}`, marginBottom:8 }}>
+            <div style={neu
+              ? { background:NEU.base, borderRadius:16, boxShadow:NEU.inset, margin:'14px 16px 0', padding:'10px 14px 12px', flexShrink:0 }
+              : { background:'#f8faff', border:`1px solid ${P}`, borderTop:'none', padding:'6px 10px' }}>
+              <div style={{ display:'flex', gap:0, borderBottom: neu ? '1px solid rgba(163,177,198,0.6)' : `1px solid ${BD}`, marginBottom:8 }}>
                 {[['so','Sales Order (SO)','#1a4a9a'],['po','Purchase Order (PO)','#2a6600'],['exp','Expenses (EXP)','#c2410c']].map(([t,l,c])=>(
                   <button key={t} onClick={()=>setColPanelTab(t)}
                     style={{ padding:'5px 16px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:F,
@@ -1805,7 +1873,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                   const ac = colPanelTab==='so' ? '#1a4a9a' : colPanelTab==='po' ? '#2a6600' : '#ea580c';
                   return (
                     <button key={b.key} onClick={()=>tcv(b.key)}
-                      style={{ padding:'3px 11px', fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:F,
+                      style={neu ? { padding:'4px 12px', fontSize:10.5, fontWeight:700, cursor:'pointer', fontFamily:F, borderRadius:9,
+                          lineHeight:'18px', border:'none', background:NEU.base, margin:'3px 2px',
+                          color: cv(b.key) ? ac : NEU.muted, boxShadow: cv(b.key) ? NEU.insetSm : NEU.raisedSm, transition:'box-shadow 0.15s' } : { padding:'3px 11px', fontSize:10.5, fontWeight:600, cursor:'pointer', fontFamily:F,
                         borderRadius:5, lineHeight:'18px',
                         border: cv(b.key) ? `1.5px solid ${ac}` : '1.5px solid #d1d5db',
                         background: cv(b.key) ? ac : '#fff',
@@ -1820,17 +1890,29 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
           )}
 
           {filteredSOs.length===0 ? (
-            <div style={{ padding:40, textAlign:'center', color:'#888', fontStyle:'italic',
+            <div style={neu
+              ? { padding:40, margin:16, textAlign:'center', color:NEU.muted, fontStyle:'italic', background:NEU.base, borderRadius:16, boxShadow:NEU.inset }
+              : { padding:40, textAlign:'center', color:'#888', fontStyle:'italic',
               background:'#fafafa', borderRadius:8, border:`1px solid ${BD}` }}>
               No sales orders found.
             </div>
           ) : (
-            <div style={{ overflow:'auto', maxHeight:`calc(100vh - ${colPanelOpen ? 195 : 110}px)`, border:`1px solid ${BD}`, borderRadius:6 }}>
-              <table ref={tableRef} style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
-                <thead style={{ position:'sticky', top:0, zIndex:10 }}>
+            <div style={{ position:'relative', flex:1, minHeight:0, display:'flex', flexDirection:'column' }}>
+            {/* Soft look: the data area sits pressed-in behind the top bar and side menu
+                (like a pressed button). The shadow is a click-through layer on top, so the
+                table cells can't hide it and it stays put while the table scrolls. */}
+            {neu && (
+              <div aria-hidden="true" style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:30,
+                boxShadow:'inset 8px 8px 14px -2px rgba(163,177,198,0.95), inset -6px -6px 12px -2px rgba(255,255,255,0.9)' }} />
+            )}
+            <div style={neu
+              ? { overflow:'auto', flex:1, minHeight:0, background:NEU_ROW }   /* fills the area — no gap, square corners */
+              : { overflow:'auto', flex:1, minHeight:0, border:`1px solid ${BD}`, borderRadius:6 }}>
+              <table ref={tableRef} className="proj-tbl" style={{ borderCollapse:'collapse', fontSize:10, fontFamily:F, width:'100%' }}>
+                <thead>
                   <tr>
-                    <th style={{ ...th('left','90px'), position:'sticky', left:0, zIndex:12 }}>Jobcode ✎</th>
-                    <th style={{ ...th('left','160px'), whiteSpace:'normal', position:'sticky', left:92, zIndex:12 }}>Client Name</th>
+                    <th style={{ ...th('left','90px'), position:'sticky', left:0, zIndex:12, boxShadow:'inset -1px 0 0 #2e7d32' }}>Jobcode</th>
+                    <th style={{ ...th('left','160px'), whiteSpace:'normal', position:'sticky', left:92, zIndex:12, boxShadow:'inset -1px 0 0 #2e7d32' }}>Client Name</th>
                     {cv('so_orderDesc') && <th style={th('left','180px')}>Order Desc</th>}
                     {cv('so_orderDate') && <th style={th('center','60px')}>Order Date</th>}
                     {cv('so_clientPO')  && <th style={th('left','90px')}>Client PO No</th>}
@@ -1893,21 +1975,22 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     const soId   = row.so.orderId || row.so._id;
 
                     return (
-                      <tr key={row.key} className="proj-row"
+                      <tr key={row.key} className={`proj-row${row.isSOFirst ? ' so-first' : ''}${row.isSOLast ? ' so-last' : ''}`}
                         data-soid={soId}
                         onMouseEnter={() => onRowEnter(soId)}
                         onMouseLeave={() => onRowLeave(soId)}
                         style={{
                           background:bg,
-                          borderTop:    row.isSOFirst ? '1px solid #bbb' : row.isPOFirst ? '1px solid #ddd' : undefined,
-                          borderBottom: row.isSOLast  ? '1px solid #bbb' : undefined,
+                          borderTop:    row.isSOFirst ? LINE_B : row.isPOFirst ? LINE_B : undefined,
+                          borderBottom: row.isSOLast  ? LINE_B : undefined,
                         }}>
                         {row.isFirst && (
                           <>
                             {/* ── Order ID — click to open detail, double-click to edit order no ── */}
                             <td rowSpan={row.rowCount}
-                              style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb', padding:'2px 4px', borderLeft:'1px solid #bbb',
-                                position:'sticky', left:0, zIndex:2 }}>
+                              style={{ ...td('left'), background:bg, borderBottom:LINE_B, padding:'2px 4px', borderLeft:LINE_B,
+                                position:'sticky', left:0, zIndex:2,
+                                boxShadow:`inset -1px 0 0 ${BDX}` }}>
                               {editingId?.soId === row.so.orderId ? (
                                 <input
                                   autoFocus
@@ -1922,22 +2005,13 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                                   onBlur={e => saveOrderNo(row.so, e.target.value)}
                                 />
                               ) : (
-                                <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                                  <span
-                                    onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
-                                    title="Click to show full order details"
-                                    style={{ fontWeight:700, color:'#1a3a8a', cursor:'pointer', fontSize:10,
-                                      textDecoration:'underline dotted', textUnderlineOffset:2 }}>
-                                    {row.so.orderNo || row.so.orderId}
-                                  </span>
-                                  <button
-                                    title="Edit order number"
-                                    onClick={() => setEditingId({ soId:row.so.orderId, value:row.so.orderNo||'' })}
-                                    style={{ flexShrink:0, background:'none', border:'none', cursor:'pointer',
-                                      fontSize:9, color:'#EA580C', padding:'0 2px', lineHeight:1 }}>
-                                    ✎
-                                  </button>
-                                </div>
+                                <span
+                                  onClick={() => setRowModal({ so:row.so, soDue:row.soDue })}
+                                  onDoubleClick={() => setEditingId({ soId:row.so.orderId, value:row.so.orderNo||'' })}
+                                  title="Click for order details · double-click to edit"
+                                  style={{ fontWeight:700, color:'#1a3a8a', cursor:'pointer', fontSize:10 }}>
+                                  {row.so.orderNo || row.so.orderId}
+                                </span>
                               )}
                             </td>
                             {/* Client Name */}
@@ -1945,24 +2019,29 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                               onClick={() => setModal({ type:'so', order:row.so })}
                               title={row.so.customerName||row.so.clientName||''}
                               style={{ ...td('left'), fontWeight:700, color:'#1a3a8a', background:bg,
-                                borderBottom:'1px solid #bbb', cursor:'pointer',
+                                borderBottom:LINE_B, cursor:'pointer',
                                 overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160,
-                                position:'sticky', left:92, zIndex:2 }}>
+                                position:'sticky', left:92, zIndex:2,
+                                /* sticky cells in a collapsed-border table can lose their shared
+                                   border on the browser's sticky compositing layer — an inset
+                                   box-shadow paints the right edge independently of that, so the
+                                   line never disappears here regardless of scroll position. */
+                                boxShadow:`inset -1px 0 0 ${BDX}` }}>
                               {row.so.customerName||row.so.clientName||'—'}
                             </td>
-                            {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
+                            {cv('so_orderDesc') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:LINE_B,
                               maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
                               wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
                               {row.so.termsConditions||row.so.customerNotes||(row.so.scopeItems||[]).map(s=>s.description).filter(Boolean).join(' | ')||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
                             </td>}
-                            {cv('so_orderDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>
+                            {cv('so_orderDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:LINE_B }}>
                               {fmtD(row.so.orderDate||row.so.date)}
                             </td>}
-                            {cv('so_clientPO') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
-                              color: row.so.customerPO ? '#111' : '#aaa', fontStyle: row.so.customerPO ? 'normal' : 'italic' }}>
+                            {cv('so_clientPO') && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:LINE_B,
+                              color: row.so.customerPO ? '#111' : '#9ca3af', fontStyle: row.so.customerPO ? 'normal' : 'italic' }}>
                               {row.so.customerPO || '—'}
                             </td>}
-                            {cv('so_dueDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>
+                            {cv('so_dueDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:LINE_B }}>
                               {fmtD(row.so.dueDate||row.so.deliveryDate)}
                             </td>}
                           </>
@@ -1987,9 +2066,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 
                         {row.isFirst && (
                           <>
-                            {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:'1px solid #bbb' }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
-                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700, color:'#16a34a', background:bg, borderBottom:'1px solid #bbb' }}>{fmt(row.soBalance)}</td>}
-                            {cv('so_billAmt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), background:bg, borderBottom:'1px solid #bbb' }}>
+                            {cv('so_receipt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), color:'#111827', fontWeight:600, background:bg, borderBottom:LINE_B }}>{row.receipt ? fmt(row.receipt) : '0'}</td>}
+                            {cv('so_dues')     && <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700, color:'#16a34a', background:bg, borderBottom:LINE_B }}>{fmt(row.soBalance)}</td>}
+                            {cv('so_billAmt')  && <td rowSpan={row.rowCount} style={{ ...td('right'), background:bg, borderBottom:LINE_B }}>
                               {row.salesBill ? fmt(parseFloat(row.salesBill.grandTotal)||0) : '—'}
                             </td>}
                             {cv('so_duesBill') && (() => {
@@ -1998,15 +2077,15 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                               const db     = soGT - billed;
                               return (
                                 <td rowSpan={row.rowCount} style={{ ...td('right'), fontWeight:700,
-                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:bg, borderBottom:'1px solid #bbb' }}>
+                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:bg, borderBottom:LINE_B }}>
                                   {fmt(db)}
                                 </td>
                               );
                             })()}
-                            {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:'1px solid #bbb' }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
-                            {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:'1px solid #bbb',
-                              color: row.salesBill ? '#111827' : '#aaa', fontWeight: row.salesBill ? 700 : 400 }}>{row.salesBill ? (row.salesBill.billNo || '—') : '—'}</td>}
-                            {cv('so_status')   && <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`1px solid ${BD}`, background:bg, borderBottom:'1px solid #bbb' }}><StatusBadge s={row.so.status}/></td>}
+                            {cv('so_billDate') && <td rowSpan={row.rowCount} style={{ ...td('center'), background:bg, borderBottom:LINE_B }}>{row.salesBill ? fmtD(row.salesBill.billDate) : '—'}</td>}
+                            {cv('so_billNo')   && <td rowSpan={row.rowCount} style={{ ...td('left'), background:bg, borderBottom:LINE_B,
+                              color: row.salesBill ? '#111827' : '#9ca3af', fontWeight: row.salesBill ? 700 : 400 }}>{row.salesBill ? (row.salesBill.billNo || '—') : '—'}</td>}
+                            {cv('so_status')   && <td rowSpan={row.rowCount} style={{ ...td('center'), borderRight:`1px solid ${BDX}`, background:bg, borderBottom:LINE_B }}><StatusBadge s={row.so.status}/></td>}
                           </>
                         )}
 
@@ -2015,18 +2094,18 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                             {cv('po_vendor') && <td rowSpan={row.poBlockSize}
                               onClick={() => row.po && setModal({ type:'po', order:row.po })}
                               title={row.po?.vendorName||''}
-                              style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd', borderLeft:'1px solid #bbb',
+                              style={{ ...ptd('left'), background:poBg, borderBottom:LINE_B, borderLeft:LINE_B,
                                 overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160,
-                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#1a5500' } : { color:'#aaa', fontStyle:'italic' }) }}>
+                                ...(row.po ? { cursor:'pointer', fontWeight:700, color:'#1a5500' } : { color:'#9ca3af', fontStyle:'italic' }) }}>
                               {row.po ? (row.po.vendorName||'—') : 'no PO'}
                             </td>}
-                            {cv('po_date') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd' }}>
+                            {cv('po_date') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:LINE_B }}>
                               {fmtD(row.po?.poDate||row.po?.date)}
                             </td>}
-                            {cv('po_no') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd' }}>
+                            {cv('po_no') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:LINE_B }}>
                               {row.po?.poNo||row.po?.poNumber||'—'}
                             </td>}
-                            {cv('po_poDesc') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd',
+                            {cv('po_poDesc') && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:LINE_B,
                               maxWidth:200, overflow:'hidden', fontSize:10, color:'#374151',
                               wordBreak:'break-word', verticalAlign:'top', padding:'3px 6px' }}>
                               {row.po?.termsConditions||row.po?.customerNotes||row.po?.remarks||<span style={{color:'#9ca3af',fontStyle:'italic'}}>—</span>}
@@ -2052,9 +2131,9 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
 
                         {row.isPOFirst && (
                           <>
-                            {cv('po_payment')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:'1px solid #ddd' }}>{row.payment ? fmt(row.payment) : '0'}</td>}
-                            {cv('po_dues')      && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:'1px solid #ddd' }}>{fmt(row.poBalance)}</td>}
-                            {cv('po_billAmt')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), background:poBg, borderBottom:'1px solid #ddd' }}>
+                            {cv('po_payment')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), color:'#111827', fontWeight:600, background:poBg, borderBottom:LINE_B }}>{row.payment ? fmt(row.payment) : '0'}</td>}
+                            {cv('po_dues')      && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#dc2626', background:poBg, borderBottom:LINE_B }}>{fmt(row.poBalance)}</td>}
+                            {cv('po_billAmt')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), background:poBg, borderBottom:LINE_B }}>
                               {row.poBill ? fmt(parseFloat(row.poBill.grandTotal)||0) : '—'}
                             </td>}
                             {cv('po_duesBill')  && (() => {
@@ -2063,15 +2142,15 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                               const db     = poGT - billed;
                               return (
                                 <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700,
-                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:poBg, borderBottom:'1px solid #ddd' }}>
+                                  color: db > 0 ? '#b71c1c' : '#16a34a', background:poBg, borderBottom:LINE_B }}>
                                   {fmt(db)}
                                 </td>
                               );
                             })()}
-                            {cv('po_purchDate') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
-                            {cv('po_purchNo')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#aaa', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
-                            {cv('po_amount')    && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:'1px solid #ddd' }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
-                            {cv('po_gstStatus') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:'1px solid #ddd', borderRight:'1px solid #bbb' }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
+                            {cv('po_purchDate') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:LINE_B }}>{row.poBill ? fmtD(row.poBill.billDate) : '—'}</td>}
+                            {cv('po_purchNo')   && <td rowSpan={row.poBlockSize} style={{ ...ptd('left'), background:poBg, borderBottom:LINE_B }}>{row.poBill ? <span style={{ fontWeight:700, color:'#111827' }}>{row.poBill.billNo}</span> : <span style={{ color:'#9ca3af', fontStyle:'italic', fontSize:9 }}>no bill</span>}</td>}
+                            {cv('po_amount')    && <td rowSpan={row.poBlockSize} style={{ ...ptd('right'), fontWeight:700, color:'#111827', background:poBg, borderBottom:LINE_B }}>{row.poBill ? fmt(row.poBill.grandTotal||0) : '—'}</td>}
+                            {cv('po_gstStatus') && <td rowSpan={row.poBlockSize} style={{ ...ptd('center'), background:poBg, borderBottom:LINE_B, borderRight:LINE_B }}>{row.poBill ? <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:3, background:row.poBill.gstType==='intrastate'?'#dcfce7':'#eef2ff', color:row.poBill.gstType==='intrastate'?'#133d80':'#4338ca' }}>{row.poBill.gstType==='intrastate'?'CGST+SGST':'IGST'}</span> : '—'}</td>}
                           </>
                         )}
 
@@ -2083,10 +2162,10 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                           const expGstAmt = expBase * expGstPct / 100;
                           const expTotal  = parseFloat(ex?.grandTotal) || (expBase + expGstAmt) || 0;
                           const expBg     = ex ? '#fff8f0' : 'transparent';
-                          const eb = (align, extra={}) => ({ ...etd(align, extra), ...(ex ? {} : { border:`1px solid ${BD}`, background:'transparent' }) });
+                          const eb = (align, extra={}) => ({ ...etd(align, extra), ...(ex ? {} : { border:`1px solid ${BDX}`, background:'transparent' }) });
                           return (<>
                             {cv('exp_date')   && <td style={eb('center')}>{ex ? fmtD(ex.date||ex.expenseDate||ex.createdAt) : ''}</td>}
-                            <td style={{ ...eb('left'), background:expBg, borderLeft:ex?'1px solid #fed7aa':`1px solid ${BD}`, fontWeight: ex?600:400, color: ex?'#7c3700':'#ccc' }}>
+                            <td style={{ ...eb('left'), background:expBg, borderLeft:ex?'1px solid #fed7aa':`1px solid ${BDX}`, fontWeight: ex?600:400, color: ex?'#7c3700':'#ccc' }}>
                               {ex ? (ex.expenseCategory||ex.category||'—') : ''}
                             </td>
                             {cv('exp_desc')   && <td style={{ ...eb('left'), background:expBg, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ex?.description||''}</td>}
@@ -2101,75 +2180,77 @@ td{padding:5px 10px;border:1px solid #d1d9ed;}
                     );
                   })}
                 </tbody>
-                <tfoot style={{ position:'sticky', bottom:0, zIndex:10 }}>
+                <tfoot>
                   <tr style={{ background:'#E8EFFF', fontWeight:700, fontSize:10 }}>
                     {/* SO fixed cols */}
-                    <td colSpan={2} style={{ ...td('right'), background:'#dce6ff', fontWeight:800, fontSize:11, borderTop:'1px solid #c8d4e8' }}>TOTAL</td>
+                    <td colSpan={2} style={{ ...td('right'), background:TOT_SO, fontWeight:800, fontSize:11, borderTop:LINE_B }}>TOTAL</td>
                     {/* SO toggle order-level cols */}
-                    {cv('so_orderDesc') && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_orderDate') && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_clientPO')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_dueDate')   && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('so_orderDesc') && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_orderDate') && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_clientPO')  && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_dueDate')   && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
                     {/* SO fixed product col */}
-                    <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>
+                    <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>
                     {/* SO toggle item-level cols */}
-                    {cv('so_itemDesc')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_qty')       && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_rate')      && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_total')     && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', fontWeight:700 }}>{fmt(GT.soTotal)}</td>}
-                    {cv('so_pnf')       && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.pnf)}</td>}
-                    {cv('so_transport') && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.transport)}</td>}
-                    {cv('so_taxable')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soTaxable)}</td>}
-                    {cv('so_gstPct')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_gstAmt')    && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soGst)}</td>}
-                    {cv('so_ov')        && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
-                    {cv('so_receipt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
-                    {cv('so_dues')      && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#16a34a', fontWeight:800 }}>{fmt(GT.dues)}</td>}
-                    {cv('so_billAmt')   && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.soBillAmt)}</td>}
-                    {cv('so_duesBill')  && <td style={{ ...td('right'), background:'#dce6ff', borderTop:'1px solid #c8d4e8', color:'#b71c1c', fontWeight:800 }}>{fmt(GT.soGTtotal - GT.soBillAmt)}</td>}
-                    {cv('so_billDate')  && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_billNo')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('so_status')    && <td style={{ ...td(), background:'#dce6ff', borderTop:'1px solid #c8d4e8', borderRight:'2px solid #9ab0e0' }}></td>}
+                    {cv('so_itemDesc')  && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_qty')       && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_rate')      && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_total')     && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B, fontWeight:700 }}>{fmt(GT.soTotal)}</td>}
+                    {cv('so_pnf')       && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B }}>{fmt(GT.pnf)}</td>}
+                    {cv('so_transport') && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B }}>{fmt(GT.transport)}</td>}
+                    {cv('so_taxable')   && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B }}>{fmt(GT.soTaxable)}</td>}
+                    {cv('so_gstPct')    && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_gstAmt')    && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B }}>{fmt(GT.soGst)}</td>}
+                    {cv('so_ov')        && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B, fontWeight:800, color:'#104f4f' }}>{fmt(GT.soOV)}</td>}
+                    {cv('so_receipt')   && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B, color:'#2e7d32' }}>{fmt(GT.receipt)}</td>}
+                    {cv('so_dues')      && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B, color:'#16a34a', fontWeight:800 }}>{fmt(GT.dues)}</td>}
+                    {cv('so_billAmt')   && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B }}>{fmt(GT.soBillAmt)}</td>}
+                    {cv('so_duesBill')  && <td style={{ ...td('right'), background:TOT_SO, borderTop:LINE_B, color:'#b71c1c', fontWeight:800 }}>{fmt(GT.soGTtotal - GT.soBillAmt)}</td>}
+                    {cv('so_billDate')  && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_billNo')    && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B }}></td>}
+                    {cv('so_status')    && <td style={{ ...td(), background:TOT_SO, borderTop:LINE_B, borderRight:'2px solid #9ab0e0' }}></td>}
                     {/* PO toggle order-level cols */}
-                    {cv('po_vendor')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_date')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_no')        && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_poDesc')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
+                    {cv('po_vendor')    && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_date')      && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_no')        && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_poDesc')    && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
                     {/* PO fixed product col */}
-                    <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>
+                    <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>
                     {/* PO toggle item-level cols */}
-                    {cv('po_itemDesc')  && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_qty')       && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_rate')      && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_total')     && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', fontWeight:700 }}>{fmt(GT.poTotal)}</td>}
-                    {cv('po_otherChg')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.otherC)}</td>}
-                    {cv('po_taxable')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poTaxable)}</td>}
-                    {cv('po_gstPct')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_gstAmt')    && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poGst)}</td>}
-                    {cv('po_ov')        && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>}
-                    {cv('po_payment')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#2e7d32' }}>{fmt(GT.payment)}</td>}
-                    {cv('po_dues')      && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#b71c1c' }}>{fmt(GT.poDues)}</td>}
-                    {cv('po_billAmt')   && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}>{fmt(GT.poBillAmt)}</td>}
-                    {cv('po_duesBill')  && <td style={{ ...td('right'), background:'#d0ecd0', borderTop:'1px solid #c8d4e8', color:'#b71c1c', fontWeight:800 }}>{fmt(GT.poGTtotal - GT.poBillAmt)}</td>}
-                    {cv('po_purchDate') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_purchNo')   && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_amount')    && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('po_gstStatus') && <td style={{ ...td(), background:'#d0ecd0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('exp_date')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>
-                    {cv('exp_desc')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('exp_vendor') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('exp_mode')   && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('exp_gstPct') && <td style={{ ...etd(), background:'#fff3e0', borderTop:'1px solid #c8d4e8' }}></td>}
-                    {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'1px solid #c8d4e8', color:'#7c3700' }}>{GT.expGst?fmt(GT.expGst):'—'}</td>}
-                    <td style={{ ...etd('right'), background:'#fff3e0', borderTop:'1px solid #c8d4e8', fontWeight:800, color:'#c2410c' }}>{GT.expTotal?fmt(GT.expTotal):'—'}</td>
+                    {cv('po_itemDesc')  && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_qty')       && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_rate')      && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_total')     && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B, fontWeight:700 }}>{fmt(GT.poTotal)}</td>}
+                    {cv('po_otherChg')  && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B }}>{fmt(GT.otherC)}</td>}
+                    {cv('po_taxable')   && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B }}>{fmt(GT.poTaxable)}</td>}
+                    {cv('po_gstPct')    && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_gstAmt')    && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B }}>{fmt(GT.poGst)}</td>}
+                    {cv('po_ov')        && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B, fontWeight:800, color:'#1a5500' }}>{fmt(GT.poOV)}</td>}
+                    {cv('po_payment')   && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B, color:'#2e7d32' }}>{fmt(GT.payment)}</td>}
+                    {cv('po_dues')      && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B, color:'#b71c1c' }}>{fmt(GT.poDues)}</td>}
+                    {cv('po_billAmt')   && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B }}>{fmt(GT.poBillAmt)}</td>}
+                    {cv('po_duesBill')  && <td style={{ ...td('right'), background:TOT_PO, borderTop:LINE_B, color:'#b71c1c', fontWeight:800 }}>{fmt(GT.poGTtotal - GT.poBillAmt)}</td>}
+                    {cv('po_purchDate') && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_purchNo')   && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_amount')    && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('po_gstStatus') && <td style={{ ...td(), background:TOT_PO, borderTop:LINE_B }}></td>}
+                    {cv('exp_date')   && <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>}
+                    <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>
+                    {cv('exp_desc')   && <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>}
+                    {cv('exp_vendor') && <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>}
+                    {cv('exp_mode')   && <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>}
+                    {cv('exp_gstPct') && <td style={{ ...etd(), background:TOT_EX, borderTop:LINE_B }}></td>}
+                    {cv('exp_gstAmt') && <td style={{ ...etd('right'), background:TOT_EX, borderTop:LINE_B, color:'#7c3700' }}>{GT.expGst?fmt(GT.expGst):'—'}</td>}
+                    <td style={{ ...etd('right'), background:TOT_EX, borderTop:LINE_B, fontWeight:800, color:'#c2410c' }}>{GT.expTotal?fmt(GT.expTotal):'—'}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+            </div>
           )}
         </>
       )}
+      </div>
 
       {/* ── Modal ── */}
       {modal && (

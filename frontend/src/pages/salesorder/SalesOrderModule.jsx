@@ -12,7 +12,10 @@ import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import { printSalesOrder } from '../../utils/printSalesOrder';
+import { withLiveContacts } from '../../utils/liveContact';
 import PageLoader from '../../components/PageLoader';
+import { withPrintFont } from '../../utils/printFont';
+import ApproverPickerModal from '../../components/ApproverPicker';
 
 /* ── colours ── */
 const N  = '#2563EB';
@@ -21,10 +24,13 @@ const W  = '#ffffff';
 const B  = '#E2E8F0';
 const R  = '#DC2626';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+/* combined nav+toolbar bar colour — shared by the Create, View and Pending tabs */
+const NAV_P  = '#4A7BA6';
+const NAV_PD = '#35597D';
 
 /* ── helpers ── */
 const api  = (url, cfg={}) => axios({url, ...cfg});
-const fmt  = n => `₹${(n||0).toFixed(2)}`;
+const fmt  = n => `₹${(Number(n)||0).toFixed(2)}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
 
@@ -33,8 +39,6 @@ const getFY = (dateStr) => {
   const d=dateStr?new Date(dateStr):new Date(); const m=d.getMonth()+1; const y=d.getFullYear();
   const s=m>=4?y:y-1; return `${String(s).slice(2)}-${String(s+1).slice(2)}`;
 };
-const makeSoNo = (id,dateStr) => `${getFY(dateStr)}/${id}`;
-
 const fmtN = n => Number(n||0).toFixed(2);
 const fmtDR = d => { if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?d:dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); };
 const printReport = (title, subtitle, cols, rows, totalRow) => {
@@ -63,7 +67,7 @@ tr:nth-child(even) td{background:#f7f7f7;}
 </body></html>`;
   const w=window.open('','_blank','width=1100,height=750,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 };
 
 /* ═══════════════════════ PRIMITIVES ═══════════════════════ */
@@ -108,7 +112,7 @@ function Inp({ value, onChange, type='text', placeholder, readOnly, disabled, st
         background: readOnly?'#F9FAFB': disabled?'#F3F4F6': W,
         outline:'none', width:'100%', boxSizing:'border-box', ...style,
       }}
-      onFocus={e=>{ if(!readOnly&&!disabled) { e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; } }}
+      onFocus={e=>{ if(!readOnly&&!disabled) { e.target.style.borderColor=NAV_P; e.target.style.boxShadow=`0 0 0 2px rgba(74,123,166,0.18)`; } }}
       onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; if(onBlurExtra) onBlurExtra(e); }}
     />
   );
@@ -124,7 +128,7 @@ function Sel({ value, onChange, options=[], disabled, style }) {
         outline:'none', width:'100%', boxSizing:'border-box',
         cursor:'pointer', ...style,
       }}
-      onFocus={e=>{ e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; }}
+      onFocus={e=>{ e.target.style.borderColor=NAV_P; e.target.style.boxShadow=`0 0 0 2px rgba(74,123,166,0.18)`; }}
       onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
     >
       {options.map((o,i)=><option key={i} value={o.value??o}>{o.label??o}</option>)}
@@ -140,7 +144,7 @@ function Txt({ value, onChange, placeholder, rows=3 }) {
         fontSize:12, fontFamily:F, color:'#111827', background:W,
         resize:'vertical', outline:'none', boxSizing:'border-box', lineHeight:1.5,
       }}
-      onFocus={e=>{ e.target.style.borderColor=N; e.target.style.boxShadow=`0 0 0 2px rgba(37,99,235,0.15)`; }}
+      onFocus={e=>{ e.target.style.borderColor=NAV_P; e.target.style.boxShadow=`0 0 0 2px rgba(74,123,166,0.18)`; }}
       onBlur={e=>{ e.target.style.borderColor='#D1D5DB'; e.target.style.boxShadow='none'; }}
     />
   );
@@ -200,24 +204,25 @@ const INNER_TABS = [
   { id:'specs',          label:'Specifications',  icon:'📐' },
 ];
 
+/* Inner section tab bar — Create/Edit form pages through one section at a time. */
 function SectionTabBar({ active, onChange }) {
   return (
-    <div style={{
+    <div className="soft-tabs" style={{
       background:'#F8FAFC',
       borderBottom:`2px solid #D1D5DB`,
       display:'flex', flexWrap:'nowrap', overflowX:'hidden',
       padding:'0 2px', gap:0, flexShrink:0,
     }}>
-      {INNER_TABS.map((t, idx) => {
+      {INNER_TABS.map((t) => {
         const isAct = active === t.id;
         return (
           <button key={t.id} onClick={() => onChange(t.id)}
             style={{
               fontFamily:F, fontSize:11, fontWeight:isAct?700:500,
-              color: isAct ? N : '#111827',
+              color: isAct ? NAV_P : '#111827',
               background: isAct ? '#DBEAFE' : 'transparent',
               border: 'none',
-              borderBottom: isAct ? `2px solid ${N}` : '2px solid transparent',
+              borderBottom: isAct ? `2px solid ${NAV_P}` : '2px solid transparent',
               marginBottom: -2,
               padding:'0 8px',
               height: 32,
@@ -226,7 +231,7 @@ function SectionTabBar({ active, onChange }) {
               display:'flex', alignItems:'center', justifyContent:'center', gap:3,
               transition:'all 0.12s',
             }}
-            onMouseEnter={e=>{ if(!isAct){ e.currentTarget.style.background='#EFF6FF'; e.currentTarget.style.color='#1D4ED8'; }}}
+            onMouseEnter={e=>{ if(!isAct){ e.currentTarget.style.background='#EFF6FF'; e.currentTarget.style.color=NAV_PD; }}}
             onMouseLeave={e=>{ if(!isAct){ e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#111827'; }}}>
             <span style={{fontSize:12, lineHeight:1}}>{t.icon}</span>
             {t.label}
@@ -238,8 +243,12 @@ function SectionTabBar({ active, onChange }) {
 }
 
 /* ═══════════════════════ CLIENT SEARCH POPUP ═══════════════════════ */
-function ClientSearch({ clients, onSelect, onClose }) {
+function ClientSearch({ clients, onSelect, onClose, companyId, onClientCreated }) {
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [nc, setNc] = useState({ clientName:'', gstin:'', mobile:'', email:'', address:'', city:'', state:'', pincode:'' });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
   const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
   const name = c => c.companyName||c.clientName||c.name||'';
@@ -252,6 +261,94 @@ function ClientSearch({ clients, onSelect, onClose }) {
         (c.state||'').toLowerCase().includes(q.toLowerCase())
       )
     : clients;
+
+  const startCreate = () => { setNc(p=>({...p, clientName:q})); setErr(''); setCreating(true); };
+
+  const saveNewClient = async () => {
+    if (!nc.clientName.trim()) { setErr('Client/Company Name is required'); return; }
+    setSaving(true); setErr('');
+    try {
+      const fd = new FormData();
+      fd.append('companyId', companyId||'');
+      fd.append('clientName', nc.clientName.trim());
+      fd.append('companyName', nc.clientName.trim());
+      fd.append('gst', nc.gstin.trim());
+      fd.append('gstin', nc.gstin.trim());
+      fd.append('mobile', nc.mobile.trim());
+      fd.append('email', nc.email.trim());
+      fd.append('billingAddr', nc.address.trim());
+      fd.append('address', nc.address.trim());
+      fd.append('city', nc.city.trim());
+      fd.append('state', nc.state.trim());
+      fd.append('pincode', nc.pincode.trim());
+      fd.append('status', 'active');
+      const r = await axios.post('/api/clients', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const newClient = {
+        clientId: r.data.clientId,
+        companyName: nc.clientName.trim(),
+        clientName: nc.clientName.trim(),
+        gstin: nc.gstin.trim(),
+        mobile: nc.mobile.trim(),
+        email: nc.email.trim(),
+        address: nc.address.trim(),
+        city: nc.city.trim(),
+        state: nc.state.trim(),
+        pincode: nc.pincode.trim(),
+      };
+      onClientCreated && onClientCreated(newClient);
+      onSelect(newClient);
+    } catch (e) {
+      setErr(e?.response?.data?.message || 'Failed to create client');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (creating) {
+    const fld = (label, key, extra={}) => (
+      <div style={{display:'flex',flexDirection:'column',gap:2}}>
+        <label style={{fontSize:10,color:'#555',fontWeight:600}}>{label}</label>
+        <input value={nc[key]} onChange={e=>setNc(p=>({...p,[key]:e.target.value}))}
+          style={{height:24,padding:'0 6px',border:'1px solid #888',borderRadius:0,fontSize:12,fontFamily:F,outline:'none'}} {...extra}/>
+      </div>
+    );
+    return (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{background:W,border:`2px solid ${N}`,width:460,maxHeight:520,display:'flex',flexDirection:'column',borderRadius:10,overflow:'hidden'}}>
+          <div style={{background:`linear-gradient(135deg, ${N}, ${ND})`,color:W,padding:'5px 10px',fontSize:12,fontWeight:700,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>➕ Create New Client</span>
+            <button onClick={onClose} style={{background:'none',border:'none',color:W,cursor:'pointer',fontSize:16}}>✕</button>
+          </div>
+          <div style={{padding:10,display:'flex',flexDirection:'column',gap:8,overflowY:'auto'}}>
+            {fld('Client / Company Name *','clientName',{autoFocus:true})}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {fld('GSTIN','gstin')}
+              {fld('Mobile','mobile')}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {fld('Email','email')}
+              {fld('Pincode','pincode')}
+            </div>
+            {fld('Address','address')}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {fld('City','city')}
+              {fld('State','state')}
+            </div>
+            {err && <div style={{color:R,fontSize:11}}>{err}</div>}
+          </div>
+          <div style={{padding:'6px 10px',background:'#f0f0f0',borderTop:`1px solid ${B}`,display:'flex',justifyContent:'flex-end',gap:8}}>
+            <button onClick={()=>setCreating(false)} disabled={saving}
+              style={{height:26,padding:'0 12px',border:'1px solid #999',background:W,borderRadius:4,fontSize:12,cursor:'pointer'}}>Back</button>
+            <button onClick={saveNewClient} disabled={saving}
+              style={{height:26,padding:'0 14px',border:'none',background:N,color:W,borderRadius:4,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              {saving ? 'Saving…' : 'Save & Use'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{background:W,border:`2px solid ${N}`,width:500,maxHeight:420,display:'flex',flexDirection:'column',borderRadius:10,overflow:'hidden'}}>
@@ -259,10 +356,14 @@ function ClientSearch({ clients, onSelect, onClose }) {
           <span>🔍 Client Search</span>
           <button onClick={onClose} style={{background:'none',border:'none',color:W,cursor:'pointer',fontSize:16}}>✕</button>
         </div>
-        <div style={{padding:'5px 8px',borderBottom:`1px solid ${B}`,background:'#f5f5f5'}}>
+        <div style={{padding:'5px 8px',borderBottom:`1px solid ${B}`,background:'#f5f5f5',display:'flex',gap:6}}>
           <input ref={ref} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by client name…"
-            style={{width:'100%',height:24,padding:'0 6px',border:'1px solid #888',borderRadius:0,fontSize:12,fontFamily:F,outline:'none'}}
+            style={{flex:1,height:24,padding:'0 6px',border:'1px solid #888',borderRadius:0,fontSize:12,fontFamily:F,outline:'none'}}
             onKeyDown={e=>e.key==='Escape'&&onClose()}/>
+          <button onClick={startCreate}
+            style={{height:24,padding:'0 10px',border:'none',background:N,color:W,borderRadius:4,fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+            + Create Client
+          </button>
         </div>
         <div style={{flex:1,overflowY:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
@@ -275,7 +376,13 @@ function ClientSearch({ clients, onSelect, onClose }) {
             </thead>
             <tbody>
               {filtered.length===0
-                ? <tr><td colSpan={4} style={{padding:'12px',textAlign:'center',color:'#666'}}>No clients found</td></tr>
+                ? <tr><td colSpan={4} style={{padding:'16px 12px',textAlign:'center',color:'#666'}}>
+                    No clients found<br/>
+                    <button onClick={startCreate}
+                      style={{marginTop:8,height:26,padding:'0 14px',border:'none',background:N,color:W,borderRadius:4,fontSize:12,fontWeight:700,cursor:'pointer'}}>
+                      + Create Client{q ? ` "${q}"` : ''}
+                    </button>
+                  </td></tr>
                 : filtered.map((c,i)=>(
                   <tr key={i} onClick={()=>onSelect(c)}
                     style={{background:i%2===0?W:'#f5f8fc',cursor:'pointer',borderBottom:'1px solid #e8e8e8'}}
@@ -345,9 +452,9 @@ function TabOrderDetails({ form, setF, showSearch, setShowSearch, checkDupOrderN
               <Inp value={form.nextId||''} readOnly style={{width:130,background:'#F0FDF4',fontWeight:700,color:'#133d80',border:'1px solid #BBF7D0'}}/>
               <span style={{fontSize:10,color:'#888',paddingLeft:4}}>(auto-generated)</span>
             </FR>
-            <FR label="Order No." w={130}>
+            <FR label="Order No./File No." w={130} req>
               <Inp value={form.orderNo} onChange={e=>setF('orderNo',e.target.value)}
-                style={{width:190}} placeholder={`SO-${form.nextId||'XXXXX'}`}
+                style={{width:190}} placeholder="Enter order / file no."
                 onBlur={e=>checkDupOrderNo&&checkDupOrderNo(e.target.value)}/>
             </FR>
             {soDupWarn&&<div style={{marginLeft:138,marginTop:-4,marginBottom:4,fontSize:11,color:'#92400E',background:'#FFFBEB',border:'1px solid #FCD34D',borderRadius:4,padding:'2px 8px',fontFamily:F}}>{soDupWarn}</div>}
@@ -1568,7 +1675,7 @@ function SpecFileUpload({ files, setFiles }) {
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
           <thead>
             <tr style={{background:N}}>
-              {['#','','Label / Description','File Name',''].map((h,i)=>(
+              {['#','','Label / Description','File Name','Linked Item',''].map((h,i)=>(
                 <th key={i} style={{padding:'4px 6px',color:W,fontWeight:700,fontSize:10,textAlign:'left',border:'1px solid #2a5a8a'}}>{h}</th>
               ))}
             </tr>
@@ -1577,12 +1684,15 @@ function SpecFileUpload({ files, setFiles }) {
             {files.map((f,i)=>(
               <tr key={f._id} style={{background:i%2===0?W:'#f5f8fc'}}>
                 <td style={{border:'1px solid #e0e0e0',width:28,textAlign:'center',padding:'2px 4px',color:'#888'}}>{i+1}</td>
-                <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px',fontSize:16}}>{ico(f.fileType)}</td>
+                <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px',fontSize:16}}>{f.category==='Drawing'?'📐':ico(f.fileType)}</td>
                 <td style={{border:'1px solid #e0e0e0',padding:'2px 4px'}}>
                   <Inp value={f.name} onChange={e=>upd(f._id,'name',e.target.value)} placeholder="Label for this file…"/>
                 </td>
                 <td style={{border:'1px solid #e0e0e0',padding:'3px 6px',color:f.file?'#005500':'#555',fontWeight:f.file?700:400}}>
                   {f.file?`✔ ${f.file.name}`:(f.fileName||'—')}
+                </td>
+                <td style={{border:'1px solid #e0e0e0',padding:'3px 6px',fontSize:10,color:'#6B7280'}}>
+                  {f.itemName ? `${f.category==='Drawing'?'📐 Drawing':'📎 Spec'} — ${f.itemName}` : '—'}
                 </td>
                 <td style={{border:'1px solid #e0e0e0',width:30,textAlign:'center',padding:'2px 4px'}}>
                   <button onClick={()=>del(f._id)}
@@ -1597,8 +1707,99 @@ function SpecFileUpload({ files, setFiles }) {
   );
 }
 
+/* ─── Per-item specs & drawings — sits beside every item in the order,
+   with a quick way to either write specs, upload a spec file, or upload
+   a drawing for that specific item. ─── */
+function ItemSpecsPanel({ items, itemSpecNotes, setItemSpecNotes, specFileList, setSpecFileList }) {
+  const [openNote, setOpenNote] = useState(null);
+
+  const setNote = (itemId, text) => setItemSpecNotes(p => ({ ...p, [itemId]: text }));
+
+  const addFiles = (itemId, itemLabel, category, fileList) => {
+    const newFs = Array.from(fileList).map(f => ({
+      _id: uid(), name: f.name.replace(/\.[^.]+$/, ''),
+      fileName: f.name, fileType: f.name.split('.').pop().toLowerCase(), file: f,
+      itemId, itemName: itemLabel, category,
+    }));
+    setSpecFileList(p => [...p, ...newFs]);
+  };
+  const removeFile = (id) => setSpecFileList(p => p.filter(f => f._id !== id));
+
+  if (items.length === 0) {
+    return (
+      <div style={{padding:'14px',textAlign:'center',color:'#888',background:'#fafafa',border:`1px dashed ${B}`,borderRadius:6,fontSize:12,marginBottom:10,flexShrink:0}}>
+        Add items in the Item Details tab first, then write specs or attach specs / drawings for each item here.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{border:`1px solid ${B}`,borderRadius:6,overflow:'hidden',marginBottom:10,flexShrink:0,maxHeight:'48%',display:'flex',flexDirection:'column'}}>
+      <div style={{background:N,color:W,padding:'6px 10px',fontSize:11,fontWeight:700,flexShrink:0}}>📦 Per-Item Specifications &amp; Drawings</div>
+      <div style={{overflowY:'auto'}}>
+        {items.map((it,idx) => {
+          const label = it.description || it.itemName || `Item ${idx+1}`;
+          const files = specFileList.filter(f=>f.itemId===it._id);
+          const specFiles = files.filter(f=>f.category!=='Drawing');
+          const drawingFiles = files.filter(f=>f.category==='Drawing');
+          const hasNote = (itemSpecNotes[it._id]||'').trim().length > 0;
+          return (
+            <div key={it._id} style={{borderTop: idx>0 ? `1px solid ${B}` : 'none'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',flexWrap:'wrap'}}>
+                <span style={{fontSize:11,fontWeight:700,color:'#111827',flex:1,minWidth:140}}>{idx+1}. {label}</span>
+                <button type="button" onClick={()=>setOpenNote(openNote===it._id?null:it._id)}
+                  style={{padding:'3px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer',fontFamily:F,borderRadius:4,
+                    background:hasNote?'#DCFCE7':'#F3F4F6',color:hasNote?'#15803D':'#374151',
+                    border:`1px solid ${hasNote?'#86EFAC':'#D1D5DB'}`}}>
+                  ✍ {hasNote?'Specs Written':'Write Specs'}
+                </button>
+                <label style={{padding:'3px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer',fontFamily:F,borderRadius:4,
+                  background:specFiles.length?'#DBEAFE':'#F3F4F6',color:specFiles.length?'#1D4ED8':'#374151',
+                  border:`1px solid ${specFiles.length?'#93C5FD':'#D1D5DB'}`}}>
+                  📎 {specFiles.length?`${specFiles.length} Spec File${specFiles.length>1?'s':''}`:'Upload Specs'}
+                  <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png" style={{display:'none'}}
+                    onChange={e=>{ if(e.target.files.length) addFiles(it._id, label, 'Specification', e.target.files); e.target.value=''; }}/>
+                </label>
+                <label style={{padding:'3px 10px',fontSize:10.5,fontWeight:700,cursor:'pointer',fontFamily:F,borderRadius:4,
+                  background:drawingFiles.length?'#FDE68A':'#F3F4F6',color:drawingFiles.length?'#92400E':'#374151',
+                  border:`1px solid ${drawingFiles.length?'#FCD34D':'#D1D5DB'}`}}>
+                  📐 {drawingFiles.length?`${drawingFiles.length} Drawing${drawingFiles.length>1?'s':''}`:'Upload Drawing'}
+                  <input type="file" multiple accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png" style={{display:'none'}}
+                    onChange={e=>{ if(e.target.files.length) addFiles(it._id, label, 'Drawing', e.target.files); e.target.value=''; }}/>
+                </label>
+              </div>
+              {openNote===it._id && (
+                <div style={{padding:'0 10px 8px'}}>
+                  <textarea value={itemSpecNotes[it._id]||''} onChange={e=>setNote(it._id,e.target.value)}
+                    placeholder={`Write specifications for ${label}…`} rows={3}
+                    style={{width:'100%',fontSize:11,fontFamily:F,padding:'5px 8px',border:`1px solid ${B}`,borderRadius:4,resize:'vertical',boxSizing:'border-box'}}/>
+                </div>
+              )}
+              {files.length>0 && (
+                <div style={{display:'flex',flexWrap:'wrap',gap:5,padding:'0 10px 8px'}}>
+                  {files.map(f=>(
+                    <span key={f._id} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,
+                      background:f.category==='Drawing'?'#FFFBEB':'#EFF6FF',
+                      color:f.category==='Drawing'?'#92400E':'#1D4ED8',
+                      border:`1px solid ${f.category==='Drawing'?'#FDE68A':'#BFDBFE'}`,
+                      borderRadius:12,padding:'2px 8px'}}>
+                      {f.category==='Drawing'?'📐':'📎'} {f.file?f.file.name:(f.fileName||f.name)}
+                      <button type="button" onClick={()=>removeFile(f._id)}
+                        style={{background:'none',border:'none',cursor:'pointer',color:'inherit',fontWeight:700,padding:0,marginLeft:2,fontSize:11}}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Tab wrapper with mode toggle ─── */
-function TabSpecifications({ items, specMode, setSpecMode, specHtml, setSpecHtml, specGroups, setSpecGroups, specFileList, setSpecFileList }) {
+function TabSpecifications({ items, specMode, setSpecMode, specHtml, setSpecHtml, specGroups, setSpecGroups, specFileList, setSpecFileList, itemSpecNotes, setItemSpecNotes }) {
   const modes = [
     { id:'freewrite',  label:'✍ Free Write' },
     { id:'structured', label:'📋 Structured' },
@@ -1606,9 +1807,13 @@ function TabSpecifications({ items, specMode, setSpecMode, specHtml, setSpecHtml
   ];
   return (
     <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:8,height:'100%',boxSizing:'border-box'}}>
-      {/* Mode toggle */}
+      {/* Per-item specs & drawings */}
+      <ItemSpecsPanel items={items} itemSpecNotes={itemSpecNotes} setItemSpecNotes={setItemSpecNotes}
+        specFileList={specFileList} setSpecFileList={setSpecFileList}/>
+
+      {/* Mode toggle — for order-level / general specifications */}
       <div style={{display:'flex',gap:4,flexShrink:0,flexWrap:'wrap',alignItems:'center'}}>
-        <span style={{fontSize:11,fontWeight:700,color:N,marginRight:4}}>📐 Specifications — Mode:</span>
+        <span style={{fontSize:11,fontWeight:700,color:N,marginRight:4}}>📐 General Specifications — Mode:</span>
         {modes.map(m=>(
           <button key={m.id} onClick={()=>setSpecMode(m.id)}
             style={{padding:'4px 14px',fontSize:11,fontWeight:specMode===m.id?700:500,
@@ -1708,9 +1913,17 @@ function AttachViewer({ orderId, companyId, fileName, label, onClose }) {
 
 function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [viewAttach, setViewAttach] = useState(null);
+  // contact shown follows later edits on the client record (see utils/liveContact)
+  const [client, setClient] = useState(null);
+  useEffect(() => {
+    if (!order?.customerCode || !companyId) return;
+    axios.get(`/api/clients/${order.customerCode}?companyId=${companyId}`).then(r => setClient(r.data)).catch(() => {});
+  }, [order?.customerCode, companyId]);
   if (!order) return null;
-  const o          = order;
+  const o          = client ? withLiveContacts(order, client) : order;
   const items      = Array.isArray(o.items)       ? o.items       : [];
   const charges    = Array.isArray(o.charges)      ? o.charges     : [];
   const addons     = Array.isArray(o.addons)       ? o.addons      : [];
@@ -1731,26 +1944,26 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
   const val  = v  => (v==null||v===''||v==='—') ? <span style={{color:'#bbb',fontStyle:'italic'}}>—</span> : v;
 
   /* ── shared inline styles ── */
-  const SH = {background:'linear-gradient(90deg,#eef2ff 0%,#f8fafc 100%)',color:N,padding:'5px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.7px',fontFamily:F,borderBottom:`1px solid rgba(99,102,241,0.15)`};
-  const CELL_L = {fontSize:10,fontWeight:700,color:'#445',minWidth:110,padding:'3px 8px',borderRight:'1px solid #e8ecf4',background:'#f6f8fc',flexShrink:0,whiteSpace:'nowrap'};
+  const SH = {background:'#ffffff',color:'#111827',padding:'5px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.7px',fontFamily:F,borderBottom:'2px solid #000000'};
+  const CELL_L = {fontSize:10,fontWeight:700,color:'#445',minWidth:110,padding:'3px 8px',borderRight:'1px solid #000000',background:'#ffffff',flexShrink:0,whiteSpace:'nowrap'};
   const CELL_V = {fontSize:11,color:'#111',padding:'3px 8px',fontFamily:F};
-  const ROW    = {display:'flex',minHeight:24,borderBottom:'1px solid #eef1f8',alignItems:'center'};
+  const ROW    = {display:'flex',minHeight:24,borderBottom:'1px solid #000000',alignItems:'center'};
   const SecHead = ({title,count})=>(
-    <div style={{...SH,marginTop:14,display:'flex',alignItems:'center',gap:8,borderLeft:`4px solid ${N}`}}>
+    <div style={{...SH,marginTop:14,display:'flex',alignItems:'center',gap:8,borderLeft:'4px solid #000000'}}>
       {title}
       {count!=null&&<span style={{background:N,color:'#fff',borderRadius:10,padding:'0 7px',fontSize:9,fontWeight:800}}>{count}</span>}
     </div>
   );
 
   /* table helpers */
-  const TH = (props) => <th style={{padding:'5px 8px',background:'#eef2ff',color:N,fontSize:10,fontWeight:700,textAlign:props.r?'right':props.c?'center':'left',border:`1px solid rgba(99,102,241,0.15)`,whiteSpace:'nowrap',...props.style}}>{props.children}</th>;
-  const TD = (props) => <td style={{padding:'4px 8px',border:'1px solid #dde4f0',fontSize:11,verticalAlign:'top',textAlign:props.r?'right':props.c?'center':'left',fontWeight:props.bold?700:400,...props.style}}>{props.children}</td>;
+  const TH = (props) => <th style={{padding:'5px 8px',background:'#ffffff',color:'#111827',fontSize:10,fontWeight:700,textAlign:props.r?'right':props.c?'center':'left',border:'1px solid #000000',whiteSpace:'nowrap',...props.style}}>{props.children}</th>;
+  const TD = (props) => <td style={{padding:'4px 8px',border:'1px solid #000000',fontSize:11,verticalAlign:'top',textAlign:props.r?'right':props.c?'center':'left',fontWeight:props.bold?700:400,...props.style}}>{props.children}</td>;
 
   return (
     <>
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:10}}
       onClick={onClose}>
-      <div style={{background:'#f4f6fa',width:'100%',maxWidth:1080,maxHeight:'96vh',display:'flex',flexDirection:'column',boxShadow:'0 6px 48px rgba(0,0,0,0.4)',border:'1px solid #c0c8da'}}
+      <div style={{background:'#f4f6fa',width:'100%',maxWidth:1080,maxHeight:'96vh',display:'flex',flexDirection:'column',boxShadow:'0 6px 48px rgba(0,0,0,0.4)',border:'1px solid #000000'}}
         onClick={e=>e.stopPropagation()}>
 
         {/* ══ STICKY HEADER ══ */}
@@ -1776,16 +1989,16 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
         <div style={{flex:1,overflowY:'auto',padding:'12px 16px',background:'#fff'}}>
 
           {/* ── BILL TO / SHIP TO ── */}
-          <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #c8d4e8',marginBottom:0}}>
+          <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #000000',marginBottom:0}}>
             <thead>
               <tr>
-                <th style={{...SH,width:'50%',textAlign:'left',border:'1px solid #2a4a8a'}}>Bill To (Customer)</th>
-                <th style={{...SH,width:'50%',textAlign:'left',border:'1px solid #2a4a8a'}}>Ship To / Delivery Address</th>
+                <th style={{...SH,width:'50%',textAlign:'left',border:'1px solid #000000'}}>Bill To (Customer)</th>
+                <th style={{...SH,width:'50%',textAlign:'left',border:'1px solid #000000'}}>Ship To / Delivery Address</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style={{padding:'8px 10px',border:'1px solid #dde4f0',verticalAlign:'top'}}>
+                <td style={{padding:'8px 10px',border:'1px solid #000000',verticalAlign:'top'}}>
                   <div style={{fontSize:13,fontWeight:800,color:'#1a3a6b',fontFamily:F}}>{val(o.customerName||o.party)}</div>
                   {o.customerGstin&&<div style={{fontSize:10,color:'#555',marginTop:2}}>GSTIN: {o.customerGstin}</div>}
                   {o.customerState&&<div style={{fontSize:10,color:'#555'}}>State: {o.customerState}</div>}
@@ -1793,7 +2006,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                   {o.mobile&&<div style={{fontSize:10,color:'#555'}}>Mobile: {o.mobile}</div>}
                   {o.email&&<div style={{fontSize:10,color:'#555'}}>Email: {o.email}</div>}
                 </td>
-                <td style={{padding:'8px 10px',border:'1px solid #dde4f0',verticalAlign:'top'}}>
+                <td style={{padding:'8px 10px',border:'1px solid #000000',verticalAlign:'top'}}>
                   <div style={{fontSize:11,color:'#222',fontFamily:F,lineHeight:1.5}}>{val(o.deliveryAddr||o.destination||o.address)}</div>
                   {o.shippingAddr&&o.shippingAddr!==(o.deliveryAddr||o.destination)&&(
                     <div style={{fontSize:10,color:'#555',marginTop:4}}>Shipping: {o.shippingAddr}</div>
@@ -1804,50 +2017,50 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           </table>
 
           {/* ── ORDER REFERENCE GRID ── */}
-          <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #c8d4e8',borderTop:'none',marginBottom:12}}>
+          <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid #000000',borderTop:'none',marginBottom:12}}>
             <tbody>
-              <tr style={{background:'#f6f8fc'}}>
-                <td style={{...ROW,padding:'4px 10px',border:'1px solid #dde4f0',width:'25%'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>ERP Order ID</span></td>
-                <td style={{...ROW,padding:'4px 10px',border:'1px solid #dde4f0',width:'25%',fontWeight:700,color:'#1a3a6b'}}>{o.orderId}</td>
-                <td style={{...ROW,padding:'4px 10px',border:'1px solid #dde4f0',width:'25%'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Order Dated</span></td>
-                <td style={{...ROW,padding:'4px 10px',border:'1px solid #dde4f0',width:'25%'}}>{fmtD(o.orderDate||o.date)}</td>
+              <tr style={{background:'#ffffff'}}>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',width:'25%'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>ERP Order ID</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',width:'25%',fontWeight:700,color:'#1a3a6b'}}>{o.orderId}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',width:'25%'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Order Dated</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',width:'25%'}}>{fmtD(o.orderDate||o.date)}</td>
               </tr>
               <tr>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Quote Ref No.</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.quotationRef||o.orderRef)}</td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Quote Ref Date</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{fmtD(o.poDate)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Quote Ref No.</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.quotationRef||o.orderRef)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Quote Ref Date</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{fmtD(o.poDate)}</td>
               </tr>
-              <tr style={{background:'#f6f8fc'}}>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Client Order No.</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0',fontWeight:700}}>{val(o.customerPO||o.reference)}</td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Client Order Date</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{fmtD(o.poDate)}</td>
-              </tr>
-              <tr>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Delivery Due Date</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0',fontWeight:700,color:'#b03000'}}>{fmtD(o.deliveryDate)}</td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Payment Terms</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.paymentTerms)}</td>
-              </tr>
-              <tr style={{background:'#f6f8fc'}}>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Order Type</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.orderType)}</td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Sales Person</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.salesPerson)}</td>
+              <tr style={{background:'#ffffff'}}>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Client Order No.</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',fontWeight:700}}>{val(o.customerPO||o.reference)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Client Order Date</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{fmtD(o.poDate)}</td>
               </tr>
               <tr>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Dispatch Mode</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.dispatchMode||o.shippedBy)}</td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Incoterms</span></td>
-                <td style={{padding:'4px 10px',border:'1px solid #dde4f0'}}>{val(o.incoterms)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Delivery Due Date</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000',fontWeight:700,color:'#b03000'}}>{fmtD(o.deliveryDate)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Payment Terms</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.paymentTerms)}</td>
+              </tr>
+              <tr style={{background:'#ffffff'}}>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Order Type</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.orderType)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Sales Person</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.salesPerson)}</td>
+              </tr>
+              <tr>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Dispatch Mode</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.dispatchMode||o.shippedBy)}</td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}><span style={{...CELL_L,minWidth:0,background:'none',border:'none',padding:0}}>Incoterms</span></td>
+                <td style={{padding:'4px 10px',border:'1px solid #000000'}}>{val(o.incoterms)}</td>
               </tr>
             </tbody>
           </table>
 
           {/* ── ITEM DETAILS ── */}
           <SecHead title="Item Details" count={items.length}/>
-          <div style={{overflowX:'auto',border:'1px solid #c8d4e8'}}>
+          <div style={{overflowX:'auto',border:'1px solid #000000'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:700}}>
               <thead><tr>
                 <TH style={{width:30,textAlign:'center'}}>#</TH>
@@ -1863,12 +2076,12 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 <TH style={{width:85,textAlign:'right'}}>Total ₹</TH>
               </tr></thead>
               <tbody>
-                {items.length===0&&<tr><td colSpan={11} style={{padding:12,textAlign:'center',color:'#aaa',fontStyle:'italic',border:'1px solid #dde4f0'}}>No items</td></tr>}
+                {items.length===0&&<tr><td colSpan={11} style={{padding:12,textAlign:'center',color:'#aaa',fontStyle:'italic',border:'1px solid #000000'}}>No items</td></tr>}
                 {items.map((it,i)=>{
                   const qty=parseFloat(it.qty)||0,rate=parseFloat(it.rate)||0;
                   const amt=qty*rate,gst=parseFloat(it.gstPercent||it.gst)||0,ttl=amt+amt*gst/100;
                   const typeC={'Manufactured':'#003875','Purchased':'#1a5c1a','Labour':'#5a3a00'}[it.type]||'#444';
-                  return(<tr key={i} style={{background:i%2?'#f7f9fd':'#fff'}}>
+                  return(<tr key={i} style={{background:'#fff'}}>
                     <TD c style={{color:'#aaa'}}>{i+1}</TD>
                     <TD bold style={{color:'#1a3a6b'}}>{it.material||it.itemName||'—'}</TD>
                     <TD style={{fontSize:10,color:'#555'}}>{it.description||'—'}</TD>
@@ -1884,12 +2097,12 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 })}
               </tbody>
               {items.length>0&&<tfoot>
-                <tr style={{background:'#eef3fa'}}>
-                  <td colSpan={7} style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontSize:11,fontFamily:F,color:'#1a3a6b',border:'1px solid #c8d4e8',borderTop:'2px solid #1a3a6b'}}>Sub Total (excl. GST)</td>
-                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontFamily:F,border:'1px solid #c8d4e8',borderTop:'2px solid #1a3a6b'}}>{fmt(itemsNet)}</td>
-                  <td style={{border:'1px solid #c8d4e8',borderTop:'2px solid #1a3a6b'}}/>
-                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontFamily:F,border:'1px solid #c8d4e8',borderTop:'2px solid #1a3a6b'}}>{fmt(itemsGst)}</td>
-                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:800,fontSize:12,fontFamily:F,color:'#1a5c1a',border:'1px solid #c8d4e8',borderTop:'2px solid #1a3a6b'}}>{fmt(itemsNet+itemsGst)}</td>
+                <tr style={{background:'#ffffff'}}>
+                  <td colSpan={7} style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontSize:11,fontFamily:F,color:'#1a3a6b',border:'1px solid #000000',borderTop:'2px solid #000000'}}>Sub Total (excl. GST)</td>
+                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontFamily:F,border:'1px solid #000000',borderTop:'2px solid #000000'}}>{fmt(itemsNet)}</td>
+                  <td style={{border:'1px solid #000000',borderTop:'2px solid #000000'}}/>
+                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontFamily:F,border:'1px solid #000000',borderTop:'2px solid #000000'}}>{fmt(itemsGst)}</td>
+                  <td style={{padding:'5px 8px',textAlign:'right',fontWeight:800,fontSize:12,fontFamily:F,color:'#1a5c1a',border:'1px solid #000000',borderTop:'2px solid #000000'}}>{fmt(itemsNet+itemsGst)}</td>
                 </tr>
               </tfoot>}
             </table>
@@ -1898,7 +2111,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── ADD-ON ITEMS ── */}
           {addons.length>0&&<>
             <SecHead title="Add-on / Accessory Items" count={addons.length}/>
-            <div style={{overflowX:'auto',border:'1px solid #c8d4e8'}}>
+            <div style={{overflowX:'auto',border:'1px solid #000000'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
                 <thead><tr>
                   <TH style={{width:30,textAlign:'center'}}>#</TH>
@@ -1911,7 +2124,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 </tr></thead>
                 <tbody>
                   {addons.map((a,i)=>(
-                    <tr key={i} style={{background:i%2?'#f7f9fd':'#fff'}}>
+                    <tr key={i} style={{background:'#fff'}}>
                       <TD c style={{color:'#aaa'}}>{i+1}</TD>
                       <TD bold>{a.description||a.itemName||'—'}</TD>
                       <TD>{a.category||'—'}</TD>
@@ -1932,7 +2145,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── ADDITIONAL CHARGES + FINANCIAL SUMMARY ── */}
           {charges.length>0&&<>
             <SecHead title="Additional Charges" count={charges.length}/>
-            <div style={{overflowX:'auto',border:'1px solid #c8d4e8'}}>
+            <div style={{overflowX:'auto',border:'1px solid #000000'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
                 <thead><tr>
                   <TH style={{width:30,textAlign:'center'}}>#</TH>
@@ -1945,7 +2158,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 <tbody>
                   {charges.map((c,i)=>{
                     const a=parseFloat(c.amount)||0,gst=parseFloat(c.gst)||0;
-                    return(<tr key={i} style={{background:i%2?'#f7f9fd':'#fff'}}>
+                    return(<tr key={i} style={{background:'#fff'}}>
                       <TD c style={{color:'#aaa'}}>{i+1}</TD>
                       <TD bold>{c.chargeType||'—'}</TD>
                       <TD style={{fontSize:10,color:'#555'}}>{c.description||'—'}</TD>
@@ -1962,7 +2175,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── FINANCIAL SUMMARY ── */}
           <SecHead title="Financial Summary"/>
           <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start',marginBottom:8}}>
-            <div style={{minWidth:260,flex:1,border:'1px solid #c8d4e8'}}>
+            <div style={{minWidth:260,flex:1,border:'1px solid #000000'}}>
               {[
                 ['Items Sub Total (excl. GST)', fmt(itemsNet)],
                 ['GST on Items',                fmt(itemsGst)],
@@ -1973,7 +2186,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 ...(o.packingCharges>0 ?[['Packing Charges',  fmt(o.packingCharges)]]:[]),
                 ...(o.roundOff         ?[['Round Off',        fmt(o.roundOff)]]:[]),
               ].map(([l,v])=>(
-                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',fontSize:11,fontFamily:F,borderBottom:'1px solid #eef1f8',color:'#444'}}>
+                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',fontSize:11,fontFamily:F,borderBottom:'1px solid #000000',color:'#444'}}>
                   <span>{l}</span><span>{v}</span>
                 </div>
               ))}
@@ -1983,10 +2196,10 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
               </div>
             </div>
             {(o.cgst||o.sgst||o.igst)&&(
-              <div style={{minWidth:180,border:'1px solid #c8d4e8'}}>
+              <div style={{minWidth:180,border:'1px solid #000000'}}>
                 <div style={{...SH,padding:'4px 10px',borderLeft:'none'}}>GST Breakup</div>
                 {[['CGST',o.cgst],['SGST',o.sgst],['IGST',o.igst]].filter(([,v])=>v).map(([l,v])=>(
-                  <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',fontSize:11,fontFamily:F,borderBottom:'1px solid #eef1f8'}}>
+                  <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',fontSize:11,fontFamily:F,borderBottom:'1px solid #000000'}}>
                     <span style={{fontWeight:700}}>{l}</span><span>{fmt(v)}</span>
                   </div>
                 ))}
@@ -1997,11 +2210,11 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── BANK GUARANTEE ── */}
           {bg.applicable&&<>
             <SecHead title="Bank Guarantee Details"/>
-            <div style={{border:'1px solid #c8d4e8',maxWidth:600}}>
+            <div style={{border:'1px solid #000000',maxWidth:600}}>
               {[['Bank Name',bg.bankName],['BG No.',bg.bgNo],['BG %',bg.pct?`${bg.pct}%`:null],
                 ['BG Expiry',fmtD(bg.expiry)],['BG Basis',bg.basis==='withGst'?'On Total (incl. GST)':'On Basic (excl. GST)'],
                 ['Remarks',bg.remarks]].map(([l,v],i)=>v&&(
-                <div key={l} style={{...ROW,background:i%2?'#f6f8fc':'#fff'}}>
+                <div key={l} style={{...ROW,background:i%2?'#ffffff':'#fff'}}>
                   <span style={{...CELL_L}}>{l}</span>
                   <span style={{...CELL_V,fontWeight:l==='Bank Name'?700:400}}>{v}</span>
                 </div>
@@ -2012,24 +2225,24 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── WARRANTY ── */}
           {warranty.period&&<>
             <SecHead title="Warranty Terms & Details"/>
-            <div style={{border:'1px solid #c8d4e8',maxWidth:700}}>
+            <div style={{border:'1px solid #000000',maxWidth:700}}>
               {[['Warranty Period',warranty.period],['Warranty Type',warranty.type],
                 ['Certificate No.',warranty.certNo],['Issued By',warranty.issuedBy],
                 ['Start Date',fmtD(warranty.startDate)],['End Date',fmtD(warranty.endDate)]].map(([l,v],i)=>(
-                <div key={l} style={{...ROW,background:i%2?'#f6f8fc':'#fff'}}>
+                <div key={l} style={{...ROW,background:i%2?'#ffffff':'#fff'}}>
                   <span style={{...CELL_L}}>{l}</span>
                   <span style={{...CELL_V,fontWeight:l==='Warranty Period'||l==='End Date'?700:400,color:l==='End Date'?'#b03000':'#111'}}>{val(v)}</span>
                 </div>
               ))}
             </div>
-            {warranty.terms&&<div style={{marginTop:5,padding:'6px 10px',background:'#fafcff',border:'1px solid #dde4f0',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{warranty.terms}</div>}
+            {warranty.terms&&<div style={{marginTop:5,padding:'6px 10px',background:'#fafcff',border:'1px solid #000000',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{warranty.terms}</div>}
             {warranty.exclusions&&<div style={{marginTop:4,padding:'6px 10px',background:'#fff8f8',border:'1px solid #f0c0c0',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#5a0000'}}><strong>Exclusions:</strong> {warranty.exclusions}</div>}
           </>}
 
           {/* ── SCOPE OF WORK ── */}
           {scopes.length>0&&<>
             <SecHead title="List of Scope of Work" count={scopes.length}/>
-            <div style={{overflowX:'auto',border:'1px solid #c8d4e8'}}>
+            <div style={{overflowX:'auto',border:'1px solid #000000'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
                 <thead><tr>
                   <TH style={{width:30,textAlign:'center'}}>#</TH>
@@ -2040,7 +2253,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 </tr></thead>
                 <tbody>
                   {scopes.map((s,i)=>(
-                    <tr key={i} style={{background:i%2?'#f7f9fd':'#fff'}}>
+                    <tr key={i} style={{background:'#fff'}}>
                       <TD c style={{color:'#aaa'}}>{i+1}</TD>
                       <TD bold>{s.item||s.scope||s.description||'—'}</TD>
                       <TD c>{s.clientScope?<span style={{color:'#1a5c1a',fontWeight:900,fontSize:14}}>✔</span>:<span style={{color:'#ccc'}}>—</span>}</TD>
@@ -2056,7 +2269,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
           {/* ── ACTIVITIES ── */}
           {activities.length>0&&<>
             <SecHead title="Activities / Task List" count={activities.length}/>
-            <div style={{overflowX:'auto',border:'1px solid #c8d4e8'}}>
+            <div style={{overflowX:'auto',border:'1px solid #000000'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,minWidth:650}}>
                 <thead><tr>
                   <TH style={{width:30,textAlign:'center'}}>#</TH>
@@ -2070,7 +2283,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 <tbody>
                   {activities.map((a,i)=>{
                     const sc={'Pending':{bg:'#fff3cd',c:'#856404'},'In Progress':{bg:'#d1ecf1',c:'#0c5460'},'Completed':{bg:'#d4edda',c:'#155724'},'On Hold':{bg:'#e2e3e5',c:'#383d41'},'Cancelled':{bg:'#f8d7da',c:'#721c24'}}[a.status]||{bg:'#eee',c:'#333'};
-                    return(<tr key={i} style={{background:i%2?'#f7f9fd':'#fff'}}>
+                    return(<tr key={i} style={{background:'#fff'}}>
                       <TD c style={{color:'#aaa'}}>{i+1}</TD>
                       <TD bold>{a.task||a.description||'—'}</TD>
                       <TD>{a.assignedTo||'—'}</TD>
@@ -2090,11 +2303,11 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
             <SecHead title="Terms, Notes & Conditions"/>
             {o.termsConditions&&<div style={{marginBottom:6}}>
               <div style={{fontSize:10,fontWeight:700,color:'#445',marginBottom:2}}>Terms & Conditions</div>
-              <div style={{padding:'6px 10px',background:'#fafcff',border:'1px solid #dde4f0',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{o.termsConditions}</div>
+              <div style={{padding:'6px 10px',background:'#fafcff',border:'1px solid #000000',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{o.termsConditions}</div>
             </div>}
             {o.customerNotes&&<div style={{marginBottom:6}}>
               <div style={{fontSize:10,fontWeight:700,color:'#445',marginBottom:2}}>Notes to Customer</div>
-              <div style={{padding:'6px 10px',background:'#fafcff',border:'1px solid #dde4f0',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{o.customerNotes}</div>
+              <div style={{padding:'6px 10px',background:'#fafcff',border:'1px solid #000000',fontSize:11,fontFamily:F,whiteSpace:'pre-wrap',color:'#333'}}>{o.customerNotes}</div>
             </div>}
             {(o.internalNotes||o.narration)&&<div style={{marginBottom:6}}>
               <div style={{fontSize:10,fontWeight:700,color:'#445',marginBottom:2}}>Internal Notes</div>
@@ -2122,7 +2335,7 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
                 const fileIcon = isPdf?'📄':isImg?'🖼️':isWord?'📝':isExcel?'📊':isTxt?'📃':'📎';
                 const fileType = isPdf?'PDF':isImg?'Image':isWord?'Word Document':isExcel?'Excel Spreadsheet':isTxt?'Text File':'File';
                 return (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'#f6f8fc',border:'1px solid #dde4f0',borderLeft:`4px solid ${N}`,borderRadius:4}}>
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'#ffffff',border:'1px solid #000000',borderLeft:`4px solid ${N}`,borderRadius:4}}>
                     <span style={{background:N,color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0}}>{i+1}</span>
                     <span style={{fontSize:16,flexShrink:0}}>{fileIcon}</span>
                     <div style={{flex:1,minWidth:0}}>
@@ -2150,14 +2363,15 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
         </div>{/* end scroll body */}
 
         {/* ══ FOOTER ACTIONS ══ */}
-        <div style={{padding:'7px 14px',borderTop:'2px solid #e0e8f0',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f4f6fa',flexShrink:0}}>
+        <div style={{padding:'7px 14px',borderTop:'2px solid #000000',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f4f6fa',flexShrink:0}}>
           <span style={{fontSize:10,color:'#888',fontFamily:F}}>Order #{o.orderId} · {o.customerName||o.party||'—'} · {fmt(grandTotal)}</span>
           <div style={{display:'flex',gap:8}}>
-            <Btn onClick={()=>printSalesOrder(o, selectedCompany)}>🖨️ Print / PDF</Btn>
+            <Btn onClick={()=>printSalesOrder(o, selectedCompany, user)}>🖨️ Print / PDF</Btn>
+            <Btn onClick={()=>navigate('/purchase-order/create', { state:{ linkedSalesOrderId: o.orderId } })} title="Create a Purchase Order linked to this Sales Order">📦 Create PO</Btn>
             {onEdit && <Btn v="suc" onClick={()=>{onClose();onEdit(o);}}>✏ Edit</Btn>}
             <Btn onClick={onClose}>Close</Btn>
             {onReject  && <Btn v="dan" onClick={()=>onReject(o.orderId)}>✕ Reject</Btn>}
-            {onApprove && <Btn v="suc" onClick={()=>onApprove(o.orderId)}>✔ Approve</Btn>}
+            {onApprove && ['pending','draft'].includes(String(o.status||'').toLowerCase()) && <Btn v="suc" onClick={()=>onApprove(o.orderId)}>✔ Approve</Btn>}
           </div>
         </div>
 
@@ -2176,27 +2390,26 @@ function OrderModal({ order, companyId, onClose, onApprove, onReject, onEdit }) 
 
 /* ── Status config for the dashboard ── */
 const SO_STATUS = {
-  confirmed:         { label:'Confirmed',        bg:'#dcfce7', color:'#15803d', dot:'#16a34a' },
-  approved:          { label:'Approved',         bg:'#dcfce7', color:'#15803d', dot:'#16a34a' },
-  active:            { label:'Active',           bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6' },
-  'in-progress':     { label:'In Progress',      bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6' },
-  'order-received':  { label:'Order Received',   bg:'#e0e7ff', color:'#3730a3', dot:'#6366f1' },
-  'dispatch-pending':{ label:'Dispatch Pending', bg:'#fff7ed', color:'#c2410c', dot:'#f97316' },
-  pending:           { label:'Pending',          bg:'#fef3c7', color:'#92400e', dot:'#f59e0b' },
-  draft:             { label:'Draft',            bg:'#f1f5f9', color:'#475569', dot:'#94a3b8' },
-  completed:         { label:'Completed',        bg:'#dcfce7', color:'#15803d', dot:'#22c55e' },
-  rejected:          { label:'Rejected',         bg:'#fee2e2', color:'#991b1b', dot:'#ef4444' },
-  cancelled:         { label:'Cancelled',        bg:'#f1f5f9', color:'#475569', dot:'#94a3b8' },
+  confirmed:         { label:'Confirmed',        bg:'#dcfce7', color:'#15803d', dot:'#16a34a', letter:'C' },
+  approved:          { label:'Approved',         bg:'#dcfce7', color:'#15803d', dot:'#16a34a', letter:'A' },
+  active:            { label:'Active',           bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6', letter:'A' },
+  'in-progress':     { label:'In Progress',      bg:'#dbeafe', color:'#1e40af', dot:'#3b82f6', letter:'I' },
+  'order-received':  { label:'Order Received',   bg:'#e0e7ff', color:'#3730a3', dot:'#6366f1', letter:'R' },
+  'dispatch-pending':{ label:'Dispatch Pending', bg:'#fff7ed', color:'#c2410c', dot:'#f97316', letter:'D' },
+  pending:           { label:'Pending',          bg:'#fef3c7', color:'#92400e', dot:'#f59e0b', letter:'P' },
+  draft:             { label:'Draft',            bg:'#f1f5f9', color:'#475569', dot:'#94a3b8', letter:'D' },
+  completed:         { label:'Completed',        bg:'#dcfce7', color:'#15803d', dot:'#22c55e', letter:'C' },
+  rejected:          { label:'Rejected',         bg:'#fee2e2', color:'#991b1b', dot:'#ef4444', letter:'R' },
+  cancelled:         { label:'Cancelled',        bg:'#fee2e2', color:'#991b1b', dot:'#ef4444', letter:'C' },
 };
 
 function SoBadge({ s }) {
   const c = SO_STATUS[s?.toLowerCase()] || SO_STATUS.draft;
   return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px',
-      borderRadius:12, fontSize:11, fontWeight:600, background:c.bg, color:c.color,
-      whiteSpace:'nowrap' }}>
-      <span style={{ width:6, height:6, borderRadius:'50%', background:c.dot, flexShrink:0 }}/>
-      {c.label}
+    <span title={c.label} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+      width:22, height:22, borderRadius:'50%', background:c.dot, color:'#fff',
+      fontSize:11, fontWeight:800, flexShrink:0, lineHeight:1 }}>
+      {c.letter}
     </span>
   );
 }
@@ -2294,6 +2507,17 @@ function TrendChart({ data, width=340, height=110, color='#6366f1' }) {
 }
 
 function ViewTab({ companyId, onEdit }) {
+  const { selectedCompany } = useCompany();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [flash, setFlash] = useState(location.state?.flashMsg || '');
+  useEffect(() => {
+    if (!location.state?.flashMsg) return;
+    navigate(location.pathname, { replace:true, state:{} });
+    const t = setTimeout(() => setFlash(''), 4000);
+    return () => clearTimeout(t);
+  }, [location.state?.flashMsg]);
   const [orders,      setOrders]      = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [q,           setQ]           = useState('');
@@ -2301,13 +2525,26 @@ function ViewTab({ companyId, onEdit }) {
   const [statusFlt,   setStatusFlt]   = useState('all');
   const [selected,    setSelected]    = useState(null);
   const [selectedRow, setSelectedRow] = useState(null);
+  const [hoverRow,    setHoverRow]    = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try { const r = await api(`/api/sales-orders?companyId=${companyId}`);
-          setOrders((r.data||[]).sort((a,b)=>b.orderId-a.orderId)); } catch{}
+          setOrders((r.data||[]).sort((a,b)=>new Date(b.orderDate||b.date||0) - new Date(a.orderDate||a.date||0))); } catch{}
     setLoading(false);
   },[companyId]);
+
+  /* Approve from the list — only for users with Sales Order approve rights, only while pending/draft */
+  const canApproveSO = o => !!o && ['pending','draft'].includes(String(o.status||'').toLowerCase()) && can(user,'salesOrder','approve');
+  const handleApprove = async (orderId) => {
+    const o = orders.find(x => String(x.orderId) === String(orderId)) || { orderId };
+    if (!window.confirm(`Approve SO ${o.orderNo||o.orderId}?`)) return;
+    try {
+      const fd = new FormData(); fd.append('status','approved');
+      await api(`/api/sales-orders/${orderId}?companyId=${companyId}`, { method:'PUT', data:fd });
+      setSelected(null); setSelectedRow(null); load();
+    } catch(e) { alert('Approve failed: ' + e.message); }
+  };
 
   const handleDelete = async (o) => {
     if (!window.confirm(`Delete SO ${o.orderNo||o.orderId} — ${o.customerName||''}?\nThis cannot be undone.`)) return;
@@ -2391,16 +2628,14 @@ function ViewTab({ companyId, onEdit }) {
   }), [tableRows, filtered]);
 
   const TH = ({children, right, style:sx={}}) => (
-    <th style={{ padding:'6px 9px', background:'#3A6186', color:'#fff', fontWeight:700,
+    <th style={{ padding:'6px 9px', background:'#4A7BA6', color:'#fff', fontWeight:700,
       fontSize:10.5, textAlign:right?'right':'left', whiteSpace:'nowrap',
-      borderRight:'1px solid #2A4D6E', borderBottom:'2px solid #2A4D6E',
+      borderRight:'1px solid #000000', borderBottom:'2px solid #000000',
       position:'sticky', top:0, zIndex:2, ...sx }}>
       {children}
     </th>
   );
 
-  const NAV_P  = '#3A6186';
-  const NAV_PD = '#2A4D6E';
   const navigate2 = useNavigate();
   const { pathname: soPath } = useLocation();
 
@@ -2410,12 +2645,14 @@ function ViewTab({ companyId, onEdit }) {
       {selected && (
         <OrderModal order={selected} companyId={companyId}
           onClose={()=>setSelected(null)}
+          onApprove={canApproveSO(selected) ? handleApprove : null}
           onEdit={o=>{setSelected(null);onEdit(o);}}/>
       )}
 
-      {/* ══ Combined nav + toolbar bar ══ */}
-      <div style={{ flexShrink:0, height:40, background:NAV_P, borderBottom:`2px solid ${NAV_PD}`,
-        display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
+      {/* ══ Combined nav + toolbar bar — scrolls horizontally instead of
+           clipping controls off the right edge on narrower windows ══ */}
+      <div className="so-toolbar-scroll" style={{ flexShrink:0, height:40, background:NAV_P, borderBottom:`2px solid ${NAV_PD}`,
+        display:'flex', alignItems:'stretch', overflowX:'auto', overflowY:'hidden', fontFamily:F }}>
 
         {/* Section label */}
         <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
@@ -2436,25 +2673,27 @@ function ViewTab({ companyId, onEdit }) {
           if (tab.isCreate) return (
             <button key={tab.path} onClick={() => navigate2(tab.path)}
               style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
-                fontSize:11.5, fontWeight:700, color:'#fff', background:'#059669',
-                border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
-                margin:'0 4px', borderRadius:5 }}
+                fontSize:11.5, fontWeight:700, color:'#fff', background: isAct?'#047857':'#059669',
+                border:'1px solid rgba(255,255,255,0.3)', boxShadow:'0 2px 6px rgba(0,0,0,0.2)',
+                cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+                margin:'0 4px', borderRadius:6 }}
               onMouseEnter={e=>{e.currentTarget.style.background='#047857';}}
-              onMouseLeave={e=>{e.currentTarget.style.background='#059669';}}>
+              onMouseLeave={e=>{e.currentTarget.style.background=isAct?'#047857':'#059669';}}>
               {tab.label}
             </button>
           );
           return (
             <button key={tab.path} onClick={() => navigate2(tab.path)}
-              style={{ display:'flex', alignItems:'center', padding:'0 10px', height:'100%',
-                fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', padding:'0 12px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight:isAct?700:600, cursor:'pointer',
                 whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-                color:isAct?'#fff':'rgba(255,255,255,0.65)',
-                background:isAct?'rgba(255,255,255,0.12)':'transparent',
-                borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
-                marginBottom:-2 }}
-              onMouseEnter={e=>{if(!isAct)e.currentTarget.style.background='rgba(255,255,255,0.08)';}}
-              onMouseLeave={e=>{if(!isAct)e.currentTarget.style.background='transparent';}}>
+                color:isAct?'#fff':'rgba(255,255,255,0.85)',
+                background:isAct?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.07)',
+                border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow:isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius:6, margin:'0 4px' }}
+              onMouseEnter={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+              onMouseLeave={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
               {tab.label}
             </button>
           );
@@ -2475,7 +2714,7 @@ function ViewTab({ companyId, onEdit }) {
         <div style={{width:1,height:20,background:'rgba(255,255,255,0.2)',alignSelf:'center',flexShrink:0,margin:'0 6px'}}/>
 
         {/* Search */}
-        <div style={{position:'relative',flex:1,minWidth:140,maxWidth:240,alignSelf:'center'}}>
+        <div style={{position:'relative',width:200,flexShrink:0,alignSelf:'center'}}>
           <span style={{position:'absolute',left:7,top:'50%',transform:'translateY(-50%)',fontSize:11,color:'rgba(255,255,255,0.45)',pointerEvents:'none'}}>🔍</span>
           <input value={q} onChange={e=>setQ(e.target.value)}
             placeholder="Search order, client, product…"
@@ -2555,39 +2794,65 @@ function ViewTab({ companyId, onEdit }) {
             </button>
       </div>
 
-      <style>{`.so-search-inp::placeholder{color:rgba(255,255,255,0.45)}`}</style>
+      <style>{`.so-search-inp::placeholder{color:rgba(255,255,255,0.45)}
+        .so-toolbar-scroll::-webkit-scrollbar{display:none}
+        .so-toolbar-scroll{scrollbar-width:none}`}</style>
 
-      {/* ── Contextual Action Bar (shows on row select) ── */}
-      {selectedRow && (
-        <div style={{ flexShrink:0, background:`linear-gradient(90deg,#3A6186,#2A4D6E)`,
-          padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
-          boxShadow:'0 2px 6px rgba(0,0,0,0.18)' }}>
-          <span style={{fontSize:11,color:'rgba(255,255,255,0.7)'}}>▶</span>
-          <span style={{fontSize:12,fontWeight:700,color:'#fff',flex:1,
-            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-            {selectedRow.orderNo||`SO-${selectedRow.orderId}`} · {selectedRow.customerName||selectedRow.clientName||''}
-          </span>
-          {[
-            {label:'👁 View',   danger:false, action:()=>setSelected(selectedRow)},
-            {label:'✏️ Edit',   danger:false, action:()=>onEdit(selectedRow)},
-            {label:'🗑 Delete', danger:true,  action:()=>{ handleDelete(selectedRow); setSelectedRow(null); }},
-          ].map(btn => (
-            <button key={btn.label} onClick={btn.action}
-              style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
-                fontWeight:700, borderRadius:5, whiteSpace:'nowrap', border:'none',
-                background:btn.danger?'rgba(220,38,38,0.35)':'rgba(255,255,255,0.18)',
-                color:'#fff' }}>
-              {btn.label}
-            </button>
-          ))}
-          <button onClick={()=>setSelectedRow(null)}
-            style={{ height:26, width:26, background:'rgba(255,255,255,0.15)', border:'none',
-              color:'#fff', borderRadius:5, cursor:'pointer', fontSize:13, flexShrink:0 }}>✕</button>
+      {flash && (
+        <div style={{ flexShrink:0, background:'#DCFCE7', color:'#166534', borderBottom:'1px solid #86EFAC',
+          padding:'6px 14px', fontSize:12, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span>✓ {flash}</span>
+          <button onClick={()=>setFlash('')} style={{background:'none',border:'none',color:'#166534',cursor:'pointer',fontSize:13}}>✕</button>
         </div>
       )}
 
+      {/* ── Contextual Action Bar — previews on hover (lighter), locks in
+           a distinct colour once the row is actually clicked ── */}
+      {(() => {
+        const barRow = selectedRow || hoverRow;
+        if (!barRow) return null;
+        const locked = !!selectedRow;
+        return (
+          <div style={{ flexShrink:0,
+            background: locked ? 'linear-gradient(90deg,#4A7BA6,#35597D)' : 'linear-gradient(90deg,#DCE6EF,#CBD9E6)',
+            padding:'5px 12px', display:'flex', alignItems:'center', gap:8,
+            boxShadow:'0 2px 6px rgba(0,0,0,0.18)', transition:'background 0.12s' }}>
+            <span style={{fontSize:11,color: locked?'rgba(255,255,255,0.7)':'#5B7083'}}>▶</span>
+            <span style={{fontSize:12,fontWeight:700,color: locked?'#fff':'#243447',flex:1,
+              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {barRow.orderNo||`SO-${barRow.orderId}`} · {barRow.customerName||barRow.clientName||''}
+            </span>
+            {[
+              {label:'👁 View',    danger:false, action:()=>setSelected(barRow)},
+              ...(canApproveSO(barRow) ? [{label:'✓ Approve', danger:false, ok:true, action:()=>handleApprove(barRow.orderId)}] : []),
+              {label:'🖨 Print',   danger:false, action:()=>printSalesOrder(barRow, selectedCompany, user),
+                dblAction:()=>setSelected(barRow), title:'Click to print · double-click to preview full details'},
+              {label:'✏️ Edit',    danger:false, action:()=>onEdit(barRow)},
+              {label:'📦 Create PO', danger:false, action:()=>navigate('/purchase-order/create', { state:{ linkedSalesOrderId: barRow.orderId } }),
+                title:'Create a Purchase Order linked to this Sales Order'},
+              /* Delete only once the row is actually clicked — a hover
+                 preview never offers a destructive action. */
+              ...(locked ? [{label:'🗑 Delete', danger:true, action:()=>{ handleDelete(barRow); setSelectedRow(null); }}] : []),
+            ].map(btn => (
+              <button key={btn.label} onClick={btn.action} onDoubleClick={btn.dblAction} title={btn.title}
+                style={{ height:26, padding:'0 12px', fontSize:11, cursor:'pointer', fontFamily:F,
+                  fontWeight:700, borderRadius:5, whiteSpace:'nowrap', border:'none',
+                  background: btn.danger ? 'rgba(220,38,38,0.35)' : btn.ok ? '#16A34A' : (locked?'rgba(255,255,255,0.18)':'rgba(255,255,255,0.55)'),
+                  color: (locked||btn.ok)?'#fff':'#1E3A5F' }}>
+                {btn.label}
+              </button>
+            ))}
+            {locked && (
+              <button onClick={()=>setSelectedRow(null)}
+                style={{ height:26, width:26, background:'rgba(255,255,255,0.15)', border:'none',
+                  color:'#fff', borderRadius:5, cursor:'pointer', fontSize:13, flexShrink:0 }}>✕</button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Table ── */}
-      <div style={{background:'#fff',border:'1px solid #d1d5db',
+      <div style={{background:'#fff',border:'1px solid #000000',
           overflow:'auto',flex:1,minHeight:0}}>
 
           {loading ? (
@@ -2598,19 +2863,19 @@ function ViewTab({ companyId, onEdit }) {
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F,tableLayout:'fixed'}}>
               <colgroup>
                 <col style={{width:'2.5%'}}/>
-                <col style={{width:'7.5%'}}/>
-                <col style={{width:'11%'}}/>
+                <col style={{width:'9.5%'}}/>
+                <col style={{width:'17.5%'}}/>
                 <col style={{width:'6.5%'}}/>
-                <col style={{width:'8.5%'}}/>
-                <col style={{width:'6.5%'}}/>
-                <col style={{width:'12%'}}/>
+                <col style={{width:'6%'}}/>
+                <col style={{width:'6%'}}/>
+                <col style={{width:'10%'}}/>
                 <col style={{width:'5%'}}/>
                 <col style={{width:'7%'}}/>
                 <col style={{width:'8%'}}/>
                 <col style={{width:'4%'}}/>
                 <col style={{width:'7%'}}/>
                 <col style={{width:'8%'}}/>
-                <col style={{width:'6.5%'}}/>
+                <col style={{width:'3%'}}/>
               </colgroup>
               <thead>
                 <tr>
@@ -2639,18 +2904,18 @@ function ViewTab({ companyId, onEdit }) {
                 {tableRows.map((r, ridx) => {
                   const { o, item, rowSpan, isFirst, seq, otherCharges, orderVal } = r;
                   const isSel = selectedRow?.orderId === o.orderId;
-                  const bg = isSel ? '#EEF4FF' : seq%2===0 ? '#fff' : '#f8fbff';
+                  const bg = isSel ? '#EEF4FF' : '#fff';
                   const txAmt = item
                     ? (parseFloat(item.taxable) || (parseFloat(item.qty||item.quantity||0)*parseFloat(item.rate||item.unitPrice||0)))
                     : 0;
                   const C = (content, right=false, extra={}) => rowSpan > 0 ? (
                     <td rowSpan={rowSpan} style={{
-                      padding:'5px 8px', borderRight:'1px solid #d1d5db',
-                      borderBottom:'1px solid #d1d5db', background:bg,
+                      padding:'5px 8px', borderRight:'1px solid #000000',
+                      borderBottom:'1px solid #000000', background:bg,
                       textAlign:right?'right':'left', verticalAlign:'middle',
                       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                       maxWidth:0,
-                      outline: isSel ? '2px solid #3A6186' : 'none', outlineOffset:'-1px',
+                      outline: isSel ? '2px solid #4A7BA6' : 'none', outlineOffset:'-1px',
                       ...extra }}>
                       {content}
                     </td>
@@ -2660,56 +2925,62 @@ function ViewTab({ companyId, onEdit }) {
                     <tr key={`${o.orderId}-${ridx}`}
                       onClick={() => setSelectedRow(isSel ? null : o)}
                       style={{ cursor:'pointer', transition:'background 0.1s' }}
-                      onMouseEnter={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background='#F5F8FF'); }}
-                      onMouseLeave={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background=bg); }}>
-                      {C(<span style={{color:'#9ca3af',fontSize:11}}>{seq}</span>)}
-                      {C(<span style={{fontWeight:700,color:'#1e293b'}}>{o.orderNo||'—'}</span>)}
+                      onMouseEnter={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background='#F5F8FF'); setHoverRow(o); }}
+                      onMouseLeave={e=>{ if(!isSel) [...e.currentTarget.cells].forEach(c=>c.style.background=bg); setHoverRow(prev => (prev && prev.orderId===o.orderId) ? null : prev); }}>
+                      {C(<span style={{color:'#000',fontSize:11}}>{seq}</span>)}
                       {C(
-                        <div>
-                          <div style={{fontWeight:600,color:'#111827'}}>{o.customerName||'—'}</div>
-                        </div>
+                        <span style={{fontWeight:700,color:'#000'}}>{o.orderNo||'—'}</span>,
+                        false,
+                        // Order No must never be hidden behind an ellipsis — wrap instead of truncating.
+                        { whiteSpace:'normal', wordBreak:'break-word', overflow:'visible', textOverflow:'clip', maxWidth:'none' }
                       )}
-                      {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.orderDate||o.date)}</span>)}
-                      {C(<span style={{color:'#6b7280'}}>{o.customerPO||o.reference||'—'}</span>)}
-                      {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtDR(o.dueDate||o.deliveryDate)||'—'}</span>)}
+                      {C(
+                        <div style={{fontWeight:600,color:'#000'}}>{o.customerName||'—'}</div>,
+                        false,
+                        // Client Name wraps onto multiple lines instead of being cut off.
+                        { whiteSpace:'normal', wordBreak:'break-word', overflow:'visible', textOverflow:'clip', maxWidth:'none' }
+                      )}
+                      {C(<span style={{color:'#000',whiteSpace:'nowrap'}}>{fmtDR(o.orderDate||o.date)}</span>)}
+                      {C(<span style={{color:'#000'}}>{o.customerPO||o.reference||'—'}</span>)}
+                      {C(<span style={{color:'#000',whiteSpace:'nowrap'}}>{fmtDR(o.dueDate||o.deliveryDate)||'—'}</span>)}
 
                       {/* item-level cells */}
-                      <td style={{padding:'5px 8px',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
+                      <td style={{padding:'5px 8px',borderRight:'1px solid #000000',borderBottom:'1px solid #000000',background:bg,color:'#000',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item
                           ? <span style={{fontSize:11}}>{item.description||item.name||item.itemName||'—'}</span>
-                          : <span style={{color:'#9ca3af',fontStyle:'italic',fontSize:11}}>No items</span>}
+                          : <span style={{color:'#000',fontStyle:'italic',fontSize:11}}>No items</span>}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',borderBottom:'1px solid #000000',background:bg,color:'#000',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? `${parseFloat(item.qty||item.quantity||0).toFixed(2)} ${item.unit||''}`.trim() : '—'}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#374151',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',borderBottom:'1px solid #000000',background:bg,color:'#000',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? fmtN(item.rate||item.unitPrice||0) : '—'}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,fontWeight:600,color:'#1e293b',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',borderBottom:'1px solid #000000',background:bg,fontWeight:600,color:'#000',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                         {item ? fmtN(txAmt) : '—'}
                       </td>
-                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',fontSize:11}}>
+                      <td style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',borderBottom:'1px solid #000000',background:bg,color:'#000',fontSize:11}}>
                         {item ? `${item.gstPct||item.gst||0}%` : '—'}
                       </td>
 
                       {/* order-level cols with rowspan */}
                       {rowSpan > 0 ? (
-                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
-                          borderBottom:'1px solid #d1d5db',background:bg,color:'#6b7280',verticalAlign:'middle',fontSize:11,
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',
+                          borderBottom:'1px solid #000000',background:bg,color:'#000',verticalAlign:'middle',fontSize:11,
                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                           {otherCharges > 0 ? fmtN(otherCharges) : '—'}
                         </td>
                       ) : null}
                       {rowSpan > 0 ? (
-                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #d1d5db',
-                          borderBottom:'1px solid #d1d5db',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'middle',fontSize:11,
+                        <td rowSpan={rowSpan} style={{padding:'5px 8px',textAlign:'right',borderRight:'1px solid #000000',
+                          borderBottom:'1px solid #000000',background:bg,fontWeight:700,color:'#000',verticalAlign:'middle',fontSize:11,
                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}}>
                           ₹{orderVal.toFixed(2)}
                         </td>
                       ) : null}
                       {rowSpan > 0 ? (
-                        <td rowSpan={rowSpan} style={{padding:'5px 8px',
-                          borderBottom:'1px solid #d1d5db',background:bg,verticalAlign:'middle'}}>
+                        <td rowSpan={rowSpan} style={{padding:'5px 4px',textAlign:'center',
+                          borderBottom:'1px solid #000000',background:bg,verticalAlign:'middle'}}>
                           <SoBadge s={o.status}/>
                         </td>
                       ) : null}
@@ -2719,23 +2990,23 @@ function ViewTab({ companyId, onEdit }) {
               </tbody>
               {tableRows.length > 0 && (
                 <tfoot>
-                  <tr style={{background:'#eef2ff',position:'sticky',bottom:0,zIndex:2}}>
-                    <td colSpan={7} style={{padding:'7px 10px',borderTop:'2px solid #818cf8',color:'#4f46e5',fontWeight:700,fontSize:11,borderRight:'1px solid #c7d2fe'}}>
+                  <tr style={{background:'#fff',position:'sticky',bottom:0,zIndex:2}}>
+                    <td colSpan={7} style={{padding:'7px 10px',borderTop:'2px solid #000000',color:'#000',fontWeight:700,fontSize:11,borderRight:'1px solid #000000'}}>
                       TOTAL — {filtered.length} order{filtered.length!==1?'s':''}, {tableRows.length} line item{tableRows.length!==1?'s':''}
                     </td>
-                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>{totals.qty.toFixed(2)}</td>
-                    <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
-                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #000000',borderRight:'1px solid #000000',color:'#000',fontWeight:700,fontSize:11}}>{totals.qty.toFixed(2)}</td>
+                    <td style={{borderTop:'2px solid #000000',borderRight:'1px solid #000000'}}/>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #000000',borderRight:'1px solid #000000',color:'#000',fontWeight:700,fontSize:11}}>
                       ₹{totals.taxable.toFixed(2)}
                     </td>
-                    <td style={{borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe'}}/>
-                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#1e293b',fontWeight:700,fontSize:11}}>
+                    <td style={{borderTop:'2px solid #000000',borderRight:'1px solid #000000'}}/>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #000000',borderRight:'1px solid #000000',color:'#000',fontWeight:700,fontSize:11}}>
                       ₹{totals.otherCh.toFixed(2)}
                     </td>
-                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #818cf8',borderRight:'1px solid #c7d2fe',color:'#4f46e5',fontWeight:800,fontSize:12}}>
+                    <td style={{padding:'7px 8px',textAlign:'right',borderTop:'2px solid #000000',borderRight:'1px solid #000000',color:'#000',fontWeight:800,fontSize:12}}>
                       ₹{totals.orderVal.toFixed(2)}
                     </td>
-                    <td style={{borderTop:'2px solid #818cf8'}}/>
+                    <td style={{borderTop:'2px solid #000000'}}/>
                   </tr>
                 </tfoot>
               )}
@@ -2756,9 +3027,6 @@ function PendingTab({ companyId }) {
   const [search,   setSearch]   = useState('');
   const [selected, setSelected] = useState(null);
   const { pathname: pPath } = useLocation();
-
-  const NAV_P  = '#3A6186';
-  const NAV_PD = '#2A4D6E';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2830,20 +3098,22 @@ function PendingTab({ companyId }) {
               <Link key={t.path} to={t.path} style={{ display:'flex', alignItems:'center',
                 padding:'0 14px', height:26, fontSize:11, fontWeight:700, color:'#fff',
                 background: isAct ? '#047857' : '#059669', textDecoration:'none',
-                borderRadius:5, margin:'0 6px', alignSelf:'center', whiteSpace:'nowrap',
+                border:'1px solid rgba(255,255,255,0.3)', boxShadow:'0 2px 6px rgba(0,0,0,0.2)',
+                borderRadius:6, margin:'0 6px', alignSelf:'center', whiteSpace:'nowrap',
                 flexShrink:0, fontFamily:F }}>
                 {t.label}
               </Link>
             );
             return (
               <Link key={t.path} to={t.path} style={{ display:'flex', alignItems:'center', gap:4,
-                padding:'0 12px', height:'100%', fontSize:11,
-                fontWeight: isAct ? 700 : 400,
-                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
-                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
-                textDecoration:'none',
-                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-                marginBottom:-2, whiteSpace:'nowrap', flexShrink:0, fontFamily:F }}>
+                padding:'0 12px', height:26, alignSelf:'center', fontSize:11,
+                fontWeight: isAct ? 700 : 600,
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.85)',
+                background: isAct ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+                border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow:isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                textDecoration:'none', borderRadius:6,
+                margin:'0 4px', whiteSpace:'nowrap', flexShrink:0, fontFamily:F }}>
                 {t.label}
               </Link>
             );
@@ -3048,6 +3318,7 @@ export default function SalesOrderModule() {
   const [specHtml,     setSpecHtml]     = useState('');
   const [specGroups,   setSpecGroups]   = useState([]);
   const [specFileList, setSpecFileList] = useState([]);
+  const [itemSpecNotes, setItemSpecNotes] = useState({}); // {itemId: 'written spec text'}
 
   /* clients */
   const [clients,    setClients]    = useState([]);
@@ -3057,6 +3328,7 @@ export default function SalesOrderModule() {
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
   const [ok,     setOk]     = useState('');
+  const [showApproverPicker, setShowApproverPicker] = useState(false);
 
   /* totals */
   const itemsNet     = items.reduce((s,it)=>(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)+s, 0);
@@ -3072,30 +3344,26 @@ export default function SalesOrderModule() {
 
   const setF = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  /* load next ID + clients */
+  /* load next ID (for the ERP Order ID display only — Order No./File No. is
+     typed by the user, never auto-filled) + clients */
   useEffect(()=>{
     if (!cid) return;
-    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{const nid=r.data.nextId;setF('nextId',nid);setF('orderNo',makeSoNo(nid,today()));}).catch(()=>{});
+    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{setF('nextId',r.data.nextId);}).catch(()=>{});
     api(`/api/clients?companyId=${cid}`).then(r=>setClients(r.data||[])).catch(()=>{});
   },[cid]);
-
-  /* auto-update orderNo when order date changes for new SOs */
-  useEffect(()=>{
-    if(!editOrder&&form.nextId&&form.companyRefDate){
-      setF('orderNo',makeSoNo(form.nextId,form.companyRefDate));
-    }
-  },[form.companyRefDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetForm = () => {
     setForm(blankForm()); setItems([]); setAddons([]); setCharges([]);
     setBg({applicable:false,basis:'basic',pct:0}); setScopes([]);
     setWarranty({}); setActivities([]); setAttachments([]);
-    setSpecMode('freewrite'); setSpecHtml(''); setSpecGroups([]); setSpecFileList([]);
-    setError(''); setOk(''); setSecTab('order-details');
-    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{const nid=r.data.nextId;setF('nextId',nid);setF('orderNo',makeSoNo(nid,today()));}).catch(()=>{});
+    setSpecMode('freewrite'); setSpecHtml(''); setSpecGroups([]); setSpecFileList([]); setItemSpecNotes({});
+    setError(''); setOk(''); setSecTab('order-details'); setEditOrder(null);
+    api(`/api/sales-orders/next-id?companyId=${cid}`).then(r=>{setF('nextId',r.data.nextId);}).catch(()=>{});
   };
 
-  const loadEdit = (o) => {
+  const loadEdit = (saved) => {
+    // contact details follow later edits on the client record
+    const o = withLiveContacts(saved, clients.find(c => String(c.clientId) === String(saved.customerCode)));
     setForm({
       nextId:o.orderId, orderNo:o.orderNo||'', companyRefDate:o.orderDate||today(),
       clientOrderNo:o.customerPO||'', clientOrderDate:o.poDate||'',
@@ -3132,6 +3400,9 @@ export default function SalesOrderModule() {
       })),
     })));
     setSpecFileList((o.specFiles||[]).map(f=>({...f,_id:f._id||uid()})));
+    const notesMap = {};
+    (specParsed.itemNotes||[]).forEach(n => { if (n && n.itemId) notesMap[n.itemId] = n.text || ''; });
+    setItemSpecNotes(notesMap);
     setEditOrder(o); setSecTab('order-details');
     setError(''); setOk('');
     navigate('/sales-order/create');
@@ -3143,7 +3414,7 @@ export default function SalesOrderModule() {
     setF('customerName',   c.companyName||c.clientName||c.name||'');
     setF('customerGstin',  c.gstin||c.gstNumber||'');
     setF('contactPerson',  c.contactPerson||cp.name||cp.contactName||'');
-    setF('mobile',         c.mobile||c.phone||cp.mobile||cp.phone||'');
+    setF('mobile',         cp.mobileNumber||c.mobile||c.phone||cp.mobile||cp.phone||'');
     setF('email',          c.email||cp.email||'');
     setF('address',        c.address||c.billingAddress||'');
     setF('customerCity',   c.city||c.billingCity||'');
@@ -3156,17 +3427,19 @@ export default function SalesOrderModule() {
     setF('shipToState',   c.state||'');
     setF('shipToPincode', c.pincode||'');
     setF('shipToContact', c.contactPerson||cp.name||cp.contactName||'');
-    setF('shipToMobile',  c.mobile||c.phone||cp.mobile||cp.phone||'');
+    setF('shipToMobile',  cp.mobileNumber||c.mobile||c.phone||cp.mobile||cp.phone||'');
     setF('shipToEmail',   c.email||cp.email||'');
     setShowSearch(false);
   };
 
-  const submit = async (status) => {
+  const submit = async (status, approverId) => {
     if (!form.customerName.trim()) { setError('Customer Name is required'); setSecTab('order-details'); return; }
+    if (!form.orderNo.trim()) { setError('Order No./File No. is required'); setSecTab('order-details'); return; }
     setSaving(true); setError(''); setOk('');
     try {
       const fd = new FormData();
-      fd.append('orderNo',       form.orderNo||`SO-${form.nextId}`);
+      fd.append('approverId',    approverId || '');
+      fd.append('orderNo',       form.orderNo);
       fd.append('orderDate',     form.companyRefDate);
       fd.append('customerName',   form.customerName);
       fd.append('customerCode',   form.clientId);
@@ -3202,7 +3475,7 @@ export default function SalesOrderModule() {
       fd.append('cgst',          cgstVal);
       fd.append('sgst',          sgstVal);
       fd.append('grandTotal',    orderValue);
-      fd.append('items',         JSON.stringify(items.map(({_id,...r})=>r)));
+      fd.append('items',         JSON.stringify(items)); /* _id kept so per-item spec notes/files stay linked after reload */
       fd.append('addons',        JSON.stringify(addons.map(({_id,...r})=>r)));
       fd.append('charges',       JSON.stringify(charges.map(({_id,...r})=>r)));
       fd.append('scopeItems',    JSON.stringify(scopes.map(({_id,...r})=>r)));
@@ -3218,6 +3491,11 @@ export default function SalesOrderModule() {
             })),
           })),
         })),
+        itemNotes: Object.entries(itemSpecNotes)
+          .filter(([,text])=>(text||'').trim())
+          .map(([itemId,text])=>({
+            itemId, itemName: items.find(i=>String(i._id)===String(itemId))?.description || '', text,
+          })),
       }));
       specFileList.forEach(f=>{ if(f.file) fd.append('specUploadFiles',f.file); });
       fd.append('specFiles', JSON.stringify(specFileList.map(({_id,file,...r})=>({...r,fileName:file?.name||r.fileName||''}))));
@@ -3226,16 +3504,15 @@ export default function SalesOrderModule() {
 
       if (editOrder) {
         await api(`/api/sales-orders/${editOrder.orderId}?companyId=${cid}`,{method:'PUT',data:fd});
-        setOk(`Order ${editOrder.orderId} updated successfully`);
-        /* keep editOrder set — prevents accidental re-submit from creating a duplicate */
+        navigate('/sales-order/view', { state:{ flashMsg:`Order ${editOrder.orderId} updated successfully` } });
+        resetForm();
       } else {
         const res = await api(`/api/sales-orders?companyId=${cid}`,{method:'POST',data:fd});
         const newId = res.data.orderId;
-        setOk(`Sales Order ${newId} created successfully`);
-        /* set editOrder with new id so any immediate re-submit is a PUT, not a new POST */
-        setEditOrder({ orderId: newId });
+        navigate('/sales-order/view', { state:{ flashMsg:`Sales Order ${newId} created successfully` } });
+        resetForm();
       }
-    } catch(e) { setError(e.response?.data?.error||e.message); }
+    } catch(e) { setError(e.response?.data?.error||e.message); setSaving(false); return; }
     setSaving(false);
   };
 
@@ -3256,9 +3533,65 @@ export default function SalesOrderModule() {
     }}>
 
 
-      {/* ══ CREATE / EDIT TAB ══ */}
+      {/* ══ CREATE / EDIT TAB — one continuous scrolling page, no inner tabs ══ */}
       {tab==='create' && (
         <>
+          {/* ══ Combined nav + toolbar bar — same bar as View/Pending, so Create doesn't look orphaned ══ */}
+          <div style={{ flexShrink:0, height:40, background:NAV_P, borderBottom:`2px solid ${NAV_PD}`,
+            display:'flex', alignItems:'stretch', overflow:'hidden', fontFamily:F }}>
+
+            <div style={{ display:'flex', alignItems:'center', padding:'0 12px 0 10px',
+              fontSize:11, fontWeight:800, color:'#fff', textTransform:'uppercase',
+              letterSpacing:'0.8px', whiteSpace:'nowrap',
+              borderRight:'2px solid rgba(255,255,255,0.18)', flexShrink:0 }}>
+              SALES ORDERS
+            </div>
+
+            {[
+              { label:'All Sales Orders', path:'/sales-order/view' },
+              { label:'+ Create SO',      path:'/sales-order/create', isCreate:true },
+              { label:'⏳ Pending',       path:'/sales-order/pending' },
+              { label:'📋 Proforma Invoice', path:'/proforma-invoice/view' },
+            ].map(t => {
+              const isAct = pathname === t.path;
+              if (t.isCreate) return (
+                <button key={t.path} onClick={() => navigate(t.path)}
+                  style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
+                    fontSize:11.5, fontWeight:700, color:'#fff', background:'#047857',
+                    border:'1px solid rgba(255,255,255,0.3)', boxShadow:'0 2px 6px rgba(0,0,0,0.2)',
+                    cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+                    margin:'0 4px', borderRadius:6 }}>
+                  {t.label}
+                </button>
+              );
+              return (
+                <button key={t.path} onClick={() => navigate(t.path)}
+                  style={{ display:'flex', alignItems:'center', padding:'0 12px', height:26, alignSelf:'center',
+                    fontSize:11.5, fontWeight:isAct?700:600, cursor:'pointer',
+                    whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
+                    color:isAct?'#fff':'rgba(255,255,255,0.85)',
+                    background:isAct?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.07)',
+                    border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                    boxShadow:isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                    borderRadius:6, margin:'0 4px' }}
+                  onMouseEnter={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+                  onMouseLeave={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
+                  {t.label}
+                </button>
+              );
+            })}
+
+            <div style={{ flex:1 }}/>
+
+            {editOrder && (
+              <span style={{ alignSelf:'center', marginRight:12, fontSize:11, fontWeight:700, color:'#fff',
+                background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)',
+                borderRadius:20, padding:'3px 12px', whiteSpace:'nowrap' }}>
+                Editing Order #{editOrder.orderId}
+              </span>
+            )}
+          </div>
+
           {/* Inner Section Tab Bar */}
           <SectionTabBar active={secTab} onChange={setSecTab}/>
 
@@ -3280,7 +3613,7 @@ export default function SalesOrderModule() {
             {secTab==='warranty'        && <TabWarranty       warranty={warranty} setWarranty={setWarranty}/>}
             {secTab==='activities'      && <TabActivities     activities={activities} setActivities={setActivities}/>}
             {secTab==='attachments'     && <TabAttachments    attachments={attachments} setAttachments={setAttachments}/>}
-            {secTab==='specs'           && <TabSpecifications items={items} specMode={specMode} setSpecMode={setSpecMode} specHtml={specHtml} setSpecHtml={setSpecHtml} specGroups={specGroups} setSpecGroups={setSpecGroups} specFileList={specFileList} setSpecFileList={setSpecFileList}/>}
+            {secTab==='specs'           && <TabSpecifications items={items} specMode={specMode} setSpecMode={setSpecMode} specHtml={specHtml} setSpecHtml={setSpecHtml} specGroups={specGroups} setSpecGroups={setSpecGroups} specFileList={specFileList} setSpecFileList={setSpecFileList} itemSpecNotes={itemSpecNotes} setItemSpecNotes={setItemSpecNotes}/>}
 
           </div>
 
@@ -3293,7 +3626,7 @@ export default function SalesOrderModule() {
 
             {/* Prev / Next */}
             <button onClick={goPrev} disabled={isFirst}
-              style={{background:isFirst?'#F9FAFB':`#EFF6FF`,color:isFirst?'#9CA3AF':N,
+              style={{background:isFirst?'#F9FAFB':`#EFF6FF`,color:isFirst?'#9CA3AF':NAV_P,
                 border:`1px solid ${isFirst?'#E5E7EB':'#BFDBFE'}`,padding:'0 14px',fontSize:11.5,
                 cursor:isFirst?'default':'pointer',fontFamily:F,fontWeight:600,height:28,borderRadius:5}}>
               ← Prev
@@ -3303,7 +3636,7 @@ export default function SalesOrderModule() {
               {secIdx+1} / {INNER_TABS.length} · {INNER_TABS[secIdx].label}
             </span>
             <button onClick={goNext} disabled={isLast}
-              style={{background:isLast?'#F9FAFB':`#EFF6FF`,color:isLast?'#9CA3AF':N,
+              style={{background:isLast?'#F9FAFB':`#EFF6FF`,color:isLast?'#9CA3AF':NAV_P,
                 border:`1px solid ${isLast?'#E5E7EB':'#BFDBFE'}`,padding:'0 14px',fontSize:11.5,
                 cursor:isLast?'default':'pointer',fontFamily:F,fontWeight:600,height:28,borderRadius:5}}>
               Next →
@@ -3318,12 +3651,17 @@ export default function SalesOrderModule() {
                 fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
               💾 Save Draft
             </button>
-            <button onClick={()=>submit('pending')} disabled={saving}
+            <button onClick={()=>setShowApproverPicker(true)} disabled={saving}
               style={{background:saving?'#F9FAFB':'#2563EB',color:saving?'#9CA3AF':'#fff',border:'none',
                 padding:'0 16px',fontSize:12,cursor:saving?'default':'pointer',
                 fontFamily:F,fontWeight:700,height:30,borderRadius:5}}>
               📤 Submit for Approval
             </button>
+            {showApproverPicker && (
+              <ApproverPickerModal module="salesorder" recordLabel={`Sales Order ${form.orderNo||''} — ${form.customerName||''}`}
+                onConfirm={(approverId)=>{ setShowApproverPicker(false); submit('pending', approverId); }}
+                onCancel={()=>setShowApproverPicker(false)} />
+            )}
             {can(user,'salesOrder','approve') && (
             <button onClick={()=>submit('approved')} disabled={saving}
               style={{background:'#16A34A',color:'#fff',border:'none',
@@ -3352,7 +3690,8 @@ export default function SalesOrderModule() {
 
 
       {/* Client Search Popup */}
-      {showSearch && <ClientSearch clients={clients} onSelect={handleClientSelect} onClose={()=>setShowSearch(false)}/>}
+      {showSearch && <ClientSearch clients={clients} onSelect={handleClientSelect} onClose={()=>setShowSearch(false)}
+        companyId={cid} onClientCreated={(nc)=>setClients(prev=>[...prev, nc])}/>}
     </div>
   );
 }

@@ -1,0 +1,10 @@
+{
+  "name": "epsilon-eway-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runs on the user's PC: logs into the e-way bill portal (captcha by the user), uploads the ERP's JSON and sends the e-way bill numbers back to the ERP.",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "puppeteer-core": "24.42.0" }
+}

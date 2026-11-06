@@ -153,7 +153,7 @@ function SearchBtn({ onClick }) {
   );
 }
 
-const fmt = (n) => (n || 0).toFixed(2);
+const fmt = (n) => (Number(n) || 0).toFixed(2);
 const PROJECT_TYPES = ['Prefab', 'Cabin', 'Civil', 'Trading'];
 const PAYMENT_TERMS = ['0001 Payable immediately', 'Net 30', 'Net 45', 'Net 60', '50% Advance', 'On Delivery'];
 const BLANK_ITEM = { material: '', description: '', itCa: 'TAN', qty: 1, unit: 'NOS', unitPrice: 0, taxPct: 18, plant: '1000', firstDate: new Date().toISOString().slice(0, 10) };

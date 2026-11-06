@@ -2,14 +2,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════ */
 const UNITS     = ['NOS','Kg','Ltr','Mtr','Box','Pcs','Set','Hr','Sqft','MT','Roll','Pair','Bag'];
 const GST_RATES = [0, 5, 12, 18, 28];
-const SALES_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
-
 const TABS = [
   { id:'general',  label:'General',     icon:'📋' },
   { id:'items',    label:'Items',       icon:'📦' },
@@ -167,6 +166,7 @@ const EditSalesOrder = () => {
   const { orderId }         = useParams();
   const navigate            = useNavigate();
   const { selectedCompany } = useCompany();
+  const SALES_PERSONS = useStaffNames();
 
   const [activeTab, setActiveTab] = useState('general');
   const [loading,   setLoading]   = useState(true);
@@ -443,6 +443,9 @@ const EditSalesOrder = () => {
     const e = {};
     if (!hdr.customerName.trim()) e.customerName = 'Customer is required';
     if (!hdr.orderDate)           e.orderDate    = 'Order date is required';
+    if (gen.deliveryDate && hdr.orderDate && gen.deliveryDate < hdr.orderDate) {
+      e.genDeliveryDate = 'Delivery Date cannot be before Order Date';
+    }
     if (items.every(it => !it.itemName.trim())) e.items = 'At least one item is required';
     setErrs(e);
     return e;
@@ -452,9 +455,9 @@ const EditSalesOrder = () => {
   const handleSave = async (status) => {
     const e = validate();
     if (Object.keys(e).length > 0) {
-      if (e.customerName || e.orderDate) setActiveTab('general');
+      if (e.customerName || e.orderDate || e.genDeliveryDate) setActiveTab('general');
       else if (e.items) setActiveTab('items');
-      setToast({ type:'error', msg:'Please fix the errors before saving.' });
+      setToast({ type:'error', msg: e.genDeliveryDate || 'Please fix the errors before saving.' });
       return;
     }
     setSaving(true);
@@ -635,7 +638,7 @@ const EditSalesOrder = () => {
         <div style={{ background:'#fff', border:`1px solid ${BD}`, display:'flex', overflowX:'auto', borderBottom:`1px solid ${BD}`, borderRadius:'10px 10px 0 0', padding:'0 8px', boxShadow:`0 1px 0 ${BD}` }}>
           {TABS.map(t => {
             const active  = activeTab === t.id;
-            const hasErr  = (t.id==='general' && (errs.customerName||errs.orderDate)) || (t.id==='items' && errs.items);
+            const hasErr  = (t.id==='general' && (errs.customerName||errs.orderDate||errs.genDeliveryDate)) || (t.id==='items' && errs.items);
             return (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
                 display:'flex', alignItems:'center', gap:'5px', padding:'11px 14px',
@@ -671,7 +674,8 @@ const EditSalesOrder = () => {
                 <FIn label="Quotation Reference" value={gen.quotationRef} onChange={v => setGen(g=>({...g,quotationRef:v}))} placeholder="QT-XXXX" />
                 <div>
                   <label style={S.lbl}>Requested Delivery Date</label>
-                  <input type="date" value={gen.deliveryDate} onChange={e => setGen(g=>({...g,deliveryDate:e.target.value}))} style={inp()} />
+                  <input type="date" value={gen.deliveryDate} onChange={e => setGen(g=>({...g,deliveryDate:e.target.value}))} style={inp(errs.genDeliveryDate)} />
+                  {errs.genDeliveryDate && <div style={S.err}>{errs.genDeliveryDate}</div>}
                 </div>
                 <FSel label="Incoterms" value={gen.incoterms} onChange={v => setGen(g=>({...g,incoterms:v}))}
                   options={['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DPU','DAP','DDP']} placeholder="— Select —" />

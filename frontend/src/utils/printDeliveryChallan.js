@@ -1,13 +1,16 @@
+import { withPrintFont } from './printFont';
+import { brandLine } from './printBranding';
 /**
  * Delivery Challan & Packing List — print layout matching the reference image.
  */
-export function printDeliveryChallan(dc, company = {}) {
+export function printDeliveryChallan(dc, company = {}, user = null) {
   const fmtN = n => (parseFloat(n) || 0).toFixed(2);
   const fmtD = d => {
     if (!d) return '';
     const dt = new Date(d); if (isNaN(dt)) return d;
     return `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`;
   };
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
   const val = v => v || '';
 
   const items   = dc.items   || [];
@@ -22,7 +25,11 @@ export function printDeliveryChallan(dc, company = {}) {
   const css = `
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; padding: 12px; }
-    .outer { border: 1.5px solid #000; width: 100%; border-collapse: collapse; }
+    /* border-collapse:separate (not collapse) — collapsed shared borders can
+       vanish between rows on some print engines (notably Firefox) once a
+       table crosses a forced page-break; the separate model paints every
+       cell's own border independently so rows never lose their divider. */
+    .outer { border: 1.5px solid #000; width: 100%; border-collapse: separate; border-spacing: 0; }
     .outer td, .outer th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; }
     .section-hdr { text-align: center; font-weight: bold; font-size: 11pt; background: #fff; padding: 4px; }
     .col-hdr { font-weight: bold; text-decoration: underline; font-size: 10pt; }
@@ -31,11 +38,11 @@ export function printDeliveryChallan(dc, company = {}) {
     .field-colon { margin: 0 4px; }
     .field-val { flex: 1; }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; }
-    .item-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+    .item-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 9pt; }
     .item-table th { border: 1px solid #000; padding: 4px 5px; font-weight: bold; text-align: center; background: #fff; }
     .item-table td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; }
     .total-row { display: flex; justify-content: flex-end; }
-    .total-table { border-collapse: collapse; min-width: 280px; }
+    .total-table { border-collapse: separate; border-spacing: 0; min-width: 280px; }
     .total-table td { border: 1px solid #000; padding: 3px 8px; font-size: 9.5pt; }
     .bold { font-weight: bold; }
     .center { text-align: center; }
@@ -256,24 +263,26 @@ export function printDeliveryChallan(dc, company = {}) {
           <tr style="height:40px;"><td colspan="9"></td></tr>
         </tbody>
         <tfoot>
+          <!-- Labels span the Qty/UoM/Rate columns so they fit on one line
+               without widening any single column of the items table above. -->
           <tr>
-            <td colspan="7" style="border:none;"></td>
-            <td class="bold" style="text-align:right; padding:3px 8px;">Total Taxable</td>
+            <td colspan="5" style="border:none;"></td>
+            <td class="bold" colspan="3" style="text-align:right; padding:3px 8px; white-space:nowrap;">Total Taxable</td>
             <td class="bold right">${fmtN(subTotal)}</td>
           </tr>
           <tr>
-            <td colspan="7" style="border:none;"></td>
-            <td class="bold" style="text-align:right; padding:3px 8px;">All Additional Charges</td>
+            <td colspan="5" style="border:none;"></td>
+            <td class="bold" colspan="3" style="text-align:right; padding:3px 8px; white-space:nowrap;">All Additional Charges</td>
             <td class="bold right">${fmtN(additionalChgs)}</td>
           </tr>
           <tr>
-            <td colspan="7" style="border:none;"></td>
-            <td class="bold" style="text-align:right; padding:3px 8px;">GST</td>
+            <td colspan="5" style="border:none;"></td>
+            <td class="bold" colspan="3" style="text-align:right; padding:3px 8px; white-space:nowrap;">GST</td>
             <td class="bold right">${fmtN(totalGST)}</td>
           </tr>
           <tr>
-            <td colspan="7" style="border:none;"></td>
-            <td class="bold" style="text-align:right; padding:3px 8px; border-top:1.5px solid #000;">Total Order Value</td>
+            <td colspan="5" style="border:none;"></td>
+            <td class="bold" colspan="3" style="text-align:right; padding:3px 8px; white-space:nowrap; border-top:1.5px solid #000;">Total Order Value</td>
             <td class="bold right" style="border-top:1.5px solid #000;">${fmtN(grandTotal)}</td>
           </tr>
         </tfoot>
@@ -328,6 +337,13 @@ export function printDeliveryChallan(dc, company = {}) {
     </td>
   </tr>
 
+  <tr><td colspan="2" style="border-top:1px solid #000; font-size:8pt; color:#555;">
+    <div style="display:flex; justify-content:space-between;">
+      <span>${brandLine(user)}</span>
+      <span>Printed: ${today}</span>
+    </div>
+  </td></tr>
+
 </table>
 
 <script>
@@ -337,6 +353,6 @@ export function printDeliveryChallan(dc, company = {}) {
 </html>`;
 
   const win = window.open('', '_blank', 'width=900,height=700');
-  win.document.write(html);
+  win.document.write(withPrintFont(html));
   win.document.close();
 }

@@ -814,7 +814,7 @@ router.get('/purchase-orders/:orderId/bills/:fileName', authByTokenOrHeader, (re
 router.get('/payments', requireVendorAuth, (req, res) => {
   try {
     const { companyId, vendorId } = req.vendor;
-    const allPayments = jstore.readAll('Payment', companyId);
+    const allPayments = jstore.readAll('Payments', companyId);
     const myPayments  = allPayments.filter(p =>
       String(p.vendorId) === String(vendorId) || String(p.partyId) === String(vendorId)
     );

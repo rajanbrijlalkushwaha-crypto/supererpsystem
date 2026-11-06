@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
+import { orderIndex, orderDetails } from './orderInfo';
+import { OrderCard } from './Create';
 
 const F = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P = '#104f4f'; const BD = '#E5EAF2';
@@ -25,6 +27,7 @@ export default function ViewJournals() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expanded, setExpanded] = useState(null);
   const [msg, setMsg] = useState('');
+  const [orders, setOrders] = useState({ so: [], po: [] });   // for the linked order's vendor / client details
 
   const load = useCallback(async () => {
     if (!cid) return;
@@ -32,6 +35,8 @@ export default function ViewJournals() {
     try {
       const { data } = await axios.get(`/api/accounts/journals?companyId=${cid}`);
       setRecords(Array.isArray(data) ? data : []);
+      const [so, po] = await Promise.all([axios.get(`/api/sales-orders?companyId=${cid}`).catch(() => ({ data: [] })), axios.get(`/api/purchase-orders?companyId=${cid}`).catch(() => ({ data: [] }))]);
+      setOrders({ so: Array.isArray(so.data) ? so.data : [], po: Array.isArray(po.data) ? po.data : [] });
     } catch (e) { setMsg('Error: ' + e.message); }
     finally { setLoading(false); }
   }, [cid]);
@@ -44,11 +49,13 @@ export default function ViewJournals() {
     catch (e) { setMsg('Error: ' + e.message); }
   };
 
+  const idx = React.useMemo(() => orderIndex(orders.so, orders.po), [orders]);
+  const detailOf = r => (r.type === 'order' && r.orderId ? orderDetails(idx, r.orderLinkType || 'PO', r.orderId) : null);
   let rows = records;
   if (statusFilter !== 'all') rows = rows.filter(r => r.status === statusFilter);
   if (search) {
     const q = search.toLowerCase();
-    rows = rows.filter(r => String(r.journalId).includes(q) || (r.narration || '').toLowerCase().includes(q) || (r.refNo || '').toLowerCase().includes(q) || (r.type || '').toLowerCase().includes(q));
+    rows = rows.filter(r => { const d = detailOf(r); return [r.journalId, r.narration, r.refNo, r.type, d?.no, d?.fileNo, d?.vendor, d?.client, d?.clientPO, d?.material].join(' ').toLowerCase().includes(q); });
   }
 
   return (
@@ -118,10 +125,14 @@ export default function ViewJournals() {
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}` }}>{fmtD(r.date)}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, color: '#6b7280' }}>{r.refNo || '—'}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}` }}>{r.narration}</td>
-                        <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, color: '#6b7280', fontSize: 11 }}>
-                          {r.type === 'order' && r.orderId
-                            ? <span style={{ color: P, fontWeight: 600 }}>[{r.orderLinkType||'PO'}] #{r.orderId}</span>
-                            : '—'}
+                        <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, color: '#6b7280', fontSize: 11, maxWidth: 320 }}>
+                          {r.type === 'order' && r.orderId ? (() => { const d = detailOf(r); return d ? (
+                            <div style={{ lineHeight: 1.45 }}>
+                              <div><span style={{ color: P, fontWeight: 700 }}>[{d.type}] {d.no}</span>{d.type === 'PO' && d.fileNo ? <span style={{ color: '#475467' }}> · File {d.fileNo}</span> : ''}</div>
+                              {d.vendor && <div style={{ color: '#374151' }}>Vendor: <b>{d.vendor}</b></div>}
+                              {d.client && <div style={{ color: '#374151' }}>Client: <b>{d.client}</b>{d.clientPO ? <span style={{ color: '#6b7280' }}> · PO {d.clientPO}</span> : ''}</div>}
+                            </div>
+                          ) : <span style={{ color: P, fontWeight: 600 }}>[{r.orderLinkType||'PO'}] #{r.orderId}</span>; })() : '—'}
                         </td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, textAlign: 'right', fontWeight: 600, color: '#1e40af' }}>₹{fmt(debit)}</td>
                         <td style={{ padding: '8px 10px', border: `1px solid ${BD}`, textAlign: 'right', fontWeight: 600, color: '#7c3aed' }}>₹{fmt(credit)}</td>
@@ -142,6 +153,7 @@ export default function ViewJournals() {
                         <tr>
                           <td colSpan={10} style={{ padding: 0, border: `1px solid ${BD}` }}>
                             <div style={{ background: '#f0f4fb', padding: '12px 14px' }}>
+                              {detailOf(r) && <div style={{ marginBottom: 10 }}><OrderCard d={detailOf(r)} /></div>}
                               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                                 <thead>
                                   <tr style={{ background: P }}>

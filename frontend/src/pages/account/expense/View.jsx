@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
+import { withPrintFont } from '../../../utils/printFont';
+import FyDropdown from '../../../components/FyDropdown';
+import { useNavTheme } from '../../../utils/navTheme';
 
 const F   = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P   = '#3A6186';
@@ -19,6 +22,15 @@ const STATUS_COLOR = {
 };
 
 const getVendorDisplay = e => e.vendorName || e.vendor || e.ledgerName || '—';
+/* financial year (Apr–Mar) of an ISO date, e.g. '2026-07-15' → '26-27'; no date → current FY */
+const fyOf = d => {
+  const t = d ? new Date(d) : new Date();
+  if (isNaN(t)) return '';
+  const y = t.getMonth() >= 3 ? t.getFullYear() : t.getFullYear() - 1;
+  return `${String(y).slice(2)}-${String(y + 1).slice(2)}`;
+};
+/* material names of the sales order an expense is booked against */
+const soMaterials = so => (so?.items || []).map(it => it.description || it.itemName || it.name).filter(Boolean);
 const getOrderDisplay  = e => e.orderNo ? (e.clientName ? `${e.orderNo} — ${e.clientName}` : e.orderNo) : null;
 const getStatusLabel   = s => s === 'pending_approval' ? 'Pending Approval' : (s || 'draft');
 
@@ -124,7 +136,7 @@ ${items.length > 0 ? `
 
   const w = window.open('', '_blank');
   if (!w) { alert('Allow pop-ups to print the voucher.'); return; }
-  w.document.write(html);
+  w.document.write(withPrintFont(html));
   w.document.close();
 }
 
@@ -133,7 +145,7 @@ const DetailRow = ({ exp }) => {
   const items = exp.items || [];
   return (
     <tr>
-      <td colSpan={9} style={{ background:'#F7FAFF', borderBottom:`1px solid ${BD}`, padding:0 }}>
+      <td colSpan={12} style={{ background:'#F7FAFF', borderBottom:`1px solid ${BD}`, padding:0 }}>
         <div style={{ padding:'10px 24px 12px' }}>
           <div style={{ display:'flex', gap:20, marginBottom:8, fontSize:11, color:'#555', flexWrap:'wrap' }}>
             {getOrderDisplay(exp)   && <span><b>Order:</b> {getOrderDisplay(exp)}</span>}
@@ -198,13 +210,20 @@ export default function ViewExpenses() {
   const [expanded,   setExpanded]   = useState(null);
   const [selExp,     setSelExp]     = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [fy,         setFy]         = useState(() => fyOf(null));
+  const [sos,        setSos]        = useState([]);
+  const neu = useNavTheme()[0] === 'neu';
 
   const load = useCallback(async () => {
     if (!cid) return;
     setLoading(true);
     try {
-      const { data } = await axios.get(`/api/accounts/expenses?companyId=${cid}`);
+      const [{ data }, soRes] = await Promise.all([
+        axios.get(`/api/accounts/expenses?companyId=${cid}`),
+        axios.get(`/api/sales-orders?companyId=${cid}`).catch(() => ({ data: [] })),
+      ]);
       setExpenses(data);
+      setSos(Array.isArray(soRes.data) ? soRes.data : []);
     } catch (e) { setMsg('Error: ' + e.message); }
     setLoading(false);
   }, [cid]);
@@ -232,7 +251,20 @@ export default function ViewExpenses() {
     setTimeout(() => setMsg(''), 3000);
   };
 
-  const filtered = expenses.filter(e => {
+  const soById = useMemo(() => {
+    const m = {};
+    sos.forEach(so => { if (so.orderId != null) m['id:' + so.orderId] = so; if (so.orderNo) m['no:' + so.orderNo] = so; });
+    return m;
+  }, [sos]);
+  const materialsOf = e => soMaterials(soById['id:' + e.soId] || soById['no:' + e.orderNo]);
+  const fyList = useMemo(() => {
+    const set = new Set(expenses.map(e => fyOf(e.date)).filter(Boolean));
+    set.add(fyOf(null));
+    return ['all', ...[...set].sort().reverse()];
+  }, [expenses]);
+  const fyRows = fy === 'all' ? expenses : expenses.filter(e => fyOf(e.date) === fy);
+
+  const filtered = fyRows.filter(e => {
     if (activeTab !== 'all' && e.status !== activeTab && !(activeTab === 'pending' && e.status === 'pending_approval')) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -242,6 +274,8 @@ export default function ViewExpenses() {
           || (e.vendor||'').toLowerCase().includes(q)
           || (e.ledgerName||'').toLowerCase().includes(q)
           || (e.invoiceNo||'').toLowerCase().includes(q)
+          || (e.description||'').toLowerCase().includes(q)
+          || materialsOf(e).some(m => m.toLowerCase().includes(q))
           || (e.expenseCategory||e.category||'').toLowerCase().includes(q)
           || String(e.expenseId).includes(q);
     }
@@ -251,21 +285,24 @@ export default function ViewExpenses() {
   const totalAmt = filtered.reduce((s,e)=>s+(parseFloat(e.grandTotal||e.totalAmount)||0),0);
   const isPend = e => e.status === 'pending' || e.status === 'pending_approval';
   const cnt = {
-    all:      expenses.length,
-    pending:  expenses.filter(isPend).length,
-    approved: expenses.filter(e=>e.status==='approved').length,
+    all:      fyRows.length,
+    pending:  fyRows.filter(isPend).length,
+    approved: fyRows.filter(e=>e.status==='approved').length,
   };
 
   const navTab = (key, icon, label) => {
     const isAct = activeTab === key;
     return (
       <button key={key} onClick={() => setActiveTab(key)}
-        style={{ height:'100%', padding:'0 12px', border:'none', flexShrink:0,
-          borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-          marginBottom: -2,
-          cursor:'pointer', fontFamily:F, fontSize:11.5, fontWeight: isAct ? 700 : 400,
-          background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
-          color: isAct ? '#fff' : 'rgba(255,255,255,0.65)', whiteSpace:'nowrap' }}>
+        style={{ height:26, alignSelf:'center', padding:'0 12px', flexShrink:0,
+          cursor:'pointer', fontFamily:F, fontSize:11.5, fontWeight: isAct ? 700 : 600,
+          background: isAct ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+          border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+          boxShadow: isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+          borderRadius:6, margin:'0 4px',
+          color: isAct ? '#fff' : 'rgba(255,255,255,0.85)', whiteSpace:'nowrap' }}
+        onMouseEnter={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+        onMouseLeave={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
         {icon} {label} ({cnt[key]||0})
       </button>
     );
@@ -279,8 +316,8 @@ export default function ViewExpenses() {
     <div style={{ display:'flex', flexDirection:'column', height:'100%', fontFamily:F, fontSize:12 }}>
 
       {/* ══ Single Nav Bar ══ */}
-      <div style={{ flexShrink:0, height:40, background:P, borderBottom:`2px solid ${PD}`,
-        display:'flex', alignItems:'stretch', overflow:'hidden' }}>
+      <div style={{ flexShrink:0, minHeight:40, background:P, borderBottom:`2px solid ${PD}`,
+        display:'flex', alignItems:'stretch', flexWrap:'wrap', rowGap:6, padding:'6px 0' }}>
         <style>{`.exp-srch::placeholder{color:rgba(255,255,255,0.45)}`}</style>
 
         <div style={{ display:'flex', alignItems:'center', padding:'0 10px 0 12px',
@@ -293,6 +330,10 @@ export default function ViewExpenses() {
         {navTab('pending','⏳','Pending')}
         {navTab('approved','✅','Approved')}
 
+        <div style={{ alignSelf:'center', display:'flex', alignItems:'center', flexShrink:0 }}>
+          <FyDropdown value={fy} options={fyList} onChange={setFy} neu={neu} current={fyOf(null)} />
+        </div>
+
         <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', margin:'0 4px', flexShrink:0 }} />
 
         <div style={{ position:'relative', minWidth:160, maxWidth:220, alignSelf:'center', margin:'0 6px' }}>
@@ -303,11 +344,19 @@ export default function ViewExpenses() {
               outline:'none', background:'rgba(255,255,255,0.12)', color:'#fff', boxSizing:'border-box' }} />
         </div>
 
-        <span style={{ fontSize:10.5, color:'rgba(255,255,255,0.55)', alignSelf:'center',
-          flexShrink:0, whiteSpace:'nowrap', margin:'0 6px' }}>
+        <span style={{ fontSize:10.5, color:'rgba(255,255,255,0.7)', alignSelf:'center', flexShrink:0, whiteSpace:'nowrap', margin:'0 6px' }}>
           {loading ? '…' : `${filtered.length} entries`}
           {!loading && <span style={{ color:'#fde68a', fontWeight:700 }}>&nbsp;₹{fmt(totalAmt)}</span>}
         </span>
+
+        {selExp && (
+          <div style={{ padding:'0 9px', height:26, alignSelf:'center', background:'#EEF4FF', border:`1px solid ${BD}`, borderRadius:5, fontSize:10.5, color:P, fontWeight:600,
+            display:'flex', alignItems:'center', gap:6, flexShrink:0, marginLeft:6, whiteSpace:'nowrap' }}>
+            <span>Selected: EXP-{selExp.expenseId}</span>
+            <button onClick={() => { setSelExp(null); setExpanded(null); }}
+              style={{ border:'none', background:'none', color:'#dc2626', cursor:'pointer', fontSize:12, fontWeight:700, padding:0 }}>✕</button>
+          </div>
+        )}
 
         {selExp && (
           <button onClick={() => printExpenseVoucher(selExp, selectedCompany)}
@@ -332,27 +381,6 @@ export default function ViewExpenses() {
         </button>
       </div>
 
-      {/* Summary strip */}
-      <div style={{ flexShrink:0, display:'flex', gap:6, padding:'5px 10px', background:'#F4F7FB', borderBottom:`1px solid ${BD}`, alignItems:'center' }}>
-        {[
-          { label:'Total',    val:`₹${fmt(expenses.reduce((s,e)=>s+(parseFloat(e.grandTotal||e.totalAmount)||0),0))}`,       color:P,        bg:'#EEF4FF', border:BD },
-          { label:'Pending',  val:`₹${fmt(expenses.filter(isPend).reduce((s,e)=>s+(parseFloat(e.grandTotal||e.totalAmount)||0),0))}`, color:'#b06000', bg:'#fff8f0', border:'#ffcc80' },
-          { label:'Approved', val:`₹${fmt(expenses.filter(e=>e.status==='approved').reduce((s,e)=>s+(parseFloat(e.grandTotal||e.totalAmount)||0),0))}`, color:'#1b5e20', bg:'#f0fff4', border:'#a5d6a7' },
-        ].map(c => (
-          <div key={c.label} style={{ background:c.bg, border:`1px solid ${c.border}`, borderRadius:5, padding:'2px 10px', display:'flex', gap:6, alignItems:'center' }}>
-            <span style={{ fontSize:10, color:'#666' }}>{c.label}:</span>
-            <span style={{ fontSize:12, fontWeight:700, color:c.color }}>{c.val}</span>
-          </div>
-        ))}
-        {selExp && (
-          <div style={{ marginLeft:'auto', padding:'2px 10px', background:'#EEF4FF', border:`1px solid ${P}`, borderRadius:5, fontSize:10.5, color:P, fontWeight:600, display:'flex', alignItems:'center', gap:6 }}>
-            <span>Selected: EXP-{selExp.expenseId}</span>
-            <button onClick={() => { setSelExp(null); setExpanded(null); }}
-              style={{ border:'none', background:'none', color:'#dc2626', cursor:'pointer', fontSize:12, fontWeight:700, padding:0 }}>✕</button>
-          </div>
-        )}
-      </div>
-
       {msg && (
         <div style={{ flexShrink:0, padding:'5px 10px', fontSize:11,
           background:msg.startsWith('Error')?'#ffe0e0':'#e8f5e9',
@@ -369,14 +397,14 @@ export default function ViewExpenses() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
             <thead>
               <tr>
-                {['#','ID','Date','Order / Client','Vendor / By','Category','Amount (₹)','Status','Actions'].map((h,i) => (
-                  <th key={i} style={{ ...th, textAlign: i===6 ? 'right' : 'left' }}>{h}</th>
+                {['#','ID','Date','Order ID','Client Name','Material','Description','Vendor / By','Category','Amount (₹)','Status','Actions'].map((h,i) => (
+                  <th key={i} style={{ ...th, textAlign: i===9 ? 'right' : 'left' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={9} style={{ padding:30, textAlign:'center', color:'#888', fontStyle:'italic' }}>No expenses found</td></tr>
+                <tr><td colSpan={12} style={{ padding:30, textAlign:'center', color:'#888', fontStyle:'italic' }}>No expenses found</td></tr>
               )}
               {filtered.map((e, i) => {
                 const sc   = STATUS_COLOR[e.status] || STATUS_COLOR.draft;
@@ -384,6 +412,7 @@ export default function ViewExpenses() {
                 const isSel = selExp?.expenseId === e.expenseId;
                 const rowBg = isSel ? '#EEF4FF' : i%2===0 ? '#fff' : '#f9fbff';
                 const orderDisp = getOrderDisplay(e);
+                const mats = materialsOf(e);
                 return (
                   <React.Fragment key={e.expenseId}>
                     <tr
@@ -399,20 +428,25 @@ export default function ViewExpenses() {
                       <td style={{ padding:'4px 8px', color:'#aaa', borderBottom:'1px solid #eee' }}>
                         <span style={{ fontSize:9, marginRight:3 }}>{isExp?'▼':'▶'}</span>{i+1}
                       </td>
-                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontFamily:'monospace', fontSize:10, color:'#555' }}>EXP-{e.expenseId}</td>
+                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontFamily:'monospace', fontSize:10, color:'#555', whiteSpace:'nowrap' }}>EXP-{e.expenseId}</td>
                       <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontWeight:600, whiteSpace:'nowrap' }}>{fmtD(e.date)}</td>
-                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee' }}>
+                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', whiteSpace:'nowrap' }}>
                         {orderDisp
-                          ? <div><div style={{ fontWeight:700, color:P, fontSize:11 }}>{e.orderNo}</div>{e.clientName && <div style={{ fontSize:10, color:'#555' }}>{e.clientName}</div>}</div>
+                          ? <span style={{ fontWeight:700, color:P, fontSize:11 }}>{e.orderNo}</span>
                           : <span style={{ color:'#bbb', fontStyle:'italic', fontSize:10 }}>{e.expenseType||'—'}</span>}
                       </td>
+                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontSize:10.5, color:'#333' }}>{e.clientName||'—'}</td>
+                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontSize:10.5, color:'#333' }} title={mats.join('\n')}>
+                        {mats.length ? mats.map((m, k) => <div key={k}>{m}</div>) : <span style={{ color:'#bbb' }}>—</span>}
+                      </td>
+                      <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontSize:10.5, color:'#555' }}>{e.description||'—'}</td>
                       <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', fontWeight:600 }}>{getVendorDisplay(e)}</td>
                       <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', color:'#555', fontSize:10.5 }}>{e.expenseCategory||e.category||'—'}</td>
                       <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee', textAlign:'right', fontWeight:700, color:P, fontSize:12 }}>
                         ₹{fmt(e.grandTotal||e.totalAmount||0)}
                       </td>
                       <td style={{ padding:'4px 8px', borderBottom:'1px solid #eee' }}>
-                        <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4,
+                        <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, whiteSpace:'nowrap',
                           background:sc.bg, color:sc.color, border:`1px solid ${sc.border}` }}>
                           {getStatusLabel(e.status)}
                         </span>
@@ -443,7 +477,7 @@ export default function ViewExpenses() {
             </tbody>
             <tfoot>
               <tr style={{ background:'#F0F4FF', fontWeight:700 }}>
-                <td colSpan={6} style={{ padding:'5px 8px', textAlign:'right', fontSize:11 }}>Total ({filtered.length}):</td>
+                <td colSpan={9} style={{ padding:'5px 8px', textAlign:'right', fontSize:11 }}>Total ({filtered.length}):</td>
                 <td style={{ padding:'5px 8px', textAlign:'right', color:P, fontSize:13 }}>₹{fmt(totalAmt)}</td>
                 <td colSpan={2}></td>
               </tr>

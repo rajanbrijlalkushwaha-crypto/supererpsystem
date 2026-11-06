@@ -7,41 +7,13 @@
 const fs   = require('fs');
 const path = require('path');
 const { ROOT } = require('./helpers');
+const sqlite = require('./sqlite');
 
 const companyBase = (companyId, module) =>
   path.join(ROOT, 'Database', 'Companies', companyId, module);
 
 // ── Read all records for a module+company (each record in its own subdir) ──
-const readAll = (module, companyId) => {
-  const dir = companyBase(companyId, module);
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(d => {
-      const full = path.join(dir, d);
-      return fs.statSync(full).isDirectory() && !isNaN(parseInt(d, 10));
-    })
-    .sort((a, b) => parseInt(b, 10) - parseInt(a, 10)) // newest first
-    .map(d => {
-      const subdir = path.join(dir, d);
-      // Always prefer the canonical record file {id}.json first.
-      // This avoids picking up side-car files like communication-logs.json
-      // that live in the same folder.
-      const canonical = path.join(subdir, `${d}.json`);
-      if (fs.existsSync(canonical)) {
-        try { return JSON.parse(fs.readFileSync(canonical, 'utf-8')); }
-        catch { return null; }
-      }
-      // Fallback: most recently modified json (legacy behaviour for renamed records)
-      const jsonFiles = fs.readdirSync(subdir)
-        .filter(f => f.endsWith('.json'))
-        .map(f => ({ f, mtime: fs.statSync(path.join(subdir, f)).mtimeMs }))
-        .sort((a, b) => b.mtime - a.mtime);
-      if (!jsonFiles.length) return null;
-      try { return JSON.parse(fs.readFileSync(path.join(subdir, jsonFiles[0].f), 'utf-8')); }
-      catch { return null; }
-    })
-    .filter(Boolean);
-};
+const readAll = (module, companyId) => sqlite.listCanonical(companyId, module);
 
 // ── Get next sequential ID for a module ──
 const nextId = (module, companyId, base) => {
@@ -56,24 +28,13 @@ const nextId = (module, companyId, base) => {
 };
 
 // ── Read one record by ID ──
-const readOne = (module, companyId, id) => {
-  const dir = path.join(companyBase(companyId, module), String(id));
-  if (!fs.existsSync(dir)) return null;
-  // Prefer canonical {id}.json
-  const canonical = path.join(dir, `${id}.json`);
-  if (fs.existsSync(canonical)) {
-    try { return JSON.parse(fs.readFileSync(canonical, 'utf-8')); } catch { return null; }
-  }
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-  if (!files.length) return null;
-  try { return JSON.parse(fs.readFileSync(path.join(dir, files[0]), 'utf-8')); }
-  catch { return null; }
-};
+const readOne = (module, companyId, id) => sqlite.getOne(companyId, module, id);
 
 // ── Delete one record folder ──
 const deleteOne = (module, companyId, id) => {
   const dir = path.join(companyBase(companyId, module), String(id));
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  sqlite.removeRecord(companyId, module, id);
 };
 
 // ── Companies: stored at Database/Companies/{companyId}/company.json ──

@@ -30,14 +30,12 @@ export const MODULES = [
 
   /* Sales Bill & Dispatch */
   { key:'salesBill',       label:'Sales Bill / Tax Invoice', group:'Sales Bill',     navKey:'dispatch',      actions:['view','create','edit','delete','approve'] },
-  { key:'deliveryChallan', label:'Delivery Challan / GDN',   group:'Sales Bill',     navKey:'dispatch',      actions:['view','create','edit','delete'] },
 
   /* Purchase Order */
   { key:'purchaseOrder',   label:'Purchase Order',           group:'Purchase Order', navKey:'purchase',      actions:['view','create','edit','delete','approve'] },
 
-  /* Purchase Bill & GRN */
+  /* Purchase Bill */
   { key:'purchaseBill',    label:'Purchase Bill',            group:'Purchase Bill',  navKey:'purchasebill',  actions:['view','create','edit','delete','approve'] },
-  { key:'grn',             label:'GRN (Goods Receipt)',      group:'Purchase Bill',  navKey:'purchasebill',  actions:['view','create'] },
 
   /* Manufacturing */
   { key:'mfgOrders',       label:'Manufacturing Orders',     group:'Manufacturing',  navKey:'mfg',           actions:['view','create','edit','delete'] },
@@ -48,8 +46,8 @@ export const MODULES = [
   { key:'accExpense',      label:'Expense',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete','approve'] },
   { key:'accDebitNote',    label:'Debit Note',               group:'Account',        navKey:'finance',       actions:['view','create','edit','delete'] },
   { key:'accCreditNote',   label:'Credit Note',              group:'Account',        navKey:'finance',       actions:['view','create','edit','delete'] },
-  { key:'accPayment',      label:'Payment',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete'] },
-  { key:'accReceipt',      label:'Receipt',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete'] },
+  { key:'accPayment',      label:'Payment',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete','approve'] },
+  { key:'accReceipt',      label:'Receipt',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete','approve'] },
   { key:'accJournal',      label:'Journal',                  group:'Account',        navKey:'finance',       actions:['view','create','edit','delete'] },
   { key:'accBank',         label:'Bank Accounts',            group:'Account',        navKey:'finance',       actions:['view','create','edit'] },
   { key:'accStatement',    label:'Statement',                group:'Account',        navKey:'finance',       actions:['view'] },
@@ -60,8 +58,6 @@ export const MODULES = [
 
   /* Stock */
   { key:'stock',           label:'Stock View',               group:'Stock',          navKey:'stock',         actions:['view'] },
-  { key:'stockIn',         label:'Stock In / GRN',           group:'Stock',          navKey:'stock',         actions:['view','create'] },
-  { key:'stockOut',        label:'Stock Out / GDN',          group:'Stock',          navKey:'stock',         actions:['view','create'] },
 
   /* GST */
   { key:'gst',             label:'GST & Compliance',         group:'GST',            navKey:'gst',           actions:['view'] },

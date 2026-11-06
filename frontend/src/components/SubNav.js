@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useNavTheme, NEU } from '../utils/navTheme';
 
 const SECTIONS = {
   crm: {
@@ -98,17 +99,8 @@ const SECTIONS = {
     routes: ['/project'],
     tabs: [
       { label: 'Jobcodes',      path: '/project/list' },
+      { label: 'Report',        path: '/project/report' },
       { label: 'Project Close', path: '/project/close' },
-    ],
-  },
-  stock: {
-    label: 'Stock',
-    routes: ['/stock'],
-    tabs: [
-      { label: 'Stock View',          path: '/stock/view' },
-      { label: 'GRN (Goods Receipt)', path: '/stock/in' },
-      { label: 'GDN (Stock Out)',     path: '/stock/out' },
-      { label: 'Delivery Challan',    path: '/stock/challan' },
     ],
   },
   admin: {
@@ -136,13 +128,14 @@ const TAB_ICONS = {
   tally:         { 'Import': '📥', 'Pending Review': '🔍' },
   manufacturing: { 'Mfg Orders': '🏭', 'Job Sheets': '📋', 'Create Job Sheet': '➕', 'Locations': '📍' },
   project:       { 'Projects': '📁', 'Create Project': '➕' },
-  stock:         { 'Stock View': '🏬', 'GRN (Goods Receipt)': '📥', 'GDN (Stock Out)': '📤', 'Delivery Challan': '🚚' },
   admin:         { 'Companies': '🏢' },
 };
 
 export default function SubNav() {
   const { pathname } = useLocation();
-  if (pathname.startsWith('/account') || pathname.startsWith('/tally') || pathname.startsWith('/project') || pathname.startsWith('/client') || pathname.startsWith('/client-sap') || pathname.startsWith('/sales-order')) return null;
+  const [navTheme] = useNavTheme();
+  const neu = navTheme === 'neu';
+  if (pathname.startsWith('/account') || pathname.startsWith('/tally') || pathname.startsWith('/project') || pathname.startsWith('/client') || pathname.startsWith('/client-sap') || pathname.startsWith('/sales-order') || pathname.startsWith('/vendor')) return null;
   const sectionEntry = Object.entries(SECTIONS).find(([, s]) => match(s.routes, pathname));
   if (!sectionEntry) return null;
   const [sectionKey, section] = sectionEntry;
@@ -150,7 +143,11 @@ export default function SubNav() {
   const iconMap = TAB_ICONS[sectionKey] || {};
 
   return (
-    <nav style={{
+    <nav style={neu ? {
+      display: 'flex', alignItems: 'stretch',
+      background: NEU.base, flexShrink: 0, height: 46, fontFamily: F,
+      boxShadow: '0 4px 10px rgba(163,177,198,0.45)', position: 'relative', zIndex: 2,
+    } : {
       display: 'flex', alignItems: 'stretch',
       background: '#3A6186',
       borderBottom: '2px solid #2A4D6E',
@@ -159,10 +156,10 @@ export default function SubNav() {
     }}>
       {/* Section label — pinned left, never scrolls away */}
       <div style={{
-        fontSize: 11, fontWeight: 800, color: '#FFFFFF',
+        fontSize: 11, fontWeight: 800, color: neu ? NEU.strong : '#FFFFFF',
         textTransform: 'uppercase', letterSpacing: '0.8px',
         padding: '0 12px 0 10px', whiteSpace: 'nowrap',
-        borderRight: '2px solid rgba(255,255,255,0.18)',
+        borderRight: neu ? '1px solid rgba(163,177,198,0.6)' : '2px solid rgba(255,255,255,0.18)',
         display: 'flex', alignItems: 'center',
         flexShrink: 0,
       }}>
@@ -180,19 +177,29 @@ export default function SubNav() {
           const isAct = pathname === tab.path || pathname.startsWith(tab.path + '/');
           const icon  = iconMap[tab.label] || '';
           if (tab.isCreate) {
+            if (neu) {
+              return (
+                <Link key={tab.path} to={tab.path} style={{
+                  display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px',
+                  fontSize: 11.5, fontWeight: 700, color: '#047857', background: NEU.base,
+                  boxShadow: isAct ? NEU.inset : NEU.raisedSm, textDecoration: 'none', fontFamily: F,
+                  whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'center', borderRadius: 10, margin: '0 6px', height: 30,
+                }}>{tab.label}</Link>
+              );
+            }
             return (
               <Link key={tab.path} to={tab.path} style={{
                 display: 'flex', alignItems: 'center', gap: 4,
-                padding: '0 14px', height: '100%',
+                padding: '0 14px',
                 fontSize: 11.5, fontWeight: 700,
                 color: '#fff',
                 background: isAct ? '#047857' : '#059669',
+                border: '1px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                 textDecoration: 'none',
-                borderBottom: '2px solid transparent',
-                marginBottom: -2,
                 fontFamily: F, whiteSpace: 'nowrap',
-                transition: 'all 0.15s', flexShrink: 0,
-                alignSelf: 'center', borderRadius: 5,
+                transition: 'background 0.15s', flexShrink: 0,
+                alignSelf: 'center', borderRadius: 6,
                 margin: '0 6px', height: 26,
               }}
               onMouseEnter={e => { e.currentTarget.style.background = '#047857'; }}
@@ -201,23 +208,37 @@ export default function SubNav() {
               </Link>
             );
           }
+          if (neu) {
+            return (
+              <Link key={tab.path} to={tab.path} style={{
+                display: 'flex', alignItems: 'center', gap: 4, padding: '0 13px', height: 30, alignSelf: 'center',
+                fontSize: 11.5, fontWeight: isAct ? 700 : 600, color: isAct ? NEU.accent : NEU.text,
+                background: NEU.base, boxShadow: isAct ? NEU.inset : NEU.raisedSm, textDecoration: 'none',
+                borderRadius: 10, margin: '0 6px', fontFamily: F, whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
+                {icon && <span style={{ fontSize: 12 }}>{icon}</span>}
+                {tab.label}
+              </Link>
+            );
+          }
           return (
             <Link key={tab.path} to={tab.path} style={{
               display: 'flex', alignItems: 'center', gap: 4,
-              padding: '0 11px',
-              height: '100%',
+              padding: '0 12px',
+              height: 26, alignSelf: 'center',
               fontSize: 11.5,
-              fontWeight: isAct ? 700 : 400,
-              color: isAct ? '#FFFFFF' : 'rgba(255,255,255,0.65)',
-              background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
-              textDecoration: 'none',
-              borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-              marginBottom: -2,
+              fontWeight: isAct ? 700 : 600,
+              color: isAct ? '#FFFFFF' : 'rgba(255,255,255,0.85)',
+              background: isAct ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+              border: `1px solid ${isAct ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)'}`,
+              boxShadow: isAct ? '0 2px 6px rgba(0,0,0,0.22)' : '0 1px 2px rgba(0,0,0,0.12)',
+              textDecoration: 'none', borderRadius: 6,
+              margin: '0 4px',
               fontFamily: F, whiteSpace: 'nowrap',
-              transition: 'all 0.15s', flexShrink: 0,
+              transition: 'background 0.1s, border-color 0.1s', flexShrink: 0,
             }}
-            onMouseEnter={e => { if (!isAct) e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
-            onMouseLeave={e => { if (!isAct) e.currentTarget.style.background = 'transparent'; }}>
+            onMouseEnter={e => { if (!isAct) { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.55)'; } }}
+            onMouseLeave={e => { if (!isAct) { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'; } }}>
               {icon && <span style={{ fontSize: 12 }}>{icon}</span>}
               {tab.label}
             </Link>

@@ -1,0 +1,188 @@
+/* ════════════════════════════════════════════════════════════════════
+   SOFT (NEUMORPHIC) LOOK — whole ERP
+   ────────────────────────────────────────────────────────────────────
+   Active only when the SOFT switch in the top bar is on (App.js puts
+   `theme-neu` on <body>). Pages are styled with inline style={{…}}, so these
+   rules find elements by their serialized inline style (e.g. a blue toolbar
+   is `background: rgb(58, 97, 134)`) and override with !important.
+
+   Scope: everything inside .content-area, except pages that already have a
+   hand-made soft look (their root carries `neu-native`: Jobcode, My Profile).
+   The top bar, side menu and SubNav are themed in their own components.
+   ════════════════════════════════════════════════════════════════════ */
+
+body.theme-neu {
+  --neu-base:   #E0E5EC;
+  --neu-row:    #E9EDF3;
+  --neu-line:   #C5CEDB;
+  --neu-text:   #1F2937;
+  --neu-strong: #000000;
+  --neu-muted:  #4B5563;
+  --neu-accent: #C2410C;
+  --neu-raised:    5px 5px 10px #A3B1C6, -5px -5px 10px #FFFFFF;
+  --neu-raised-sm: 3px 3px 6px #A3B1C6, -3px -3px 6px #FFFFFF;
+  --neu-inset:     inset 3px 3px 6px #A3B1C6, inset -3px -3px 6px #FFFFFF;
+  --neu-inset-sm:  inset 2px 2px 4px #A3B1C6, inset -2px -2px 4px #FFFFFF;
+}
+
+/* ── 1. Page surface ─────────────────────────────────────────────── */
+body.theme-neu .content-area,
+body.theme-neu .content-area > :not(.neu-native) {
+  background-color: var(--neu-base) !important;
+}
+
+/* ── 2. Surfaces & cards (tagged by utils/softTheme.js) ──────────── */
+body.theme-neu .content-area .neu-surface {
+  background: var(--neu-base) !important;
+  border-color: var(--neu-line) !important;
+}
+body.theme-neu .content-area .neu-card {
+  border-color: transparent !important;
+  box-shadow: var(--neu-raised) !important;
+}
+
+/* ── 3. Dark bars → soft bars (tagged by utils/softTheme.js) ──────── */
+body.theme-neu .content-area .neu-bar {
+  background: var(--neu-base) !important;
+  color: var(--neu-strong) !important;
+  border-color: var(--neu-line) !important;
+  box-shadow: 0 4px 10px rgba(163, 177, 198, 0.45) !important;
+}
+/* white text inside a bar → dark; pale coloured text → same hue, darker */
+body.theme-neu .content-area .neu-ink {
+  color: var(--neu-text) !important;
+}
+body.theme-neu .content-area .neu-ink-tint {
+  color: var(--neu-ink-col) !important;
+}
+/* dark table rows/cells (e.g. Grand Total) → a slightly deeper soft row */
+body.theme-neu .content-area :is(td, tr).neu-darkcell,
+body.theme-neu .content-area tr.neu-darkcell > td {
+  background: #D3DAE5 !important;
+  color: var(--neu-strong) !important;
+}
+/* see-through white buttons/chips in a bar → raised soft pills; active one pressed in */
+body.theme-neu .content-area .neu-pill {
+  background: var(--neu-base) !important;
+  border-color: transparent !important;
+  box-shadow: var(--neu-raised-sm) !important;
+  color: var(--neu-text) !important;
+  border-radius: 10px !important;
+}
+body.theme-neu .content-area .neu-pill.neu-pill-on {
+  box-shadow: var(--neu-inset) !important;
+  color: var(--neu-accent) !important;
+}
+body.theme-neu .content-area .neu-pill * { color: inherit; }
+/* thin dividers and white icons inside a bar */
+body.theme-neu .content-area .neu-bar [style*="width: 1px"] {
+  background: var(--neu-line) !important;
+}
+body.theme-neu .content-area .neu-bar :is(svg[stroke="#fff"], svg[stroke="white"], svg [stroke="#fff"], svg[stroke="#FFFFFF"]) {
+  stroke: var(--neu-text) !important;
+}
+
+/* ── 4. Tables ───────────────────────────────────────────────────── */
+/* header keeps its original colour (tagger sets --neu-th) as text + underline */
+body.theme-neu .content-area > :not(.neu-native) th {
+  background: var(--neu-base) !important;
+  color: var(--neu-th, var(--neu-strong)) !important;
+  border-color: var(--neu-line) !important;
+  box-shadow: inset 0 -2px 0 var(--neu-th, #3A6186);
+}
+body.theme-neu .content-area > :not(.neu-native) th * { color: inherit !important; }
+body.theme-neu .content-area > :not(.neu-native) td {
+  border-color: var(--neu-line) !important;
+}
+body.theme-neu .content-area > :not(.neu-native) :is(
+  td[style*="background: rgb(255, 255, 255)"], tr[style*="background: rgb(255, 255, 255)"],
+  td[style*="background: rgb(248, 250, 252)"], tr[style*="background: rgb(248, 250, 252)"],
+  td[style*="background: rgb(249, 250, 251)"], tr[style*="background: rgb(249, 250, 251)"],
+  td[style*="background: rgb(250, 250, 250)"], tr[style*="background: rgb(250, 250, 250)"]
+) {
+  background: var(--neu-row) !important;
+}
+body.theme-neu .content-area > :not(.neu-native) tbody tr:not([style*="background"]) td:not([style*="background"]) {
+  background-color: var(--neu-row);
+}
+
+/* ── 5. Inputs, selects, text areas → pressed-in fields ──────────── */
+body.theme-neu .content-area > :not(.neu-native) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]),
+  select, textarea
+) {
+  background-color: var(--neu-base) !important;
+  border-color: transparent !important;
+  box-shadow: var(--neu-inset) !important;
+  border-radius: 9px !important;
+  color: var(--neu-strong) !important;
+}
+body.theme-neu .content-area > :not(.neu-native) :is(input, textarea)::placeholder {
+  color: var(--neu-muted) !important;
+}
+body.theme-neu .content-area > :not(.neu-native) :is(input, textarea, select):focus {
+  box-shadow: inset 4px 4px 8px #A3B1C6, inset -4px -4px 8px #FFFFFF !important;
+}
+
+/* ── 6. Buttons ──────────────────────────────────────────────────── */
+body.theme-neu .content-area > :not(.neu-native) button {
+  border-radius: 10px !important;
+  transition: box-shadow 0.15s, background 0.15s;
+}
+/* light / see-through buttons → raised soft buttons (their own text colour is kept) */
+body.theme-neu .content-area > :not(.neu-native) button:is(
+  [style*="background: rgb(255, 255, 255)"], [style*="background: white"], [style*="background: transparent"], [style*="background: none"],
+  [style*="background: rgb(248, 250, 252)"], [style*="background: rgb(241, 245, 249)"],
+  [style*="background: rgb(243, 244, 246)"], [style*="background: rgb(240, 240, 240)"],
+  [style*="background: rgb(249, 250, 251)"]
+) {
+  background: var(--neu-base) !important;
+  border-color: transparent !important;
+  box-shadow: var(--neu-raised-sm) !important;
+}
+/* any other near-white button (tagged by utils/softTheme.js) */
+body.theme-neu .content-area .neu-btn-light {
+  background: var(--neu-base) !important;
+  border-color: transparent !important;
+  box-shadow: var(--neu-raised-sm) !important;
+}
+/* solid coloured buttons (Save, Create, Delete…) keep their colour, get a soft shadow */
+body.theme-neu .content-area > :not(.neu-native) button[style*="background: rgb("]:not(
+  [style*="background: rgb(255, 255, 255)"]):not([style*="background: rgb(248, 250, 252)"]):not(
+  [style*="background: rgb(241, 245, 249)"]):not([style*="background: rgb(243, 244, 246)"]):not(
+  [style*="background: rgb(240, 240, 240)"]):not([style*="background: rgb(249, 250, 251)"]) {
+  border-color: transparent !important;
+  box-shadow: 3px 3px 7px #A3B1C6, -3px -3px 7px #FFFFFF !important;
+}
+body.theme-neu .content-area > :not(.neu-native) button:not(:disabled):active {
+  box-shadow: var(--neu-inset) !important;
+}
+
+/* ── Section tab bars (Order Details / Item Details / …) ─────────────
+   Containers carry `soft-tabs`; tabs look like the side-nav buttons:
+   raised pills, hover lifts, the open tab (inline #DBEAFE) is pressed in. */
+body.theme-neu .content-area .soft-tabs {
+  background: var(--neu-base) !important;
+  border-bottom: none !important;
+  gap: 10px;
+  padding: 8px 6px 10px !important;
+}
+body.theme-neu .content-area .soft-tabs > button {
+  background: var(--neu-base) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  margin: 0 !important;
+  height: 34px !important;
+  color: var(--neu-text) !important;
+  font-weight: 600 !important;
+  box-shadow: var(--neu-raised-sm) !important;
+}
+body.theme-neu .content-area .soft-tabs > button:hover {
+  color: var(--neu-accent) !important;
+  box-shadow: var(--neu-raised) !important;
+}
+body.theme-neu .content-area .soft-tabs > button[style*="background: rgb(219, 234, 254)"] {
+  color: var(--neu-accent) !important;
+  font-weight: 800 !important;
+  box-shadow: var(--neu-inset) !important;
+}

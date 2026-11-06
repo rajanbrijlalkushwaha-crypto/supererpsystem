@@ -2,13 +2,13 @@
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════ */
 const UNITS       = ['NOS','Kg','Ltr','Mtr','Box','Pcs','Set','Hr','Sqft','MT','Roll','Pair','Bag'];
 const GST_RATES   = [0, 5, 12, 18, 28];
-const SALES_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
 const STATES = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
   'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
@@ -147,7 +147,7 @@ function selStyle(sm) {
 }
 
 /* ── Compact field components ── */
-function F({ label, req, children, err, hint }) {
+function Field({ label, req, children, err, hint }) {
   return (
     <div>
       {label && <label style={S.lbl}>{label}{req && <span style={S.req}>*</span>}</label>}
@@ -160,17 +160,17 @@ function F({ label, req, children, err, hint }) {
 
 function FIn({ label, req, value, onChange, placeholder, err, hint, type='text', maxLength, upper, readOnly, sm }) {
   return (
-    <F label={label} req={req} err={err} hint={hint}>
+    <Field label={label} req={req} err={err} hint={hint}>
       <input type={type} value={value} maxLength={maxLength} placeholder={placeholder} readOnly={readOnly}
         onChange={e => onChange && onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
         style={{ ...inp(err, sm), ...(readOnly ? { background:'#F0F4F8', cursor:'default' } : {}) }}
       />
-    </F>
+    </Field>
   );
 }
 function FSel({ label, req, value, onChange, options, err, placeholder='— Select —', sm }) {
   return (
-    <F label={label} req={req} err={err}>
+    <Field label={label} req={req} err={err}>
       <select value={value} onChange={e => onChange(e.target.value)} style={selStyle(sm)}>
         <option value="">{placeholder}</option>
         {options.map(o => typeof o === 'string'
@@ -178,17 +178,17 @@ function FSel({ label, req, value, onChange, options, err, placeholder='— Sele
           : <option key={o.v} value={o.v}>{o.l}</option>
         )}
       </select>
-    </F>
+    </Field>
   );
 }
 function FTA({ label, req, value, onChange, placeholder, rows=3, err }) {
   return (
-    <F label={label} req={req} err={err}>
+    <Field label={label} req={req} err={err}>
       <textarea value={value} rows={rows} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
         style={{ ...inp(err), resize:'vertical', minHeight: rows*22+'px' }}
       />
-    </F>
+    </Field>
   );
 }
 
@@ -232,6 +232,7 @@ function calcRowAmt(it) {
 const CreateSalesOrder = () => {
   const navigate            = useNavigate();
   const { selectedCompany } = useCompany();
+  const SALES_PERSONS = useStaffNames();
 
   const [activeTab, setActiveTab] = useState('general');
   const [saving,    setSaving]    = useState(false);
@@ -446,6 +447,21 @@ const CreateSalesOrder = () => {
     if (!hdr.customerName.trim()) e.customerName = 'Customer is required';
     if (!hdr.orderDate)           e.orderDate    = 'Order date is required';
     if (items.every(it => !it.itemName.trim())) e.items = 'At least one item is required';
+
+    /* Delivery date can never be earlier than the order date or the
+       client's own order date — dates are yyyy-mm-dd, so plain string
+       comparison sorts correctly. */
+    const deliveryError = val => {
+      if (!val) return null;
+      if (hdr.orderDate && val < hdr.orderDate) return 'Delivery Date cannot be before Order Date';
+      if (hdr.clientOrderDate && val < hdr.clientOrderDate) return 'Delivery Date cannot be before Client Order Date';
+      return null;
+    };
+    const dErr1 = deliveryError(hdr.deliveryDate);
+    if (dErr1) e.deliveryDate = dErr1;
+    const dErr2 = deliveryError(gen.deliveryDate);
+    if (dErr2) e.genDeliveryDate = dErr2;
+
     setErrs(e);
     return e;
   };
@@ -455,8 +471,9 @@ const CreateSalesOrder = () => {
     const e = validate();
     if (Object.keys(e).length > 0) {
       if (e.customerName || e.orderDate) setActiveTab('general');
+      else if (e.genDeliveryDate)        setActiveTab('general');
       else if (e.items)                  setActiveTab('items');
-      setToast({ type:'error', msg:'Please fix the errors before saving.' });
+      setToast({ type:'error', msg: e.deliveryDate || e.genDeliveryDate || 'Please fix the errors before saving.' });
       return;
     }
     setSaving(true);
@@ -757,7 +774,8 @@ const CreateSalesOrder = () => {
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
                 <label style={{ ...S.lbl, marginBottom:0, minWidth:'130px', textAlign:'right' }}>Delivery Date</label>
                 <input type="date" value={hdr.deliveryDate} onChange={e => setH('deliveryDate', e.target.value)}
-                  style={{ ...inp(false), flex:1 }} />
+                  style={{ ...inp(errs.deliveryDate), flex:1 }} />
+                {errs.deliveryDate && <span style={{ fontSize:'11px', color:'#EF4444', whiteSpace:'nowrap' }}>{errs.deliveryDate}</span>}
               </div>
               {/* Payment Terms */}
               <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
@@ -816,7 +834,7 @@ const CreateSalesOrder = () => {
         <div style={{ background:'#fff', border:`1px solid ${BD}`, display:'flex', overflowX:'auto', borderBottom:`1px solid ${BD}`, borderRadius:'10px 10px 0 0', padding:'0 8px', boxShadow:`0 1px 0 ${BD}` }}>
           {TABS.map((t) => {
             const active = activeTab === t.id;
-            const hasErr = (t.id === 'general' && (errs.customerName || errs.orderDate)) || (t.id === 'items' && errs.items);
+            const hasErr = (t.id === 'general' && (errs.customerName || errs.orderDate || errs.genDeliveryDate)) || (t.id === 'items' && errs.items);
             return (
               <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
                 display:'flex', alignItems:'center', gap:'5px', padding:'11px 14px',
@@ -853,7 +871,8 @@ const CreateSalesOrder = () => {
                 <FIn label="Quotation Reference" value={gen.quotationRef} onChange={v => setGen(g=>({...g,quotationRef:v}))} placeholder="QT-XXXX" />
                 <div>
                   <label style={S.lbl}>Requested Delivery Date</label>
-                  <input type="date" value={gen.deliveryDate} onChange={e => setGen(g=>({...g,deliveryDate:e.target.value}))} style={inp()} />
+                  <input type="date" value={gen.deliveryDate} onChange={e => setGen(g=>({...g,deliveryDate:e.target.value}))} style={inp(errs.genDeliveryDate)} />
+                  {errs.genDeliveryDate && <div style={{ fontSize:'11px', color:'#EF4444', marginTop:'3px' }}>{errs.genDeliveryDate}</div>}
                 </div>
                 <FSel label="Incoterms (Optional)" value={gen.incoterms} onChange={v => setGen(g=>({...g,incoterms:v}))}
                   options={['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DPU','DAP','DDP']} placeholder="— Select —" />

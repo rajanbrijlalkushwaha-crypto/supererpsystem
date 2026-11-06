@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { withPrintFont } from '../../utils/printFont';
 
 const P  = '#133d80';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -414,7 +415,7 @@ td{padding:4px 7px;border:1px solid #d1d9ed;}
 </body></html>`;
     const w = window.open('','_blank','width=1200,height=900,scrollbars=yes');
     if(!w){alert('Allow pop-ups to print.');return;}
-    w.document.write(html); w.document.close();
+    w.document.write(withPrintFont(html)); w.document.close();
   };
 
   /* ── Sales bill Excel export ── */
@@ -936,7 +937,7 @@ tr:nth-child(even) td{background:#f5f8ff;}
 </body></html>`;
                 const w=window.open('','_blank','width=1100,height=800,scrollbars=yes');
                 if(!w){alert('Allow pop-ups.');return;}
-                w.document.write(html); w.document.close();
+                w.document.write(withPrintFont(html)); w.document.close();
               }} style={{ height:30, padding:'0 14px', fontSize:11, fontWeight:700, cursor:'pointer',
                 background:'#EFF6FF', color:P, border:`1px solid #b3c6e8`, borderRadius:5, fontFamily:F }}>
                 🖨️ Print PDF

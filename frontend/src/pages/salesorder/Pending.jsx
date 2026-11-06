@@ -23,6 +23,7 @@ const grand = (o) => {
 
 /* ── Order Detail Modal ── */
 export function OrderModal({ order, company, onClose, onApprove, onReject, readOnly }) {
+  const { user } = useAuth();
   if (!order) return null;
   const items    = order.items && order.items.length ? order.items : [];
   const subTotal = items.reduce((s, it) =>
@@ -163,7 +164,7 @@ export function OrderModal({ order, company, onClose, onApprove, onReject, readO
         <div style={{ padding:'14px 24px', borderTop:'1px solid #e2e8f0', display:'flex',
           justifyContent:'flex-end', gap:10, background:'#f8fafc',
           borderRadius:'0 0 10px 10px', flexShrink:0 }}>
-          <button onClick={() => printSalesOrder(order, company)}
+          <button onClick={() => printSalesOrder(order, company, user)}
             style={{ padding:'8px 18px', borderRadius:6, border:`1px solid ${P}`,
               background:'#fff', cursor:'pointer', fontSize:13, fontFamily:F }}>🖨️ Print</button>
           <button onClick={onClose}
@@ -274,7 +275,7 @@ const PendingSalesOrders = () => {
       await axios.put(`/api/sales-orders/${orderId}`, fd, { headers:{ 'Content-Type':'multipart/form-data' } });
       setMessage(`Order ${orderId} approved ✓`);
       setSelected(null);
-      fetchOrders();
+      setTimeout(() => navigate('/sales-order/view'), 1200);
     } catch (err) { setMessage('Error: ' + err.message); }
   };
 

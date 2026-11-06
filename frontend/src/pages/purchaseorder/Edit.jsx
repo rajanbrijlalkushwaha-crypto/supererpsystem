@@ -2,14 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════ */
 const UNITS          = ['NOS','Kg','Ltr','Mtr','Box','Pcs','Set','Hr','Sqft','MT','Roll','Pair','Bag'];
 const GST_RATES      = [0, 5, 12, 18, 28];
-const PURCHASE_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
-
 const TABS = [
   { id:'general',  label:'General',     icon:'📋' },
   { id:'items',    label:'Items',       icon:'📦' },
@@ -145,6 +144,7 @@ const EditPurchaseOrder = () => {
   const { orderId }         = useParams();
   const navigate            = useNavigate();
   const { selectedCompany } = useCompany();
+  const PURCHASE_PERSONS = useStaffNames();
 
   const [activeTab,  setActiveTab]  = useState('general');
   const [loading,    setLoading]    = useState(true);

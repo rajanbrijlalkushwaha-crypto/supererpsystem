@@ -3,7 +3,8 @@ const path     = require('path');
 const fs       = require('fs');
 const multer   = require('multer');
 const XLSX     = require('xlsx');
-const { ROOT, upload, saveUploadedFiles, saveJson, deleteJson, auditEntry, pushAudit } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, deleteJson, auditEntry, pushAudit, resolveUser } = require('./helpers');
+const { notifyApprovers } = require('./notifications');
 const jstore   = require('./json-store');
 
 /* ── multer for Excel upload (memory storage) ── */
@@ -305,7 +306,7 @@ router.post('/', upload.array('documents'), async (req, res) => {
     // Build contact list — new form sends flat fields; old sends JSON array
     let contactList = jp('contactPersons');
     if (!contactList) {
-      contactList = [{ name: str('contactPerson'), mobile: str('mobile'), altMobile: str('altMobile'), email: str('email'), website: str('website'), landline: str('landline') }];
+      contactList = [{ name: str('contactPerson'), mobileNumber: str('mobile'), altMobile: str('altMobile'), email: str('email'), website: str('website'), landline: str('landline') }];
     }
 
     let docList = jp('documentsJson') || [];
@@ -350,10 +351,25 @@ router.post('/', upload.array('documents'), async (req, res) => {
       currency: str('currency') || 'INR',
       category: str('category') || 'Regular',
       salesPerson: str('salesPerson'), remarks: str('remarks'),
+      epsilonVendorCode: str('epsilonVendorCode'),
+      alias: str('alias'), mailingName: str('mailingName'),
+      openingBalance: parseFloat(str('openingBalance')) || 0, openingBalanceType: str('openingBalanceType') === 'Cr' ? 'Cr' : 'Dr',
       documents: docList, createdAt: now, updatedAt: now,
       audit: [auditEntry(req, 'created')],
     };
     saveJson(clientJsonPath(companyId, clientId, clientName), fullData);
+
+    if (status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'client', recordId: clientId,
+        recordLabel: `Client ${clientName || clientId}`,
+        message: `Client ${clientName || clientId} needs your approval`,
+        link: '/client/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
 
     res.json({ success: true, clientId, message: `Client created with ID: ${clientId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -432,7 +448,7 @@ router.put('/:clientId', upload.array('newFiles'), async (req, res) => {
     const resolvedState   = state       || existing.state       || '';
     const resolvedPincode = pincode     || existing.pincode     || '';
     const resolvedGstin   = gstin       || existing.gstin       || existing.gst         || '';
-    const resolvedGstType = gstType || existing.gstType || 'Regular';
+    const resolvedGstType = str('gstType') || existing.gstType || 'Regular';   // not sent = keep the saved type
     const fullData = {
       // Merge existing data first, then overwrite with incoming values
       ...existing,
@@ -466,6 +482,12 @@ router.put('/:clientId', upload.array('newFiles'), async (req, res) => {
       remarks:       str('remarks')       || existing.remarks        || '',
       website:       str('website')       || existing.website        || '',
       landline:      str('landline')      || existing.landline       || '',
+      // fields from the new (beta) client form — sent value wins (even blank), otherwise keep what was saved
+      epsilonVendorCode: b.epsilonVendorCode !== undefined ? str('epsilonVendorCode') : (existing.epsilonVendorCode || ''),
+      alias:             b.alias !== undefined ? str('alias') : (existing.alias || ''),
+      mailingName:       b.mailingName !== undefined ? str('mailingName') : (existing.mailingName || ''),
+      openingBalance:    b.openingBalance !== undefined ? (parseFloat(str('openingBalance')) || 0) : (existing.openingBalance || 0),
+      openingBalanceType: b.openingBalanceType !== undefined ? (str('openingBalanceType') === 'Cr' ? 'Cr' : 'Dr') : (existing.openingBalanceType || 'Dr'),
       documents: docList,
       createdAt: existing.createdAt || existing.created_at || now,
       updatedAt: now,
@@ -478,6 +500,18 @@ router.put('/:clientId', upload.array('newFiles'), async (req, res) => {
     const clExtra = clNewStatus !== clOldStatus ? { from: clOldStatus, to: clNewStatus } : {};
     fullData.audit = pushAudit(existing, req, clAction, clExtra);
     saveJson(clientJsonPath(companyId, clientId, resolvedName), fullData);
+
+    if (clNewStatus === 'pending' && clOldStatus !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'client', recordId: clientId,
+        recordLabel: `Client ${resolvedName || clientId}`,
+        message: `Client ${resolvedName || clientId} needs your approval`,
+        link: '/client/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
 
     res.json({ success: true, message: 'Client updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }

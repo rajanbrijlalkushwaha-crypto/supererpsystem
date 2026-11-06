@@ -1,3 +1,4 @@
+import { withPrintFont } from './printFont';
 /* ═══════════════════════════════════════════════════════════════
    EPSILON ERP — Job Sheet Print
    Usage: printJobSheet(jobSheet, company)
@@ -196,5 +197,5 @@ export const printJobSheet = (js, company = {}) => {
 </html>`;
 
   const w = window.open('', '_blank', 'width=900,height=700');
-  if (w) { w.document.write(html); w.document.close(); }
+  if (w) { w.document.write(withPrintFont(html)); w.document.close(); }
 };

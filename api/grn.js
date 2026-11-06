@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const fs      = require('fs');
 const path    = require('path');
+const { resolveUser } = require('./helpers');
 
 const DB = path.join(__dirname, '..', 'Database', 'Companies');
 
@@ -40,10 +41,12 @@ function listAll(cid) {
     .sort((a, b) => b.grnId - a.grnId);
 }
 
+/* deleted GRNs stay on file (status 'deleted') and are listed only with ?withDeleted=1 */
 router.get('/', (req, res) => {
-  const { companyId } = req.query;
+  const { companyId, withDeleted } = req.query;
   if (!companyId) return res.status(400).json({ error: 'companyId required' });
-  res.json(listAll(companyId));
+  const list = listAll(companyId);
+  res.json(withDeleted ? list : list.filter(g => g.status !== 'deleted'));
 });
 
 router.get('/:grnId', (req, res) => {
@@ -75,12 +78,18 @@ router.put('/:grnId', (req, res) => {
   res.json({ success: true });
 });
 
+/* DELETE — marks the GRN deleted (who / when) so the list still shows it; it no longer counts as received.
+   ?hard=1 removes it (used when a DC is saved again and makes its own GRNs afresh). */
 router.delete('/:grnId', (req, res) => {
-  const { companyId } = req.query;
+  const { companyId, hard, by } = req.query;
   if (!companyId) return res.status(400).json({ error: 'companyId required' });
   const dir = entryDir(companyId, req.params.grnId);
   if (!fs.existsSync(dir)) return res.status(404).json({ error: 'GRN not found' });
-  fs.rmSync(dir, { recursive: true, force: true });
+  if (hard) { fs.rmSync(dir, { recursive: true, force: true }); return res.json({ success: true }); }
+  const file = grnFile(companyId, req.params.grnId);
+  const existing = readJSON(file);
+  if (!existing) return res.status(404).json({ error: 'GRN not found' });
+  writeJSON(file, { ...existing, status: 'deleted', deletedAt: new Date().toISOString(), deletedBy: (() => { const u = resolveUser(req); return u ? (u.name || u.username || '') : String(by || '').slice(0, 80); })(), updatedAt: new Date().toISOString() });
   res.json({ success: true });
 });
 

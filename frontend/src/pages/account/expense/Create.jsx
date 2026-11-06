@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { px } from '../../../utils/uiScale';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
@@ -51,7 +52,7 @@ function SearchDrop({ value, onSelect, options, placeholder }) {
   const openDrop = () => {
     if (inputRef.current) {
       const r = inputRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width });
+      setPos({ top: px(r.bottom + window.scrollY) + 2, left: px(r.left + window.scrollX), width: px(r.width) });
     }
     setQ(''); setOpen(true);
   };

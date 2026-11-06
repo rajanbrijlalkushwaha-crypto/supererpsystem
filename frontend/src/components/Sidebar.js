@@ -5,12 +5,12 @@ import { useChat } from '../context/ChatContext';
 import { canViewNav, can } from '../utils/permissions';
 
 /* ──────────────────────────────────────────────
-   DESIGN TOKENS — Teal Theme
+   DESIGN TOKENS — Soft Blue Theme
 ──────────────────────────────────────────────── */
-const BG      = '#104f4f';
-const BG2     = '#0b3d3d';
+const BG      = '#3A6186';
+const BG2     = '#2A4D6E';
 const MUTED   = 'rgba(255,255,255,0.88)';
-const HOVER   = 'rgba(255,255,255,0.1)';
+const HOVER   = 'rgba(255,255,255,0.12)';
 const DIVIDER = 'rgba(255,255,255,0.15)';
 const F       = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 
@@ -32,6 +32,9 @@ const ICON_BG = {
   communication:'#0284c7',
   passwords:    '#65a30d',
   admin:        '#475569',
+  reports:      '#0284c7',
+  company:      '#334155',
+  epsilonai:    '#8b5cf6',
   logout:       '#ef4444',
   clientdues:   '#b45309',
   vendordues:   '#059669',
@@ -80,6 +83,9 @@ const ICONS = {
   deposit:      ['M12 2v20','M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6'],
   approval:     ['M22 11.08V12a10 10 0 11-5.93-9.14','M22 4L12 14.01l-3-3'],
   filedocs:     ['M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z','M12 11v6','M9 14h6'],
+  reports:      ['M3 3v18h18','M7 16v-5','M12 16V7','M17 16v-3'],
+  company:      ['M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16','M3 21h18','M9 8h1','M9 12h1','M9 16h1','M14 8h1','M14 12h1','M14 16h1'],
+  epsilonai:    ['M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z','M19 2.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5L17 4.5l1.5-.5z'],
 };
 
 /* ──────────────────────────────────────────────
@@ -187,12 +193,44 @@ const NAV = [
     ],
   },
 
+  /* ── Reports (ungrouped, single page) ── */
+  { key:'reports', label:'Reports', short:'R', path:'/reports/monthly', routes:['/reports'], ungrouped:true },
+
   /* ── Admin group ── */
   { type:'group', key:'grp-admin', label:'Admin', short:'ADM', color:'#475569' },
   { key:'approvals', label:'Approvals',        path:'/approval',          routes:['/approval'] },
   { key:'passwords', label:'Password Manager', path:'/passwords',         routes:['/passwords'] },
   { key:'admin',     label:'Admin Settings',   path:'/admin/companies',   routes:['/admin','/settings','/user-management'] },
+
+  /* ── Company (ungrouped, single page) ── */
+  { key:'company', label:'Company', short:'O', path:'/company-info', routes:['/company-info'], ungrouped:true },
+
+  /* ── Epsilon AI (ungrouped, single page) ── */
+  { key:'epsilonai', label:'Epsilon AI', short:'E', path:'/epsilon-ai', routes:['/epsilon-ai'], ungrouped:true },
 ];
+
+/* ──────────────────────────────────────────────
+   KEYBOARD SHORTCUTS — Tally-style single-key nav.
+   Pressing the letter (when not typing into a field) opens that menu —
+   a group key toggles the same colored header open/closed that clicking
+   it does; a plain item key navigates straight to its page.
+──────────────────────────────────────────────── */
+const SHORTCUT_MAP = {
+  d: 'dashboard',
+  j: 'project',
+  c: 'grp-crm',
+  v: 'grp-vendor',
+  i: 'grp-inventory',
+  a: 'grp-account',
+  m: 'grp-mfg',
+  r: 'reports',
+  n: 'grp-admin',
+  o: 'company',
+  e: 'epsilonai',
+};
+const SHORTCUT_BY_KEY = Object.fromEntries(
+  Object.entries(SHORTCUT_MAP).map(([letter, key]) => [key, letter.toUpperCase()])
+);
 
 /* ──────────────────────────────────────────────
    ACCOUNT MODE NAV (full account menu)
@@ -224,7 +262,7 @@ const ACCOUNT_SECTIONS = [
     label: 'Reports',
     color: '#b45309',
     items: [
-      { label: 'View Balance',  path: '/account/dues',         icon: 'dues',      permKey: null },
+      { label: 'View Balance',  path: '/account/dues',         icon: 'dues',      permKey: 'accDues' },
       { label: 'All Ledgers',  path: '/account/ledger/view',  icon: 'ledger',    permKey: 'accLedger' },
       { label: 'Bank Account', path: '/account/bank/view',    icon: 'bank',      permKey: 'accBank' },
       { label: 'Statement',    path: '/account/statement',    icon: 'statement', permKey: 'accStatement' },
@@ -234,14 +272,14 @@ const ACCOUNT_SECTIONS = [
     label: 'Compliance',
     color: '#dc2626',
     items: [
-      { label: 'GST & Compliance',     path: '/gst/compliance',          icon: 'gst',      permKey: null },
+      { label: 'GST & Compliance',     path: '/gst/compliance',          icon: 'gst',      permKey: 'gst' },
     ],
   },
   {
     label: 'Other',
     color: '#475569',
     items: [
-      { label: 'Approval',             path: '/account/approval',        icon: 'approval', permKey: null },
+      { label: 'Approval',             path: '/account/approval',        icon: 'approval', permKey: 'accApproval' },
       { label: 'Financial Documents',  path: '/account/financial-docs',  icon: 'filedocs', permKey: null },
     ],
   },
@@ -263,7 +301,7 @@ const NAV_ITEM_GROUPS = (() => {
   let cur = null;
   for (const item of NAV) {
     if (item.type === 'group') { cur = item.key; }
-    else { map[item.key] = cur; }
+    else { map[item.key] = item.ungrouped ? null : cur; }
   }
   return map;
 })();
@@ -321,12 +359,47 @@ export default function Sidebar() {
     }
   }, [pathname, search]);
 
+  /* ── Keyboard shortcuts (D/J/C/V/I/A/M/R/N/O) — ignored while typing
+     into any field, so normal form input is never hijacked. ── */
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return;
+
+      const navKey = SHORTCUT_MAP[e.key.toLowerCase()];
+      if (!navKey) return;
+      e.preventDefault();
+      setHovered(true);
+
+      if (navKey.startsWith('grp-')) {
+        setAccountMode(false);
+        setOpenGroup(prev => prev === navKey ? null : navKey);
+        return;
+      }
+
+      const item = NAV.find(n => !n.type && n.key === navKey);
+      if (!item) return;
+      if (item.key === 'finance') {
+        setAccountMode(true);
+        navigate(item.path);
+        return;
+      }
+      if (item.sub) {
+        setOpenKeys(prev => prev.has(item.key) ? new Set() : new Set([item.key]));
+      }
+      navigate(item.path);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate]);
+
   useEffect(() => {
     localStorage.setItem('sidebar-pinned', String(pinned));
   }, [pinned]);
 
   const collapsed = !isExpanded;
-  const W = isExpanded ? 240 : 62;
+  const W = isExpanded ? 206 : 58;
 
   const initials = (name) => {
     if (!name) return 'U';
@@ -350,7 +423,7 @@ export default function Sidebar() {
       gap: isExpanded ? 6 : 0,
     }}>
       {isExpanded && (
-        <span style={{ flex:1, fontSize:12, fontWeight:800, color:'#fff',
+        <span style={{ flex:1, fontSize:12, fontWeight:800, color: MUTED,
           letterSpacing:'0.5px', paddingLeft:4, userSelect:'none' }}>
           {accountMode ? 'Account' : 'ERP Suite'}
         </span>
@@ -362,7 +435,7 @@ export default function Sidebar() {
           background: pinned ? 'rgba(255,255,255,0.18)' : 'none',
           border: pinned ? '1px solid rgba(255,255,255,0.35)' : '1px solid transparent',
           cursor: 'pointer', padding: 5,
-          color: '#fff',
+          color: MUTED,
           borderRadius: 5, display: 'flex', alignItems: 'center',
           transition: 'all 0.15s', flexShrink: 0,
         }}
@@ -392,13 +465,13 @@ export default function Sidebar() {
         background: 'rgba(255,255,255,0.2)',
         border: '1.5px solid rgba(255,255,255,0.35)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: 0.5,
+        fontSize: 12, fontWeight: 700, color: MUTED, letterSpacing: 0.5,
       }}>
         {initials(userName)}
       </div>
       {!collapsed && (
         <div style={{ overflow: 'hidden', flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#fff',
+          <div style={{ fontSize: 12, fontWeight: 700, color: MUTED,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {userName}
           </div>
@@ -406,7 +479,7 @@ export default function Sidebar() {
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>Administrator</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3,
               background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8,
-              padding: '0 5px', fontSize: 9, color: '#fff', fontWeight: 700 }}>
+              padding: '0 5px', fontSize: 9, color: MUTED, fontWeight: 700 }}>
               <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#4ade80' }}/>
               Online
             </span>
@@ -490,7 +563,7 @@ export default function Sidebar() {
                       background: '#fff', opacity: 0.85, flexShrink: 0,
                     }}/>
                     <span style={{
-                      fontSize: 9.5, fontWeight: 800, color: '#fff',
+                      fontSize: 9.5, fontWeight: 800, color: MUTED,
                       letterSpacing: '0.7px', textTransform: 'uppercase',
                     }}>
                       {section.label}
@@ -579,7 +652,7 @@ export default function Sidebar() {
                 {chatUnread > 0 && (
                   <span style={{
                     position: 'absolute', top: -5, right: -5, background: '#ef4444',
-                    color: '#fff', borderRadius: 8, fontSize: 8, fontWeight: 800,
+                    color: MUTED, borderRadius: 8, fontSize: 8, fontWeight: 800,
                     padding: '1px 4px', minWidth: 14, textAlign: 'center',
                     border: `1px solid ${BG}`, lineHeight: 1.4,
                   }}>{chatUnread > 99 ? '99+' : chatUnread}</span>
@@ -672,7 +745,7 @@ export default function Sidebar() {
                     outline: grpOpen ? `2px solid rgba(255,255,255,0.45)` : 'none',
                     transition: 'box-shadow 0.2s',
                   }}>
-                    <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: 8.5, fontWeight: 800, color: MUTED, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
                       {navItem.short || navItem.label}
                     </span>
                   </div>
@@ -704,9 +777,15 @@ export default function Sidebar() {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.8)', flexShrink: 0 }}/>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: MUTED, letterSpacing: '1px', textTransform: 'uppercase' }}>
                       {navItem.label}
                     </span>
+                    {SHORTCUT_BY_KEY[navItem.key] && (
+                      <span style={{ fontSize: 9, fontWeight: 800, color: MUTED, background: 'rgba(0,0,0,0.25)',
+                        border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, padding: '1px 5px', lineHeight: 1.4 }}>
+                        {SHORTCUT_BY_KEY[navItem.key]}
+                      </span>
+                    )}
                   </div>
                   <span style={{
                     display: 'flex', alignItems: 'center',
@@ -793,10 +872,17 @@ export default function Sidebar() {
                   <>
                     <span style={{
                       fontSize: 12.5, fontWeight: active ? 700 : 500,
-                      color: '#fff',
-                      flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      color: MUTED,
+                      flex: 1, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
                     }}>
-                      {label}
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                      {SHORTCUT_BY_KEY[key] && (
+                        <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.85)',
+                          background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)',
+                          borderRadius: 4, padding: '1px 5px', lineHeight: 1.4 }}>
+                          {SHORTCUT_BY_KEY[key]}
+                        </span>
+                      )}
                     </span>
                     {/* Show arrow for finance to indicate it opens account mode */}
                     {key === 'finance' && (
@@ -885,7 +971,7 @@ export default function Sidebar() {
               {chatUnread > 0 && (
                 <span style={{
                   position: 'absolute', top: -4, right: -4, background: '#ef4444',
-                  color: '#fff', borderRadius: 8, fontSize: 7, fontWeight: 800,
+                  color: MUTED, borderRadius: 8, fontSize: 7, fontWeight: 800,
                   padding: '1px 3px', minWidth: 13, textAlign: 'center',
                   border: `1px solid ${BG}`, lineHeight: 1.4,
                 }}>{chatUnread > 99 ? '99+' : chatUnread}</span>
@@ -895,7 +981,7 @@ export default function Sidebar() {
               <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.4px' }}>CHAT</span>
             )}
             {!collapsed && (
-              <span style={{ fontSize: 12.5, fontWeight: 400, color: '#fff' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 400, color: MUTED }}>
                 Chat{chatUnread > 0 ? ` (${chatUnread})` : ''}
               </span>
             )}
@@ -930,7 +1016,7 @@ export default function Sidebar() {
               <span style={{ fontSize: 8, fontWeight: 700, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.4px' }}>LGOUT</span>
             )}
             {!collapsed && (
-              <span style={{ fontSize: 12.5, fontWeight: 400, color: '#fff' }}>Logout</span>
+              <span style={{ fontSize: 12.5, fontWeight: 400, color: MUTED }}>Logout</span>
             )}
           </div>
         </div>

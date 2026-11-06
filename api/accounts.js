@@ -6,8 +6,10 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, saveJson, auditEntry, pushAudit, upload, saveUploadedFiles } = require('./helpers');
+const { ROOT, saveJson, auditEntry, pushAudit, upload, saveUploadedFiles, resolveUser } = require('./helpers');
+const sqlite = require('./sqlite');
 const { addSystemLog } = require('./communication');
+const { notifyApprovers } = require('./notifications');
 
 const router = express.Router();
 
@@ -21,13 +23,7 @@ const coDir      = (cid, mod)   => path.join(ROOT, 'Database', 'Companies', cid,
 const coFile     = (cid, mod, id) => path.join(coDir(cid, mod), `${id}.json`);
 
 /* ── helpers ── */
-const readAll = (dir) => {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.json'))
-    .map(f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')); } catch { return null; } })
-    .filter(Boolean);
-};
+const readAll = (dir) => sqlite.listFlatByDir(dir);
 
 const nextId = (dir, base) => {
   if (!fs.existsSync(dir)) return base;
@@ -146,6 +142,19 @@ router.post('/payments', (req, res) => {
         rec.date);
     }
 
+    if (rec.status === 'pending') {
+      const submitter = resolveUser(req);
+      const mod = rec.type === 'receipt' ? 'receipt' : 'payment';
+      notifyApprovers({
+        companyId, module: mod, recordId: paymentId,
+        recordLabel: `${rec.type === 'receipt' ? 'Receipt' : 'Payment'} ${paymentId} — ${rec.party || ''}`,
+        message: `${rec.type === 'receipt' ? 'Receipt' : 'Payment'} ${paymentId} (${rec.party || ''}) needs your approval`,
+        link: rec.type === 'receipt' ? '/account/payment/view' : '/account/payment/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, paymentId, message: `Payment recorded with ID: ${paymentId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -165,6 +174,20 @@ router.put('/payments/:id', (req, res) => {
     const updated = { ...existing, ...req.body, paymentId: existing.paymentId, updatedAt: new Date().toISOString(),
       audit: pushAudit(existing, req, action, extra) };
     saveJson(fp, updated);
+
+    if (newStatus === 'pending' && oldStatus !== 'pending') {
+      const submitter = resolveUser(req);
+      const mod = updated.type === 'receipt' ? 'receipt' : 'payment';
+      notifyApprovers({
+        companyId, module: mod, recordId: existing.paymentId,
+        recordLabel: `${updated.type === 'receipt' ? 'Receipt' : 'Payment'} ${existing.paymentId} — ${updated.party || ''}`,
+        message: `${updated.type === 'receipt' ? 'Receipt' : 'Payment'} ${existing.paymentId} (${updated.party || ''}) needs your approval`,
+        link: updated.type === 'receipt' ? '/account/payment/view' : '/account/payment/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -181,6 +204,17 @@ router.delete('/payments/:id', (req, res) => {
   try {
     const fp = coFile(cid(req), 'Payments', req.params.id);
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
+    const rec = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const who = resolveUser(req);
+    /* an approved (confirmed) payment is in the books — only an Admin may delete it */
+    if (rec.status === 'confirmed' && who?.role !== 'admin') return res.status(403).json({ error: 'Only an Admin can delete an approved payment.' });
+    /* keep a copy of every deleted payment (outside the company data, so it is never counted) to recover a mistake */
+    try {
+      const bin = path.join(ROOT, 'Database', 'DeletedRecords', String(cid(req)), 'Payments');
+      fs.mkdirSync(bin, { recursive: true });
+      fs.writeFileSync(path.join(bin, `${req.params.id}-${Date.now()}.json`),
+        JSON.stringify({ ...rec, deletedAt: new Date().toISOString(), deletedBy: who || { name: 'Unknown' } }, null, 2));
+    } catch (e) { return res.status(500).json({ error: 'Could not keep a backup copy — not deleted: ' + e.message }); }
     fs.unlinkSync(fp);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -208,6 +242,19 @@ router.post('/journals', (req, res) => {
     const now = new Date().toISOString();
     const rec = { journalId, ...req.body, companyId, createdAt: now, updatedAt: now };
     saveJson(coFile(companyId, 'Journals', journalId), rec);
+
+    if (rec.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'journal', recordId: journalId,
+        recordLabel: `Journal ${journalId}`,
+        message: `Journal ${journalId} needs your approval`,
+        link: '/account/journal/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, journalId, message: `Journal created with ID: ${journalId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -227,6 +274,19 @@ router.put('/journals/:id', (req, res) => {
     const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
     const updated  = { ...existing, ...req.body, journalId: existing.journalId, updatedAt: new Date().toISOString() };
     saveJson(fp, updated);
+
+    if (updated.status === 'pending' && existing.status !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId: cid(req), module: 'journal', recordId: existing.journalId,
+        recordLabel: `Journal ${existing.journalId}`,
+        message: `Journal ${existing.journalId} needs your approval`,
+        link: '/account/journal/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, journalId: existing.journalId });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -441,25 +501,7 @@ router.get('/dues', (req, res) => {
     // Helper: read all JSON records from a directory — handles BOTH:
     //   1. Flat files: dir/EPROP_SO_25_26_001.json  (Tally-imported)
     //   2. Subdirs:    dir/400001/400001.json         (app-created)
-    const readAllRecords = (dir) => {
-      if (!fs.existsSync(dir)) return [];
-      const results = [];
-      fs.readdirSync(dir).forEach(entry => {
-        const full = path.join(dir, entry);
-        try {
-          const stat = fs.statSync(full);
-          if (stat.isFile() && entry.endsWith('.json')) {
-            const rec = JSON.parse(fs.readFileSync(full, 'utf-8'));
-            if (rec) results.push(rec);
-          } else if (stat.isDirectory()) {
-            fs.readdirSync(full).filter(f => f.endsWith('.json')).forEach(f => {
-              try { const rec = JSON.parse(fs.readFileSync(path.join(full, f), 'utf-8')); if (rec) results.push(rec); } catch {}
-            });
-          }
-        } catch {}
-      });
-      return results;
-    };
+    const readAllRecords = (dir) => sqlite.listAnyByDir(dir);
 
     const calcTotal = (items = []) =>
       items.reduce((s, it) => {
@@ -480,27 +522,7 @@ router.get('/dues', (req, res) => {
     salesOrders.forEach(so => { soMap[String(so.orderId || so.id)] = so; });
 
     // Security deposits — load once, used in clientDues below
-    const allDepositsForDues = (() => {
-      try {
-        const dir = coDir(companyId, 'Deposits');
-        if (!fs.existsSync(dir)) return [];
-        const results = [];
-        fs.readdirSync(dir).forEach(entry => {
-          const full = path.join(dir, entry);
-          try {
-            const stat = fs.statSync(full);
-            if (stat.isFile() && entry.endsWith('.json')) {
-              results.push(JSON.parse(fs.readFileSync(full, 'utf-8')));
-            } else if (stat.isDirectory()) {
-              fs.readdirSync(full).filter(f => f.endsWith('.json')).forEach(f => {
-                try { results.push(JSON.parse(fs.readFileSync(path.join(full, f), 'utf-8'))); } catch {}
-              });
-            }
-          } catch {}
-        });
-        return results;
-      } catch { return []; }
-    })();
+    const allDepositsForDues = readAllRecords(coDir(companyId, 'Deposits'));
 
     // Build credit-note → sales order map via linked bill
     const salesBillsList = readAllRecords(coDir(companyId, 'SalesBills'));
@@ -597,14 +619,15 @@ router.get('/dues', (req, res) => {
       .map(o => {
         const oid = o.orderId || o.id;
         const orderTotal = parseFloat(o.grandTotal || o.amount) || calcTotal(o.items);
-        const linkedPayments = payments.filter(p =>
-          p.type === 'payment' && p.status !== 'rejected' &&
-          (String(p.orderId) === String(oid) || String(p.orderId) === String(o.voucherNumber))
-        );
+        // a payment can be split over several POs (poAllocations) — count only this PO's share
+        const shareOf = p => (Array.isArray(p.poAllocations) && p.poAllocations.length
+          ? p.poAllocations.filter(a => String(a.orderId) === String(oid)).reduce((s, a) => s + (parseFloat(a.amount) || 0), 0)
+          : (String(p.orderId) === String(oid) || String(p.orderId) === String(o.voucherNumber)) ? parseFloat(p.amount) || 0 : 0);
+        const linkedPayments = payments.filter(p => p.type === 'payment' && p.status !== 'rejected' && shareOf(p) > 0);
         // Add posted order journals linked to this PO
         const linkedJournals = orderJournals.filter(j => String(j.orderId) === String(oid));
         const journalPaid    = linkedJournals.reduce((s, j) => s + Math.min(parseFloat(j.totalDebit)||0, parseFloat(j.totalCredit)||0), 0);
-        const paid           = linkedPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0) + journalPaid;
+        const paid           = linkedPayments.reduce((s, p) => s + shareOf(p), 0) + journalPaid;
         const debitNotesAmt  = dnByOrder[String(oid)] || 0;
         return {
           orderId:          oid,
@@ -622,7 +645,13 @@ router.get('/dues', (req, res) => {
           paid,
           debitNotesAmt,
           linkedDebitNotes: dnRecsByOrder[String(oid)] || [],
-          linkedPayments,
+          // what settled this PO, line by line — the same lines that make up "paid":
+          // payments (a split payment shows only this PO's share) and posted order journals (TDS, adjustments)
+          linkedPayments: [
+            ...linkedPayments.map(p => ({ ...p, amount: shareOf(p), fullAmount: parseFloat(p.amount) || 0, isSplit: shareOf(p) !== (parseFloat(p.amount) || 0) })),
+            ...linkedJournals.map(j => ({ journalId: j.journalId, isJournal: true, date: j.date, amount: Math.min(parseFloat(j.totalDebit) || 0, parseFloat(j.totalCredit) || 0),
+              referenceNo: `JV #${j.journalId}`, paymentMode: 'Journal', narration: j.narration || '', status: j.status })),
+          ].sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))),
           items:            o.items     || [],
           addOnItems:       o.addOnItems || [],
           charges:          o.charges   || [],
@@ -717,24 +746,7 @@ router.get('/statement', (req, res) => {
   try {
     const companyId = cid(req);
 
-    const readAllRecords = (dir) => {
-      if (!fs.existsSync(dir)) return [];
-      const results = [];
-      fs.readdirSync(dir).forEach(entry => {
-        const full = path.join(dir, entry);
-        try {
-          const stat = fs.statSync(full);
-          if (stat.isFile() && entry.endsWith('.json')) {
-            const rec = JSON.parse(fs.readFileSync(full, 'utf-8')); if (rec) results.push(rec);
-          } else if (stat.isDirectory()) {
-            fs.readdirSync(full).filter(f => f.endsWith('.json')).forEach(f => {
-              try { const rec = JSON.parse(fs.readFileSync(path.join(full, f), 'utf-8')); if (rec) results.push(rec); } catch {}
-            });
-          }
-        } catch {}
-      });
-      return results;
-    };
+    const readAllRecords = (dir) => sqlite.listAnyByDir(dir);
 
     const payments       = readAll(coDir(companyId, 'Payments'));
     const salesOrders    = readAllRecords(coDir(companyId, 'SalesOrder'));
@@ -814,6 +826,19 @@ router.post('/expenses', (req, res) => {
     const now = new Date().toISOString();
     const rec = { expenseId, ...req.body, grandTotal, companyId, createdAt: now, updatedAt: now };
     saveJson(coFile(companyId, 'Expenses', expenseId), rec);
+
+    if (rec.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'expense', recordId: expenseId,
+        recordLabel: `Expense ${expenseId} — ${rec.party || ''}`,
+        message: `Expense ${expenseId} (${rec.party || ''}) needs your approval`,
+        link: '/account/expense/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, expenseId, message: `Expense created: ${expenseId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -846,6 +871,19 @@ router.put('/expenses/:id', (req, res) => {
     grandTotal = parseFloat(grandTotal.toFixed(2));
     const rec = { ...existing, ...req.body, grandTotal, updatedAt: new Date().toISOString() };
     saveJson(fp, rec);
+
+    if (rec.status === 'pending' && existing.status !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'expense', recordId: existing.expenseId,
+        recordLabel: `Expense ${existing.expenseId} — ${rec.party || ''}`,
+        message: `Expense ${existing.expenseId} (${rec.party || ''}) needs your approval`,
+        link: '/account/expense/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -963,21 +1001,8 @@ router.delete('/assets/:id', (req, res) => {
 ════════════════════════════════════════════════════════ */
 
 /* reads JSON files one level deep (handles sub-folder structures) */
-const readAllDeep = (dir) => {
-  if (!fs.existsSync(dir)) return [];
-  const results = [];
-  fs.readdirSync(dir, { withFileTypes: true }).forEach(e => {
-    if (e.isDirectory()) {
-      const sub = path.join(dir, e.name);
-      fs.readdirSync(sub).filter(f => f.endsWith('.json')).forEach(f => {
-        try { results.push(JSON.parse(fs.readFileSync(path.join(sub, f), 'utf-8'))); } catch {}
-      });
-    } else if (e.name.endsWith('.json')) {
-      try { results.push(JSON.parse(fs.readFileSync(path.join(dir, e.name), 'utf-8'))); } catch {}
-    }
-  });
-  return results.filter(Boolean);
-};
+// served from the SQLite index (same rows, same order as walking the folders)
+const readAllDeep = (dir) => sqlite.listShallowByDir(dir);
 
 router.get('/ledger', (req, res) => {
   try {
@@ -989,6 +1014,18 @@ router.get('/ledger', (req, res) => {
     const purchBills  = readAllDeep(coDir(companyId, 'PurchaseBills'));
     const clients     = readAllDeep(coDir(companyId, 'Client'));
     const vendors     = readAllDeep(coDir(companyId, 'Vendor'));
+
+    /* order look-ups so each entry can carry its File No (= sales order no.) and PO No */
+    const soById = {}, poById = {};
+    readAllDeep(coDir(companyId, 'SalesOrder')).forEach(o => { if (o && o.orderId != null) soById[String(o.orderId)] = o; });
+    readAllDeep(coDir(companyId, 'PurchaseOrder')).forEach(o => { if (o && o.orderId != null) poById[String(o.orderId)] = o; });
+    const fileOf = (orderId) => {
+      const id = String(orderId || '');
+      if (soById[id]) return soById[id].orderNo || '';
+      const po = poById[id];
+      return po ? (soById[String(po.linkedSalesOrderId || '')]?.orderNo || '') : '';
+    };
+    const poNoOf = (orderId) => poById[String(orderId || '')]?.poNo || '';
 
     const map = {};
     const ensure = (name, type) => {
@@ -1023,6 +1060,7 @@ router.get('/ledger', (req, res) => {
         journalId: b.billId, date: b.billDate, narration: `Sales Bill: ${b.billNo || b.billId}`,
         refNo: b.billNo || b.billId, status: 'posted',
         debit: amt, credit: 0, source: 'sales-bill',
+        fileNo: b.orderNo || fileOf(b.orderId),
       });
     });
 
@@ -1037,6 +1075,8 @@ router.get('/ledger', (req, res) => {
         journalId: `PMT-${p.paymentId}`, date: p.date, narration: `Receipt: ${p.paymentMode || ''}`,
         refNo: p.reference || p.referenceNo || String(p.paymentId), status: 'confirmed',
         debit: 0, credit: amt, source: 'receipt',
+        mode: p.paymentMode || '', chqNo: p.reference || p.referenceNo || '', notes: p.notes || '',
+        fileNo: fileOf(p.orderId),
       });
     });
 
@@ -1051,6 +1091,7 @@ router.get('/ledger', (req, res) => {
         journalId: b.billId, date: b.billDate, narration: `Purchase Bill: ${b.billNo || b.billId}`,
         refNo: b.billNo || b.billId, status: 'posted',
         debit: 0, credit: amt, source: 'purchase-bill',
+        fileNo: fileOf(b.orderId), poNo: b.orderNo || poNoOf(b.orderId), vendorBillNo: b.vendorBillNo || '',
       });
     });
 
@@ -1065,6 +1106,8 @@ router.get('/ledger', (req, res) => {
         journalId: `PMT-${p.paymentId}`, date: p.date, narration: `Payment: ${p.paymentMode || ''}`,
         refNo: p.reference || p.referenceNo || String(p.paymentId), status: 'confirmed',
         debit: amt, credit: 0, source: 'payment',
+        mode: p.paymentMode || '', chqNo: p.reference || p.referenceNo || '', notes: p.notes || '',
+        fileNo: fileOf(p.orderId), poNo: poNoOf(p.orderId),
       });
     });
 
@@ -1113,19 +1156,31 @@ router.get('/ledger', (req, res) => {
         narration: `Security Deposit${d.orderNo ? ' — ' + d.orderNo : ''}`,
         refNo: d.depositId, status: d.status,
         debit: 0, credit: amt, source: 'security-deposit',
+        fileNo: d.orderNo || '',
       });
     });
 
     /* 9. Ensure all clients and vendors appear even with zero transactions */
+    /* party details (address + first contact) for printed statements */
+    const partyInfo = (o) => {
+      const cp = (o.contactPersons || []).find(p => p && (p.name || p.mobileNumber)) || {};
+      return {
+        address: o.address || o.billingAddr || '', city: o.city || '', state: o.state || '', pincode: o.pincode || '',
+        gstin: o.gstin || o.gst || '',
+        contactPerson: cp.name || o.contactPerson || '', mobile: cp.mobileNumber || o.mobile || '', email: cp.email || o.email || '',
+      };
+    };
     clients.forEach(c => {
       const name = c.clientName || c.companyName;
       if (!name || name.trim() === '') return;
       ensure(name, 'client');
+      if (!map[name].party) map[name].party = partyInfo(c);
     });
     vendors.forEach(v => {
       const name = v.vendorName || v.companyName;
       if (!name || name.trim() === '') return;
       ensure(name, 'vendor');
+      if (!map[name].party) map[name].party = partyInfo(v);
     });
 
     /* 10. Expenses → Credit vendor/ledger party (we owe them) */
@@ -1146,6 +1201,7 @@ router.get('/ledger', (req, res) => {
         status: e.status || 'pending',
         debit: 0, credit: amt,
         source: 'expense',
+        fileNo: e.orderNo || '',
       });
     });
 
@@ -1232,6 +1288,19 @@ router.post('/debit-notes', (req, res) => {
     const now = new Date().toISOString();
     const rec = { dnId, dnNo, ...req.body, items: computed, subTotal, totalGST, grandTotal, companyId, createdAt: now, updatedAt: now };
     saveJson(coFile(companyId, 'DebitNotes', dnId), rec);
+
+    if (rec.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'debitnote', recordId: dnId,
+        recordLabel: `Debit Note ${dnNo} — ${rec.party || ''}`,
+        message: `Debit Note ${dnNo} (${rec.party || ''}) needs your approval`,
+        link: '/account/debit-note',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, dnId, dnNo });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1249,7 +1318,21 @@ router.put('/debit-notes/:id', (req, res) => {
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
     const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
     const { items: computed, subTotal, totalGST, grandTotal } = calcNoteItems(req.body.items || existing.items);
-    saveJson(fp, { ...existing, ...req.body, items: computed, subTotal, totalGST, grandTotal, updatedAt: new Date().toISOString() });
+    const updated = { ...existing, ...req.body, items: computed, subTotal, totalGST, grandTotal, updatedAt: new Date().toISOString() };
+    saveJson(fp, updated);
+
+    if (updated.status === 'pending' && existing.status !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'debitnote', recordId: existing.dnId,
+        recordLabel: `Debit Note ${existing.dnNo} — ${updated.party || ''}`,
+        message: `Debit Note ${existing.dnNo} (${updated.party || ''}) needs your approval`,
+        link: '/account/debit-note',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1280,6 +1363,19 @@ router.post('/credit-notes', (req, res) => {
     const now = new Date().toISOString();
     const rec = { cnId, cnNo, ...req.body, items: computed, subTotal, totalGST, grandTotal, companyId, createdAt: now, updatedAt: now };
     saveJson(coFile(companyId, 'CreditNotes', cnId), rec);
+
+    if (rec.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'creditnote', recordId: cnId,
+        recordLabel: `Credit Note ${cnNo} — ${rec.party || ''}`,
+        message: `Credit Note ${cnNo} (${rec.party || ''}) needs your approval`,
+        link: '/account/credit-note',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true, cnId, cnNo });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1297,7 +1393,21 @@ router.put('/credit-notes/:id', (req, res) => {
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
     const existing = JSON.parse(fs.readFileSync(fp, 'utf-8'));
     const { items: computed, subTotal, totalGST, grandTotal } = calcNoteItems(req.body.items || existing.items);
-    saveJson(fp, { ...existing, ...req.body, items: computed, subTotal, totalGST, grandTotal, updatedAt: new Date().toISOString() });
+    const updated = { ...existing, ...req.body, items: computed, subTotal, totalGST, grandTotal, updatedAt: new Date().toISOString() };
+    saveJson(fp, updated);
+
+    if (updated.status === 'pending' && existing.status !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'creditnote', recordId: existing.cnId,
+        recordLabel: `Credit Note ${existing.cnNo} — ${updated.party || ''}`,
+        message: `Credit Note ${existing.cnNo} (${updated.party || ''}) needs your approval`,
+        link: '/account/credit-note',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

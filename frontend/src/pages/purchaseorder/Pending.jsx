@@ -430,7 +430,7 @@ const PendingPurchaseOrders = () => {
           onApprove={can(user,'purchaseOrder','approve') ? () => handleApprove(selected) : null}
           onReject={can(user,'purchaseOrder','approve') ? () => handleReject(selected) : null}
           onEdit={() => { setSelected(null); navigate(`/purchase-order/edit/${selected.orderId}`); }}
-          onPrint={() => printPurchaseOrder(selected, selectedCompany)}
+          onPrint={() => printPurchaseOrder(selected, selectedCompany, user)}
         />
       )}
 
@@ -517,7 +517,7 @@ const PendingPurchaseOrders = () => {
                     <div className="action-buttons">
                       {can(user,'purchaseOrder','approve') && <button className="approve-btn" onClick={() => handleApprove(order)}>✓ Approve</button>}
                       <button className="edit-btn"    onClick={() => navigate(`/purchase-order/edit/${order.orderId}`)}>✏️ Edit</button>
-                      <button className="print-btn"   onClick={() => printPurchaseOrder(order, selectedCompany)}>🖨️ Print</button>
+                      <button className="print-btn"   onClick={() => printPurchaseOrder(order, selectedCompany, user)}>🖨️ Print</button>
                       {can(user,'purchaseOrder','approve') && <button className="delete-btn"  style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => handleReject(order)}>✕ Reject</button>}
                     </div>
                   </td>

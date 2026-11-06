@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import AuthShell, { Field, Alert, Btn, PwdHint, loginPath, StateIcon, Note } from '../../components/auth/AuthShell';
+import { PRODUCT_NAME } from '../../utils/brand';
 
-const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P = '#104f4f';
-
+/* New company user — activate the account from the invite link (?token=…) by choosing a password. */
 export default function SetPassword() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
   const navigate = useNavigate();
 
-  const [status,  setStatus]  = useState('verifying'); // verifying | valid | invalid | done
-  const [info,    setInfo]     = useState(null);
-  const [pwd,     setPwd]      = useState('');
-  const [conf,    setConf]     = useState('');
-  const [showPwd, setShowPwd]  = useState(false);
-  const [saving,  setSaving]   = useState(false);
-  const [err,     setErr]      = useState('');
+  const [status, setStatus] = useState('verifying'); // verifying | valid | invalid | done
+  const [info, setInfo]     = useState(null);
+  const [pwd, setPwd]       = useState('');
+  const [conf, setConf]     = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg]       = useState(null);
 
   useEffect(() => {
     if (!token) { setStatus('invalid'); return; }
@@ -27,118 +26,61 @@ export default function SetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (pwd.length < 6) { setErr('Password must be at least 6 characters.'); return; }
-    if (pwd !== conf)   { setErr('Passwords do not match.'); return; }
-    setErr('');
-    setSaving(true);
+    if (pwd.length < 6) { setMsg({ text: 'Password must be at least 6 characters.' }); return; }
+    if (pwd !== conf)   { setMsg({ text: 'Passwords do not match.' }); return; }
+    setMsg(null); setSaving(true);
     try {
       await axios.post('/api/auth/accept-invite', { token, password: pwd });
       setStatus('done');
-    } catch(e) {
-      setErr(e.response?.data?.error || e.message);
+    } catch (err) {
+      setMsg({ text: err.response?.data?.error || err.message });
     } finally { setSaving(false); }
   };
 
-  const cardStyle = {
-    background: '#fff', borderRadius: 14, padding: '32px 36px',
-    width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-    fontFamily: F,
-  };
-
-  if (status === 'verifying') return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f4fb' }}>
-      <div style={cardStyle}>
-        <div style={{ textAlign:'center', color:'#6b7280', fontSize:14 }}>Verifying invite link…</div>
-      </div>
-    </div>
-  );
-
-  if (status === 'invalid') return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f4fb' }}>
-      <div style={cardStyle}>
-        <div style={{ textAlign:'center', marginBottom:20 }}>
-          <div style={{ fontSize:36, marginBottom:8 }}>⚠️</div>
-          <div style={{ fontSize:17, fontWeight:800, color:'#111827', marginBottom:6 }}>Link Invalid or Expired</div>
-          <div style={{ fontSize:13, color:'#6b7280', lineHeight:1.6 }}>
-            This invite link is invalid or has expired (links expire after 7 days).<br/>
-            Please ask your administrator to resend the invitation.
-          </div>
-        </div>
-        <button onClick={()=>navigate('/login')}
-          style={{ width:'100%', height:40, background:P, border:'none', borderRadius:8, color:'#fff', fontSize:13.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-          Go to Login
-        </button>
-      </div>
-    </div>
-  );
-
-  if (status === 'done') return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f4fb' }}>
-      <div style={cardStyle}>
-        <div style={{ textAlign:'center', marginBottom:24 }}>
-          <div style={{ fontSize:40, marginBottom:10 }}>✅</div>
-          <div style={{ fontSize:18, fontWeight:800, color:'#15803d', marginBottom:6 }}>Account Activated!</div>
-          <div style={{ fontSize:13, color:'#6b7280', lineHeight:1.6 }}>
-            Your password has been set and your account is now active.<br/>
-            You can log in with your username: <strong style={{ color:P }}>{info?.username}</strong>
-          </div>
-        </div>
-        <button onClick={()=>navigate('/login')}
-          style={{ width:'100%', height:40, background:P, border:'none', borderRadius:8, color:'#fff', fontSize:13.5, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-          Go to Login →
-        </button>
-      </div>
-    </div>
-  );
+  const first = info?.name?.split(' ')[0];
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f4fb', padding:16 }}>
-      <div style={cardStyle}>
-        {/* Header */}
-        <div style={{ textAlign:'center', marginBottom:26 }}>
-          <div style={{ width:48, height:48, background:P, borderRadius:12, display:'inline-flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
-            <span style={{ fontSize:22 }}>⚡</span>
-          </div>
-          <div style={{ fontSize:18, fontWeight:800, color:'#111827', letterSpacing:'-0.3px' }}>Set Your Password</div>
-          <div style={{ fontSize:12.5, color:'#6b7280', marginTop:4 }}>Welcome to Epsilon ERP, {info?.name?.split(' ')[0]}!</div>
+    <AuthShell
+      kicker="Account activation"
+      heading={first ? `Welcome, ${first}.` : 'Activate your account.'}
+      text={`Your administrator has created an account for you on ${PRODUCT_NAME}. Choose a password to activate it.`}
+      points={['Choose your password', 'Sign in with your user name', 'Start working right away']}
+      title="Activate account"
+      subtitle={status === 'valid' ? 'Set a password to finish setting up your account.' : undefined}
+    >
+      {status === 'verifying' && <div className="as-state"><div className="as-loader" /><p>Checking your invite link…</p></div>}
+
+      {status === 'invalid' && (
+        <div className="as-state">
+          <StateIcon kind="bad" />
+          <h3>Link invalid or expired</h3>
+          <p>Invite links expire after 7 days. Please ask your administrator to send the invitation again.</p>
+          <Btn type="button" onClick={() => navigate(loginPath())}>Go to sign in</Btn>
         </div>
+      )}
 
-        {/* Account info */}
-        <div style={{ background:'#f8faff', border:'1px solid #dbeafe', borderRadius:8, padding:'10px 14px', marginBottom:20, fontSize:12 }}>
-          <div style={{ marginBottom:4 }}><span style={{ color:'#6b7280' }}>Username: </span><strong style={{ color:P }}>{info?.username}</strong></div>
-          <div><span style={{ color:'#6b7280' }}>Email: </span><span style={{ color:'#374151' }}>{info?.email}</span></div>
+      {status === 'done' && (
+        <div className="as-state">
+          <StateIcon kind="ok" />
+          <h3>Account activated</h3>
+          <p>Your password is set. Sign in with your user name <b>{info?.username}</b>.</p>
+          <Btn type="button" onClick={() => navigate(loginPath())}>Sign in</Btn>
         </div>
+      )}
 
-        <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          <div>
-            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>New Password</label>
-            <div style={{ position:'relative' }}>
-              <input type={showPwd?'text':'password'} value={pwd} onChange={e=>{setPwd(e.target.value);setErr('');}}
-                placeholder="Minimum 6 characters" autoFocus
-                style={{ width:'100%', height:40, padding:'0 38px 0 12px', fontSize:13, fontFamily:F, border:'1px solid #d1d5db', borderRadius:8, outline:'none', boxSizing:'border-box' }}/>
-              <button type="button" onClick={()=>setShowPwd(s=>!s)}
-                style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16 }}>
-                {showPwd?'🙈':'👁️'}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:5 }}>Confirm Password</label>
-            <input type="password" value={conf} onChange={e=>{setConf(e.target.value);setErr('');}}
-              placeholder="Re-enter password"
-              style={{ width:'100%', height:40, padding:'0 12px', fontSize:13, fontFamily:F, border:'1px solid #d1d5db', borderRadius:8, outline:'none', boxSizing:'border-box' }}/>
-          </div>
-
-          {err && (
-            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:7, padding:'8px 12px', fontSize:12, color:'#dc2626' }}>{err}</div>
-          )}
-
-          <button type="submit" disabled={saving}
-            style={{ height:42, background:P, border:'none', borderRadius:9, color:'#fff', fontSize:14, fontWeight:700, cursor:saving?'not-allowed':'pointer', fontFamily:F, marginTop:4 }}>
-            {saving ? 'Activating…' : 'Activate Account →'}
-          </button>
+      {status === 'valid' && (
+        <form onSubmit={handleSubmit} autoComplete="off" noValidate className="as-anim">
+          <Note icon="user">User name: <b>{info?.username}</b>{info?.email && <><br />Email: {info.email}</>}</Note>
+          <Alert msg={msg} />
+          <Field id="sp-pwd" icon="lock" type="password" autoFocus placeholder="New password" aria-label="New password"
+            value={pwd} onChange={e => { setPwd(e.target.value); setMsg(null); }} />
+          <PwdHint pwd={pwd} />
+          <Field id="sp-conf" icon="lock" type="password" placeholder="Confirm password" aria-label="Confirm password" bad={!!conf && pwd !== conf}
+            value={conf} onChange={e => { setConf(e.target.value); setMsg(null); }} />
+          <PwdHint pwd={pwd} conf={conf} />
+          <Btn type="submit" busy={saving} busyText="Activating…">Activate account</Btn>
         </form>
-      </div>
-    </div>
+      )}
+    </AuthShell>
   );
 }

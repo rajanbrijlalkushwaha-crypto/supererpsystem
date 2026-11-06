@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { withPrintFont } from '../../utils/printFont';
 
 const P   = '#104f4f';
 const BG  = '#F5F7FB';
@@ -34,7 +35,7 @@ const ChallanModal = ({ record, type, company, onClose }) => {
 
   const handlePrint = () => {
     const win = window.open('', '_blank');
-    win.document.write(`
+    win.document.write(withPrintFont(`
       <html><head><title>${label} - ${docNo}</title>
       <style>
         body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; color: #111; font-size: 12px; }
@@ -107,7 +108,7 @@ const ChallanModal = ({ record, type, company, onClose }) => {
       </div>
       <script>window.onload=()=>{window.print();window.close();}</script>
       </body></html>
-    `);
+    `));
     win.document.close();
   };
 

@@ -3,7 +3,8 @@ const path    = require('path');
 const fs      = require('fs');
 const multer  = require('multer');
 const XLSX    = require('xlsx');
-const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit, resolveUser } = require('./helpers');
+const { notifyApprovers } = require('./notifications');
 const jstore  = require('./json-store');
 
 /* ── multer for Excel upload (memory storage) ── */
@@ -289,7 +290,13 @@ router.post('/', upload.array('documents'), async (req, res) => {
       category:      b.category      || '',
       purchasePerson:b.purchasePerson|| '',
       remarks:       b.remarks       || '',
+      alias:         b.alias         || '',
+      // Dispatch From: where the vendor sends the goods from (Bill From is the vendor's own address above)
+      dispatchSame:  b.dispatchSame === 'false' || b.dispatchSame === false ? false : true,
+      dispatchFrom:  (() => { try { const d = typeof b.dispatchFrom === 'string' ? JSON.parse(b.dispatchFrom) : b.dispatchFrom; return d && typeof d === 'object' ? { address: String(d.address || ''), city: String(d.city || ''), state: String(d.state || ''), pincode: String(d.pincode || ''), country: String(d.country || 'India') } : null; } catch { return null; } })(),
     };
+
+    if (!extra.vendorCode) extra.vendorCode = String(vendorId);   // the vendor code is the vendor id unless one is typed
 
     if (db.connected) {
       await db.query(
@@ -306,6 +313,18 @@ router.post('/', upload.array('documents'), async (req, res) => {
       createdAt: now, updatedAt: now,
       audit: [auditEntry(req, 'created')],
     });
+
+    if (status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'vendor', recordId: vendorId,
+        recordLabel: `Vendor ${vendorName || vendorId}`,
+        message: `Vendor ${vendorName || vendorId} needs your approval`,
+        link: '/vendor/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: b.approverId || null,
+      });
+    }
 
     res.json({ success: true, vendorId, message: `Vendor created with ID: ${vendorId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -377,7 +396,16 @@ router.put('/:vendorId', upload.array('newFiles'), async (req, res) => {
       category:      b.category      || '',
       purchasePerson:b.purchasePerson|| '',
       remarks:       b.remarks       || '',
+      alias:         b.alias         || '',
+      // Dispatch From: where the vendor sends the goods from (Bill From is the vendor's own address above)
+      dispatchSame:  b.dispatchSame === 'false' || b.dispatchSame === false ? false : true,
+      dispatchFrom:  (() => { try { const d = typeof b.dispatchFrom === 'string' ? JSON.parse(b.dispatchFrom) : b.dispatchFrom; return d && typeof d === 'object' ? { address: String(d.address || ''), city: String(d.city || ''), state: String(d.state || ''), pincode: String(d.pincode || ''), country: String(d.country || 'India') } : null; } catch { return null; } })(),
     };
+
+    // a form that does not send these (the classic vendor form) keeps what is saved
+    if (b.alias === undefined) extra.alias = existingRecord.alias || '';
+    if (!extra.vendorCode) extra.vendorCode = existingRecord.vendorCode || String(vendorId);
+    if (b.dispatchSame === undefined) { extra.dispatchSame = existingRecord.dispatchSame !== false; extra.dispatchFrom = existingRecord.dispatchFrom || null; }
 
     if (db.connected) {
       await db.query(
@@ -407,6 +435,18 @@ router.put('/:vendorId', upload.array('newFiles'), async (req, res) => {
       createdAt: existingCreatedAt, updatedAt: new Date().toISOString(),
       audit: pushAudit(existingRecord, req, vAction, vExtra),
     });
+
+    if (vNewStatus === 'pending' && vOldStatus !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'vendor', recordId: vendorId,
+        recordLabel: `Vendor ${vendorName || vendorId}`,
+        message: `Vendor ${vendorName || vendorId} needs your approval`,
+        link: '/vendor/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
 
     res.json({ success: true, message: 'Vendor updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }

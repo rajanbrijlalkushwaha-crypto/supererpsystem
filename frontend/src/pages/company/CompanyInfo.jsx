@@ -120,6 +120,7 @@ function CompanyProfile() {
         <Field icon="🏦" label="Bank Name"     value={d.bankName}    />
         <Field icon="💳" label="Account No."   value={d.bankAccount} />
         <Field icon="🔑" label="IFSC Code"     value={d.bankIfsc}    />
+        <Field icon="🏢" label="Branch Name"   value={d.bankBranch}  />
       </Section>
     </div>
   );

@@ -155,7 +155,7 @@ const CreateClient = () => {
       )}
 
       {/* ── Tab Bar — flat horizontal, same as Sales Order ── */}
-      <div style={{ flexShrink:0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
+      <div className="soft-tabs" style={{ flexShrink:0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
         {TABS.map((t) => {
           const isActive = tab === t.id;
           return (

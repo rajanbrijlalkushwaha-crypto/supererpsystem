@@ -575,7 +575,7 @@ export default function VendorPortal() {
       {/* Header */}
       <div style={{ background:'linear-gradient(135deg,#1E293B,#1D4ED8)', padding:'11px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:'#fff', background:'rgba(255,255,255,0.12)', padding:'5px 10px', borderRadius:6 }}>⚡ Universal Core ERP</div>
+          <div style={{ fontSize:12, fontWeight:700, color:'#fff', background:'rgba(255,255,255,0.12)', padding:'5px 10px', borderRadius:6 }}>⚡ Super ERP System</div>
           <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)' }}>Vendor Portal</div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>

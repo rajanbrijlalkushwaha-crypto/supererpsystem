@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import AuditTrail from '../../components/AuditTrail';
 import ActivityDrawer from '../../components/ActivityDrawer';
+import { withPrintFont } from '../../utils/printFont';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const P  = '#104f4f';
+const P  = '#133d80'; // matches Sales Order module's blue theme
 const PL = '#e8eef8';
 const GN = '#065f46';
 
@@ -24,15 +27,95 @@ const inp = { width:'100%', height:32, padding:'0 9px', border:'1px solid #D1D5D
 const lbl = { fontSize:11, fontWeight:600, color:'#374151', marginBottom:4, display:'block' };
 
 const TH = ({children, align='left', bg=P, style={}}) => (
-  <th style={{ padding:'6px 8px', background:bg, color:'#fff', fontSize:10, fontWeight:700, textAlign:align, border:`1px solid ${bg==='#065f46'?'#047857':'#0b3d3d'}`, whiteSpace:'nowrap', ...style }}>{children}</th>
+  <th style={{ padding:'6px 8px', background:bg, color:'#fff', fontSize:10, fontWeight:700, textAlign:align, border:`1px solid ${bg==='#065f46'?'#047857':'#1a3a9f'}`, whiteSpace:'nowrap', ...style }}>{children}</th>
 );
 const TD = ({children, align='left', bold, color, style={}}) => (
-  <td style={{ padding:'4px 8px', fontSize:11, border:'1px solid #e2e8f0', textAlign:align, fontWeight:bold?700:400, color:color||'#111827', verticalAlign:'middle', fontFamily:F, ...style }}>{children}</td>
+  <td style={{ padding:'4px 8px', fontSize:11, border:'1px solid #000000', textAlign:align, fontWeight:bold?700:400, color:color||'#111827', verticalAlign:'middle', fontFamily:F, ...style }}>{children}</td>
 );
+
+/* badge — solid colour circle + single letter, same convention as Sales Order / Purchase Order */
+const BC = {
+  draft:    { bg:'#94a3b8', letter:'D', label:'Draft' },
+  pending:  { bg:'#f59e0b', letter:'P', label:'Pending' },
+  approved: { bg:'#16a34a', letter:'A', label:'Approved' },
+  posted:   { bg:'#16a34a', letter:'A', label:'Approved' },
+  rejected: { bg:'#ef4444', letter:'C', label:'Rejected' },
+};
+function Badge({ s }) {
+  const c = BC[s?.toLowerCase()] || BC.draft;
+  return (
+    <span title={c.label} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+      width:22, height:22, borderRadius:'50%', background:c.bg, color:'#fff',
+      fontSize:11, fontWeight:800, flexShrink:0, lineHeight:1, fontFamily:F }}>{c.letter}</span>
+  );
+}
+
+/* ── Fetch company logo as base64 for embedding in print windows ── */
+const fetchLogoBase64 = async (logoFileName, companyId) => {
+  if (!logoFileName) return null;
+  try {
+    const res = await fetch(`/api/companies/logo/${encodeURIComponent(logoFileName)}?companyId=${companyId}`);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise(r => {
+      const rd = new FileReader(); rd.onload = () => r(rd.result); rd.readAsDataURL(blob);
+    });
+  } catch { return null; }
+};
+
+/* ── Purchase Bills list — A4 portrait, outlined borders, company header ── */
+const printPurchaseBillsReport = (title, subtitle, rows, company = {}) => {
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const cols = ['#','Order File No','Client','Vendor','PO No','Vendor Bill Date','Vendor Bill No','Material','Qty','Rate (₹)','Taxable (₹)','GST (₹)','Invoice Value (₹)','GST Type','Status'];
+  const rHtml = rows.map((r,i) => `<tr class="${i%2===0?'':'alt'}">${r.map(c=>`<td>${c??'—'}</td>`).join('')}</tr>`).join('');
+  const logoHtml = company.logoBase64
+    ? `<img src="${company.logoBase64}" style="height:52px;max-width:150px;object-fit:contain;">`
+    : '';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;color:#000;padding:10px;}
+.outer{border:1.5px solid #000;width:100%;border-collapse:collapse;}
+.outer td{border:1px solid #000;padding:3px 6px;vertical-align:top;}
+h1{font-size:12.5pt;font-weight:bold;text-align:center;padding:6px;border-bottom:2px solid #000;}
+.sub{font-size:8.5pt;text-align:center;color:#333;padding:3px 6px;}
+table.data{width:100%;border-collapse:collapse;font-size:7.5pt;}
+table.data th{border:1px solid #000;padding:4px 4px;font-weight:bold;text-align:left;background:#fff;white-space:nowrap;}
+table.data td{border:1px solid #000;padding:3px 4px;vertical-align:middle;}
+.alt td{background:#f7f7f7;}
+.foot{margin-top:5px;font-size:7.5pt;color:#555;text-align:right;}
+@media print{@page{margin:8mm;size:A4 portrait;}}</style>
+</head><body>
+<table class="outer" style="margin-bottom:0;">
+  <tr>
+    <td style="padding:8px 10px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${logoHtml}
+        <div>
+          <div style="font-size:13pt;font-weight:bold;">${company.companyName||company.name||''}</div>
+          <div style="font-size:8.5pt;color:#333;">${[company.address,company.city,company.state,company.pincode].filter(Boolean).join(', ')}</div>
+          <div style="font-size:8.5pt;color:#333;">GSTIN: ${company.gstin||company.gst||''} &nbsp;|&nbsp; PAN: ${company.pan||''}</div>
+        </div>
+      </div>
+    </td>
+  </tr>
+  <tr><td><h1>${title}</h1></td></tr>
+  <tr><td class="sub">${subtitle} &middot; ${rows.length} bills &middot; Printed: ${today}</td></tr>
+  <tr><td style="padding:0;">
+    <table class="data"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+    <tbody>${rHtml}</tbody></table>
+  </td></tr>
+</table>
+<div class="foot">Generated: ${today}</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script></body></html>`;
+  const w = window.open('','_blank','width=1100,height=900');
+  if (!w) { alert('Allow pop-ups to print.'); return; }
+  w.document.write(withPrintFont(html)); w.document.close();
+};
 
 export default function PurchaseBill() {
   const { selectedCompany } = useCompany();
   const cid = selectedCompany?.companyId;
+  const { user } = useAuth();
   const companyState = selectedCompany?.state || '';
 
   const [tab,  setTab]  = useState('orders');
@@ -41,8 +124,6 @@ export default function PurchaseBill() {
   const [purchaseOrders, setPOs]    = useState([]);
   const [salesOrders,    setSOs]    = useState([]);
   const [bills,          setBills]  = useState([]);
-  const [grns,           setGrns]   = useState([]);
-  const [gdns,           setGdns]   = useState([]);
   const [clients,        setClients]= useState([]);
   const [vendors,        setVendors]= useState([]);
   const [loading,        setLoading]= useState(false);
@@ -59,39 +140,6 @@ export default function PurchaseBill() {
   const [saving,       setSaving]       = useState(false);
   const [msg,          setMsg]          = useState('');
 
-  // GRN form
-  const [editGRN,        setEditGRN]       = useState(null);
-  const [grnPO,          setGrnPO]         = useState('');
-  const [grnPOData,      setGrnPOData]     = useState(null);
-  const [grnDate,        setGrnDate]       = useState(today());
-  const [grnReceivedBy,  setGrnReceivedBy] = useState('');
-  const [grnRemarks,     setGrnRemarks]    = useState('');
-  const [grnItems,       setGrnItems]      = useState([]);
-  const [grnSaving,      setGrnSaving]     = useState(false);
-  const [grnMsg,         setGrnMsg]        = useState('');
-  const [grnDeliveryType,setGrnDeliveryType]=useState('our-yard'); // 'our-yard'|'direct-client'|'to-vendor'
-  const [grnLocation,    setGrnLocation]   = useState('');
-  const [grnClientId,    setGrnClientId]   = useState('');
-  const [grnToVendorName,setGrnToVendorName]=useState('');
-
-  // GDN form
-  const [editGDN,        setEditGDN]       = useState(null);
-  const [gdnDate,        setGdnDate]       = useState(today());
-  const [gdnDispatchedBy,setGdnDispatchedBy]=useState('');
-  const [gdnFromType,    setGdnFromType]   = useState('our-yard'); // 'our-yard'|'vendor'
-  const [gdnFromName,    setGdnFromName]   = useState('');
-  const [gdnFromPO,      setGdnFromPO]     = useState('');
-  const [gdnToType,      setGdnToType]     = useState('client');   // 'client'|'vendor'|'other'
-  const [gdnToClientId,  setGdnToClientId] = useState('');
-  const [gdnToName,      setGdnToName]     = useState('');
-  const [gdnVehicleNo,   setGdnVehicleNo]  = useState('');
-  const [gdnLrNo,        setGdnLrNo]       = useState('');
-  const [gdnTransporter, setGdnTransporter]= useState('');
-  const [gdnRemarks,     setGdnRemarks]    = useState('');
-  const [gdnItems,       setGdnItems]      = useState([{itemName:'',hsnCode:'',unit:'NOS',qty:1,rate:0,remarks:''}]);
-  const [gdnSaving,      setGdnSaving]     = useState(false);
-  const [gdnMsg,         setGdnMsg]        = useState('');
-
   // UI
   const [viewBill,     setViewBill]     = useState(null);
   const [selPBill,     setSelPBill]     = useState(null);
@@ -100,28 +148,22 @@ export default function PurchaseBill() {
   const [pdfViewer,    setPdfViewer]    = useState(null);
   const [ordSearch,  setOrdSearch] = useState('');
   const [pbSearch,   setPbSearch]  = useState('');
-  const [grnSearch,  setGrnSearch] = useState('');
-  const [gdnSearch,  setGdnSearch] = useState('');
   const [poFy,       setPoFy]      = useState('all');
 
   const load = useCallback(async () => {
     if (!cid) return;
     setLoading(true);
     try {
-      const [poR, soR, bR, grnR, gdnR, clientR, vendorR] = await Promise.all([
+      const [poR, soR, bR, clientR, vendorR] = await Promise.all([
         axios.get(`/api/purchase-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/sales-orders?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/bills?companyId=${cid}&type=purchase`).catch(()=>({data:[]})),
-        axios.get(`/api/grn?companyId=${cid}`).catch(()=>({data:[]})),
-        axios.get(`/api/gdn?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/clients?companyId=${cid}`).catch(()=>({data:[]})),
         axios.get(`/api/vendors?companyId=${cid}`).catch(()=>({data:[]})),
       ]);
       setPOs((poR.data||[]).filter(o => !['draft','rejected'].includes(o.status)));
       setSOs(soR.data||[]);
       setBills(bR.data||[]);
-      setGrns(grnR.data||[]);
-      setGdns(gdnR.data||[]);
       setClients(clientR.data||[]);
       setVendors(vendorR.data||[]);
     } catch {}
@@ -141,12 +183,6 @@ export default function PurchaseBill() {
     bills.forEach(b => { const k=String(b.orderId); if(!m[k]) m[k]=[]; m[k].push(b); });
     return m;
   }, [bills]);
-
-  const grnsByPO = useMemo(() => {
-    const m = {};
-    grns.forEach(g => { const k=String(g.poId); if(!m[k]) m[k]=[]; m[k].push(g); });
-    return m;
-  }, [grns]);
 
   const alreadyBilledQtys = useMemo(() => {
     if (!order || !selOrder) return [];
@@ -185,26 +221,6 @@ export default function PurchaseBill() {
       .then(r => setOrder(r.data))
       .catch(() => setOrder(purchaseOrders.find(o=>String(o.orderId)===String(selOrder))||null));
   }, [selOrder, cid, purchaseOrders]);
-
-  useEffect(() => {
-    if (!grnPO) { setGrnPOData(null); setGrnItems([]); return; }
-    const mkItems = po => (po.items||[]).map(it => ({
-      itemName:   it.itemName||it.description||it.name||'—',
-      hsnCode:    it.hsnCode||it.hsn||'',
-      unit:       it.unit||it.uom||'NOS',
-      orderedQty: parseFloat(it.qty||it.quantity)||0,
-      rate:       parseFloat(it.rate)||0,
-      receivedQty:parseFloat(it.qty||it.quantity)||0,
-      remarks:    '',
-    }));
-    axios.get(`/api/purchase-orders/${grnPO}?companyId=${cid}`)
-      .then(r => { setGrnPOData(r.data); if (!editGRN) setGrnItems(mkItems(r.data)); })
-      .catch(() => {
-        const po = purchaseOrders.find(o=>String(o.orderId)===String(grnPO));
-        setGrnPOData(po||null);
-        if (po && !editGRN) setGrnItems(mkItems(po));
-      });
-  }, [grnPO, cid, purchaseOrders, editGRN]);
 
   const calcLines = (ord = order, qtyOverrides = null) => {
     if (!ord) return { lines:[], subTotal:0, totalCGST:0, totalSGST:0, totalIGST:0, totalGST:0, grandTotal:0, intrastate:false };
@@ -257,41 +273,6 @@ export default function PurchaseBill() {
     setBillNo(`PB/${yr}-${String(yr+1).slice(2)}/${String(bills.length+1).padStart(3,'0')}`);
   };
 
-  const openCreateGRN = (po=null) => {
-    setEditGRN(null); setGrnPO(po?String(po.orderId):'');
-    setGrnDate(today()); setGrnReceivedBy(''); setGrnRemarks(''); setGrnMsg('');
-    setGrnDeliveryType('our-yard'); setGrnLocation(''); setGrnClientId(''); setGrnToVendorName('');
-    if (!po) setGrnItems([]);
-    setView('create-grn');
-  };
-
-  const openEditGRN = (g) => {
-    setEditGRN(g); setGrnPO(String(g.poId));
-    setGrnDate(g.receiptDate||today()); setGrnReceivedBy(g.receivedBy||'');
-    setGrnRemarks(g.remarks||''); setGrnItems(g.items||[]); setGrnMsg('');
-    setGrnDeliveryType(g.deliveryType||'our-yard'); setGrnLocation(g.deliveryLocation||'');
-    setGrnClientId(g.clientId||''); setGrnToVendorName(g.toVendorName||'');
-    setView('create-grn');
-  };
-
-  const openCreateGDN = () => {
-    setEditGDN(null); setGdnDate(today()); setGdnDispatchedBy('');
-    setGdnFromType('our-yard'); setGdnFromName(''); setGdnFromPO('');
-    setGdnToType('client'); setGdnToClientId(''); setGdnToName('');
-    setGdnVehicleNo(''); setGdnLrNo(''); setGdnTransporter(''); setGdnRemarks('');
-    setGdnItems([{itemName:'',hsnCode:'',unit:'NOS',qty:1,rate:0,remarks:''}]); setGdnMsg('');
-    setView('create-gdn');
-  };
-
-  const openEditGDN = (g) => {
-    setEditGDN(g); setGdnDate(g.date||today()); setGdnDispatchedBy(g.dispatchedBy||'');
-    setGdnFromType(g.fromType||'our-yard'); setGdnFromName(g.fromName||''); setGdnFromPO(g.poRef||'');
-    setGdnToType(g.toType||'client'); setGdnToClientId(g.toClientId||''); setGdnToName(g.toName||'');
-    setGdnVehicleNo(g.vehicleNo||''); setGdnLrNo(g.lrNo||''); setGdnTransporter(g.transporter||'');
-    setGdnRemarks(g.remarks||''); setGdnItems(g.items||[]); setGdnMsg('');
-    setView('create-gdn');
-  };
-
   const handleSave = async (stay=false) => {
     if (!selOrder) { setMsg('Select a Purchase Order'); return; }
     if (!billNo.trim()) { setMsg('Bill No is required'); return; }
@@ -306,6 +287,9 @@ export default function PurchaseBill() {
         partyState, companyState, gstType:ist?'intrastate':'interstate',
         items:L, subTotal:st, totalCGST:ist?cg:0, totalSGST:ist?sg:0, totalIGST:ist?0:ig,
         totalGST:tg, grandTotal:gt, companyId:cid,
+        // every new purchase bill goes straight into the approval queue;
+        // on edit, omit status so the backend keeps whatever it already was
+        ...(editBill ? {} : { status:'pending' }),
       };
       let savedBillId;
       if (editBill) {
@@ -327,54 +311,17 @@ export default function PurchaseBill() {
     setSaving(false);
   };
 
-  const handleSaveGRN = async () => {
-    if (!grnPO) { setGrnMsg('Select a Purchase Order'); return; }
-    setGrnSaving(true); setGrnMsg('');
+  /* Approve — only for users with Purchase Bill approve rights, only while pending/draft.
+     'posted' is the status the Approvals module uses for an approved purchase bill. */
+  const canApproveBill = b => !!b && ['pending','draft'].includes(String(b.status||'').toLowerCase()) && can(user,'purchaseBill','approve');
+  const handleApproveBill = async (b) => {
+    if (!window.confirm(`Approve purchase bill ${b.billNo||b.billId}?`)) return;
     try {
-      const po = grnPOData || purchaseOrders.find(o=>String(o.orderId)===String(grnPO));
-      const clientObj = clients.find(c=>String(c.clientId||c._id||c.id)===String(grnClientId));
-      const payload = {
-        companyId:cid, poId:grnPO, poNo:po?.poNo||po?.poNumber||`PO-${grnPO}`,
-        vendorName:po?.vendorName||'—', vendorId:po?.vendorId||'',
-        receiptDate:grnDate, receivedBy:grnReceivedBy, remarks:grnRemarks, items:grnItems,
-        deliveryType:grnDeliveryType, deliveryLocation:grnLocation,
-        clientId:grnClientId, clientName:clientObj?.clientName||clientObj?.name||'',
-        toVendorName:grnToVendorName,
-      };
-      if (editGRN) { await axios.put(`/api/grn/${editGRN.grnId}?companyId=${cid}`, payload); }
-      else         { await axios.post(`/api/grn?companyId=${cid}`, payload); }
-      setGrnMsg(editGRN?'GRN updated!':'GRN saved!');
+      await axios.put(`/api/bills/${b.billId}?companyId=${cid}&type=purchase`,
+        { type:'purchase', status:'posted', approvedBy:user?.name||user?.username||'Admin', approvedAt:new Date().toISOString() });
+      setSelPBill(null); setViewBill(null);
       await load();
-      setTimeout(()=>{ setView('tab'); setTab('grn'); setGrnMsg(''); setGrnPO(''); setEditGRN(null); },900);
-    } catch(e) { setGrnMsg('Error: '+(e.response?.data?.error||e.message)); }
-    setGrnSaving(false);
-  };
-
-  const handleSaveGDN = async () => {
-    setGdnSaving(true); setGdnMsg('');
-    try {
-      const clientObj = clients.find(c=>String(c.clientId||c._id||c.id)===String(gdnToClientId));
-      const payload = {
-        companyId:cid, date:gdnDate, dispatchedBy:gdnDispatchedBy,
-        fromType:gdnFromType, fromName:gdnFromName, poRef:gdnFromPO,
-        toType:gdnToType, toClientId:gdnToClientId,
-        toName:gdnToType==='client'?(clientObj?.clientName||clientObj?.name||gdnToName):gdnToName,
-        vehicleNo:gdnVehicleNo, lrNo:gdnLrNo, transporter:gdnTransporter,
-        remarks:gdnRemarks, items:gdnItems.filter(it=>it.itemName.trim()),
-      };
-      if (editGDN) { await axios.put(`/api/gdn/${editGDN.gdnId}?companyId=${cid}`, payload); }
-      else         { await axios.post(`/api/gdn?companyId=${cid}`, payload); }
-      setGdnMsg(editGDN?'GDN updated!':'GDN saved!');
-      await load();
-      setTimeout(()=>{ setView('tab'); setTab('gdn'); setGdnMsg(''); setEditGDN(null); },900);
-    } catch(e) { setGdnMsg('Error: '+(e.response?.data?.error||e.message)); }
-    setGdnSaving(false);
-  };
-
-  const handleDeleteGDN = async (gdnId) => {
-    if (!window.confirm(`Delete GDN ${gdnId}?`)) return;
-    await axios.delete(`/api/gdn/${gdnId}?companyId=${cid}`).catch(()=>{});
-    load();
+    } catch(e) { alert('Approve failed: '+(e.response?.data?.error||e.message)); }
   };
 
   const handleDeleteBill = async (billId) => {
@@ -383,15 +330,32 @@ export default function PurchaseBill() {
     load();
   };
 
-  const handleDeleteGRN = async (grnId) => {
-    if (!window.confirm(`Delete GRN ${grnId}?`)) return;
-    await axios.delete(`/api/grn/${grnId}?companyId=${cid}`).catch(()=>{});
-    load();
+  const doPrintBills = async () => {
+    const list = [...filteredBills].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+    const rows = list.map((b,i) => {
+      const po = purchaseOrders.find(o=>String(o.orderId)===String(b.orderId));
+      const so = soMap[String(po?.linkedSalesOrderId)];
+      const items = b.items||[];
+      const matQty = items.reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+      const material = items.length
+        ? (items[0].description||items[0].itemName||'—') + (items.length>1?` +${items.length-1} more`:'')
+        : '—';
+      const matRate = items.length ? (parseFloat(items[0].rate)||0) : null;
+      return [
+        i+1, so?.orderNo||'—', so?.customerName||so?.clientName||'—', b.partyName||'—',
+        b.orderNo||'—', fmtD(b.billDate), b.vendorBillNo||'—', material, matQty||'—',
+        matRate!==null?fmt(matRate):'—', fmt(b.subTotal), fmt(b.totalGST), fmt(b.grandTotal),
+        b.gstType==='intrastate'?'CGST+SGST':'IGST',
+        (BC[b.status?.toLowerCase()]||BC.draft).label,
+      ];
+    });
+    const logoBase64 = await fetchLogoBase64(selectedCompany?.logoFileName, cid);
+    const fyLabel = pbFy==='all' ? 'All Financial Years' : `FY ${pbFy}`;
+    printPurchaseBillsReport('Purchase Bills Report', fyLabel, rows, { ...selectedCompany, logoBase64 });
   };
 
   const poOrderQty    = (po) => (po.items||[]).reduce((s,it)=>s+(parseFloat(it.qty||it.quantity)||0),0);
   const poBilledQty   = (po) => (billsByOrder[String(po.orderId)]||[]).reduce((s,b)=>s+(b.items||[]).reduce((ss,it)=>ss+(parseFloat(it.qty)||0),0),0);
-  const poReceivedQty = (po) => (grnsByPO[String(po.orderId)]||[]).reduce((s,g)=>s+(g.items||[]).reduce((ss,it)=>ss+(parseFloat(it.receivedQty)||0),0),0);
 
   const isFullyBilled = (po) => {
     const poVal=parseFloat(po.grandTotal)||0; if(poVal<=0) return false;
@@ -423,19 +387,6 @@ export default function PurchaseBill() {
       (b.partyName||'').toLowerCase().includes(q)||(b.orderNo||'').toLowerCase().includes(q));
   },[bills,pbSearch,pbFy]);
 
-  const filteredGRNs = useMemo(()=>{
-    if (!grnSearch.trim()) return grns;
-    const q=grnSearch.toLowerCase();
-    return grns.filter(g=>(g.grnNo||'').toLowerCase().includes(q)||(g.vendorName||'').toLowerCase().includes(q)||
-      (g.poNo||'').toLowerCase().includes(q));
-  },[grns,grnSearch]);
-
-  const filteredGDNs = useMemo(()=>{
-    if (!gdnSearch.trim()) return gdns;
-    const q=gdnSearch.toLowerCase();
-    return gdns.filter(g=>(g.gdnNo||'').toLowerCase().includes(q)||(g.toName||'').toLowerCase().includes(q)||
-      (g.fromName||'').toLowerCase().includes(q));
-  },[gdns,gdnSearch]);
 
   /* ══════ CREATE BILL VIEW ══════ */
   if (view==='create-bill') {
@@ -464,7 +415,7 @@ export default function PurchaseBill() {
           </div>
         </div>
         {msg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:12,background:msg.startsWith('Error')?'#FEF2F2':'#dcfce7',color:msg.startsWith('Error')?'#DC2626':'#166534',border:`1px solid ${msg.startsWith('Error')?'#FECACA':'#bbf7d0'}`}}>{msg}</div>}
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,padding:14,marginBottom:10}}>
+        <div style={{background:'#fff',border:'1px solid #000000',borderRadius:8,padding:14,marginBottom:10}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 2fr',gap:14}}>
             <div><label style={lbl}>Internal Bill No *</label><input style={inp} value={billNo} onChange={e=>setBillNo(e.target.value)} placeholder="PB/2025-26/001"/></div>
             <div><label style={lbl}>Vendor Invoice No</label><input style={inp} value={vendorBillNo} onChange={e=>setVendorBillNo(e.target.value)} placeholder="Vendor's invoice no"/></div>
@@ -489,7 +440,7 @@ export default function PurchaseBill() {
           return (
           <>
             <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,marginBottom:10}}>
-              <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,padding:12}}>
+              <div style={{background:'#fff',border:'1px solid #000000',borderRadius:8,padding:12}}>
                 <div style={{fontWeight:800,fontSize:12,color:'#1E293B',marginBottom:8}}>Vendor Details</div>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
                   {[{l:'Vendor',v:order.vendorName},{l:'GSTIN',v:order.vendorGstin},{l:'State',v:partyState},{l:'PO Ref',v:order.poNo||order.poNumber||`PO-${order.orderId}`}].map(x=>(
@@ -507,7 +458,7 @@ export default function PurchaseBill() {
             </div>
 
             {/* Qty-breakdown items table */}
-            <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden',marginBottom:10}}>
+            <div style={{background:'#fff',border:'1px solid #000000',borderRadius:8,overflow:'hidden',marginBottom:10}}>
               <div style={{background:P,padding:'7px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:11,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:'0.6px'}}>Line Items — Qty Breakdown</span>
                 <span style={{fontSize:10,color:'rgba(255,255,255,0.75)'}}>Enter qty for this bill. Due = PO Qty − Already Billed.</span>
@@ -522,7 +473,7 @@ export default function PurchaseBill() {
                     <TH align="right" style={{background:'#1e3a5f'}}>PO Qty</TH>
                     <TH align="right" style={{background:'#92400e'}}>Already Billed</TH>
                     <TH align="right" style={{background:'#064e3b'}}>Due Qty</TH>
-                    <TH align="right" style={{background:'#104f4f',minWidth:100}}>Current Bill Qty</TH>
+                    <TH align="right" style={{background:'#133d80',minWidth:100}}>Current Bill Qty</TH>
                     <TH align="right">Rate (₹)</TH>
                     <TH align="right">Taxable (₹)</TH>
                     <TH align="center">GST%</TH>
@@ -546,10 +497,10 @@ export default function PurchaseBill() {
                           <TD align="right" bold color="#1e3a5f">{poQty}</TD>
                           <TD align="right" color={alreadyBilled>0?'#92400e':'#9CA3AF'}>{alreadyBilled>0?alreadyBilled:'—'}</TD>
                           <TD align="right" bold color={dueQty===0?'#DC2626':'#065f46'}>{dueQty}</TD>
-                          <td style={{padding:'3px 6px',border:'1px solid #e2e8f0',textAlign:'right',background:overBill?'#FEF9C3':ist?'#EEF2FF':'#EFF6FF'}}>
+                          <td style={{padding:'3px 6px',border:'1px solid #000000',textAlign:'right',background:overBill?'#FEF9C3':ist?'#EEF2FF':'#EFF6FF'}}>
                             <input type="number" min="0" step="0.01" value={billQtys[i]??''}
                               onChange={e=>setBillQtys(prev=>{const n=[...prev];n[i]=parseFloat(e.target.value)||0;return n;})}
-                              style={{width:80,height:26,padding:'0 6px',border:`1px solid ${overBill?'#F59E0B':'#93C5FD'}`,borderRadius:4,fontSize:11,fontFamily:F,outline:'none',textAlign:'right',fontWeight:700,color:overBill?'#92400e':'#104f4f',background:'transparent'}}/>
+                              style={{width:80,height:26,padding:'0 6px',border:`1px solid ${overBill?'#F59E0B':'#93C5FD'}`,borderRadius:4,fontSize:11,fontFamily:F,outline:'none',textAlign:'right',fontWeight:700,color:overBill?'#92400e':'#133d80',background:'transparent'}}/>
                             {overBill&&<div style={{fontSize:9,color:'#D97706',marginTop:1}}>Over due qty!</div>}
                           </td>
                           <TD align="right">{fmt(it.rate)}</TD>
@@ -568,26 +519,26 @@ export default function PurchaseBill() {
 
             <div style={{display:'flex',justifyContent:'space-between',gap:14,marginBottom:10,flexWrap:'wrap'}}>
               {existingBills.length>0&&(
-                <div style={{flex:1,minWidth:280,background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden'}}>
+                <div style={{flex:1,minWidth:280,background:'#fff',border:'1px solid #000000',borderRadius:8,overflow:'hidden'}}>
                   <div style={{background:'#374151',padding:'6px 14px',fontSize:11,fontWeight:800,color:'#fff'}}>
                     Previous Bills for this PO ({existingBills.length})
                   </div>
                   <table style={{borderCollapse:'collapse',fontSize:11,fontFamily:F,width:'100%'}}>
                     <thead><tr>{['Bill No','Vendor Bill No','Date','Total (₹)'].map(h=>(
-                      <th key={h} style={{padding:'4px 8px',background:'#f1f5f9',color:'#374151',fontSize:10,fontWeight:700,border:'1px solid #e2e8f0'}}>{h}</th>
+                      <th key={h} style={{padding:'4px 8px',background:'#f1f5f9',color:'#374151',fontSize:10,fontWeight:700,border:'1px solid #000000'}}>{h}</th>
                     ))}</tr></thead>
                     <tbody>{existingBills.map((b,i)=>(
                       <tr key={b.billId} style={{background:i%2?'#f9fafb':'#fff'}}>
-                        <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',fontWeight:700,color:P}}>{b.billNo}</td>
-                        <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',color:'#555'}}>{b.vendorBillNo||'—'}</td>
-                        <td style={{padding:'4px 8px',border:'1px solid #e2e8f0'}}>{fmtD(b.billDate)}</td>
-                        <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(b.grandTotal)}</td>
+                        <td style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:700,color:P}}>{b.billNo}</td>
+                        <td style={{padding:'4px 8px',border:'1px solid #000000',color:'#555'}}>{b.vendorBillNo||'—'}</td>
+                        <td style={{padding:'4px 8px',border:'1px solid #000000'}}>{fmtD(b.billDate)}</td>
+                        <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(b.grandTotal)}</td>
                       </tr>
                     ))}</tbody>
                   </table>
                 </div>
               )}
-              <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden',minWidth:280}}>
+              <div style={{background:'#fff',border:'1px solid #000000',borderRadius:8,overflow:'hidden',minWidth:280}}>
                 <div style={{background:P,padding:'6px 14px',fontSize:11,fontWeight:800,color:'#fff',textTransform:'uppercase'}}>This Bill Summary</div>
                 <table style={{borderCollapse:'collapse',width:'100%',fontSize:12,fontFamily:F}}>
                   <tbody>
@@ -613,271 +564,9 @@ export default function PurchaseBill() {
     );
   }
 
-  /* ══════ CREATE GRN VIEW ══════ */
-  if (view==='create-grn') {
-    const dtBg = {'our-yard':'#dcfce7','direct-client':'#dbeafe','to-vendor':'#fef9c3'};
-    const dtColor = {'our-yard':GN,'direct-client':'#1d4ed8','to-vendor':'#92400e'};
-    const dtLabel = {'our-yard':'🏭 Our Manufacturing Yard','direct-client':'🚛 Direct to Client','to-vendor':'🔄 To Another Vendor'};
-    return (
-      <div style={{fontFamily:F,fontSize:12,padding:10}}>
-        <div style={{background:GN,color:'#fff',padding:'8px 14px',borderRadius:7,display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:800}}>{editGRN?'✏ï¸ Edit GRN':'📦 New Goods Receipt Note (GRN)'}</div>
-            <div style={{fontSize:10,opacity:0.7,marginTop:1}}>Record material received from vendor — select where it is delivered</div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>{setView('tab');setTab('grn');setEditGRN(null);setGrnPO('');setGrnMsg('');}}
-              style={{height:30,padding:'0 14px',background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:F}}>← Back</button>
-            <button onClick={handleSaveGRN} disabled={grnSaving}
-              style={{height:30,padding:'0 18px',background:'#F59E0B',border:'none',borderRadius:6,cursor:grnSaving?'not-allowed':'pointer',color:'#fff',fontSize:12,fontWeight:800,fontFamily:F,opacity:grnSaving?0.7:1}}>
-              {grnSaving?'Saving…':editGRN?'✔ Update GRN':'✔ Save GRN'}
-            </button>
-          </div>
-        </div>
-        {grnMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:12,background:grnMsg.startsWith('Error')?'#FEF2F2':'#dcfce7',color:grnMsg.startsWith('Error')?'#DC2626':'#166534',border:`1px solid ${grnMsg.startsWith('Error')?'#FECACA':'#bbf7d0'}`}}>{grnMsg}</div>}
-
-        {/* Header fields */}
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,padding:14,marginBottom:10}}>
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:14,marginBottom:12}}>
-            <div>
-              <label style={lbl}>Purchase Order (Dispatch From Vendor) *</label>
-              <select style={{...inp,cursor:'pointer'}} value={grnPO} onChange={e=>setGrnPO(e.target.value)} disabled={!!editGRN}>
-                <option value="">— Select PO —</option>
-                {purchaseOrders.map(o=><option key={o.orderId} value={o.orderId}>{o.poNo||o.poNumber||`PO-${o.orderId}`} · {o.vendorName||'—'}</option>)}
-              </select>
-              {grnPOData&&<div style={{fontSize:10,color:GN,marginTop:4,fontWeight:600}}>📦 Dispatch From: {grnPOData.vendorName||'—'}</div>}
-            </div>
-            <div><label style={lbl}>Receipt Date *</label><input type="date" style={inp} value={grnDate} onChange={e=>setGrnDate(e.target.value)}/></div>
-            <div><label style={lbl}>Received By</label><input style={inp} value={grnReceivedBy} onChange={e=>setGrnReceivedBy(e.target.value)} placeholder="Name of receiver"/></div>
-          </div>
-
-          {/* Delivery To */}
-          <div style={{marginBottom:12}}>
-            <label style={lbl}>Delivery To *</label>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              {['our-yard','direct-client','to-vendor'].map(dt=>(
-                <button key={dt} onClick={()=>setGrnDeliveryType(dt)}
-                  style={{padding:'6px 14px',border:`2px solid ${grnDeliveryType===dt?dtColor[dt]:'#D1D5DB'}`,borderRadius:8,cursor:'pointer',fontFamily:F,fontSize:11,fontWeight:grnDeliveryType===dt?800:500,
-                    background:grnDeliveryType===dt?dtBg[dt]:'#f9fafb',color:grnDeliveryType===dt?dtColor[dt]:'#6B7280'}}>
-                  {dtLabel[dt]}
-                </button>
-              ))}
-            </div>
-          </div>
-          {grnDeliveryType==='our-yard'&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-              <div><label style={lbl}>Yard / Location</label><input style={inp} value={grnLocation} onChange={e=>setGrnLocation(e.target.value)} placeholder="e.g. Main Yard, Warehouse A"/></div>
-              <div><label style={lbl}>Remarks</label><input style={inp} value={grnRemarks} onChange={e=>setGrnRemarks(e.target.value)} placeholder="Condition, note"/></div>
-            </div>
-          )}
-          {grnDeliveryType==='direct-client'&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-              <div>
-                <label style={lbl}>Deliver to Client *</label>
-                <select style={{...inp,cursor:'pointer'}} value={grnClientId} onChange={e=>setGrnClientId(e.target.value)}>
-                  <option value="">— Select Client —</option>
-                  {clients.map(c=><option key={c.clientId||c._id} value={c.clientId||c._id}>{c.clientName||c.name||'—'}</option>)}
-                </select>
-              </div>
-              <div><label style={lbl}>Remarks</label><input style={inp} value={grnRemarks} onChange={e=>setGrnRemarks(e.target.value)} placeholder="Condition, note"/></div>
-            </div>
-          )}
-          {grnDeliveryType==='to-vendor'&&(
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-              <div><label style={lbl}>Deliver to Vendor Name *</label><input style={inp} value={grnToVendorName} onChange={e=>setGrnToVendorName(e.target.value)} placeholder="Vendor name for processing"/></div>
-              <div><label style={lbl}>Remarks</label><input style={inp} value={grnRemarks} onChange={e=>setGrnRemarks(e.target.value)} placeholder="Condition, note"/></div>
-            </div>
-          )}
-        </div>
-
-        {/* Items table */}
-        {grnPOData&&(
-          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden',marginBottom:10}}>
-            <div style={{background:GN,padding:'7px 14px',fontSize:11,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:'0.6px'}}>
-              Items — {grnPOData.vendorName||'Vendor'} → {grnDeliveryType==='our-yard'?(grnLocation||'Our Yard'):grnDeliveryType==='direct-client'?(clients.find(c=>String(c.clientId||c._id)===grnClientId)?.clientName||'Client'):(grnToVendorName||'Vendor')}
-            </div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{borderCollapse:'collapse',fontSize:11,fontFamily:F,width:'100%'}}>
-                <thead><tr>
-                  {['#','Item / Description','HSN','Unit','Ordered Qty','Received Qty','Rate (₹)','Remarks'].map((h,i)=>(
-                    <th key={h} style={{padding:'6px 8px',background:'#064e3b',color:'#fff',fontSize:10,fontWeight:700,textAlign:i>=4&&i<=6?'right':'left',border:'1px solid #047857',whiteSpace:'nowrap'}}>{h}</th>
-                  ))}
-                </tr></thead>
-                <tbody>
-                  {grnItems.map((it,i)=>(
-                    <tr key={i} style={{background:i%2===0?'#fff':'#f0fdf4'}}>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',textAlign:'center',color:'#9CA3AF'}}>{i+1}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',fontWeight:600}}>{it.itemName}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',fontFamily:'monospace',fontSize:10,color:'#555'}}>{it.hsnCode||'—'}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5'}}>{it.unit}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',textAlign:'right',fontWeight:700,color:P}}>{it.orderedQty}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',textAlign:'right'}}>
-                        <input type="number" min="0" step="0.01" value={it.receivedQty}
-                          onChange={e=>setGrnItems(prev=>prev.map((x,j)=>j===i?{...x,receivedQty:parseFloat(e.target.value)||0}:x))}
-                          style={{width:80,height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none',textAlign:'right'}}/>
-                      </td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5',textAlign:'right'}}>₹{fmt(it.rate)}</td>
-                      <td style={{padding:'5px 8px',border:'1px solid #d1fae5'}}>
-                        <input type="text" value={it.remarks||''} onChange={e=>setGrnItems(prev=>prev.map((x,j)=>j===i?{...x,remarks:e.target.value}:x))}
-                          style={{width:'100%',height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none'}} placeholder="Condition / note"/>
-                      </td>
-                    </tr>
-                  ))}
-                  {grnItems.length===0&&<tr><td colSpan={8} style={{textAlign:'center',padding:24,color:'#9CA3AF',fontStyle:'italic'}}>Select a PO to load items</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* ══════ CREATE GDN VIEW ══════ */
-  if (view==='create-gdn') {
-    const GDN_C = '#7c3aed';
-    const fromLabel = gdnFromType==='our-yard'?'🏭 Our Yard':'🏢 From Vendor';
-    const toLabel   = gdnToType==='client'?'👤 Client':gdnToType==='vendor'?'🏢 Another Vendor':'📍 Other';
-    const addGdnItem = () => setGdnItems(p=>[...p,{itemName:'',hsnCode:'',unit:'NOS',qty:1,rate:0,remarks:''}]);
-    const removeGdnItem = i => setGdnItems(p=>p.filter((_,j)=>j!==i));
-    return (
-      <div style={{fontFamily:F,fontSize:12,padding:10}}>
-        <div style={{background:GDN_C,color:'#fff',padding:'8px 14px',borderRadius:7,display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:800}}>{editGDN?'✏ï¸ Edit GDN':'🚚 New Goods Delivery Note (GDN)'}</div>
-            <div style={{fontSize:10,opacity:0.7,marginTop:1}}>Record material dispatched — from source to destination</div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>{setView('tab');setTab('gdn');setEditGDN(null);setGdnMsg('');}}
-              style={{height:30,padding:'0 14px',background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:F}}>← Back</button>
-            <button onClick={handleSaveGDN} disabled={gdnSaving}
-              style={{height:30,padding:'0 18px',background:'#F59E0B',border:'none',borderRadius:6,cursor:gdnSaving?'not-allowed':'pointer',color:'#fff',fontSize:12,fontWeight:800,fontFamily:F,opacity:gdnSaving?0.7:1}}>
-              {gdnSaving?'Saving…':editGDN?'✔ Update GDN':'✔ Save GDN'}
-            </button>
-          </div>
-        </div>
-        {gdnMsg&&<div style={{marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:12,background:gdnMsg.startsWith('Error')?'#FEF2F2':'#ede9fe',color:gdnMsg.startsWith('Error')?'#DC2626':'#5b21b6',border:`1px solid ${gdnMsg.startsWith('Error')?'#FECACA':'#c4b5fd'}`}}>{gdnMsg}</div>}
-
-        {/* Header row */}
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,padding:14,marginBottom:10}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:14}}>
-            <div><label style={lbl}>GDN Date *</label><input type="date" style={inp} value={gdnDate} onChange={e=>setGdnDate(e.target.value)}/></div>
-            <div><label style={lbl}>Dispatched By</label><input style={inp} value={gdnDispatchedBy} onChange={e=>setGdnDispatchedBy(e.target.value)} placeholder="Name"/></div>
-            <div><label style={lbl}>PO Reference (optional)</label>
-              <select style={{...inp,cursor:'pointer'}} value={gdnFromPO} onChange={e=>setGdnFromPO(e.target.value)}>
-                <option value="">— None —</option>
-                {purchaseOrders.map(o=><option key={o.orderId} value={o.poNo||o.poNumber||`PO-${o.orderId}`}>{o.poNo||o.poNumber||`PO-${o.orderId}`} · {o.vendorName||'—'}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* FROM section */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14,padding:12,background:'#f8fafc',borderRadius:8,border:'1px solid #e2e8f0'}}>
-            <div>
-              <label style={lbl}>📤 Dispatch From</label>
-              <div style={{display:'flex',gap:8,marginBottom:8}}>
-                {[['our-yard','🏭 Our Yard'],['vendor','🏢 From Vendor']].map(([v,l])=>(
-                  <button key={v} onClick={()=>setGdnFromType(v)}
-                    style={{padding:'5px 12px',border:`2px solid ${gdnFromType===v?GDN_C:'#D1D5DB'}`,borderRadius:6,cursor:'pointer',fontFamily:F,fontSize:11,fontWeight:gdnFromType===v?800:500,
-                      background:gdnFromType===v?'#ede9fe':'#f9fafb',color:gdnFromType===v?GDN_C:'#6B7280'}}>{l}</button>
-                ))}
-              </div>
-              <input style={inp} value={gdnFromName} onChange={e=>setGdnFromName(e.target.value)}
-                placeholder={gdnFromType==='our-yard'?'Yard / warehouse name':'Vendor name'}/>
-            </div>
-            <div>
-              <label style={lbl}>📥 Deliver To</label>
-              <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-                {[['client','👤 Client'],['vendor','🏢 Vendor'],['other','📍 Other']].map(([v,l])=>(
-                  <button key={v} onClick={()=>setGdnToType(v)}
-                    style={{padding:'5px 12px',border:`2px solid ${gdnToType===v?'#059669':'#D1D5DB'}`,borderRadius:6,cursor:'pointer',fontFamily:F,fontSize:11,fontWeight:gdnToType===v?800:500,
-                      background:gdnToType===v?'#dcfce7':'#f9fafb',color:gdnToType===v?'#059669':'#6B7280'}}>{l}</button>
-                ))}
-              </div>
-              {gdnToType==='client'?(
-                <select style={{...inp,cursor:'pointer'}} value={gdnToClientId} onChange={e=>setGdnToClientId(e.target.value)}>
-                  <option value="">— Select Client —</option>
-                  {clients.map(c=><option key={c.clientId||c._id} value={c.clientId||c._id}>{c.clientName||c.name||'—'}</option>)}
-                </select>
-              ):(
-                <input style={inp} value={gdnToName} onChange={e=>setGdnToName(e.target.value)}
-                  placeholder={gdnToType==='vendor'?'Vendor name':'Address / location'}/>
-              )}
-            </div>
-          </div>
-
-          {/* Transport */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:14}}>
-            <div><label style={lbl}>Vehicle No</label><input style={inp} value={gdnVehicleNo} onChange={e=>setGdnVehicleNo(e.target.value)} placeholder="MH01AB1234"/></div>
-            <div><label style={lbl}>LR / Docket No</label><input style={inp} value={gdnLrNo} onChange={e=>setGdnLrNo(e.target.value)} placeholder="LR number"/></div>
-            <div><label style={lbl}>Transporter</label><input style={inp} value={gdnTransporter} onChange={e=>setGdnTransporter(e.target.value)} placeholder="Transport company"/></div>
-            <div><label style={lbl}>Remarks</label><input style={inp} value={gdnRemarks} onChange={e=>setGdnRemarks(e.target.value)} placeholder="Notes"/></div>
-          </div>
-        </div>
-
-        {/* Items */}
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden',marginBottom:10}}>
-          <div style={{background:GDN_C,padding:'7px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontSize:11,fontWeight:800,color:'#fff',textTransform:'uppercase',letterSpacing:'0.6px'}}>Items Dispatched — {fromLabel} → {toLabel}</span>
-            <button onClick={addGdnItem} style={{padding:'3px 10px',background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',borderRadius:4,cursor:'pointer',fontSize:11,fontFamily:F}}>+ Add Item</button>
-          </div>
-          <div style={{overflowX:'auto'}}>
-            <table style={{borderCollapse:'collapse',fontSize:11,fontFamily:F,width:'100%'}}>
-              <thead><tr>
-                {['#','Item / Description','HSN','Unit','Qty','Rate (₹)','Amount (₹)','Remarks',''].map((h,i)=>(
-                  <th key={i} style={{padding:'6px 8px',background:'#4c1d95',color:'#fff',fontSize:10,fontWeight:700,textAlign:i>=4&&i<=6?'right':'left',border:'1px solid #6d28d9',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {gdnItems.map((it,i)=>(
-                  <tr key={i} style={{background:i%2===0?'#fff':'#faf5ff'}}>
-                    <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'center',color:'#9CA3AF'}}>{i+1}</td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0'}}>
-                      <input value={it.itemName} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,itemName:e.target.value}:x))}
-                        style={{width:'100%',height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none'}} placeholder="Item name"/>
-                    </td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0'}}>
-                      <input value={it.hsnCode||''} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,hsnCode:e.target.value}:x))}
-                        style={{width:70,height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none'}} placeholder="HSN"/>
-                    </td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0'}}>
-                      <input value={it.unit} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,unit:e.target.value}:x))}
-                        style={{width:60,height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none'}}/>
-                    </td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0',textAlign:'right'}}>
-                      <input type="number" min="0" step="0.01" value={it.qty} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,qty:parseFloat(e.target.value)||0}:x))}
-                        style={{width:70,height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none',textAlign:'right'}}/>
-                    </td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0',textAlign:'right'}}>
-                      <input type="number" min="0" step="0.01" value={it.rate||0} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,rate:parseFloat(e.target.value)||0}:x))}
-                        style={{width:80,height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none',textAlign:'right'}}/>
-                    </td>
-                    <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:GDN_C}}>₹{fmt((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0))}</td>
-                    <td style={{padding:'3px 6px',border:'1px solid #e2e8f0'}}>
-                      <input value={it.remarks||''} onChange={e=>setGdnItems(p=>p.map((x,j)=>j===i?{...x,remarks:e.target.value}:x))}
-                        style={{width:'100%',height:28,padding:'0 6px',border:'1px solid #D1D5DB',borderRadius:4,fontSize:11,fontFamily:F,outline:'none'}} placeholder="Note"/>
-                    </td>
-                    <td style={{padding:'4px 6px',border:'1px solid #e2e8f0',textAlign:'center'}}>
-                      {gdnItems.length>1&&<button onClick={()=>removeGdnItem(i)} style={{background:'#FEF2F2',border:'1px solid #FECACA',color:'#DC2626',borderRadius:4,cursor:'pointer',fontSize:12,padding:'2px 7px',fontFamily:F}}>✕</button>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr style={{background:'#f5f3ff'}}>
-                <td colSpan={6} style={{padding:'6px 8px',border:'1px solid #e2e8f0',fontWeight:800,fontSize:11}}>TOTAL</td>
-                <td style={{padding:'6px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:800,color:GDN_C}}>₹{fmt(gdnItems.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0))}</td>
-                <td colSpan={2} style={{border:'1px solid #e2e8f0'}}/>
-              </tr></tfoot>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   /* ══════ TABS VIEW ══════ */
   return (
-    <div style={{fontFamily:F,fontSize:12,padding:10}}>
+    <div style={{fontFamily:F,fontSize:12,padding:10,height:'100%',boxSizing:'border-box',display:'flex',flexDirection:'column'}}>
 
       {/* PDF Viewer */}
       {pdfViewer&&(
@@ -909,6 +598,10 @@ export default function PurchaseBill() {
                 <div style={{fontSize:11,color:'#6B7280'}}>Vendor Invoice: {viewBill.vendorBillNo||'—'} · {fmtD(viewBill.billDate)}</div>
               </div>
               <div style={{display:'flex',gap:8}}>
+                {canApproveBill(viewBill)&&(
+                  <button onClick={()=>handleApproveBill(viewBill)}
+                    style={{padding:'4px 12px',background:'#16A34A',color:'#fff',border:'1px solid #15803D',borderRadius:5,cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:700}}>✓ Approve</button>
+                )}
                 <button onClick={()=>{setViewBill(null);openEditBill(viewBill);}}
                   style={{padding:'4px 12px',background:'#EEF2FF',color:'#4338CA',border:'1px solid #C7D2FE',borderRadius:5,cursor:'pointer',fontSize:11,fontFamily:F,fontWeight:600}}>✏ï¸ Edit</button>
                 <button onClick={()=>setViewBill(null)}
@@ -923,23 +616,23 @@ export default function PurchaseBill() {
             </div>
             <table style={{borderCollapse:'collapse',fontSize:11,fontFamily:F,width:'100%',marginBottom:12}}>
               <thead><tr>{['Item','Qty','Rate','Taxable','GST','Total'].map(h=>(
-                <th key={h} style={{padding:'5px 8px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:h==='Item'?'left':'right',border:'1px solid #0b3d3d'}}>{h}</th>
+                <th key={h} style={{padding:'5px 8px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:h==='Item'?'left':'right',border:'1px solid #1a3a9f'}}>{h}</th>
               ))}</tr></thead>
               <tbody>{(viewBill.items||[]).map((l,i)=>(
                 <tr key={i} style={{background:i%2?'#f9fafb':'#fff'}}>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',fontWeight:600}}>{l.description||l.itemName||'—'}</td>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right'}}>{l.qty}</td>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right'}}>₹{fmt(l.rate)}</td>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right'}}>₹{fmt(l.taxable)}</td>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right',color:'#7C3AED'}}>₹{fmt(l.gstAmt)}</td>
-                  <td style={{padding:'4px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(l.total)}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:600}}>{l.description||l.itemName||'—'}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right'}}>{l.qty}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right'}}>₹{fmt(l.rate)}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right'}}>₹{fmt(l.taxable)}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',color:'#7C3AED'}}>₹{fmt(l.gstAmt)}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(l.total)}</td>
                 </tr>
               ))}</tbody>
               <tfoot><tr style={{background:'#e8eef8'}}>
-                <td colSpan={3} style={{padding:'6px 8px',border:'1px solid #e2e8f0',fontWeight:700}}>Grand Total</td>
-                <td style={{padding:'6px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700}}>₹{fmt(viewBill.subTotal)}</td>
-                <td style={{padding:'6px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:'#7C3AED'}}>₹{fmt(viewBill.totalGST)}</td>
-                <td style={{padding:'6px 8px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:800,color:P}}>₹{fmt(viewBill.grandTotal)}</td>
+                <td colSpan={3} style={{padding:'6px 8px',border:'1px solid #000000',fontWeight:700}}>Grand Total</td>
+                <td style={{padding:'6px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700}}>₹{fmt(viewBill.subTotal)}</td>
+                <td style={{padding:'6px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:'#7C3AED'}}>₹{fmt(viewBill.totalGST)}</td>
+                <td style={{padding:'6px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:800,color:P}}>₹{fmt(viewBill.grandTotal)}</td>
               </tr></tfoot>
             </table>
             {(viewBill.attachments||[]).length>0&&(
@@ -962,98 +655,91 @@ export default function PurchaseBill() {
         </div>
       )}
 
-      {/* Header */}
-      <div style={{background:P,color:'#fff',padding:'8px 14px',borderRadius:'7px 7px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div>
-          <div style={{fontSize:14,fontWeight:800}}>🛒 Purchase Bills</div>
-          <div style={{fontSize:10,opacity:0.7,marginTop:1}}>PO Dashboard · Purchase Bills · GRN · GDN</div>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          {tab==='grn'&&<button onClick={()=>openCreateGRN()} style={{height:30,padding:'0 14px',background:GN,border:'1px solid #047857',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:F}}>📦 New GRN</button>}
-          {tab==='gdn'&&<button onClick={openCreateGDN} style={{height:30,padding:'0 14px',background:'#7c3aed',border:'1px solid #6d28d9',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:F}}>🚚 New GDN</button>}
-          {(tab==='orders'||tab==='bills')&&<button onClick={()=>setView('create-bill')} style={{height:30,padding:'0 14px',background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.35)',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:F}}>📄 New Bill</button>}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{display:'flex',background:'#f1f5f9',borderLeft:'1px solid #e2e8f0',borderRight:'1px solid #e2e8f0'}}>
-        {[{key:'orders',label:'📊 PO Dashboard',cnt:purchaseOrders.length,bg:'#e8eef8',c:P},
-          {key:'bills',label:'📄 Purchase Bills',cnt:bills.length,bg:'#dcfce7',c:'#166534'},
-          {key:'grn',label:'📦 GRN',cnt:grns.length,bg:'#d1fae5',c:GN},
-          {key:'gdn',label:'🚚 GDN',cnt:gdns.length,bg:'#ede9fe',c:'#7c3aed'},
+      {/* Header — title, tabs, search, FY filter and actions on ONE line */}
+      <div style={{background:P,color:'#fff',padding:'6px 12px',borderRadius:'7px 7px 0 0',display:'flex',alignItems:'center',gap:10,flexShrink:0,flexWrap:'nowrap',overflowX:'auto'}}>
+        <div style={{fontSize:14,fontWeight:800,whiteSpace:'nowrap',marginRight:4}}>🛒 Purchase Bills</div>
+        {[{key:'orders',label:'📊 PO Dashboard',cnt:purchaseOrders.length},
+          {key:'bills',label:'📄 Purchase Bills',cnt:bills.length},
         ].map(t=>(
           <button key={t.key} onClick={()=>setTab(t.key)}
-            style={{padding:'9px 22px',fontSize:12,fontWeight:tab===t.key?800:500,background:tab===t.key?'#fff':'transparent',border:'none',
-              borderBottom:tab===t.key?`2px solid ${t.c}`:'2px solid transparent',
-              color:tab===t.key?t.c:'#6B7280',cursor:'pointer',fontFamily:F,whiteSpace:'nowrap'}}>
+            style={{height:28,padding:'0 12px',fontSize:11.5,fontWeight:tab===t.key?800:600,cursor:'pointer',fontFamily:F,whiteSpace:'nowrap',borderRadius:6,
+              background:tab===t.key?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.08)',border:`1px solid ${tab===t.key?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.25)'}`,color:'#fff'}}>
             {t.label}
-            <span style={{marginLeft:5,background:t.bg,color:t.c,borderRadius:10,padding:'1px 7px',fontSize:9,fontWeight:700}}>{t.cnt}</span>
+            <span style={{marginLeft:5,background:'rgba(255,255,255,0.2)',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:9,fontWeight:700}}>{t.cnt}</span>
           </button>
         ))}
+        <div style={{width:1,height:20,background:'rgba(255,255,255,0.25)',flexShrink:0}}/>
+        {/* search for the open tab */}
+        <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,background:'#fff',height:28,padding:'0 8px',gap:6,flex:'1 1 220px',minWidth:180,maxWidth:340}}>
+          <span style={{fontSize:12,color:'#9ca3af'}}>🔍</span>
+          {tab==='orders' ? (
+            <input value={ordSearch} onChange={e=>setOrdSearch(e.target.value)} placeholder="Search PO No, vendor, client, order ID…"
+              style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,minWidth:0,background:'transparent',color:'#374151'}}/>
+          ) : (
+            <input value={pbSearch} onChange={e=>setPbSearch(e.target.value)} placeholder="Search bills, vendor, PO…"
+              style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,minWidth:0,background:'transparent',color:'#374151'}}/>
+          )}
+          {(tab==='orders'?ordSearch:pbSearch)&&<button onClick={()=>tab==='orders'?setOrdSearch(''):setPbSearch('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af'}}>×</button>}
+        </div>
+        {/* FY filter for the open tab */}
+        <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0}}>
+          {['all',...(tab==='orders'?fyPOList:fyBillList)].map(f=>{
+            const on = (tab==='orders'?poFy:pbFy)===f;
+            return (
+              <button key={f} onClick={()=>tab==='orders'?setPoFy(f):setPbFy(f)}
+                style={{height:28,padding:'0 9px',borderRadius:6,border:`1px solid ${on?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.25)'}`,background:on?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.08)',color:'#fff',fontSize:11,fontWeight:on?800:600,cursor:'pointer',fontFamily:F,whiteSpace:'nowrap'}}>
+                {f==='all'?'All FY':`FY ${f}`}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{flex:1}}/>
+        {tab==='bills'&&(
+          <button onClick={doPrintBills}
+            style={{height:28,padding:'0 12px',background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.35)',borderRadius:6,cursor:'pointer',color:'#fff',fontSize:11,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>
+            🖨 Print
+          </button>
+        )}
+        <button onClick={()=>setView('create-bill')} style={{height:28,padding:'0 14px',background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.35)',color:'#fff',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>📄 New Bill</button>
       </div>
 
       {/* ── PO Dashboard ── */}
       {tab==='orders'&&(
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderTop:'none',borderRadius:'0 0 7px 7px'}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-            <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,background:'#f9fafb',height:32,padding:'0 10px',gap:6,flex:1,maxWidth:380}}>
-              <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
-              <input value={ordSearch} onChange={e=>setOrdSearch(e.target.value)} placeholder="Search PO No, vendor, client, order ID…"
-                style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
-              {ordSearch&&<button onClick={()=>setOrdSearch('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af'}}>×</button>}
-            </div>
-            {fyPOList.length > 0 && (
-              <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                {['all',...fyPOList].map(f=>(
-                  <button key={f} onClick={()=>setPoFy(f)}
-                    style={{height:28,padding:'0 9px',borderRadius:6,border:`1px solid ${poFy===f?P:'#D1D5DB'}`,background:poFy===f?P:'#fff',color:poFy===f?'#fff':'#374151',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:F,whiteSpace:'nowrap'}}>
-                    {f==='all'?'All FY':`FY ${f}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div style={{overflowX:'auto'}}>
+        <div style={{background:'#fff',border:'1px solid #000000',borderTop:'none',borderRadius:'0 0 7px 7px',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+          <div style={{overflow:'auto',flex:1,minHeight:0}}>
             <table style={{borderCollapse:'collapse',width:'100%',fontSize:11,fontFamily:F}}>
               <thead><tr>
-                {['#','Order ID','Client','Vendor','PO Date','PO No','Order Qty','Billed Qty','Received Qty','PO Value (₹)','Bills','GRN','Actions'].map((h,i)=>(
-                  <th key={h} style={{padding:'7px 10px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:i>=6&&i<=9?'right':'left',border:'1px solid #0b3d3d',whiteSpace:'nowrap'}}>{h}</th>
+                {['#','Order ID','Client','Vendor','PO Date','PO No','Order Qty','Billed Qty','PO Value (₹)','Bills','Actions'].map((h,i)=>(
+                  <th key={h} style={{padding:'5px 8px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:i>=6&&i<=8?'right':'left',border:'1px solid #1a3a9f',whiteSpace:'nowrap',position:'sticky',top:0,zIndex:1}}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {loading?(<tr><td colSpan={13} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
-                :filteredPOs.length===0?(<tr><td colSpan={13} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No purchase orders found.</td></tr>)
+                {loading?(<tr><td colSpan={11} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
+                :filteredPOs.length===0?(<tr><td colSpan={11} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No purchase orders found.</td></tr>)
                 :filteredPOs.map((po,i)=>{
                   const so=soMap[String(po.linkedSalesOrderId)];
                   const clientName=so?.customerName||so?.clientName||'—';
                   const orderBills=billsByOrder[String(po.orderId)]||[];
-                  const orderGRNs=grnsByPO[String(po.orderId)]||[];
                   const fullyBilled=isFullyBilled(po);
-                  const oQty=poOrderQty(po), bQty=poBilledQty(po), rQty=poReceivedQty(po);
+                  const oQty=poOrderQty(po), bQty=poBilledQty(po);
                   return (
-                    <tr key={po.orderId} style={{background:i%2===0?'#fff':'#f8fafc',transition:'background 0.1s'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#eff6ff'}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f8fafc'}>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',color:'#9CA3AF',textAlign:'center'}}>{i+1}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',fontWeight:700,color:P}}>
-                        {po.orderId}
-                        {po.linkedSalesOrderId&&<div style={{fontSize:9,color:'#6B7280',marginTop:1}}>SO #{po.linkedSalesOrderId}</div>}
+                    <tr key={po.orderId} style={{background:'#fff',transition:'background 0.1s'}}
+                      onMouseEnter={e=>e.currentTarget.style.background='#f5f5f5'}
+                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',color:'#000',textAlign:'center'}}>{i+1}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:700,color:'#000'}}>
+                        {so?.orderNo || (po.linkedSalesOrderId?`SO#${po.linkedSalesOrderId}`:'—')}
                       </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',fontWeight:600,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{po.vendorName||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',whiteSpace:'nowrap'}}>{fmtD(po.poDate)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',fontWeight:600,whiteSpace:'nowrap'}}>{po.poNo||po.poNumber||`PO-${po.orderId}`}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:'#1E293B'}}>{oQty.toFixed(2)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:bQty>=oQty&&oQty>0?'#166534':'#4338CA'}}>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:600,color:'#000',maxWidth:220,wordBreak:'break-word'}}>{clientName}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',color:'#000',maxWidth:220,wordBreak:'break-word'}}>{po.vendorName||'—'}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',color:'#000',whiteSpace:'nowrap'}}>{fmtD(po.poDate)}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:600,color:'#000',whiteSpace:'nowrap'}}>{po.poNo||po.poNumber||`PO-${po.orderId}`}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:'#000'}}>{oQty.toFixed(2)}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:'#000'}}>
                         {bQty.toFixed(2)}
-                        {oQty>0&&<div style={{fontSize:9,color:'#9CA3AF',marginTop:1}}>{Math.min(100,Math.round(bQty/oQty*100))}%</div>}
                       </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:rQty>=oQty&&oQty>0?'#166534':'#065f46'}}>
-                        {rQty.toFixed(2)}
-                        {oQty>0&&<div style={{fontSize:9,color:'#9CA3AF',marginTop:1}}>{Math.min(100,Math.round(rQty/oQty*100))}%</div>}
-                      </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:P}}>₹{fmt(po.grandTotal||po.totalAmount||0)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0'}}>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:'#000'}}>₹{fmt(po.grandTotal||po.totalAmount||0)}</td>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000'}}>
                         {orderBills.length>0?(
                           <span style={{fontSize:10,background:'#EEF2FF',color:'#4338CA',padding:'1px 7px',borderRadius:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}
                             onClick={()=>{setPbSearch(po.poNo||po.poNumber||`PO-${po.orderId}`);setTab('bills');}}>
@@ -1061,15 +747,7 @@ export default function PurchaseBill() {
                           </span>
                         ):<span style={{fontSize:10,color:'#D1D5DB'}}>—</span>}
                       </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0'}}>
-                        {orderGRNs.length>0?(
-                          <span style={{fontSize:10,background:'#d1fae5',color:GN,padding:'1px 7px',borderRadius:10,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}
-                            onClick={()=>{setGrnSearch(po.poNo||po.poNumber||`PO-${po.orderId}`);setTab('grn');}}>
-                            {orderGRNs.length} GRN{orderGRNs.length>1?'s':''}
-                          </span>
-                        ):<span style={{fontSize:10,color:'#D1D5DB'}}>—</span>}
-                      </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e2e8f0'}} onClick={e=>e.stopPropagation()}>
+                      <td style={{padding:'4px 8px',border:'1px solid #000000'}} onClick={e=>e.stopPropagation()}>
                         <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                           {fullyBilled?(
                             <span style={{padding:'2px 8px',background:'#DCFCE7',color:'#166534',borderRadius:10,fontSize:10,fontWeight:700,border:'1px solid #BBF7D0',whiteSpace:'nowrap'}}>✅ All Invoice Received</span>
@@ -1079,10 +757,6 @@ export default function PurchaseBill() {
                               📄 Bill
                             </button>
                           )}
-                          <button onClick={()=>openCreateGRN(po)}
-                            style={{padding:'2px 8px',background:'#d1fae5',color:GN,border:'1px solid #a7f3d0',borderRadius:4,cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>
-                            📦 GRN
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1096,43 +770,22 @@ export default function PurchaseBill() {
 
       {/* ── Purchase Bills Tab ── */}
       {tab==='bills'&&(
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderTop:'none',borderRadius:'0 0 7px 7px'}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-            <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,background:'#f9fafb',height:32,padding:'0 10px',gap:6,flex:1,maxWidth:300}}>
-              <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
-              <input value={pbSearch} onChange={e=>setPbSearch(e.target.value)} placeholder="Search bills, vendor, PO…"
-                style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
-              {pbSearch&&<button onClick={()=>setPbSearch('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af'}}>×</button>}
-            </div>
-            {fyBillList.length > 0 && (
-              <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
-                {['all',...fyBillList].map(f=>(
-                  <button key={f} onClick={()=>setPbFy(f)}
-                    style={{height:28,padding:'0 9px',borderRadius:6,border:`1px solid ${pbFy===f?P:'#D1D5DB'}`,background:pbFy===f?P:'#fff',color:pbFy===f?'#fff':'#374151',fontSize:11,fontWeight:600,cursor:'pointer',fontFamily:F,whiteSpace:'nowrap'}}>
-                    {f==='all'?'All FY':`FY ${f}`}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button onClick={()=>setView('create-bill')}
-              style={{height:30,padding:'0 14px',background:'#EEF2FF',border:'1px solid #C7D2FE',borderRadius:6,cursor:'pointer',color:'#4338CA',fontSize:11,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>
-              + New Bill
-            </button>
-          </div>
+        <div style={{background:'#fff',border:'1px solid #000000',borderTop:'none',borderRadius:'0 0 7px 7px',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
           {/* ── Action Bar ── */}
           {selPBill && (
-            <div style={{background:'linear-gradient(90deg,#104f4f,#104f4f)',padding:'5px 12px',display:'flex',alignItems:'center',gap:8}}>
+            <div style={{background:'linear-gradient(90deg,#133d80,#133d80)',padding:'5px 12px',display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:11,color:'rgba(255,255,255,0.8)'}}>▶</span>
               <span style={{fontSize:12,fontWeight:700,color:'#fff',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                 {selPBill.billNo} · {selPBill.partyName||''}
               </span>
               {[
                 {label:'👁 View',   fn:()=>setViewBill(selPBill)},
+                ...(canApproveBill(selPBill)?[{label:'✓ Approve', fn:()=>handleApproveBill(selPBill), ok:true}]:[]),
                 {label:'✏ï¸ Edit',   fn:()=>openEditBill(selPBill)},
                 {label:'🗑 Delete', fn:()=>handleDeleteBill(selPBill.billId), danger:true},
               ].map(btn=>(
                 <button key={btn.label} onClick={btn.fn}
-                  style={{height:26,padding:'0 10px',fontSize:11,cursor:'pointer',fontFamily:F,fontWeight:700,borderRadius:5,whiteSpace:'nowrap',border:'none',background:btn.danger?'rgba(220,38,38,0.35)':'rgba(255,255,255,0.18)',color:'#fff'}}>
+                  style={{height:26,padding:'0 10px',fontSize:11,cursor:'pointer',fontFamily:F,fontWeight:700,borderRadius:5,whiteSpace:'nowrap',border:'none',background:btn.danger?'rgba(220,38,38,0.35)':btn.ok?'#16A34A':'rgba(255,255,255,0.18)',color:'#fff'}}>
                   {btn.label}
                 </button>
               ))}
@@ -1140,49 +793,65 @@ export default function PurchaseBill() {
                 style={{height:26,width:26,background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',borderRadius:5,cursor:'pointer',fontSize:13}}>✕</button>
             </div>
           )}
-          <div style={{overflowX:'auto',overflowY:'auto',maxHeight:'calc(100vh - 290px)'}}>
+          <div style={{overflow:'auto',flex:1,minHeight:0}}>
             <table style={{borderCollapse:'collapse',width:'100%',fontSize:11,fontFamily:F}}>
               <thead style={{position:'sticky',top:0,zIndex:3}}><tr>
-                {['#','Bill No','Vendor Bill No','Date','PO No','Vendor','GST','Taxable (₹)','GST (₹)','Total (₹)'].map((h,i)=>(
-                  <th key={h} style={{padding:'7px 10px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:i>=7&&i<=9?'right':(i===0?'center':'left'),border:'1px solid #0b3d3d',whiteSpace:'nowrap',...(i===0?{width:36}:{})}}>{h}</th>
+                {['#','Order File No','Client','Vendor','PO No','Vendor Bill Date','Vendor Bill No','Material','Qty','Rate (₹)','Taxable (₹)','GST (₹)','Invoice Value (₹)','GST Type','Status'].map((h,i)=>(
+                  <th key={h} style={{padding:'7px 10px',background:P,color:'#fff',fontSize:10,fontWeight:700,
+                    textAlign:i===8?'center':i>=9&&i<=12?'right':i===14?'center':(i===0?'center':'left'),
+                    border:'1px solid #1a3a9f',whiteSpace:'nowrap',...(i===0?{width:36}:{})}}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {loading?(<tr><td colSpan={11} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
-                :filteredBills.length===0?(<tr><td colSpan={11} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No purchase bills yet. Click "New Bill" or use the PO Dashboard.</td></tr>)
+                {loading?(<tr><td colSpan={15} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
+                :filteredBills.length===0?(<tr><td colSpan={15} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No purchase bills yet. Click "New Bill" or use the PO Dashboard.</td></tr>)
                 :[...filteredBills].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map((b,i)=>{
-                  const isSel=selPBill?.billId===b.billId; const rowBg=isSel?'#EEF4FF':i%2===0?'#fff':'#f8fafc';
+                  const isSel=selPBill?.billId===b.billId; const rowBg=isSel?'#EEF4FF':'#fff';
+                  const po = purchaseOrders.find(o=>String(o.orderId)===String(b.orderId));
+                  const so = soMap[String(po?.linkedSalesOrderId)];
+                  const items = b.items||[];
+                  const matQty = items.reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+                  const material = items.length
+                    ? (items[0].description||items[0].itemName||'—') + (items.length>1?` +${items.length-1} more`:'')
+                    : '—';
+                  const matRate = items.length ? (parseFloat(items[0].rate)||0) : null;
                   return (
                   <tr key={b.billId} style={{background:rowBg,cursor:'pointer',transition:'background 0.1s',outline:isSel?`2px solid ${P}`:'none',outlineOffset:'-2px'}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background='#eff6ff';}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background='#f5f5f5';}}
                     onMouseLeave={e=>{e.currentTarget.style.background=rowBg;}}
                     onClick={()=>setActivityRec(b)}>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#9CA3AF',background:isSel?P:'transparent',cursor:'pointer',fontSize:11}}
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#000',background:isSel?P:'transparent',cursor:'pointer',fontSize:11}}
                       onClick={e=>{e.stopPropagation();setSelPBill(s=>s?.billId===b.billId?null:b);}}>
                       {isSel?'✓':i+1}
                     </td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',fontWeight:700,color:P}}>{b.billNo}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',color:'#555'}}>{b.vendorBillNo||'—'}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',whiteSpace:'nowrap'}}>{fmtD(b.billDate)}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',color:'#555'}}>{b.orderNo||'—'}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',fontWeight:600,maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.partyName}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0'}}>
-                      <span style={{padding:'1px 7px',borderRadius:4,fontSize:10,fontWeight:700,background:b.gstType==='intrastate'?'#DCFCE7':'#EEF2FF',color:b.gstType==='intrastate'?'#104f4f':'#4338CA'}}>
-                        {b.gstType==='intrastate'?'C+S GST':'IGST'}
-                      </span>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000'}}>{so?.orderNo||'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{so?.customerName||so?.clientName||'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',fontWeight:600,color:'#000',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.partyName}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000'}}>{b.orderNo||'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000',whiteSpace:'nowrap'}}>{fmtD(b.billDate)}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000'}}>{b.vendorBillNo||'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000',maxWidth:160,wordBreak:'break-word'}}>{material}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'center',fontWeight:700,color:'#000'}}>{matQty||'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',color:'#000'}}>{matRate!==null?fmt(matRate):'—'}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',color:'#000'}}>{fmt(b.subTotal)}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',color:'#000'}}>{fmt(b.totalGST)}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,color:'#000'}}>{fmt(b.grandTotal)}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',color:'#000',whiteSpace:'nowrap'}}>
+                      {b.gstType==='intrastate'?'CGST+SGST':'IGST'}
                     </td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',textAlign:'right'}}>{fmt(b.subTotal)}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',textAlign:'right',color:'#7C3AED'}}>{fmt(b.totalGST)}</td>
-                    <td style={{padding:'5px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:700,color:P}}>{fmt(b.grandTotal)}</td>
+                    <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'center'}}>
+                      <Badge s={b.status}/>
+                    </td>
                   </tr>
                 );})}
               </tbody>
               {filteredBills.length>0&&(
-                <tfoot style={{position:'sticky',bottom:0,zIndex:2}}><tr style={{background:'#e8eef8',fontWeight:700}}>
-                  <td colSpan={7} style={{padding:'6px 10px',border:'1px solid #e2e8f0',fontWeight:800}}>TOTAL ({filteredBills.length} bills{pbFy!=='all'?` · FY ${pbFy}`:''})</td>
-                  <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',fontWeight:800}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.subTotal)||0),0))}</td>
-                  <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',color:'#7C3AED',fontWeight:800}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.totalGST)||0),0))}</td>
-                  <td style={{padding:'6px 10px',border:'1px solid #e2e8f0',textAlign:'right',color:P,fontWeight:800}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.grandTotal)||0),0))}</td>
+                <tfoot style={{position:'sticky',bottom:0,zIndex:2}}><tr style={{background:'#f0f0f0',fontWeight:700}}>
+                  <td colSpan={10} style={{padding:'4px 8px',border:'1px solid #000000',fontWeight:800,color:'#000'}}>TOTAL ({filteredBills.length} bills{pbFy!=='all'?` · FY ${pbFy}`:''})</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:800,color:'#000'}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.subTotal)||0),0))}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:800,color:'#000'}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.totalGST)||0),0))}</td>
+                  <td style={{padding:'4px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:800,color:'#000'}}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.grandTotal)||0),0))}</td>
+                  <td colSpan={2} style={{padding:'4px 8px',border:'1px solid #000000'}}/>
                 </tr></tfoot>
               )}
             </table>
@@ -1190,119 +859,6 @@ export default function PurchaseBill() {
         </div>
       )}
 
-      {/* ── GRN Tab ── */}
-      {tab==='grn'&&(
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderTop:'none',borderRadius:'0 0 7px 7px'}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:10}}>
-            <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,background:'#f9fafb',height:32,padding:'0 10px',gap:6,flex:1,maxWidth:360}}>
-              <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
-              <input value={grnSearch} onChange={e=>setGrnSearch(e.target.value)} placeholder="Search GRN No, vendor, PO…"
-                style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
-              {grnSearch&&<button onClick={()=>setGrnSearch('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af'}}>×</button>}
-            </div>
-            <button onClick={()=>openCreateGRN()}
-              style={{height:30,padding:'0 14px',background:GN,border:`1px solid #047857`,borderRadius:6,cursor:'pointer',color:'#fff',fontSize:11,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>
-              📦 New GRN
-            </button>
-          </div>
-          <div style={{overflowX:'auto'}}>
-            <table style={{borderCollapse:'collapse',width:'100%',fontSize:11,fontFamily:F}}>
-              <thead><tr>
-                {['#','GRN No','Date','PO No','Dispatch From','Delivery To','Received By','Qty','Actions'].map((h,i)=>(
-                  <th key={h} style={{padding:'7px 10px',background:GN,color:'#fff',fontSize:10,fontWeight:700,textAlign:'left',border:'1px solid #047857',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {loading?(<tr><td colSpan={9} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
-                :filteredGRNs.length===0?(<tr><td colSpan={9} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No GRNs yet.</td></tr>)
-                :[...filteredGRNs].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map((g,i)=>{
-                  const totalQty=(g.items||[]).reduce((s,it)=>s+(parseFloat(it.receivedQty)||0),0);
-                  const dtMap={'our-yard':['🏭','#dcfce7',GN],'direct-client':['🚛','#dbeafe','#1d4ed8'],'to-vendor':['🔄','#fef9c3','#92400e']};
-                  const [dtIcon,dtBg,dtC]=dtMap[g.deliveryType||'our-yard']||dtMap['our-yard'];
-                  const destLabel=g.deliveryType==='direct-client'?g.clientName||'Client':g.deliveryType==='to-vendor'?g.toVendorName||'Vendor':(g.deliveryLocation||'Our Yard');
-                  return (
-                    <tr key={g.grnId} style={{background:i%2===0?'#fff':'#f0fdf4',transition:'background 0.1s'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#dcfce7'}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f0fdf4'}>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',color:'#9CA3AF',textAlign:'center'}}>{i+1}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',fontWeight:700,color:GN}}>{g.grnNo}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',whiteSpace:'nowrap'}}>{fmtD(g.receiptDate)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',fontWeight:600,color:P}}>{g.poNo||`PO-${g.poId}`}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{g.vendorName||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5'}}>
-                        <span style={{background:dtBg,color:dtC,padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{dtIcon} {destLabel}</span>
-                      </td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5'}}>{g.receivedBy||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5',fontWeight:700}}>{totalQty.toFixed(2)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #d1fae5'}}>
-                        <div style={{display:'flex',gap:4}}>
-                          <button onClick={()=>openEditGRN(g)} style={{padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#d1fae5',color:GN,border:'1px solid #a7f3d0',borderRadius:4,fontFamily:F,fontWeight:600}}>✏ï¸</button>
-                          <button onClick={()=>handleDeleteGRN(g.grnId)} style={{padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#FEF2F2',color:'#DC2626',border:'1px solid #FECACA',borderRadius:4,fontFamily:F}}>🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ── GDN Tab ── */}
-      {tab==='gdn'&&(
-        <div style={{background:'#fff',border:'1px solid #e2e8f0',borderTop:'none',borderRadius:'0 0 7px 7px'}}>
-          <div style={{padding:'10px 14px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:10}}>
-            <div style={{display:'flex',alignItems:'center',border:'1px solid #d1d5db',borderRadius:6,background:'#f9fafb',height:32,padding:'0 10px',gap:6,flex:1,maxWidth:360}}>
-              <span style={{fontSize:13,color:'#9ca3af'}}>🔍</span>
-              <input value={gdnSearch} onChange={e=>setGdnSearch(e.target.value)} placeholder="Search GDN No, from, to…"
-                style={{border:'none',outline:'none',fontSize:12,fontFamily:F,flex:1,background:'transparent',color:'#374151'}}/>
-              {gdnSearch&&<button onClick={()=>setGdnSearch('')} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#9ca3af'}}>×</button>}
-            </div>
-            <button onClick={openCreateGDN} style={{height:30,padding:'0 14px',background:'#7c3aed',border:'1px solid #6d28d9',borderRadius:6,cursor:'pointer',color:'#fff',fontSize:11,fontWeight:700,fontFamily:F,whiteSpace:'nowrap'}}>
-              🚚 New GDN
-            </button>
-          </div>
-          <div style={{overflowX:'auto'}}>
-            <table style={{borderCollapse:'collapse',width:'100%',fontSize:11,fontFamily:F}}>
-              <thead><tr>
-                {['#','GDN No','Date','From','To','Vehicle No','LR No','Items','Dispatched By','Actions'].map(h=>(
-                  <th key={h} style={{padding:'7px 10px',background:'#7c3aed',color:'#fff',fontSize:10,fontWeight:700,textAlign:'left',border:'1px solid #6d28d9',whiteSpace:'nowrap'}}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {loading?(<tr><td colSpan={10} style={{textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic'}}>Loading…</td></tr>)
-                :filteredGDNs.length===0?(<tr><td colSpan={10} style={{textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic'}}>No GDNs yet. Click "+ New GDN" to record a dispatch.</td></tr>)
-                :[...filteredGDNs].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0)).map((g,i)=>{
-                  const fromLabel=g.fromType==='vendor'?`🏢 ${g.fromName||'Vendor'}`:`🏭 ${g.fromName||'Our Yard'}`;
-                  const toLabel=g.toType==='client'?`👤 ${g.toName||'Client'}`:g.toType==='vendor'?`🏢 ${g.toName||'Vendor'}`:`📍 ${g.toName||'Other'}`;
-                  return (
-                    <tr key={g.gdnId} style={{background:i%2===0?'#fff':'#faf5ff',transition:'background 0.1s'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='#ede9fe'}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#faf5ff'}>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff',color:'#9CA3AF',textAlign:'center'}}>{i+1}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff',fontWeight:700,color:'#7c3aed'}}>{g.gdnNo}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff',whiteSpace:'nowrap'}}>{fmtD(g.date)}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff',fontSize:11}}>{fromLabel}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff',fontSize:11,fontWeight:600}}>{toLabel}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff'}}>{g.vehicleNo||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff'}}>{g.lrNo||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff'}}>{(g.items||[]).length}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff'}}>{g.dispatchedBy||'—'}</td>
-                      <td style={{padding:'6px 10px',border:'1px solid #e9d5ff'}}>
-                        <div style={{display:'flex',gap:4}}>
-                          <button onClick={()=>openEditGDN(g)} style={{padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#ede9fe',color:'#7c3aed',border:'1px solid #c4b5fd',borderRadius:4,fontFamily:F,fontWeight:600}}>✏ï¸</button>
-                          <button onClick={()=>handleDeleteGDN(g.gdnId)} style={{padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#FEF2F2',color:'#DC2626',border:'1px solid #FECACA',borderRadius:4,fontFamily:F}}>🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <ActivityDrawer record={activityRec} recordType="pb" onClose={()=>setActivityRec(null)} />
     </div>

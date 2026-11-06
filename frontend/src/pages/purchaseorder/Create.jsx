@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════════════ */
 const UNITS         = ['NOS','Kg','Ltr','Mtr','Box','Pcs','Set','Hr','Sqft','MT','Roll','Pair','Bag'];
 const GST_RATES     = [0, 5, 12, 18, 28];
-const PURCHASE_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
 const STATES = [
   'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
   'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
@@ -155,6 +155,7 @@ function calcRowAmt(it) {
 const CreatePurchaseOrder = () => {
   const navigate            = useNavigate();
   const { selectedCompany } = useCompany();
+  const PURCHASE_PERSONS = useStaffNames();
 
   const [activeTab, setActiveTab] = useState('general');
   const [saving,    setSaving]    = useState(false);
@@ -706,7 +707,7 @@ const CreatePurchaseOrder = () => {
 
       <div style={{ padding:'0 20px' }}>
       {/* ── Tab Bar — same style as Sales Order ── */}
-      <div style={{ background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap' }}>
+      <div className="soft-tabs" style={{ background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap' }}>
         {TABS.map((t) => {
           const active = activeTab === t.id;
           return (

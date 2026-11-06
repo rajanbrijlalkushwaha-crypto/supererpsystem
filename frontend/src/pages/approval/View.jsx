@@ -41,14 +41,16 @@ const STATUS_STYLE = {
   rejected:  { bg:'#fee2e2', color:'#dc2626', border:'#fca5a5', label:'Rejected'  },
 };
 
+/* permKey must match the user-permission keys in utils/permissions.js (and the
+   backend's PERMISSION_MODULE map in api/notifications.js). */
 const ALL_MODULES = [
-  { key:'deposit',       label:'BG / Deposit',   permKey:'deposit'       },
-  { key:'payment',       label:'Payment',         permKey:'payment'       },
-  { key:'receipt',       label:'Receipt',         permKey:'receipt'       },
-  { key:'journal',       label:'Journal',         permKey:'journal'       },
-  { key:'expense',       label:'Expense',         permKey:'expense'       },
-  { key:'creditnote',    label:'Credit Note',     permKey:'creditNote'    },
-  { key:'debitnote',     label:'Debit Note',      permKey:'debitNote'     },
+  { key:'deposit',       label:'BG / Deposit',   permKey:'accDeposit'    },
+  { key:'payment',       label:'Payment',         permKey:'accPayment'    },
+  { key:'receipt',       label:'Receipt',         permKey:'accReceipt'    },
+  { key:'journal',       label:'Journal',         permKey:'accJournal'    },
+  { key:'expense',       label:'Expense',         permKey:'accExpense'    },
+  { key:'creditnote',    label:'Credit Note',     permKey:'accCreditNote' },
+  { key:'debitnote',     label:'Debit Note',      permKey:'accDebitNote'  },
   { key:'salesorder',    label:'Sales Order',     permKey:'salesOrder'    },
   { key:'purchaseorder', label:'Purchase Order',  permKey:'purchaseOrder' },
   { key:'salesbill',     label:'Sales Bill',      permKey:'salesBill'     },
@@ -95,8 +97,9 @@ const SKIP_FIELDS = new Set([
 ]);
 
 /* Format a raw value for display */
-const fmtVal = v => {
+const fmtVal = (v, k = '') => {
   if (Array.isArray(v)) return v.join(', ');
+  if (typeof v === 'number' && /(id|no|code|number)$/i.test(k)) return String(v);
   if (typeof v === 'number') {
     /* format numbers ≥ 100 as currency-style */
     return Math.abs(v) >= 100
@@ -119,10 +122,112 @@ const buildKVPairs = (raw) => {
       return;
     }
     if (typeof v === 'object') return;
-    pairs.push([k, fmtVal(v)]);
+    pairs.push([k, fmtVal(v, k)]);
   });
   return pairs;
 };
+
+/* ════════════════════════════════════════════════
+   ORDER CONTEXT — for a payment / receipt / expense, the PO and sales order
+   it belongs to: Order ID, PO No, SO File No, client, vendor, material and
+   how much of the order is already paid.
+════════════════════════════════════════════════ */
+function OrderContext({ module, raw, cid }) {
+  const [ctx, setCtx] = useState(null);
+  useEffect(() => {
+    if (!cid) return;
+    let alive = true;
+    const get = u => axios.get(u).then(r => r.data).catch(() => null);
+    (async () => {
+      const orderId = String(module === 'expense' ? (raw.soId || raw.orderId || '') : (raw.orderId || ''));
+      if (!orderId) { if (alive) setCtx({ none: true }); return; }
+      let po = null, so = null;
+      const wantPO = module === 'payment' ? raw.orderType !== 'sales' : false;
+      if (wantPO || /^4/.test(orderId)) po = await get(`/api/purchase-orders/${orderId}?companyId=${cid}`);
+      if (po && po.orderId != null) {
+        if (po.linkedSalesOrderId) so = await get(`/api/sales-orders/${po.linkedSalesOrderId}?companyId=${cid}`);
+      } else {
+        po = null;
+        so = await get(`/api/sales-orders/${orderId}?companyId=${cid}`);
+        if (!so || so.orderId == null) so = null;
+      }
+      /* paid so far on this order — confirmed entries of the same type, this one excluded */
+      let paidBefore = null;
+      if (module === 'payment' || module === 'receipt') {
+        const list = await get(`/api/accounts/payments?companyId=${cid}`) || [];
+        paidBefore = list.filter(p => p.type === (module === 'receipt' ? 'receipt' : 'payment')
+            && String(p.orderId) === orderId && p.status === 'confirmed'
+            && String(p.paymentId) !== String(raw.paymentId))
+          .reduce((t, p) => t + (parseFloat(p.amount) || 0), 0);
+      }
+      const banks = raw.bankId ? (await get(`/api/accounts/banks?companyId=${cid}`) || []) : [];
+      const bank  = banks.find(b => String(b.bankId) === String(raw.bankId));
+      if (alive) setCtx({ po, so, paidBefore, bank });
+    })();
+    return () => { alive = false; };
+  }, [module, raw, cid]);
+
+  if (!ctx) return <div style={{ fontSize:11.5, color:'#9ca3af', padding:'6px 0 12px' }}>Loading order details…</div>;
+  if (ctx.none) return null;
+  const { po, so, paidBefore, bank } = ctx;
+  const order = po || so;
+  if (!order) return null;
+
+  const items = (order.items || []).filter(it => it && (it.itemName || it.description || it.material));
+  const orderValue = parseFloat(order.grandTotal) || 0;
+  const thisAmt = parseFloat(raw.amount || raw.grandTotal) || 0;
+  const rows = [
+    ['Order ID',     order.orderId],
+    po && ['PO No',  po.poNo || po.poNumber],
+    po && ['PO Date', fmtD(po.poDate || po.date)],
+    so && ['SO File No', so.orderNo],
+    so && ['Client', so.customerName || so.clientName],
+    so && ['Client PO No', so.customerPO],
+    ['Vendor',       po ? po.vendorName : (raw.vendorName || raw.ledgerName || raw.entityName)],
+    bank && ['Bank', `${bank.bankName || ''}${bank.accountNumber ? ' — ' + bank.accountNumber : ''}`],
+  ].filter(r => r && r[1] != null && r[1] !== '');
+
+  const L = { fontSize:11, color:'#6b7280', fontWeight:500, width:120, minWidth:120 };
+  const V = { fontSize:11.5, color:'#111827', fontWeight:700, flex:1, wordBreak:'break-word' };
+  return (
+    <div style={{ border:`1px solid ${BD}`, borderRadius:10, padding:'10px 12px', marginBottom:14, background:'#F8FAFF' }}>
+      <div style={{ fontSize:11, fontWeight:700, color:P, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>
+        Order Details{po ? ' — Purchase Order' : ' — Sales Order'}
+      </div>
+      {rows.map(([l, v]) => (
+        <div key={l} style={{ display:'flex', gap:8, padding:'3px 0' }}><div style={L}>{l}</div><div style={V}>{String(v)}</div></div>
+      ))}
+      {items.length > 0 && (
+        <div style={{ display:'flex', gap:8, padding:'3px 0' }}>
+          <div style={L}>Material</div>
+          <div style={{ ...V, fontWeight:600 }}>
+            {items.map((it, i) => (
+              <div key={i}>{it.itemName || it.material || it.description}{it.qty ? ` — ${it.qty} ${it.unit || ''}` : ''}</div>
+            ))}
+          </div>
+        </div>
+      )}
+      {orderValue > 0 && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))', gap:6, marginTop:8 }}>
+          {[
+            ['Order Value', orderValue, '#111827'],
+            paidBefore != null && [module === 'receipt' ? 'Received Before' : 'Paid Before', paidBefore, '#15803d'],
+            (module === 'payment' || module === 'receipt') && ['This Entry', thisAmt, P],
+            paidBefore != null && ['Balance After', orderValue - paidBefore - thisAmt, (orderValue - paidBefore - thisAmt) < 0 ? '#dc2626' : '#b45309'],
+          ].filter(Boolean).map(([l, v, c]) => (
+            <div key={l} style={{ background:'#fff', border:`1px solid ${BD}`, borderRadius:8, padding:'6px 8px' }}>
+              <div style={{ fontSize:9.5, color:'#6b7280', fontWeight:700, textTransform:'uppercase' }}>{l}</div>
+              <div style={{ fontSize:12.5, fontWeight:800, color:c }}>{fmtAmt(v)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {paidBefore != null && orderValue > 0 && orderValue - paidBefore - thisAmt < 0 && (
+        <div style={{ marginTop:8, fontSize:11, fontWeight:700, color:'#dc2626' }}>⚠ This entry takes the total above the order value.</div>
+      )}
+    </div>
+  );
+}
 
 /* ════════════════════════════════════════════════
    PREVIEW MODAL
@@ -167,7 +272,7 @@ function PreviewModal({ item, cid, onClose, onApprove, onReject, canDoApprove })
   const hlPairs = hlKeys
     .map(k => [k, raw[k]])
     .filter(([,v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0))
-    .map(([k, v]) => [k, fmtVal(v)]);
+    .map(([k, v]) => [k, fmtVal(v, k)]);
   const hlKeySet = new Set(hlKeys);
   const otherPairs = kvPairs.filter(([k]) => !hlKeySet.has(k));
 
@@ -220,6 +325,7 @@ function PreviewModal({ item, cid, onClose, onApprove, onReject, canDoApprove })
 
           {/* Left: Key Details */}
           <div style={{ flex:'1 1 340px', minWidth:280 }}>
+            {['payment','receipt','expense'].includes(item.module) && <OrderContext module={item.module} raw={raw} cid={cid} />}
             <div style={{ fontSize:11, fontWeight:700, color:P, letterSpacing:.5, textTransform:'uppercase', marginBottom:8 }}>Key Details</div>
             {hlPairs.length === 0 && otherPairs.length === 0 && (
               <div style={{ color:'#9ca3af', fontSize:12 }}>No details available</div>
@@ -417,6 +523,9 @@ export default function ApprovalView() {
   const [preview,    setPreview]    = useState(null);  // item being previewed
   const [rejectFor,  setRejectFor]  = useState(null);  // item being rejected (after preview)
   const [toast,      setToast]      = useState(null);
+  const [selected,   setSelected]   = useState(() => new Set()); // "module:refId"
+  const [bulkBusy,   setBulkBusy]   = useState(false);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -487,6 +596,54 @@ export default function ApprovalView() {
 
   const isPending = item => ['pending','draft'].includes((item.status||'').toLowerCase());
 
+  /* ── Bulk selection ── */
+  const keyOf = it => `${it.module}:${it.refId}`;
+
+  /* Only pending rows the user is allowed to approve can be selected */
+  const selectableRows = useMemo(
+    () => filtered.filter(it => ['pending','draft'].includes((it.status||'').toLowerCase()) && canApprove(user, it.module)),
+    [filtered, user]
+  );
+
+  /* Any change of tab/filter/company invalidates the current selection */
+  useEffect(()=>{ setSelected(new Set()); }, [tab, modFilter, search, cid]);
+
+  const toggleOne = (it) => setSelected(prev => {
+    const next = new Set(prev);
+    const k = keyOf(it);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    return next;
+  });
+
+  const allSelected = selectableRows.length > 0 && selectableRows.every(it => selected.has(keyOf(it)));
+  const someSelected = selected.size > 0 && !allSelected;
+
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(selectableRows.map(keyOf)));
+
+  const doBulk = async (action, reason='') => {
+    const chosen = selectableRows.filter(it => selected.has(keyOf(it)));
+    if (!chosen.length) return;
+    setBulkBusy(true);
+    try {
+      const { data } = await axios.put(`/api/approvals/bulk?companyId=${cid}`, {
+        action,
+        items: chosen.map(it => ({ module: it.module, refId: it.refId })),
+        by: user?.name || 'Admin',
+        reason,
+      });
+      const verb = action === 'approve' ? 'approved' : 'rejected';
+      if (data.failedCount) {
+        showToast(`${data.approved} ${verb}, ${data.failedCount} failed`, false);
+      } else {
+        showToast(`${data.approved} ${verb}`);
+      }
+      setSelected(new Set());
+      await load();
+    } catch(e){ showToast('Error: '+(e.response?.data?.error || e.message), false); }
+    setBulkBusy(false);
+  };
+
   /* Visible modules for filter bar */
   const visibleMods = tab==='pending'
     ? ALL_MODULES.filter(m=>approveableModules.includes(m.key))
@@ -521,15 +678,15 @@ export default function ApprovalView() {
       </div>
 
       {/* Module stats strip */}
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:14 }}>
+      <div style={{ display:'flex', gap:6, flexWrap:'nowrap', overflowX:'auto', padding:'4px 2px 6px', marginBottom:10 }}>
         {visibleMods.map(m=>{
           const s  = stats[m.key]||{};
           const mc = MODULE_COLOR[m.key]||{ bg:'#f3f4f6', color:'#374151' };
           return (
             <div key={m.key} onClick={()=>setModFilter(modFilter===m.key?'all':m.key)}
-              style={{ background:'#fff', border:`2px solid ${modFilter===m.key?P:BD}`, borderRadius:9, padding:'7px 12px',
-                cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,0.04)', minWidth:100, transition:'border-color .15s' }}>
-              <div style={{ fontSize:10, color:'#6b7280', marginBottom:2 }}>{m.label}</div>
+              style={{ background:'#fff', border:`2px solid ${modFilter===m.key?P:BD}`, borderRadius:9, padding:'6px 8px',
+                cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,0.04)', flex:'1 1 0', minWidth:78, transition:'border-color .15s' }}>
+              <div style={{ fontSize:10, color:'#6b7280', marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={m.label}>{m.label}</div>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:6 }}>
                 <span style={{ fontWeight:900, fontSize:18, color:s.pending>0?'#dc2626':'#9ca3af' }}>{s.pending||0}</span>
                 <span style={{ fontSize:9, background:mc.bg, color:mc.color, padding:'1px 5px', borderRadius:4, fontWeight:700 }}>pend</span>
@@ -574,6 +731,17 @@ export default function ApprovalView() {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5, fontFamily:F }}>
               <thead>
                 <tr style={{ background:'#f8faff', borderBottom:`2px solid ${BD}` }}>
+                  <th style={{ padding:'9px 6px 9px 12px', width:34 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all approvable rows"
+                      disabled={selectableRows.length===0}
+                      checked={allSelected}
+                      ref={el=>{ if (el) el.indeterminate = someSelected; }}
+                      onChange={toggleAll}
+                      style={{ width:15, height:15, cursor:selectableRows.length?'pointer':'not-allowed', accentColor:P }}
+                    />
+                  </th>
                   {['APR ID','Module','Ref No','Party / Name','Amount','Date','Status','Action'].map((h,i)=>(
                     <th key={i} style={{ padding:'9px 12px', textAlign:'left', fontWeight:700, fontSize:10.5, color:'#374151', whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -585,12 +753,26 @@ export default function ApprovalView() {
                   const sst = STATUS_STYLE[(item.status||'').toLowerCase()]||STATUS_STYLE.pending;
                   const pend = isPending(item);
                   const canDo = canApprove(user, item.module);
+                  const selectable = pend && canDo;
+                  const isSel = selected.has(keyOf(item));
+                  const rowBg = isSel ? '#eef6ff' : (idx%2===0?'#fff':'#fafbff');
                   return (
                     <tr key={idx}
                       onClick={()=>setPreview(item)}
-                      style={{ borderBottom:`1px solid ${BD}`, background:idx%2===0?'#fff':'#fafbff', cursor:'pointer', transition:'background .1s' }}
+                      style={{ borderBottom:`1px solid ${BD}`, background:rowBg, cursor:'pointer', transition:'background .1s' }}
                       onMouseEnter={e=>e.currentTarget.style.background='#eef3ff'}
-                      onMouseLeave={e=>e.currentTarget.style.background=idx%2===0?'#fff':'#fafbff'}>
+                      onMouseLeave={e=>e.currentTarget.style.background=rowBg}>
+
+                      <td style={{ padding:'8px 6px 8px 12px' }} onClick={e=>e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${item.approvalId}`}
+                          disabled={!selectable}
+                          checked={isSel}
+                          onChange={()=>toggleOne(item)}
+                          style={{ width:15, height:15, cursor:selectable?'pointer':'not-allowed', accentColor:P }}
+                        />
+                      </td>
 
                       <td style={{ padding:'8px 12px' }}>
                         <span style={{ fontFamily:'monospace', fontWeight:800, fontSize:12, color:P }}>{item.approvalId}</span>
@@ -649,6 +831,49 @@ export default function ApprovalView() {
           </div>
         )}
       </div>
+
+      {/* Bulk action bar — appears once rows are selected */}
+      {selected.size > 0 && (
+        <div style={{
+          position:'fixed', left:'50%', bottom:22, transform:'translateX(-50%)', zIndex:9998,
+          display:'flex', alignItems:'center', gap:14,
+          background:'#111827', color:'#fff', padding:'10px 16px', borderRadius:10,
+          boxShadow:'0 10px 34px rgba(0,0,0,0.28)', fontFamily:F,
+        }}>
+          <span style={{ fontSize:12.5, fontWeight:600 }}>
+            {selected.size} selected
+          </span>
+          <button
+            onClick={()=>setSelected(new Set())}
+            style={{ background:'transparent', border:'none', color:'#9ca3af', fontSize:12, cursor:'pointer', fontFamily:F, textDecoration:'underline' }}>
+            Clear
+          </button>
+          <div style={{ width:1, height:20, background:'#374151' }} />
+          <button
+            disabled={bulkBusy}
+            onClick={()=>doBulk('approve')}
+            style={{ padding:'7px 18px', background:bulkBusy?'#166534':'#16a34a', border:'none', borderRadius:7,
+                     color:'#fff', fontSize:12.5, fontWeight:700, cursor:bulkBusy?'wait':'pointer', fontFamily:F }}>
+            {bulkBusy ? 'Working…' : `Approve ${selected.size}`}
+          </button>
+          <button
+            disabled={bulkBusy}
+            onClick={()=>setBulkRejectOpen(true)}
+            style={{ padding:'7px 16px', background:'transparent', border:'1px solid #4b5563', borderRadius:7,
+                     color:'#fca5a5', fontSize:12.5, fontWeight:600, cursor:bulkBusy?'wait':'pointer', fontFamily:F }}>
+            Reject
+          </button>
+        </div>
+      )}
+
+      {/* Bulk reject reason */}
+      {bulkRejectOpen && (
+        <RejectModal
+          item={{ approvalId:`${selected.size} entries`, moduleLabel:'Bulk reject', party:'', refNo:'' }}
+          onConfirm={reason=>{ setBulkRejectOpen(false); doBulk('reject', reason); }}
+          onClose={()=>setBulkRejectOpen(false)}
+        />
+      )}
 
       {/* Preview modal */}
       {preview && (

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 import DocAttachments from '../../../components/DocAttachments';
+import { orderIndex, orderDetails, money as inr, fmtDate } from './orderInfo';
 
 const F   = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P   = '#133d80';
@@ -75,25 +76,28 @@ const AmtInput = ({ value, onChange, color, placeholder = '—' }) => (
       color:value?(color==='dr'?'#1d4ed8':'#7c3aed'):'#9ca3af' }} />
 );
 
-/* ── Order search popup ── */
+/* ── Order search popup — every SO / PO with its full details ── */
 function OrderSearchPopup({ salesOrders, purchaseOrders, onSelect, onClose }) {
-  const [tab, setTab] = useState('SO');
+  const [tab, setTab] = useState('PO');
   const [q, setQ]     = useState('');
   const ref = useRef(null);
   useEffect(() => { ref.current?.focus(); }, []);
-  const items = tab === 'SO' ? salesOrders : purchaseOrders;
-  const filtered = q.trim()
-    ? items.filter(o =>
-        String(o.orderId||'').includes(q) ||
-        (o.orderNo||o.poNo||'').toLowerCase().includes(q.toLowerCase()) ||
-        (o.customerName||o.clientName||o.vendorName||'').toLowerCase().includes(q.toLowerCase())
-      )
-    : items;
+  const idx = React.useMemo(() => orderIndex(salesOrders, purchaseOrders), [salesOrders, purchaseOrders]);
+  const rows = React.useMemo(() => (tab === 'SO' ? salesOrders : purchaseOrders)
+    .map(o => ({ o, d: orderDetails(idx, tab, o.orderId) })).filter(x => x.d)
+    .sort((a, b) => String(b.d.date).localeCompare(String(a.d.date))), [tab, salesOrders, purchaseOrders, idx]);
+  const t = q.trim().toLowerCase();
+  const filtered = t ? rows.filter(({ d }) => [d.orderId, d.no, d.fileNo, d.client, d.clientPO, d.vendor, d.pos, d.material, d.value].join(' ').toLowerCase().includes(t)) : rows;
+  const cell = { padding:'7px 9px', border:`1px solid ${BD}`, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', verticalAlign:'top' };
+  const cols = tab === 'PO'
+    ? [['PO No',128],['Vendor',160],['Order File No',118],['Client',160],['Client PO',135],['Material',200],['Taxable',100],['GST',86],['Order Value',108],['Date',88]]
+    : [['Order File No',125],['Client',190],['Client PO',150],['Material',240],['Taxable',105],['GST',90],['Order Value',110],['Vendor / POs',190],['Date',86]];
+  const right = h => ['Taxable','GST','Order Value'].includes(h);
   return (
     <div onClick={e => { if (e.target===e.currentTarget) onClose(); }}
       style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', backdropFilter:'blur(2px)', zIndex:9000,
         display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:700, maxHeight:'80vh',
+      <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:1320, maxHeight:'86vh',
         display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ background:P, color:'#fff', padding:'12px 16px', borderRadius:'12px 12px 0 0',
           display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
@@ -102,47 +106,70 @@ function OrderSearchPopup({ salesOrders, purchaseOrders, onSelect, onClose }) {
             borderRadius:6, color:'#fff', width:28, height:28, cursor:'pointer', fontSize:16, fontFamily:F }}>✕</button>
         </div>
         <div style={{ padding:'10px 14px', display:'flex', gap:8, borderBottom:`1px solid ${BD}`, flexShrink:0, alignItems:'center' }}>
-          {['SO','PO'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{ height:28, padding:'0 14px', borderRadius:5, border:`1px solid ${tab===t?P:BD}`,
-                background:tab===t?P:'#fff', color:tab===t?'#fff':'#374151', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
-              {t === 'SO' ? '📋 Sales Orders' : '🛒 Purchase Orders'}
+          {['PO','SO'].map(t2 => (
+            <button key={t2} onClick={() => setTab(t2)}
+              style={{ height:28, padding:'0 14px', borderRadius:5, border:`1px solid ${tab===t2?P:BD}`,
+                background:tab===t2?P:'#fff', color:tab===t2?'#fff':'#374151', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:F }}>
+              {t2 === 'SO' ? '📋 Sales Orders' : '🛒 Purchase Orders'}
             </button>
           ))}
-          <input ref={ref} value={q} onChange={e => setQ(e.target.value)} placeholder="Search by ID, No, party…"
-            style={{ marginLeft:'auto', height:28, padding:'0 10px', border:`1px solid ${BD}`, borderRadius:5,
-              fontSize:12, fontFamily:F, outline:'none', width:220 }} />
+          <input ref={ref} value={q} onChange={e => setQ(e.target.value)} placeholder={tab === 'PO' ? 'Search PO no., vendor, file no., client, client PO, material…' : 'Search file no., client, client PO, material, vendor…'}
+            style={{ marginLeft:'auto', height:30, padding:'0 10px', border:`1px solid ${BD}`, borderRadius:5, fontSize:12, fontFamily:F, outline:'none', width:380 }} />
         </div>
-        <div style={{ flex:1, overflowY:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
-            <thead style={{ position:'sticky', top:0 }}>
+        <div style={{ flex:1, overflow:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, fontFamily:F, tableLayout:'fixed', minWidth:1180 }}>
+            <colgroup>{cols.map(([h, w]) => <col key={h} style={{ width:w }} />)}</colgroup>
+            <thead style={{ position:'sticky', top:0, zIndex:1 }}>
               <tr style={{ background:P }}>
-                {['#','Order No','Party','Date','Amount'].map((h,i)=>(
-                  <th key={i} style={{ padding:'7px 10px', color:'#fff', fontWeight:700, textAlign:i>=3?'right':'left', fontSize:11, border:'1px solid rgba(255,255,255,0.15)' }}>{h}</th>
-                ))}
+                {cols.map(([h]) => <th key={h} style={{ padding:'7px 9px', color:'#fff', fontWeight:700, textAlign:right(h)?'right':'left', fontSize:11, border:'1px solid rgba(255,255,255,0.15)', whiteSpace:'nowrap' }}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
-              {filtered.length===0 && <tr><td colSpan={5} style={{ padding:24, textAlign:'center', color:'#9ca3af' }}>No {tab} records found</td></tr>}
-              {filtered.map((o,i) => (
-                <tr key={String(o.orderId||i)} onClick={() => { onSelect({ ...o, _orderType: tab }); onClose(); }}
-                  style={{ background:i%2===0?'#fff':'#f8faff', cursor:'pointer' }}
-                  onMouseEnter={e=>e.currentTarget.style.background='#eff6ff'}
-                  onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f8faff'}>
-                  <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, fontWeight:700, color:P }}>{o.orderId}</td>
-                  <td style={{ padding:'7px 10px', border:`1px solid ${BD}` }}>{o.orderNo||o.poNo||'—'}</td>
-                  <td style={{ padding:'7px 10px', border:`1px solid ${BD}` }}>{o.customerName||o.clientName||o.vendorName||'—'}</td>
-                  <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, textAlign:'right', color:'#6b7280' }}>{o.orderDate||o.poDate||'—'}</td>
-                  <td style={{ padding:'7px 10px', border:`1px solid ${BD}`, textAlign:'right', fontWeight:600 }}>₹{fmt(o.grandTotal||0)}</td>
-                </tr>
-              ))}
+              {filtered.length===0 && <tr><td colSpan={cols.length} style={{ padding:24, textAlign:'center', color:'#9ca3af' }}>No {tab} found</td></tr>}
+              {filtered.map(({ o, d }, i) => {
+                const v = h => ({ 'PO No': d.no, Vendor: d.vendor, 'Order File No': d.fileNo, Client: d.client, 'Client PO': d.clientPO, Material: d.material,
+                  Taxable: inr(d.taxable), GST: inr(d.gst), 'Order Value': inr(d.value), 'Vendor / POs': [d.vendor, d.pos].filter(Boolean).join(' · '), Date: fmtDate(d.date) }[h]);
+                return (
+                  <tr key={String(o.orderId||i)} onClick={() => { onSelect({ ...o, _orderType: tab }); onClose(); }}
+                    style={{ background:i%2===0?'#fff':'#f8faff', cursor:'pointer' }}
+                    onMouseEnter={e=>e.currentTarget.style.background='#eff6ff'}
+                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#fff':'#f8faff'}>
+                    {cols.map(([h]) => <td key={h} title={v(h) || ''} style={{ ...cell, textAlign:right(h)?'right':'left', fontWeight:['PO No','Order File No','Order Value'].includes(h)?700:400,
+                      color:h==='PO No'||(tab==='SO'&&h==='Order File No')?P:h==='Order Value'?'#101828':'#374151' }}>{v(h) || <span style={{ color:'#d1d5db' }}>—</span>}</td>)}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         <div style={{ padding:'8px 14px', borderTop:`1px solid ${BD}`, fontSize:11, color:'#9ca3af', background:'#fafbfc', borderRadius:'0 0 12px 12px', flexShrink:0 }}>
-          {filtered.length} record{filtered.length!==1?'s':''} — click to link
+          {filtered.length} record{filtered.length!==1?'s':''} — click a row to link · values from the ERP order (taxable + GST = order value)
         </div>
       </div>
+    </div>
+  );
+}
+
+/* the linked order's details, shown under the selector and in the journal list */
+export function OrderCard({ d }) {
+  if (!d) return null;
+  const item = (label, value, strong) => (
+    <div style={{ minWidth:0 }}>
+      <div style={{ fontSize:9.5, fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</div>
+      <div title={value || ''} style={{ fontSize:12.5, fontWeight:strong?800:600, color:value?'#111827':'#cbd5e1', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{value || '—'}</div>
+    </div>
+  );
+  return (
+    <div style={{ marginTop:10, border:`1px solid ${BD}`, borderRadius:8, background:'#fbfcff', padding:'10px 12px', display:'grid', gridTemplateColumns:'repeat(5, minmax(0,1fr))', gap:'10px 16px' }}>
+      {item(d.type === 'PO' ? 'PO No' : 'Order File No', d.no, true)}
+      {item(d.type === 'PO' ? 'Order File No (SO)' : 'POs', d.type === 'PO' ? d.fileNo : d.pos)}
+      {item('Client', d.client)}
+      {item('Client PO', d.clientPO)}
+      {item('Vendor', d.vendor + (d.vendorGstin ? ` · ${d.vendorGstin}` : ''))}
+      <div style={{ gridColumn:'span 2', minWidth:0 }}>{item('Material', d.material)}</div>
+      {item('Taxable', '₹' + inr(d.taxable))}
+      {item('GST', '₹' + inr(d.gst))}
+      {item('Order Value', '₹' + inr(d.value), true)}
     </div>
   );
 }
@@ -170,6 +197,7 @@ export default function CreateJournal() {
   const [loadingEdit,   setLoadingEdit]   = useState(false);
   const [savedJournalId, setSavedJournalId] = useState(null);
   const [attachments,    setAttachments]    = useState([]);
+  const orderIdx = React.useMemo(() => orderIndex(salesOrders, purchOrders), [salesOrders, purchOrders]);
 
   const loadLedgers = useCallback(async () => {
     if (!cid) return;
@@ -268,7 +296,7 @@ export default function CreateJournal() {
         type: journalType,
         ...(journalType === 'order' && linkedOrder ? {
           orderId:       String(linkedOrder.orderId),
-          orderNo:       linkedOrder.orderNo || String(linkedOrder.orderId),
+          orderNo:       linkedOrder.orderNo || linkedOrder.poNo || linkedOrder.poNumber || String(linkedOrder.orderId),
           orderLinkType: linkedOrder._orderType || 'PO',
         } : {}),
       };
@@ -357,7 +385,8 @@ export default function CreateJournal() {
                 <div style={{ flex:1, height:36, padding:'0 12px', background:'#f8faff', border:`1px solid ${BD}`, borderRadius:6,
                   display:'flex', alignItems:'center', fontSize:12.5, color:linkedOrder?P:'#9ca3af' }}>
                   {linkedOrder
-                    ? <span><strong>[{linkedOrder._orderType}]</strong> #{linkedOrder.orderId} — {linkedOrder.orderNo}</span>
+                    ? (() => { const d = orderDetails(orderIdx, linkedOrder._orderType || 'PO', linkedOrder.orderId);
+                        return <span><strong>[{linkedOrder._orderType}]</strong> {d ? d.no : `#${linkedOrder.orderId}`}{d && (d.vendor || d.client) ? <span style={{ color:'#475467', fontWeight:500 }}> — {[d.vendor, d.client].filter(Boolean).join(' · ')}</span> : ''}</span>; })()
                     : 'No order selected — click Search to link a SO or PO'
                   }
                 </div>
@@ -373,6 +402,7 @@ export default function CreateJournal() {
                   </button>
                 )}
               </div>
+              {linkedOrder && <OrderCard d={orderDetails(orderIdx, linkedOrder._orderType || 'PO', linkedOrder.orderId)} />}
             </div>
           )}
         </div>

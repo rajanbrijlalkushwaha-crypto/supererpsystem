@@ -3,37 +3,70 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { printClientDetails } from '../../utils/printClient';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../utils/permissions';
 import ActivityDrawer from '../../components/ActivityDrawer';
 
 const P  = '#3A6186';
 const PD = '#2A4D6E';
 const BG = '#F5F7FB';
-const BD = '#E5EAF2';
+const BD = '#000000';
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const STATUS_MAP = {
-  approved: { bg:'#ECFDF5', color:'#059669', dot:'#059669', label:'Approved' },
-  pending:  { bg:'#FFFBEB', color:'#D97706', dot:'#D97706', label:'Pending'  },
-  draft:    { bg:'#EFF6FF', color:'#104f4f', dot:'#93C5FD', label:'Draft'    },
+  approved:  { dot:'#16a34a', letter:'A', label:'Approved'  },
+  pending:   { dot:'#f59e0b', letter:'P', label:'Pending'   },
+  draft:     { dot:'#94a3b8', letter:'D', label:'Draft'     },
+  rejected:  { dot:'#ef4444', letter:'C', label:'Rejected'  },
+  cancelled: { dot:'#ef4444', letter:'C', label:'Cancelled' },
 };
 
 const StatusBadge = ({ status }) => {
   const s = STATUS_MAP[status] || STATUS_MAP.draft;
   return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px',
-      borderRadius:20, fontSize:10.5, fontWeight:700, background:s.bg, color:s.color,
-      border:`1px solid ${s.dot}40`, fontFamily:F }}>
-      <span style={{ width:5, height:5, borderRadius:'50%', background:s.dot, flexShrink:0 }} />
-      {s.label || status || 'Draft'}
+    <span title={s.label} style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+      width:22, height:22, borderRadius:'50%', background:s.dot, color:'#fff',
+      fontSize:11, fontWeight:800, flexShrink:0, lineHeight:1, fontFamily:F }}>
+      {s.letter}
     </span>
   );
 };
 
+const ORDER_STATUS_MAP = {
+  approved:   { bg:'#ECFDF5', color:'#059669', label:'Approved'   },
+  pending:    { bg:'#FFFBEB', color:'#D97706', label:'Pending'    },
+  draft:      { bg:'#EFF6FF', color:'#2563EB', label:'Draft'      },
+  completed:  { bg:'#ECFDF5', color:'#15803D', label:'Completed'  },
+  cancelled:  { bg:'#FEF2F2', color:'#DC2626', label:'Cancelled'  },
+};
+const fmtOrderD = v => {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d) ? String(v) : d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+};
+const fmtOrderAmt = n => `₹${Number(n||0).toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}`;
+
 /* ── Detail Modal ── */
 function ClientDetailModal({ client, onClose, onEdit, company }) {
+  const { user } = useAuth();
+  const [orders,        setOrders]        = useState([]);
+  const [ordersLoading, setOrdersLoading]  = useState(false);
+
+  useEffect(() => {
+    if (!client?.clientId || !company?.companyId) { setOrders([]); return; }
+    setOrdersLoading(true);
+    axios.get(`/api/sales-orders?companyId=${company.companyId}`)
+      .then(r => {
+        const all = Array.isArray(r.data) ? r.data : [];
+        setOrders(all.filter(o => String(o.customerCode) === String(client.clientId)));
+      })
+      .catch(() => setOrders([]))
+      .finally(() => setOrdersLoading(false));
+  }, [client?.clientId, company?.companyId]);
+
   if (!client) return null;
   const contact = client.contactPersons?.[0] || {};
-  const st = STATUS_MAP[client.status] || STATUS_MAP.draft;
+  const orderTotal = orders.reduce((s, o) => s + (parseFloat(o.grandTotal) || 0), 0);
   const Field = ({ label, value }) => (
     <div style={{ marginBottom:10 }}>
       <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase',
@@ -46,7 +79,7 @@ function ClientDetailModal({ client, onClose, onEdit, company }) {
       style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)',
         backdropFilter:'blur(2px)', zIndex:10000,
         display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'#fff', borderRadius:14, width:'95%', maxWidth:620,
+      <div style={{ background:'#fff', borderRadius:14, width:'95%', maxWidth:780,
         maxHeight:'88vh', display:'flex', flexDirection:'column',
         boxShadow:'0 24px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         <div style={{ background:`linear-gradient(135deg, ${P} 0%, ${PD} 100%)`,
@@ -55,10 +88,9 @@ function ClientDetailModal({ client, onClose, onEdit, company }) {
             <div style={{ fontSize:10, color:'rgba(255,255,255,0.65)', fontWeight:500,
               textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:3 }}>Client Details</div>
             <div style={{ fontSize:17, fontWeight:800, color:'#fff' }}>{client.companyName}</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.75)', marginTop:3 }}>
-              ID: {client.clientId}
-              <span style={{ marginLeft:10, background:st.bg, color:st.color, padding:'1px 7px',
-                borderRadius:20, fontSize:10, fontWeight:700 }}>{st.label}</span>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.75)', marginTop:3, display:'flex', alignItems:'center', gap:8 }}>
+              <span>ID: {client.clientId}</span>
+              <StatusBadge status={client.status}/>
             </div>
           </div>
           <button onClick={onClose} style={{ background:'rgba(255,255,255,0.18)', border:'none',
@@ -79,13 +111,73 @@ function ClientDetailModal({ client, onClose, onEdit, company }) {
             <Field label="Payment Terms"  value={client.paymentTerms} />
             <Field label="Credit Limit"   value={client.creditLimit ? `₹${Number(client.creditLimit).toFixed(2)}` : ''} />
           </div>
+
+          {/* ── Sales Orders for this client ── */}
+          <div style={{ marginTop:20 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+              <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase',
+                letterSpacing:'0.5px', fontFamily:F }}>
+                Sales Orders {orders.length > 0 && `(${orders.length})`}
+              </div>
+              {orders.length > 0 && (
+                <div style={{ fontSize:11.5, fontWeight:700, color:'#111827', fontFamily:F }}>
+                  Total: {fmtOrderAmt(orderTotal)}
+                </div>
+              )}
+            </div>
+
+            {ordersLoading ? (
+              <div style={{ padding:'20px 0', textAlign:'center', color:'#9CA3AF', fontSize:12.5, fontFamily:F }}>
+                Loading orders…
+              </div>
+            ) : orders.length === 0 ? (
+              <div style={{ padding:'20px 0', textAlign:'center', color:'#9CA3AF', fontSize:12.5,
+                fontStyle:'italic', fontFamily:F, border:`1px solid ${BD}`, borderRadius:8 }}>
+                No sales orders for this client yet.
+              </div>
+            ) : (
+              <div style={{ border:`1px solid ${BD}`, borderRadius:8, overflow:'hidden' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
+                  <thead>
+                    <tr style={{ background:BG }}>
+                      {['Order No','Date','Status','Grand Total'].map(h => (
+                        <th key={h} style={{ padding:'7px 10px', textAlign: h==='Grand Total' ? 'right' : 'left',
+                          fontSize:10.5, fontWeight:700, color:'#6B7280', borderBottom:`1px solid ${BD}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders
+                      .slice()
+                      .sort((a,b) => new Date(b.orderDate||b.date||0) - new Date(a.orderDate||a.date||0))
+                      .map(o => {
+                        const os = ORDER_STATUS_MAP[o.status] || ORDER_STATUS_MAP.draft;
+                        return (
+                          <tr key={o.orderId} style={{ borderBottom:`1px solid ${BD}` }}>
+                            <td style={{ padding:'7px 10px', fontWeight:700, color:'#111827' }}>{o.orderNo || o.orderId}</td>
+                            <td style={{ padding:'7px 10px', color:'#111827' }}>{fmtOrderD(o.orderDate || o.date)}</td>
+                            <td style={{ padding:'7px 10px' }}>
+                              <span style={{ background:os.bg, color:os.color, padding:'2px 8px', borderRadius:20,
+                                fontSize:10.5, fontWeight:700 }}>{os.label}</span>
+                            </td>
+                            <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, color:'#111827' }}>
+                              {fmtOrderAmt(o.grandTotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
         <div style={{ padding:'10px 20px', borderTop:`1px solid ${BD}`,
           display:'flex', gap:8, justifyContent:'flex-end', background:BG }}>
           <button onClick={onClose} style={{ height:32, padding:'0 16px', fontSize:12, fontFamily:F,
             cursor:'pointer', background:'#fff', color:'#374151', border:`1px solid ${BD}`,
             borderRadius:7, fontWeight:600 }}>Close</button>
-          <button onClick={() => printClientDetails(client, company)}
+          <button onClick={() => printClientDetails(client, company, user)}
             style={{ height:32, padding:'0 16px', fontSize:12, fontFamily:F, cursor:'pointer',
               background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A',
               borderRadius:7, fontWeight:700 }}>🖨️ Print</button>
@@ -113,6 +205,7 @@ const ViewClients = () => {
   const [viewClient,  setViewClient]  = useState(null);
   const [activityRec, setActivityRec] = useState(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { pathname } = useLocation();
   const { selectedCompany } = useCompany();
 
@@ -127,6 +220,19 @@ const ViewClients = () => {
       setSelectedId(null);
     } catch (err) { setMessage('Error: ' + err.message); }
     finally { setLoading(false); }
+  };
+
+  /* Approve a pending client — shown only to users with Client approve rights */
+  const handleApprove = async (client) => {
+    if (!window.confirm(`Approve client ${client.companyName || client.clientId}?`)) return;
+    try {
+      const fd = new FormData();
+      if (selectedCompany) fd.append('companyId', selectedCompany.companyId);
+      fd.append('status', 'approved');
+      await axios.put(`/api/clients/${client.clientId}`, fd, { headers:{ 'Content-Type':'multipart/form-data' } });
+      setMessage(`Client ${client.clientId} approved.`);
+      fetchClients();
+    } catch (err) { setMessage('Error: ' + (err.response?.data?.error || err.message)); }
   };
 
   const handleDelete = async (clientId) => {
@@ -201,10 +307,11 @@ const ViewClients = () => {
 
         {/* + Create Client */}
         <button onClick={() => navigate('/client-sap')}
-          style={{ display:'flex', alignItems:'center', padding:'0 14px', height:'100%',
+          style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
             fontSize:11.5, fontWeight:700, color:'#fff', background:'#059669',
-            border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
-            margin:'auto 6px', borderRadius:5, height:26 }}
+            border:'1px solid rgba(255,255,255,0.3)', boxShadow:'0 2px 6px rgba(0,0,0,0.2)',
+            cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+            margin:'0 6px', borderRadius:6 }}
           onMouseEnter={e => { e.currentTarget.style.background='#047857'; }}
           onMouseLeave={e => { e.currentTarget.style.background='#059669'; }}>
           + Create Client
@@ -214,19 +321,21 @@ const ViewClients = () => {
         {[
           { label:'👥 View Clients', path:'/client/view' },
           { label:'⏳ Pending',      path:'/client/pending' },
+          { label:'🧾 Tally',        path:'/client/tally' },
         ].map(tab => {
           const isAct = pathname === tab.path;
           return (
             <button key={tab.path} onClick={() => navigate(tab.path)}
-              style={{ display:'flex', alignItems:'center', padding:'0 11px', height:'100%',
-                fontSize:11.5, fontWeight: isAct ? 700 : 400, border:'none', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', padding:'0 12px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight: isAct ? 700 : 600, cursor:'pointer',
                 whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
-                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
-                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-                marginBottom: -2 }}
-              onMouseEnter={e => { if (!isAct) e.currentTarget.style.background='rgba(255,255,255,0.08)'; }}
-              onMouseLeave={e => { if (!isAct) e.currentTarget.style.background='transparent'; }}>
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.85)',
+                background: isAct ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+                border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow: isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius:6, margin:'0 4px' }}
+              onMouseEnter={e => { if (!isAct) { e.currentTarget.style.background='rgba(255,255,255,0.14)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.55)'; } }}
+              onMouseLeave={e => { if (!isAct) { e.currentTarget.style.background='rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.22)'; } }}>
               {tab.label}
             </button>
           );
@@ -325,14 +434,16 @@ const ViewClients = () => {
           </span>
           {[
             { label:'👁 View',    action:() => setViewClient(activeClient) },
+            ...(activeClient.status === 'pending' && can(user,'client','approve')
+              ? [{ label:'✓ Approve', action:() => handleApprove(activeClient), ok:true }] : []),
             { label:'✏️ Edit',    action:() => navigate(`/client/edit/${activeClient.clientId}`) },
-            { label:'🖨️ Print',  action:() => printClientDetails(activeClient, selectedCompany) },
+            { label:'🖨️ Print',  action:() => printClientDetails(activeClient, selectedCompany, user) },
             { label:'🗑️ Delete', action:() => handleDelete(activeClient.clientId), danger:true },
           ].map(btn => (
             <button key={btn.label} onClick={btn.action}
               style={{ height:26, padding:'0 11px', fontSize:11, cursor:'pointer', fontFamily:F,
                 fontWeight:700, borderRadius:5, whiteSpace:'nowrap', border:'none',
-                background: btn.danger ? 'rgba(220,38,38,0.35)' : 'rgba(255,255,255,0.18)',
+                background: btn.danger ? 'rgba(220,38,38,0.35)' : btn.ok ? '#16A34A' : 'rgba(255,255,255,0.18)',
                 color:'#fff' }}>
               {btn.label}
             </button>
@@ -352,10 +463,10 @@ const ViewClients = () => {
           </div>
         ) : (
           <div style={{ background:'#fff' }}>
-            <table style={{ width:'100%', minWidth:750, borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
+            <table style={{ width:'100%', minWidth:1150, borderCollapse:'collapse', fontSize:12, fontFamily:F }}>
                 <thead>
                   <tr>
-                    {['Client ID','Company Name','GSTIN','City / State','Contact','Mobile','Reg. Date','Status'].map(h => (
+                    {['Client ID','Client Name','GSTIN','Address','City','State','Pincode','Mobile No','Email','Reg Date','Status'].map(h => (
                       <th key={h} style={{ padding:'7px 11px', background:P, color:'#fff',
                         fontSize:10, fontWeight:700, textAlign:'left', border:`1px solid ${PD}`,
                         fontFamily:F, letterSpacing:'0.3px', whiteSpace:'nowrap',
@@ -364,10 +475,10 @@ const ViewClients = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((client, i) => {
+                  {filtered.map((client) => {
                     const contact = client.contactPersons?.[0] || {};
                     const isSel   = selectedId === client.clientId;
-                    const rowBg   = isSel ? '#EEF4FF' : i % 2 === 0 ? '#fff' : '#FAFBFC';
+                    const rowBg   = isSel ? '#EEF4FF' : '#fff'; // all rows white — no zebra striping
                     return (
                       <tr key={client.clientId}
                         onClick={() => setSelectedId(isSel ? null : client.clientId)}
@@ -381,20 +492,34 @@ const ViewClients = () => {
                         <td style={{ padding:'5px 11px', border:`1px solid ${BD}`,
                           fontWeight:600, color:'#111827' }}>{client.companyName}</td>
                         <td style={{ padding:'5px 11px', border:`1px solid ${BD}`,
-                          fontFamily:'monospace', fontSize:11, color:'#374151' }}>
+                          fontFamily:'monospace', fontSize:11, color:'#111827' }}>
                           {client.gstin || client.gst || '—'}
                         </td>
-                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#6B7280' }}>
-                          {[client.city, client.state].filter(Boolean).join(', ') || '—'}
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#111827',
+                          maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                          title={client.address || ''}>
+                          {client.address || '—'}
                         </td>
-                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#374151' }}>
-                          {contact.name || '—'}
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#111827' }}>
+                          {client.city || '—'}
+                        </td>
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#111827' }}>
+                          {client.state || '—'}
                         </td>
                         <td style={{ padding:'5px 11px', border:`1px solid ${BD}`,
-                          color:'#374151', fontFamily:'monospace', fontSize:11.5 }}>
+                          color:'#111827', fontFamily:'monospace', fontSize:11.5 }}>
+                          {client.pincode || '—'}
+                        </td>
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`,
+                          color:'#111827', fontFamily:'monospace', fontSize:11.5 }}>
                           {contact.mobileNumber || '—'}
                         </td>
-                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#6B7280', fontSize:11, whiteSpace:'nowrap' }}>
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#111827',
+                          maxWidth:170, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                          title={contact.email || ''}>
+                          {contact.email || '—'}
+                        </td>
+                        <td style={{ padding:'5px 11px', border:`1px solid ${BD}`, color:'#111827', fontSize:11, whiteSpace:'nowrap' }}>
                           {fmtD2(client.createdAt)}
                         </td>
                         <td style={{ padding:'5px 11px', border:`1px solid ${BD}` }}>

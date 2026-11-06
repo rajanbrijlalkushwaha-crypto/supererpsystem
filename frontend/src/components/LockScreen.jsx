@@ -177,7 +177,7 @@ export default function LockScreen() {
 
           {/* Brand name */}
           <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '0.3px', marginBottom: 2 }}>
-            Universal Core ERP Solutions
+            Super ERP System
           </div>
           <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.35)', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 20 }}>
             Session Locked
@@ -234,7 +234,7 @@ export default function LockScreen() {
 
         {/* Footer */}
         <div style={{ position: 'absolute', bottom: 18, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.18)', letterSpacing: '0.4px' }}>
-          Epsilongroup · Universal Core ERP Solutions · © 2025
+          Super ERP System · © 2025
         </div>
       </div>
     </>

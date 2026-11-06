@@ -25,3 +25,6 @@ Database/**
 !Database/SalesOrder/.gitkeep
 !Database/TallyImport/.gitkeep
 !Database/Vendor/.gitkeep
+
+# encryption keys (Password Manager) — never commit; keep a backup copy
+.secrets/

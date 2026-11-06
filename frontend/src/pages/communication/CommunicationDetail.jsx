@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import PageLoader from '../../components/PageLoader';
+import { withPrintFont } from '../../utils/printFont';
 
 const F  = "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 const P  = '#104f4f';
@@ -361,7 +362,7 @@ export default function CommunicationDetail() {
     }
     const html = buildLetterHTML(letter, order, co, logoDataUrl);
     const win = window.open('', '_blank', 'width=900,height=1100');
-    win.document.write(html);
+    win.document.write(withPrintFont(html));
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 600);
   };

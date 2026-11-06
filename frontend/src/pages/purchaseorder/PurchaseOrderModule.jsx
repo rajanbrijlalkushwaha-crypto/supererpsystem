@@ -10,6 +10,8 @@ import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import { printPurchaseOrder, buildPurchaseOrderHtml } from '../../utils/printPurchaseOrder';
 import PageLoader from '../../components/PageLoader';
+import ApproverPickerModal from '../../components/ApproverPicker';
+import { withPrintFont } from '../../utils/printFont';
 
 /* ── colour / font constants ── */
 const N = '#104f4f';
@@ -21,7 +23,7 @@ const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 /* ── helpers ── */
 const api  = (url, cfg={}) => axios({ url, ...cfg });
-const fmt  = n => `₹${(n||0).toFixed(2)}`;
+const fmt  = n => `₹${(Number(n)||0).toFixed(2)}`;
 const today= () => new Date().toISOString().slice(0,10);
 const uid  = () => Date.now() + Math.random();
 
@@ -64,7 +66,7 @@ tr:nth-child(even) td{background:#f7f7f7;}
 </body></html>`;
   const w=window.open('','_blank','width=1100,height=750,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 };
 
 /* calc row */
@@ -212,19 +214,20 @@ function PH({title}){
   );
 }
 
-/* badge */
+/* badge — solid colour circle + single letter, same convention as Sales Order */
 const BC={
-  draft:{bg:'#f0f0f0',color:'#444',bd:'#aaa'},
-  pending:{bg:'#d8eeff',color:'#003875',bd:'#88aacc'},
-  approved:{bg:'#d8f0d8',color:'#005500',bd:'#44aa44'},
-  rejected:{bg:'#ffe0e0',color:'#880000',bd:'#cc4444'},
+  draft:    {bg:'#94a3b8',letter:'D',label:'Draft'},
+  pending:  {bg:'#f59e0b',letter:'P',label:'Pending'},
+  approved: {bg:'#16a34a',letter:'A',label:'Approved'},
+  rejected: {bg:'#ef4444',letter:'C',label:'Rejected'},
+  cancelled:{bg:'#ef4444',letter:'C',label:'Cancelled'},
 };
 function Badge({s}){
   const c=BC[s?.toLowerCase()]||BC.draft;
   return(
-    <span style={{display:'inline-block',padding:'0 5px',fontSize:10,fontWeight:700,
-      fontFamily:F,border:`1px solid ${c.bd}`,background:c.bg,color:c.color,
-      textTransform:'uppercase'}}>{s||'—'}</span>
+    <span title={c.label} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',
+      width:22,height:22,borderRadius:'50%',background:c.bg,color:'#fff',
+      fontSize:11,fontWeight:800,flexShrink:0,lineHeight:1,fontFamily:F}}>{c.letter}</span>
   );
 }
 
@@ -242,7 +245,7 @@ const INNER_TABS=[
 
 function SectionTabBar({active,onChange}){
   return(
-    <div style={{background:'#F8FAFC',borderBottom:`2px solid ${B}`,
+    <div className="soft-tabs" style={{background:'#F8FAFC',borderBottom:`2px solid ${B}`,
       display:'flex',flexWrap:'nowrap',padding:'0 2px',flexShrink:0}}>
       {INNER_TABS.map((t)=>{
         const a=active===t.id;
@@ -494,6 +497,7 @@ function SOItemPicker({soId,companyId,onImport,onClose,currentItems=[]}){
 
 /* ═══════════════════════ VENDOR BILLS SECTION ═══════════════════════ */
 function VendorBillsSection({order,companyId}){
+  const { user } = useAuth();
   const [bills,setBills]=useState(order.vendorBills||[]);
   const [acting,setActing]=useState(null); // billId being actioned
 
@@ -593,7 +597,7 @@ function VendorBillsSection({order,companyId}){
                     ⬇ PDF
                   </a>
                 )}
-                {b.status!=='approved'&&b.status!=='rejected'&&(
+                {b.status!=='approved'&&b.status!=='rejected'&&can(user,'purchaseBill','approve')&&(
                   <>
                     <Btn small v="suc" onClick={()=>approve(b)} disabled={acting===b.billId}>✔ Approve</Btn>
                     <Btn small v="dan" onClick={()=>reject(b)} disabled={acting===b.billId}>✕ Reject</Btn>
@@ -814,11 +818,11 @@ function POModal({order,onClose,onApprove,onReject,onEdit,onPrint,onEmail,compan
           <div style={{display:'flex',gap:6}}>
             <Btn onClick={onEdit}>✏ï¸ Edit</Btn>
             <Btn onClick={onPrint}>🖨ï¸ Print</Btn>
-            {o.status!=='approved'&&<Btn v="dan" onClick={onReject}>✕ Reject</Btn>}
+            {onReject&&o.status!=='approved'&&<Btn v="dan" onClick={onReject}>✕ Reject</Btn>}
           </div>
           <div style={{display:'flex',gap:6}}>
             <Btn onClick={onClose}>Close</Btn>
-            {o.status!=='approved'&&<Btn v="suc" onClick={onApprove}>✔ Approve PO</Btn>}
+            {onApprove&&['pending','draft'].includes(String(o.status||'').toLowerCase())&&<Btn v="suc" onClick={onApprove}>✔ Approve PO</Btn>}
             <Btn v="pri" onClick={onEmail}>📧 Send Email</Btn>
           </div>
         </div>
@@ -876,7 +880,8 @@ Thank you for your cooperation.`;
       let poHtml='';
       try{
         const built=await buildPurchaseOrderHtml(o, company||{}, {skipAttachments:true});
-        poHtml=built.html||'';
+        // Embed the brand font so the server-rendered PDF matches the printed copy.
+        poHtml=built.html?withPrintFont(built.html):'';
       }catch(he){console.warn('PO HTML build failed:',he);}
 
       const r=await fetch(`/api/purchase-orders/${o.orderId}/send-email`,{
@@ -1236,7 +1241,8 @@ function TabOrderDetails({form,setF,salesOrders,vendors,openSOPicker,poNumberLoa
             </FR>
             <FR label="PO Number" req w={120}>
               <Inp value={form.poNo} onChange={e=>setF('poNo',e.target.value)}
-                onBlur={e=>checkDupPoNo&&checkDupPoNo(e.target.value)}/>
+                onBlur={e=>checkDupPoNo&&checkDupPoNo(e.target.value)}
+                placeholder={form.nextId?makePoNo(form.nextId,form.poDate):''}/>
               {!poNumberLoaded&&<span style={{fontSize:10,color:'#888',fontFamily:F,whiteSpace:'nowrap'}}>…</span>}
             </FR>
             {poDupWarn&&<div style={{marginLeft:128,marginTop:-4,marginBottom:4,fontSize:11,color:'#92400E',background:'#FFFBEB',border:'1px solid #FCD34D',borderRadius:4,padding:'2px 8px',fontFamily:F}}>{poDupWarn}</div>}
@@ -1793,6 +1799,9 @@ function TabAttachments({attachments,setAttachments}){
 }
 
 /* ═══════════════════════ LIST VIEW (All POs) ═══════════════════════ */
+const HDR_BLUE   = '#3A6186';
+const HDR_BLUE_D = '#2A4D6E';
+
 function ListAll({companyId,onEdit,selectedCompany}){
   const { user } = useAuth();
   const [orders,setOrders]=useState([]);
@@ -1823,6 +1832,17 @@ function ListAll({companyId,onEdit,selectedCompany}){
   },[salesOrders]);
 
   useEffect(()=>{load();},[load]);
+
+  /* a just-created/updated PO redirects here with a flash message in nav state */
+  const location = useLocation();
+  const navigate2 = useNavigate();
+  useEffect(() => {
+    if (!location.state?.flashMsg) return;
+    setMsg(location.state.flashMsg);
+    navigate2(location.pathname, { replace:true, state:{} });
+    const t = setTimeout(() => setMsg(''), 4000);
+    return () => clearTimeout(t);
+  }, [location.state?.flashMsg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDelete=async id=>{
     if(!window.confirm('Delete this purchase order?')) return;
@@ -1881,7 +1901,7 @@ function ListAll({companyId,onEdit,selectedCompany}){
           onApprove={can(user,'purchaseOrder','approve') ? ()=>handleApprove(selected) : null}
           onReject={can(user,'purchaseOrder','approve') ? ()=>handleReject(selected) : null}
           onEdit={()=>{setSelected(null);onEdit(selected.orderId);}}
-          onPrint={()=>printPurchaseOrder(selected,selectedCompany)}
+          onPrint={()=>printPurchaseOrder(selected,selectedCompany,user)}
           onEmail={()=>setEmailOrder(selected)}
         />
       )}
@@ -1889,9 +1909,9 @@ function ListAll({companyId,onEdit,selectedCompany}){
         <EmailPOModal order={emailOrder} companyId={companyId} company={selectedCompany} onClose={()=>setEmailOrder(null)}/>
       )}
       {/* toolbar */}
-      <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,
+      <div style={{background:W,borderBottom:'1px solid #000000',
         padding:'4px 8px',display:'flex',alignItems:'center',gap:8,flexShrink:0,flexWrap:'wrap'}}>
-        <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>
+        <span style={{fontSize:11,fontWeight:700,color:HDR_BLUE,fontFamily:F}}>
           {vendorFlt==='all'?'All Purchase Orders':`Vendor: ${vendorFlt}`}
         </span>
         <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:8,flex:1,maxWidth:280,minWidth:140}}>
@@ -1950,32 +1970,50 @@ function ListAll({companyId,onEdit,selectedCompany}){
       </div>
             {msg&&<div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
 
-      {/* ── Action bar: appears when a row is selected ── */}
+      {/* ── Action bar: appears when a row is selected — classic-button
+           style on a blue gradient, matching the sidebar/toolbar theme ── */}
       <div style={{
         minHeight:36,flexShrink:0,
-        background:activeRow?'#f0f7ff':'#fafafa',
-        borderBottom:activeRow?'1px solid #bcd4f0':'1px solid '+B,
-        display:'flex',alignItems:'center',gap:8,padding:'0 10px',
-        transition:'background 0.15s',
+        background: activeRow ? `linear-gradient(90deg,${HDR_BLUE},${HDR_BLUE_D})` : '#F3F6FB',
+        borderBottom: activeRow ? `2px solid ${HDR_BLUE_D}` : '1px solid #000000',
+        boxShadow: activeRow ? '0 2px 6px rgba(0,0,0,0.18)' : 'none',
+        display:'flex',alignItems:'center',gap:8,padding:'5px 10px',
+        transition:'background 0.15s, border-color 0.15s',
       }}>
         {activeRow?(
           <>
-            <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F,marginRight:4}}>
+            <span style={{fontSize:11,fontWeight:700,color:'#fff',fontFamily:F,marginRight:4,whiteSpace:'nowrap'}}>
               PO: {activeRow.poNo||activeRow.orderId}
             </span>
-            <span style={{fontSize:10,color:'#666',fontFamily:F,marginRight:8}}>
+            <span style={{fontSize:10,color:'rgba(255,255,255,0.75)',fontFamily:F,marginRight:8,whiteSpace:'nowrap'}}>
               {activeRow.vendorName||''}{activeRow.grandTotal?' · '+fmt(activeRow.grandTotal):''}
             </span>
-            <Btn small onClick={()=>setSelected(activeRow)}>👁 View</Btn>
-            <Btn small onClick={()=>onEdit(activeRow.orderId)}>✏️ Edit</Btn>
-            <Btn small onClick={()=>printPurchaseOrder(activeRow,selectedCompany)}>🖨️ Print</Btn>
-            <Btn small onClick={()=>setEmailOrder(activeRow)}>📧 Email</Btn>
-            <Btn small v="dan" onClick={()=>handleDelete(activeRow.orderId)}>🗑️ Delete</Btn>
+            {[
+              {label:'👁 View',  action:()=>setSelected(activeRow)},
+              ...(['pending','draft'].includes(String(activeRow.status||'').toLowerCase())&&can(user,'purchaseOrder','approve')
+                ? [{label:'✓ Approve', ok:true, action:()=>{ if(window.confirm(`Approve PO ${activeRow.poNo||activeRow.orderId}?`)) handleApprove(activeRow); }}] : []),
+              {label:'✏️ Edit',  action:()=>onEdit(activeRow.orderId)},
+              {label:'🖨️ Print', action:()=>printPurchaseOrder(activeRow,selectedCompany,user)},
+              {label:'📧 Email', action:()=>setEmailOrder(activeRow)},
+              {label:'🗑️ Delete',action:()=>handleDelete(activeRow.orderId),danger:true},
+            ].map(btn=>(
+              <button key={btn.label} onClick={btn.action}
+                style={{height:26,padding:'0 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:F,
+                  whiteSpace:'nowrap',borderRadius:6,
+                  background:btn.danger?'rgba(220,38,38,0.35)':btn.ok?'#16A34A':'rgba(255,255,255,0.18)',
+                  border:`1px solid ${btn.danger?'rgba(220,38,38,0.5)':'rgba(255,255,255,0.3)'}`,
+                  color:'#fff'}}
+                onMouseEnter={e=>{e.currentTarget.style.background=btn.danger?'rgba(220,38,38,0.5)':btn.ok?'#15803D':'rgba(255,255,255,0.3)';}}
+                onMouseLeave={e=>{e.currentTarget.style.background=btn.danger?'rgba(220,38,38,0.35)':btn.ok?'#16A34A':'rgba(255,255,255,0.18)';}}>
+                {btn.label}
+              </button>
+            ))}
             <button onClick={()=>setActiveRow(null)}
-              style={{marginLeft:'auto',border:'none',background:'none',cursor:'pointer',fontSize:14,color:'#888',padding:'0 4px'}}>✕</button>
+              style={{marginLeft:'auto',height:26,width:26,border:'1px solid rgba(255,255,255,0.3)',
+                background:'rgba(255,255,255,0.15)',borderRadius:6,cursor:'pointer',fontSize:13,color:'#fff'}}>✕</button>
           </>
         ):(
-          <span style={{fontSize:11,color:'#aaa',fontFamily:F,fontStyle:'italic'}}>
+          <span style={{fontSize:11,color:'#94A3B8',fontFamily:F,fontStyle:'italic'}}>
             Click a row to select — actions will appear here
           </span>
         )}
@@ -1989,56 +2027,78 @@ function ListAll({companyId,onEdit,selectedCompany}){
         ):(
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
             <thead style={{position:'sticky',top:0,zIndex:2}}>
-              <tr style={{background:N}}>
-                {['SO No.','Client Name','Vendor Name','PO Date','PO No.','Product / Qty','Total ₹','Status'].map((h,i)=>(
+              <tr style={{background:HDR_BLUE}}>
+                {['SO No.','Client Name','Vendor Name','PO Date','PO No.','Product','Qty','Rate (₹)','Taxable (₹)','GST%','Total Value (₹)','Total ₹','Status'].map((h,i)=>(
                   <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,fontSize:10,
-                    textAlign:'left',borderRight:'1px solid #4a6a7a',whiteSpace:'nowrap'}}>{h}</th>
+                    textAlign:'left',borderRight:`1px solid ${HDR_BLUE_D}`,whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o,i)=>{
+              {filtered.map((o)=>{
                 const so=soMap[String(o.linkedSalesOrderId)];
                 const isAct=activeRow?.orderId===o.orderId;
-                return(
-                <tr key={o.orderId}
-                  style={{background:isAct?'#dbeafe':i%2===0?W:'#f5f8fc',cursor:'pointer'}}
-                  onClick={()=>setActiveRow(isAct?null:o)}
-                  onMouseEnter={e=>{ if(!isAct) e.currentTarget.style.background='#e8f0fe'; }}
-                  onMouseLeave={e=>{ if(!isAct) e.currentTarget.style.background=i%2===0?W:'#f5f8fc'; }}>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>
-                    {o.linkedSalesOrderId
-                      ?<span style={{background:'#d8f0d8',color:'#005500',padding:'1px 5px',border:'1px solid #44aa44',fontSize:10,fontWeight:700}}>
-                        {so?.orderNo||('SO#'+o.linkedSalesOrderId)}
-                      </span>
-                      :<span style={{color:'#aaa'}}>—</span>}
-                  </td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600,color:'#111'}}>
-                    {so?.customerName||so?.clientName||<span style={{color:'#aaa'}}>—</span>}
-                  </td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600}}>{o.vendorName||'—'}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',whiteSpace:'nowrap'}}>{fmtD(o.poDate||o.orderDate||o.date)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.poNo||o.orderId}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',maxWidth:200}}>
-                    {(o.items||[]).length===0
-                      ?<span style={{color:'#aaa'}}>—</span>
-                      :(o.items||[]).map((it,idx)=>(
-                        <div key={idx} style={{display:'flex',justifyContent:'space-between',gap:6,
-                          fontSize:10,borderBottom:idx<o.items.length-1?'1px solid #f0f0f0':'none',padding:'1px 0'}}>
-                          <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>
-                            {it.itemName||it.description||'—'}
-                          </span>
-                          <span style={{fontWeight:700,color:N,whiteSpace:'nowrap'}}>
-                            {it.qty||it.quantity||'—'} {it.unit||''}
-                          </span>
-                        </div>
-                      ))
-                    }
-                  </td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',textAlign:'right',fontWeight:700}}>{fmt(o.grandTotal)}</td>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}><Badge s={o.status}/></td>
-                </tr>
-              );})}
+                const items=o.items||[];
+                const rowsForPO=items.length>0?items:[null];
+                const span=rowsForPO.length;
+                const rowBg=isAct?'#EEF4FF':W;
+
+                const soTD=(content,extra={})=>(
+                  <td rowSpan={span} style={{padding:'3px 8px',border:'1px solid #000000',
+                    verticalAlign:'top',background:rowBg,...extra}}>{content}</td>
+                );
+
+                return rowsForPO.map((it,idx)=>{
+                  const isFirst=idx===0;
+                  const qty=it?parseFloat(it.qty||it.quantity)||0:0;
+                  const rate=it?parseFloat(it.rate)||0:0;
+                  const taxable=qty*rate;
+                  const gst=it?parseFloat(it.gstPercent||it.gstPct)||0:0;
+                  const totalValue=taxable+taxable*gst/100;
+                  return (
+                    <tr key={o.orderId+'-'+idx}
+                      style={{background:rowBg,cursor:'pointer',
+                        outline:isAct?`2px solid ${HDR_BLUE}`:'none',outlineOffset:'-2px'}}
+                      onClick={()=>setActiveRow(isAct?null:o)}
+                      onMouseEnter={e=>{ if(!isAct) e.currentTarget.style.background='#F5F8FF'; }}
+                      onMouseLeave={e=>{ if(!isAct) e.currentTarget.style.background=rowBg; }}>
+                      {isFirst&&soTD(
+                        o.linkedSalesOrderId
+                          ? <span style={{fontWeight:700,color:HDR_BLUE}}>{so?.orderNo||('SO#'+o.linkedSalesOrderId)}</span>
+                          : <span style={{color:'#aaa'}}>—</span>
+                      )}
+                      {isFirst&&soTD(
+                        <span style={{fontWeight:600,color:'#111'}}>{so?.customerName||so?.clientName||'—'}</span>
+                      )}
+                      {isFirst&&soTD(<span style={{fontWeight:600}}>{o.vendorName||'—'}</span>)}
+                      {isFirst&&soTD(<span style={{whiteSpace:'nowrap'}}>{fmtD(o.poDate||o.orderDate||o.date)}</span>)}
+                      {isFirst&&soTD(<span style={{fontWeight:700,color:HDR_BLUE}}>{o.poNo||o.orderId}</span>)}
+
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',maxWidth:220,background:rowBg}}>
+                        {it ? (it.itemName||it.description||'—') : <span style={{color:'#aaa'}}>—</span>}
+                      </td>
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',whiteSpace:'nowrap',background:rowBg}}>
+                        {it ? `${it.qty||it.quantity||'—'} ${it.unit||''}`.trim() : '—'}
+                      </td>
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',background:rowBg}}>
+                        {it ? fmtNR(rate) : '—'}
+                      </td>
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',background:rowBg}}>
+                        {it ? fmtNR(taxable) : '—'}
+                      </td>
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'center',background:rowBg}}>
+                        {it ? `${gst}%` : '—'}
+                      </td>
+                      <td style={{padding:'3px 8px',border:'1px solid #000000',textAlign:'right',fontWeight:700,background:rowBg}}>
+                        {it ? fmt(totalValue) : '—'}
+                      </td>
+
+                      {isFirst&&soTD(<span style={{fontWeight:700}}>{fmt(o.grandTotal)}</span>)}
+                      {isFirst&&soTD(<Badge s={o.status}/>,{textAlign:'center'})}
+                    </tr>
+                  );
+                });
+              })}
             </tbody>
           </table>
         )}
@@ -2116,31 +2176,44 @@ function ListPending({companyId,onEdit,selectedCompany}){
           onApprove={can(user,'purchaseOrder','approve') ? ()=>approve(selected) : null}
           onReject={can(user,'purchaseOrder','approve') ? ()=>reject(selected) : null}
           onEdit={()=>{setSelected(null);onEdit(selected.orderId);}}
-          onPrint={()=>printPurchaseOrder(selected,selectedCompany)}
+          onPrint={()=>printPurchaseOrder(selected,selectedCompany,user)}
           onEmail={()=>setEmailOrder(selected)}
         />
       )}
       {emailOrder&&(
         <EmailPOModal order={emailOrder} companyId={companyId} company={selectedCompany} onClose={()=>setEmailOrder(null)}/>
       )}
-      <div style={{background:'#f0f0f0',borderBottom:`1px solid ${B}`,
-        padding:'4px 8px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-        <span style={{fontSize:11,fontWeight:700,color:N,fontFamily:F}}>Pending / Draft — Approval Queue</span>
-        <div style={{display:'flex',alignItems:'center',gap:4,marginLeft:8,flex:1,maxWidth:300}}>
-          <span style={{fontSize:11,color:'#666'}}>🔍</span>
+      <div style={{background:'linear-gradient(135deg, #3A6186, #2A4D6E)',borderBottom:'2px solid #22394F',
+        padding:'6px 10px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+        <span style={{fontSize:11.5,fontWeight:800,color:'#fff',fontFamily:F,textTransform:'uppercase',letterSpacing:'0.5px',whiteSpace:'nowrap'}}>
+          Pending / Draft — Approval Queue
+        </span>
+        <div style={{display:'flex',alignItems:'center',gap:5,marginLeft:4,flex:1,maxWidth:280,
+          height:26,padding:'0 8px',borderRadius:6,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.22)'}}>
+          <span style={{fontSize:11,color:'rgba(255,255,255,0.6)'}}>🔍</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
-            style={{flex:1,height:20,padding:'0 4px',border:'1px solid #888',fontSize:11,fontFamily:F,outline:'none'}}/>
-          {search&&<button onClick={()=>setSearch('')} style={{border:'none',background:'none',cursor:'pointer',fontSize:13,color:'#888'}}>✕</button>}
+            style={{flex:1,height:'100%',padding:0,border:'none',background:'transparent',fontSize:11,fontFamily:F,outline:'none',color:'#fff'}}/>
+          {search&&<button onClick={()=>setSearch('')} style={{border:'none',background:'none',cursor:'pointer',fontSize:13,color:'rgba(255,255,255,0.7)'}}>✕</button>}
         </div>
-        <span style={{fontSize:11,color:'#666',fontFamily:F,marginLeft:'auto'}}>{filtered.length} pending</span>
-        <Btn small onClick={()=>{
+        <span style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontFamily:F,marginLeft:'auto',whiteSpace:'nowrap'}}>{filtered.length} pending</span>
+        <button onClick={()=>{
           const cols=['#','PO No','Vendor','Linked SO','Date','Amount (₹)','Status'];
           const rows=filtered.map((o,i)=>[i+1,o.poNo||o.orderId,o.vendorName||'—',soMap[String(o.linkedSalesOrderId)]?.orderNo||(o.linkedSalesOrderId?`SO#${o.linkedSalesOrderId}`:'—'),fmtDR(o.date||o.poDate),'₹ '+fmtNR(o.grandTotal||o.totalAmount||0),o.status||'—']);
           const tot=filtered.reduce((s,o)=>s+(parseFloat(o.grandTotal||o.totalAmount)||0),0);
           const totalRow=['','','','',`Total: ${filtered.length}`,'₹ '+fmtNR(tot),''];
           printReport('Pending Purchase Orders Report','Pending / Draft — Approval Queue',cols,rows,totalRow);
-        }}>🖨 Print</Btn>
-        <Btn small onClick={load}>🔄</Btn>
+        }} style={{height:26,padding:'0 12px',fontSize:11,fontWeight:700,fontFamily:F,cursor:'pointer',
+          borderRadius:6,color:'#fff',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)'}}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.2)';}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.1)';}}>
+          🖨 Print
+        </button>
+        <button onClick={load} title="Refresh" style={{height:26,width:30,fontSize:13,fontFamily:F,cursor:'pointer',
+          borderRadius:6,color:'#fff',background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.25)'}}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.2)';}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.1)';}}>
+          🔄
+        </button>
       </div>
       {msg&&<div style={{padding:'3px 8px',background:'#d8f0d8',borderBottom:'1px solid #44aa44',fontSize:11,color:'#005500',fontWeight:700,fontFamily:F}}>{msg}</div>}
       <div style={{flex:1,overflow:'auto',background:W}}>
@@ -2149,10 +2222,10 @@ function ListPending({companyId,onEdit,selectedCompany}){
         ):(
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F}}>
             <thead style={{position:'sticky',top:0,zIndex:2}}>
-              <tr style={{background:N}}>
+              <tr style={{background:'linear-gradient(135deg, #3A6186, #2A4D6E)'}}>
                 {['PO No','Vendor','Linked SO','PO Date','Total ₹','Status','Actions'].map((h,i)=>(
-                  <th key={i} style={{padding:'4px 8px',color:W,fontWeight:700,fontSize:10,
-                    textAlign:'left',borderRight:'1px solid #4a6a7a',whiteSpace:'nowrap'}}>{h}</th>
+                  <th key={i} style={{padding:'6px 8px',color:'#fff',fontWeight:700,fontSize:10,
+                    textAlign:'left',borderRight:'1px solid rgba(255,255,255,0.18)',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -2162,7 +2235,7 @@ function ListPending({companyId,onEdit,selectedCompany}){
                   onClick={()=>setSelected(o)}
                   onMouseEnter={e=>e.currentTarget.style.background='#d0e4f8'}
                   onMouseLeave={e=>e.currentTarget.style.background=i%2===0?W:'#f5f8fc'}>
-                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:N}}>{o.poNo||o.orderId}</td>
+                  <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:700,color:'#3A6186'}}>{o.poNo||o.orderId}</td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0',fontWeight:600}}>{o.vendorName||'—'}</td>
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}}>
                     {o.linkedSalesOrderId
@@ -2177,8 +2250,8 @@ function ListPending({companyId,onEdit,selectedCompany}){
                   <td style={{padding:'3px 8px',border:'1px solid #e0e0e0'}} onClick={e=>e.stopPropagation()}>
                     <div style={{display:'flex',gap:3}}>
                       <Btn small onClick={()=>setSelected(o)}>👁 View</Btn>
-                      <Btn small v="suc" onClick={()=>approve(o)}>✔ Approve</Btn>
-                      <Btn small v="dan" onClick={()=>reject(o)}>✕ Reject</Btn>
+                      {can(user,'purchaseOrder','approve')&&<Btn small v="suc" onClick={()=>approve(o)}>✔ Approve</Btn>}
+                      {can(user,'purchaseOrder','approve')&&<Btn small v="dan" onClick={()=>reject(o)}>✕ Reject</Btn>}
                       <Btn small onClick={()=>onEdit(o.orderId)}>✏ï¸</Btn>
                     </div>
                   </td>
@@ -2265,6 +2338,7 @@ export default function PurchaseOrderModule(){
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   const [ok,setOk]=useState('');
+  const [showApproverPicker,setShowApproverPicker]=useState(false);
 
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
 
@@ -2311,14 +2385,14 @@ export default function PurchaseOrderModule(){
       .catch(()=>{});
   },[form.linkedSalesOrderId,cid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* load next ID on mount (for new PO) */
+  /* load next ID on mount (for new PO) — PO Number is left blank; it's
+     required input, not auto-filled, so users always type their own. */
   const loadNextId=useCallback(()=>{
     if(!cid) return;
     api(`/api/purchase-orders/next-id?companyId=${cid}`)
       .then(r=>{
         const nid=r.data.nextId||400001;
         setF('nextId',nid);
-        setF('poNo',makePoNo(nid,today()));
         setPoNumberLoaded(true);
       })
       .catch(()=>setPoNumberLoaded(true));
@@ -2333,13 +2407,6 @@ export default function PurchaseOrderModule(){
     const want=`SO#${form.linkedSalesOrderId}${name?' | '+name:''}`;
     if(form.linkedSODisplay!==want) setF('linkedSODisplay',want);
   },[salesOrders,form.linkedSalesOrderId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* auto-update poNo when poDate changes for new POs */
-  useEffect(()=>{
-    if(!editOrder&&form.nextId&&form.poDate){
-      setF('poNo',makePoNo(form.nextId,form.poDate));
-    }
-  },[form.poDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* load order for editing */
   const loadEdit=useCallback(async(id)=>{
@@ -2420,7 +2487,7 @@ export default function PurchaseOrderModule(){
   const igst=isIntra?0:gstTotal;
 
   /* submit */
-  const submit=async(status)=>{
+  const submit=async(status,approverId)=>{
     if(!form.vendorName.trim()){setError('Vendor Name is required');setSecTab('order-details');return;}
     if(!form.linkedSalesOrderId){setError('Please link a Sales Order');setSecTab('order-details');return;}
     setSaving(true); setError(''); setOk('');
@@ -2456,7 +2523,7 @@ export default function PurchaseOrderModule(){
        ['clientScope',form.clientScope||''],
        ['epsilonScope',form.epsilonScope||''],
        ['vendorScope',form.vendorScope||''],
-       ['status',status],
+       ['status',status],['approverId',approverId||''],
       ].forEach(([k,v])=>fd.append(k,v??''));
 
       fd.append('items',JSON.stringify(items.map(({_id,...r})=>r)));
@@ -2467,16 +2534,15 @@ export default function PurchaseOrderModule(){
 
       if(editOrder){
         await api(`/api/purchase-orders/${editOrder.orderId}?companyId=${cid}`,{method:'PUT',data:fd});
-        setOk(`PO ${form.poNo} updated successfully`);
-        /* keep editOrder set — prevents accidental re-submit from creating a duplicate */
+        navigate('/purchase-order/view', { state:{ flashMsg:`PO ${form.poNo} updated successfully` } });
+        resetForm();
       } else {
         const res=await api(`/api/purchase-orders?companyId=${cid}`,{method:'POST',data:fd});
         const newId=res.data.orderId;
-        setOk(`Purchase Order ${newId} (${form.poNo}) created`);
-        /* set editOrder with new id so any immediate re-submit is a PUT, not a new POST */
-        setEditOrder({orderId:newId});
+        navigate('/purchase-order/view', { state:{ flashMsg:`Purchase Order ${newId} (${form.poNo}) created` } });
+        resetForm();
       }
-    }catch(e){setError(e.response?.data?.error||e.message);}
+    }catch(e){setError(e.response?.data?.error||e.message);setSaving(false);return;}
     setSaving(false);
   };
 
@@ -2623,7 +2689,7 @@ export default function PurchaseOrderModule(){
                       fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:'pointer'}}>
                     📧 Send Email
                   </button>
-                  <button onClick={()=>printPurchaseOrder({...editOrder,...form,items,charges,scopeItems:poScopeItems},selectedCompany)}
+                  <button onClick={()=>printPurchaseOrder({...editOrder,...form,items,charges,scopeItems:poScopeItems},selectedCompany,user)}
                     style={{height:30,padding:'0 12px',background:'#475569',border:'none',color:W,
                       fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:'pointer'}}>
                     🖨ï¸ Print
@@ -2640,11 +2706,16 @@ export default function PurchaseOrderModule(){
                   fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:saving?'default':'pointer'}}>
                 💾 Save Draft
               </button>
-              <button onClick={()=>submit('pending')} disabled={saving}
+              <button onClick={()=>setShowApproverPicker(true)} disabled={saving}
                 style={{height:30,padding:'0 14px',background:saving?'#475569':N,border:'none',color:W,
                   fontSize:12,fontWeight:700,fontFamily:F,borderRadius:5,cursor:saving?'default':'pointer'}}>
                 📤 Submit for Approval
               </button>
+              {showApproverPicker && (
+                <ApproverPickerModal module="purchaseorder" recordLabel={`Purchase Order ${form.poNo||''} — ${form.vendorName||''}`}
+                  onConfirm={(approverId)=>{ setShowApproverPicker(false); submit('pending', approverId); }}
+                  onCancel={()=>setShowApproverPicker(false)} />
+              )}
               {can(user,'purchaseOrder','approve') && (
               <button onClick={()=>submit('approved')} disabled={saving}
                 style={{height:30,padding:'0 14px',background:saving?'#475569':'#16A34A',border:'none',color:W,

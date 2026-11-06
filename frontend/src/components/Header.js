@@ -1,18 +1,201 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import { useLock } from '../context/LockContext';
+import { useNavTheme, NEU } from '../utils/navTheme';
+import { useUiScale, SCALE_OPTIONS } from '../utils/uiScale';
 import axios from 'axios';
 import {
   Search, ChevronDown, Building2, LogOut, Settings,
-  RefreshCw, Bell, User, ChevronRight,
+  RefreshCw, Bell, User,
 } from 'lucide-react';
 
 const FONT = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const TEAL = '#104f4f';
-const TEAL2= '#14837e';
+// Kept as TEAL/TEAL2 to avoid touching every reference below; both now resolve
+// to the app's single orange accent (Direction A) instead of the old teal.
+const TEAL = '#EA580C';
+const TEAL2= '#C2410C';
+
+/* ── Top bar tokens — 'classic' = navy (matches SidebarNav), 'neu' = neumorphism.
+   Every colour/shadow of the bar comes from here, so the toggle switches it all. ── */
+const NAV_W_OPEN = 204, NAV_W_RAIL = 60;   // must match SidebarNav widths
+
+const HDR_CLASSIC = {
+  neu: false,
+  bg: 'linear-gradient(90deg, #1B354D 0%, #22415C 40%, #2A4D6E 100%)',
+  barBorder: '1px solid rgba(0,0,0,0.28)', barShadow: '0 2px 10px rgba(0,0,0,0.16)',
+  edge: '#1F3B56',                          // badge rings sit on this colour
+  line: 'rgba(255,255,255,0.12)',
+  txt: 'rgba(255,255,255,0.86)', muted: 'rgba(255,255,255,0.55)', strong: '#fff',
+  brandBg: 'rgba(0,0,0,0.14)',
+  // icon buttons
+  btnBg: 'transparent', btnHoverBg: 'rgba(255,255,255,0.12)', btnActiveBg: 'rgba(255,255,255,0.16)',
+  btnShadow: 'none', btnHoverShadow: 'none', btnActiveShadow: 'none',
+  btnColor: 'rgba(255,255,255,0.86)', btnHoverColor: '#fff',
+  // search field
+  fieldBg: 'rgba(255,255,255,0.08)', fieldBgFocus: 'rgba(255,255,255,0.16)',
+  fieldBorder: 'rgba(255,255,255,0.14)', fieldBorderFocus: 'rgba(255,255,255,0.42)',
+  fieldShadow: 'none', fieldShadowFocus: 'none', fieldText: '#fff',
+  kbdBg: 'rgba(255,255,255,0.10)', kbdHoverBg: 'rgba(255,255,255,0.2)', kbdBorder: 'rgba(255,255,255,0.20)', kbdShadow: 'none',
+  // pills (company switcher)
+  pillBg: 'rgba(255,255,255,0.07)', pillHoverBg: 'rgba(255,255,255,0.12)', pillOpenBg: 'rgba(255,255,255,0.16)',
+  pillBorder: 'rgba(255,255,255,0.14)', pillHoverBorder: 'rgba(255,255,255,0.3)', pillOpenBorder: 'rgba(255,255,255,0.42)',
+  pillShadow: 'none', pillHoverShadow: 'none', pillOpenShadow: 'none',
+  coTileBg: 'linear-gradient(135deg, #10B981, #047857)', coTileIcon: '#fff', coTileShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
+};
+const HDR_NEU = {
+  neu: true,
+  bg: NEU.base,
+  barBorder: 'none', barShadow: '0 5px 14px rgba(163,177,198,0.55)',
+  edge: NEU.base,
+  line: 'rgba(163,177,198,0.55)',
+  txt: NEU.text, muted: NEU.muted, strong: NEU.strong,
+  brandBg: NEU.base,
+  btnBg: NEU.base, btnHoverBg: NEU.base, btnActiveBg: NEU.base,
+  btnShadow: NEU.raisedSm, btnHoverShadow: NEU.raised, btnActiveShadow: NEU.inset,
+  btnColor: NEU.text, btnHoverColor: NEU.accent,
+  fieldBg: NEU.base, fieldBgFocus: NEU.base,
+  fieldBorder: 'transparent', fieldBorderFocus: 'transparent',
+  fieldShadow: NEU.inset, fieldShadowFocus: 'inset 4px 4px 9px #A3B1C6, inset -4px -4px 9px #FFFFFF', fieldText: NEU.strong,
+  kbdBg: NEU.base, kbdHoverBg: NEU.base, kbdBorder: 'transparent', kbdShadow: NEU.raisedSm,
+  pillBg: NEU.base, pillHoverBg: NEU.base, pillOpenBg: NEU.base,
+  pillBorder: 'transparent', pillHoverBorder: 'transparent', pillOpenBorder: 'transparent',
+  pillShadow: NEU.raisedSm, pillHoverShadow: NEU.raised, pillOpenShadow: NEU.inset,
+  coTileBg: NEU.base, coTileIcon: '#1F2937', coTileShadow: NEU.raisedSm,
+};
+/* Current top-bar tokens; re-renders when the look is switched. */
+const useHdrTokens = () => { const [theme] = useNavTheme(); return theme === 'neu' ? HDR_NEU : HDR_CLASSIC; };
+
+/* Rounded-square icon button used across the top bar. */
+const ghostBtn = (active, tk) => ({
+  display:'flex', alignItems:'center', justifyContent:'center', position:'relative',
+  width:32, height:32, borderRadius: tk.neu ? 10 : 8, flexShrink:0, cursor:'pointer',
+  background: active ? tk.btnActiveBg : tk.btnBg,
+  boxShadow: active ? tk.btnActiveShadow : tk.btnShadow,
+  border:'1px solid transparent', color: active ? tk.btnHoverColor : tk.btnColor,
+  transition:'background 0.12s, color 0.12s, box-shadow 0.15s',
+});
+const ghostIn = tk => e => {
+  e.currentTarget.style.background = tk.btnHoverBg; e.currentTarget.style.boxShadow = tk.btnHoverShadow;
+  e.currentTarget.style.color = tk.btnHoverColor;
+};
+const ghostOut = (active, tk) => e => {
+  if (active) return;
+  e.currentTarget.style.background = tk.btnBg; e.currentTarget.style.boxShadow = tk.btnShadow;
+  e.currentTarget.style.color = tk.btnColor;
+};
+const countBadge = (urgent, tk) => ({
+  position:'absolute', top:-3, right:-3, minWidth:16, height:16, padding:'0 3px', borderRadius:8,
+  background: urgent ? '#DC2626' : '#F59E0B', color:'#fff', fontSize:9, fontWeight:800, lineHeight:1,
+  display:'flex', alignItems:'center', justifyContent:'center', border:`2px solid ${tk.edge}`,
+});
+
+/* Switch Company menu in the soft (neumorphic) look: raised panel, the
+   current company pressed in, other rows lift on hover. */
+function CompanyMenuSoft({ companies, selectedCompany, onPick, onManage }) {
+  const rowIn  = e => { e.currentTarget.style.boxShadow = NEU.raisedSm; };
+  const rowOut = e => { e.currentTarget.style.boxShadow = 'none'; };
+  return (
+    <div style={{ position:'absolute', top:'calc(100% + 12px)', right:0, minWidth:290, zIndex:9999,
+      background:NEU.base, borderRadius:16, boxShadow:'8px 8px 18px #A3B1C6, -8px -8px 18px #FFFFFF',
+      padding:'10px 10px 12px', fontFamily:FONT }}>
+      <div style={{ fontSize:9.5, fontWeight:800, color:NEU.muted, textTransform:'uppercase', letterSpacing:'1px', padding:'2px 8px 8px' }}>
+        Switch Company
+      </div>
+      {companies.length === 0 ? (
+        <div style={{ padding:'14px 8px', fontSize:12.5, color:NEU.text, textAlign:'center' }}>
+          No companies.{' '}<span onClick={onManage} style={{ color:NEU.accent, cursor:'pointer', fontWeight:700 }}>Add one →</span>
+        </div>
+      ) : (
+        <div style={{ maxHeight:260, overflowY:'auto', padding:'2px 4px', scrollbarWidth:'thin', scrollbarColor:'#A3B1C6 transparent' }}>
+          {companies.map(co => {
+            const isAct = selectedCompany?.companyId === co.companyId;
+            return (
+              <div key={co.companyId}
+                onClick={() => { if (!isAct) onPick(co); }}
+                onMouseEnter={isAct ? undefined : rowIn} onMouseLeave={isAct ? undefined : rowOut}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 10px', margin:'4px 0', borderRadius:12,
+                  cursor: isAct ? 'default' : 'pointer', background:NEU.base,
+                  boxShadow: isAct ? NEU.inset : 'none', transition:'box-shadow 0.15s' }}>
+                <span style={{ width:28, height:28, borderRadius:9, flexShrink:0, background:NEU.base,
+                  boxShadow: isAct ? NEU.insetSm : NEU.raisedSm,
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <Building2 size={14} color={isAct ? NEU.accent : '#059669'} strokeWidth={2} />
+                </span>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:12.5, fontWeight:700, color: isAct ? NEU.accent : NEU.strong, lineHeight:1.3 }}>{co.companyName}</span>
+                    {co.isDefault && (
+                      <span style={{ fontSize:8.5, fontWeight:800, letterSpacing:'0.5px', color:NEU.accent,
+                        padding:'2px 7px', borderRadius:8, background:NEU.base, boxShadow:NEU.insetSm }}>DEFAULT</span>
+                    )}
+                  </span>
+                  <span style={{ display:'block', fontSize:10.5, color:NEU.muted, marginTop:2 }}>{co.gstin || co.city || ''}</span>
+                </span>
+                {isAct && <span title="Current company" style={{ width:7, height:7, borderRadius:'50%', background:NEU.accent, flexShrink:0 }} />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div onClick={onManage}
+        onMouseEnter={e => { e.currentTarget.style.boxShadow = NEU.inset; }}
+        onMouseLeave={e => { e.currentTarget.style.boxShadow = NEU.raisedSm; }}
+        style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:10, height:34, borderRadius:11,
+          cursor:'pointer', background:NEU.base, boxShadow:NEU.raisedSm, transition:'box-shadow 0.15s',
+          fontSize:12, fontWeight:700, color:NEU.accent }}>
+        <Settings size={13} /> Manage Companies
+      </div>
+    </div>
+  );
+}
+
+/* Display size of the whole app — Auto fits the screen (smaller on laptops). */
+function UiScaleSelect() {
+  const { pref, zoom, setPref } = useUiScale();
+  const [theme] = useNavTheme();
+  const neu = theme === 'neu';
+  return (
+    <label title={`Display size — ${pref === 'auto' ? `Auto (${Math.round(zoom * 100)}% for this screen)` : `${Math.round(zoom * 100)}%`}. Smaller fits more on a laptop screen.`}
+      style={{ display:'flex', alignItems:'center', gap:5, height:32, padding:'0 6px', flexShrink:0, cursor:'pointer', borderRadius:10, fontFamily:FONT,
+        background: neu ? NEU.base : 'transparent', boxShadow: neu ? NEU.raisedSm : 'none' }}>
+      <span style={{ fontSize:12, fontWeight:800, color: neu ? NEU.accent : 'rgba(255,255,255,0.8)' }}>Aa</span>
+      <select value={pref} onChange={e => setPref(e.target.value)}
+        style={{ height:24, border:'none', borderRadius:6, fontSize:11, fontWeight:700, fontFamily:FONT, cursor:'pointer', outline:'none', padding:'0 2px',
+          background: neu ? NEU.base : 'rgba(255,255,255,0.14)', color: neu ? NEU.text : '#fff' }}>
+        {SCALE_OPTIONS.map(([k, l]) => <option key={k} value={k} style={{ color:'#101828' }}>{k === 'auto' ? `Auto ${Math.round(zoom * 100)}%` : l}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/* Switch in the top bar that turns the neumorphic look on/off. */
+function NavThemeToggle() {
+  const [theme, setTheme] = useNavTheme();
+  const on = theme === 'neu';
+  return (
+    <button onClick={() => setTheme(on ? 'classic' : 'neu')} role="switch" aria-checked={on}
+      title={on ? 'Soft (neumorphic) look is ON — click for the classic navy look' : 'Switch the top bar and side menu to the soft (neumorphic) look'}
+      style={{ display:'flex', alignItems:'center', gap:7, height:32, padding:'0 8px', flexShrink:0, cursor:'pointer',
+        borderRadius:10, border:'1px solid transparent', fontFamily:FONT,
+        background: on ? NEU.base : 'transparent', boxShadow: on ? NEU.raisedSm : 'none' }}>
+      <span style={{ fontSize:10, fontWeight:800, letterSpacing:'0.6px', textTransform:'uppercase',
+        color: on ? NEU.accent : 'rgba(255,255,255,0.75)' }} className="hdr-hide-md">Soft</span>
+      <span style={{ position:'relative', width:36, height:20, borderRadius:10, flexShrink:0,
+        background: on ? NEU.base : 'rgba(255,255,255,0.18)',
+        boxShadow: on ? NEU.insetSm : 'inset 0 1px 2px rgba(0,0,0,0.3)', transition:'background 0.2s' }}>
+        <span style={{ position:'absolute', top:2, left: on ? 18 : 2, width:16, height:16, borderRadius:'50%',
+          background: on ? NEU.base : '#fff', transition:'left 0.2s',
+          boxShadow: on ? '2px 2px 4px #A3B1C6, -2px -2px 4px #FFFFFF' : '0 1px 3px rgba(0,0,0,0.35)',
+          display:'flex', alignItems:'center', justifyContent:'center' }}>
+          {on && <span style={{ width:6, height:6, borderRadius:'50%', background:NEU.accent }} />}
+        </span>
+      </span>
+    </button>
+  );
+}
 
 /* ── All navigable pages (command palette) ─────────────────────── */
 const ALL_PAGES = [
@@ -40,9 +223,7 @@ const ALL_PAGES = [
   { section:'Purchase Order',  label:'View / Edit POs',            path:'/purchase-order/view',             color:'#ea580c', keys:'list PO' },
   { section:'Purchase Order',  label:'Pending Approval',           path:'/purchase-order/pending',          color:'#ea580c', keys:'approve' },
   { section:'Sales Bill',      label:'Tax Invoices',               path:'/sales-bill',                      color:'#0891b2', keys:'invoice bill dispatch' },
-  { section:'Sales Bill',      label:'Delivery Challan',           path:'/delivery-challan/view',           color:'#0891b2', keys:'DC challan' },
   { section:'Purchase Bill',   label:'Purchase Bills',             path:'/purchase-bill',                   color:'#6d28d9', keys:'vendor invoice' },
-  { section:'Purchase Bill',   label:'GRN (Goods Receipt)',        path:'/stock/in',                        color:'#6d28d9', keys:'goods received' },
   { section:'Account',         label:'Ledger Master',              path:'/account/ledger/master',           color:'#b45309', keys:'master setup' },
   { section:'Account',         label:'Account Groups',             path:'/account/groups/view',             color:'#b45309', keys:'groups setup' },
   { section:'Account',         label:'Expense Entry',              path:'/account/expense/create',          color:'#b45309', keys:'expense add' },
@@ -59,9 +240,6 @@ const ALL_PAGES = [
   { section:'Account',         label:'Statement',                  path:'/account/statement',               color:'#b45309', keys:'bank statement' },
   { section:'Account',         label:'Approval',                   path:'/account/approval',                color:'#b45309', keys:'approve' },
   { section:'Account',         label:'Financial Documents',        path:'/account/financial-docs',          color:'#b45309', keys:'pdf docs certificates gst pan' },
-  { section:'Stock',           label:'Stock View',                 path:'/stock/view',                      color:'#0f766e', keys:'inventory levels' },
-  { section:'Stock',           label:'GRN — Goods Receipt',        path:'/stock/in',                        color:'#0f766e', keys:'receive inward' },
-  { section:'Stock',           label:'GDN — Stock Out',            path:'/stock/out',                       color:'#0f766e', keys:'issue outward' },
   { section:'GST',             label:'GST & Compliance',           path:'/gst/compliance',                  color:'#dc2626', keys:'tax return filing' },
   { section:'Communication',   label:'Communication Logs',         path:'/communication/logs',              color:'#0284c7', keys:'logs chat messages' },
   { section:'Approvals',       label:'Approvals',                  path:'/approval',                        color:'#16a34a', keys:'approve pending' },
@@ -76,7 +254,6 @@ const ALL_PAGES = [
   { section:'Admin',            label:'Approvals',                  path:'/approval',                        color:'#475569', keys:'approve pending admin' },
 ];
 
-const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 function useClickOutside(ref, onClose) {
   useEffect(() => {
@@ -85,233 +262,6 @@ function useClickOutside(ref, onClose) {
     return () => document.removeEventListener('mousedown', h);
   }, [ref, onClose]);
 }
-
-/* ── Navigation group config ───────────────────────────────────── */
-const NAV_GROUPS = [
-  {
-    key: 'dashboard',
-    label: 'Dashboard',
-    icon: '🏠',
-    color: '#3b82f6',
-    path: '/dashboard',
-    routes: ['/dashboard'],
-  },
-  {
-    key: 'jobcode',
-    label: 'Jobcode',
-    icon: '📁',
-    color: '#4f46e5',
-    routes: ['/project'],
-    items: [
-      { label: '📋 All Jobcodes',  path: '/project/list'  },
-      { label: '✅ Project Close', path: '/project/close' },
-    ],
-  },
-  {
-    key: 'crm',
-    label: 'CRM',
-    icon: '👥',
-    color: '#ec4899',
-    routes: ['/client', '/crm', '/sales-order', '/sales-bill', '/delivery-challan', '/communication'],
-    sections: [
-      {
-        title: '👤 Clients', color: '#ec4899',
-        items: [
-          { label: '👥 View Clients',   path: '/client/view'        },
-          { label: '🎯 CRM / Leads',    path: '/crm/view'           },
-          { label: '💬 Communication',  path: '/communication/logs' },
-        ],
-      },
-      {
-        title: '📋 Sales', color: '#7c3aed',
-        items: [
-          { label: '📋 Sales Orders',   path: '/sales-order/view'        },
-          { label: '🧾 Sales Bills',    path: '/sales-bill'              },
-          { label: '🟢 Client Balance', path: '/account/dues?tab=client' },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'vendor',
-    label: 'Vendor',
-    icon: '🏢',
-    color: '#059669',
-    routes: ['/vendor', '/purchase-order', '/purchase-bill'],
-    sections: [
-      {
-        title: '🏢 Suppliers', color: '#059669',
-        items: [
-          { label: '🏢 All Vendors',        path: '/vendor/view'               },
-          { label: '📝 Self Registrations', path: '/vendor/self-registrations' },
-        ],
-      },
-      {
-        title: '🛒 Purchasing', color: '#ea580c',
-        items: [
-          { label: '🛒 Purchase Orders', path: '/purchase-order/tracking' },
-          { label: '📄 Purchase Bills',  path: '/purchase-bill'           },
-          { label: '🔴 Vendor Dues',     path: '/account/dues?tab=vendor' },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'inventory',
-    label: 'Inventory',
-    icon: '📦',
-    color: '#0d9488',
-    routes: ['/items', '/stock'],
-    sections: [
-      {
-        title: '🗂️ Products', color: '#0d9488',
-        items: [
-          { label: '🗂️ Items / Products', path: '/items/view'   },
-          { label: '➕ Create Item',       path: '/items/create' },
-        ],
-      },
-      {
-        title: '📦 Stock', color: '#0f766e',
-        items: [
-          { label: '📦 Stock View',          path: '/stock/view'    },
-          { label: '📥 GRN (Goods Receipt)', path: '/stock/in'      },
-          { label: '📤 GDN (Stock Out)',     path: '/stock/out'     },
-          { label: '🚚 Delivery Challan',    path: '/stock/challan' },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'account',
-    label: 'Account',
-    icon: '💰',
-    color: '#b45309',
-    routes: ['/account', '/tally', '/gst'],
-    sections: [
-      {
-        title: '⚙️ Setup', color: '#0d9488',
-        items: [
-          { label: '📒 Ledger Master',  path: '/account/ledger/master' },
-          { label: '🗂️ Account Groups', path: '/account/groups/view'   },
-        ],
-      },
-      {
-        title: '💳 Transactions', color: '#7c3aed',
-        items: [
-          { label: '🧾 Expense Entry',  path: '/account/expense/create'   },
-          { label: '💳 Payment',        path: '/account/payment/create'   },
-          { label: '💰 Receipt',        path: '/account/receipt/create'   },
-          { label: '📔 Journal Entry',  path: '/account/journal/view'     },
-          { label: '📉 Debit Note',     path: '/account/debit-note/view'  },
-          { label: '📈 Credit Note',    path: '/account/credit-note/view' },
-          { label: '🏦 Deposit',        path: '/account/deposit/view'     },
-        ],
-      },
-      {
-        title: '📊 Reports', color: '#b45309',
-        items: [
-          { label: '⚖️ View Balance',   path: '/account/dues'           },
-          { label: '📒 All Ledgers',    path: '/account/ledger/view'    },
-          { label: '🏦 Bank Accounts',  path: '/account/bank/view'      },
-          { label: '📄 Statement',      path: '/account/statement'      },
-        ],
-      },
-      {
-        title: '🏷️ Compliance', color: '#dc2626',
-        items: [
-          { label: '🏷️ GST & Compliance', path: '/gst/compliance' },
-          { label: '📥 Tally Import',     path: '/tally/import'   },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'mfg',
-    label: 'MFG',
-    icon: '🏭',
-    color: '#9333ea',
-    routes: ['/manufacturing'],
-    items: [
-      { label: '🏭 Manufacturing Orders', path: '/manufacturing/orders'            },
-      { label: '📋 Job Sheets',           path: '/manufacturing/job-sheets'        },
-      { label: '➕ Create Job Sheet',     path: '/manufacturing/job-sheets/create' },
-      { label: '📍 Locations',            path: '/manufacturing/locations'         },
-    ],
-  },
-  {
-    key: 'reports',
-    label: 'Reports',
-    icon: '📊',
-    color: '#0284c7',
-    alwaysShow: true,
-    routes: ['/reports'],
-    sections: [
-      {
-        title: '📒 Day Book', color: '#0284c7',
-        items: [
-          { label: '📖 Day Book',          path: '/reports/daybook'           },
-          { label: '💵 Cash Book',         path: '/reports/cashbook'          },
-          { label: '🏦 Bank Statement',    path: '/account/statement'         },
-        ],
-      },
-      {
-        title: '📅 Monthly Reports', color: '#7c3aed',
-        items: [
-          { label: '📋 Monthly Summary',   path: '/reports/monthly'           },
-          { label: '📈 Sales Register',    path: '/reports/sales-register'    },
-          { label: '📉 Purchase Register', path: '/reports/purchase-register' },
-          { label: '💹 P&L Statement',     path: '/reports/pnl'               },
-        ],
-      },
-      {
-        title: '👥 Party Reports', color: '#059669',
-        items: [
-          { label: '📒 All Ledgers',       path: '/account/ledger/view'       },
-          { label: '🟢 Client Balance',    path: '/account/dues?tab=client'   },
-          { label: '🔴 Vendor Dues',       path: '/account/dues?tab=vendor'   },
-          { label: '🏷️ GST Reports',       path: '/gst/compliance'            },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'admin',
-    label: 'Admin',
-    icon: '⚙️',
-    color: '#475569',
-    alwaysShow: true,
-    routes: ['/admin', '/approval', '/passwords'],
-    sections: [
-      {
-        title: '🖥️ System', color: '#475569',
-        items: [
-          { label: '✅ Approvals',        path: '/approval'        },
-          { label: '🔑 Password Manager', path: '/passwords'       },
-          { label: '🏢 Companies',        path: '/admin/companies' },
-          { label: '👤 User Management',  path: '/admin/users'     },
-        ],
-      },
-      {
-        title: '⚙️ Settings', color: '#0891b2',
-        items: [
-          { label: '📥 Tally Import',     path: '/tally/import'    },
-        ],
-      },
-    ],
-  },
-  {
-    key: 'company',
-    label: 'Company',
-    icon: '🏛️',
-    color: '#0f766e',
-    alwaysShow: true,
-    path: '/company-info',
-    routes: ['/company-info'],
-  },
-];
-
-const isPathActive = (routes, pathname) =>
-  routes?.some(r => pathname === r || pathname.startsWith(r + '/'));
 
 /* ── Command Palette ── */
 function CommandPalette({ onClose }) {
@@ -412,10 +362,14 @@ function CommandPalette({ onClose }) {
 }
 
 /* ── Notification Centre ── */
-function NotificationCentre({ companyId }) {
+function NotificationCentre({ companyId, userId }) {
+  const tk = useHdrTokens();
   const [open,   setOpen]   = useState(false);
+  const [tab,    setTab]    = useState('dispatch'); // 'dispatch' | 'approvals'
   const [alerts, setAlerts] = useState([]);
+  const [approvals, setApprovals] = useState([]);
   const ref = useRef(null);
+  const navigate = useNavigate();
   useClickOutside(ref, () => setOpen(false));
 
   const load = useCallback(() => {
@@ -445,7 +399,48 @@ function NotificationCentre({ companyId }) {
     }).catch(() => {});
   }, [companyId]);
 
+  const loadApprovals = useCallback(() => {
+    if (!userId) return;
+    axios.get(`/api/notifications?userId=${userId}`)
+      .then(res => setApprovals(Array.isArray(res.data) ? res.data : []))
+      .catch(() => {});
+  }, [userId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadApprovals(); }, [loadApprovals]);
+  useEffect(() => {
+    if (!userId) return;
+    const t = setInterval(loadApprovals, 60000);
+    return () => clearInterval(t);
+  }, [userId, loadApprovals]);
+
+  const unreadApprovals = approvals.filter(n => !n.read).length;
+
+  const timeAgo = (iso) => {
+    const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)   return 'just now';
+    if (mins < 60)  return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)   return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  const openApproval = (n) => {
+    if (!n.read) {
+      axios.put(`/api/notifications/${n.id}/read`).catch(() => {});
+      setApprovals(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
+    }
+    setOpen(false);
+    if (n.link) navigate(n.link);
+  };
+
+  const markAllApprovalsRead = () => {
+    if (!userId) return;
+    axios.put(`/api/notifications/read-all?userId=${userId}`).catch(() => {});
+    setApprovals(prev => prev.map(x => ({ ...x, read: true })));
+  };
 
   const today = new Date(); today.setHours(0,0,0,0);
   const urgency = (dateStr) => {
@@ -462,23 +457,17 @@ function NotificationCentre({ companyId }) {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${parseInt(d,10)} ${months[parseInt(m,10)-1]} ${y}`;
   };
-  const overdue    = alerts.filter(o => new Date(o.deliveryDate).setHours(0,0,0,0) < today.getTime());
-  const badgeCount = alerts.length;
+  const overdue     = alerts.filter(o => new Date(o.deliveryDate).setHours(0,0,0,0) < today.getTime());
+  const badgeCount  = alerts.length + unreadApprovals;
+  const badgeUrgent = overdue.length > 0 || unreadApprovals > 0;
 
   return (
     <div ref={ref} style={{ position:'relative', flexShrink:0 }}>
-      <button onClick={()=>setOpen(p=>!p)} title="Dispatch Notifications"
-        style={{ width:32, height:32, borderRadius:7, cursor:'pointer', position:'relative',
-          background:open?'#FFF7ED':'#F9FAFB', border:`1px solid ${open?'#FED7AA':'#E5E7EB'}`,
-          color:open?'#EA580C':'#9ca3af', display:'flex', alignItems:'center', justifyContent:'center',
-          transition:'all 0.15s', flexShrink:0 }}
-        onMouseEnter={e=>{e.currentTarget.style.background='#FFF7ED';e.currentTarget.style.color='#EA580C';}}
-        onMouseLeave={e=>{if(!open){e.currentTarget.style.background='#F9FAFB';e.currentTarget.style.color='#9ca3af';}}}>
-        <Bell size={14} strokeWidth={2} />
+      <button onClick={()=>setOpen(p=>!p)} title="Notifications"
+        style={ghostBtn(open, tk)} onMouseEnter={ghostIn(tk)} onMouseLeave={ghostOut(open, tk)}>
+        <Bell size={16} strokeWidth={2} />
         {badgeCount>0 && (
-          <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%',
-            background:overdue.length>0?'#DC2626':'#F59E0B', color:'#fff', fontSize:9, fontWeight:800,
-            display:'flex', alignItems:'center', justifyContent:'center', border:'2px solid #fff', lineHeight:1 }}>
+          <span style={countBadge(badgeUrgent, tk)}>
             {badgeCount>9?'9+':badgeCount}
           </span>
         )}
@@ -488,63 +477,253 @@ function NotificationCentre({ companyId }) {
         <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, width:380,
           background:'#fff', borderRadius:12, boxShadow:'0 16px 48px rgba(0,0,0,0.14)',
           border:'1px solid #E5E7EB', zIndex:9999, overflow:'hidden', fontFamily:FONT }}>
-          <div style={{ background:'linear-gradient(135deg,#1e293b,#334155)', padding:'12px 16px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:700, color:'#fff' }}>Dispatch Alerts</div>
-              <div style={{ fontSize:10.5, color:'#94a3b8', marginTop:1 }}>
-                {badgeCount===0?'No upcoming due dates':`${badgeCount} order${badgeCount>1?'s':''} need attention`}
-              </div>
+          <div style={{ background:'linear-gradient(135deg,#1e293b,#334155)', padding:'10px 16px 0' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#fff' }}>Notifications</div>
+              <button onClick={tab==='dispatch'?load:loadApprovals} title="Refresh" style={{ width:24, height:24, borderRadius:5, border:'1px solid #475569', background:'transparent', color:'#94a3b8', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><RefreshCw size={11}/></button>
             </div>
-            <div style={{ display:'flex', gap:6 }}>
-              {overdue.length>0 && <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:'#DC2626', color:'#fff' }}>{overdue.length} overdue</span>}
-              <button onClick={load} title="Refresh" style={{ width:24, height:24, borderRadius:5, border:'1px solid #475569', background:'transparent', color:'#94a3b8', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><RefreshCw size={11}/></button>
+            <div style={{ display:'flex', gap:4 }}>
+              <button onClick={()=>setTab('dispatch')} style={{
+                flex:1, padding:'6px 8px', fontSize:11, fontWeight:700, cursor:'pointer',
+                background: tab==='dispatch' ? '#fff' : 'transparent',
+                color: tab==='dispatch' ? '#1e293b' : '#94a3b8',
+                border:'none', borderRadius:'6px 6px 0 0', fontFamily:FONT }}>
+                Dispatch Alerts {alerts.length>0 && `(${alerts.length})`}
+              </button>
+              <button onClick={()=>setTab('approvals')} style={{
+                flex:1, padding:'6px 8px', fontSize:11, fontWeight:700, cursor:'pointer',
+                background: tab==='approvals' ? '#fff' : 'transparent',
+                color: tab==='approvals' ? '#1e293b' : '#94a3b8',
+                border:'none', borderRadius:'6px 6px 0 0', fontFamily:FONT }}>
+                My Approvals {unreadApprovals>0 && `(${unreadApprovals})`}
+              </button>
             </div>
           </div>
-          <div style={{ maxHeight:420, overflowY:'auto' }}>
-            {alerts.length===0 ? (
-              <div style={{ padding:'32px 16px', textAlign:'center' }}>
-                <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
-                <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>All clear!</div>
-                <div style={{ fontSize:11, color:'#9ca3af', marginTop:3 }}>No orders due in the next 5 days</div>
-              </div>
-            ) : alerts.map((o,i) => {
-              const urg = urgency(o.deliveryDate);
-              const items = (o.items||[]).slice(0,2);
-              const moreItems = (o.items||[]).length - 2;
-              return (
-                <div key={o.orderId} style={{ padding:'12px 16px', borderBottom:i<alerts.length-1?'1px solid #F1F5F9':'none', background:i%2===0?'#fff':'#FAFAFA' }}>
-                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{ width:8, height:8, borderRadius:'50%', background:urg.dot, flexShrink:0, display:'inline-block' }}/>
-                      <span style={{ fontSize:12, fontWeight:800, color:'#1e293b' }}>{o.orderNo}</span>
-                    </div>
-                    <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:urg.bg, color:urg.color, whiteSpace:'nowrap' }}>{urg.label}</span>
+
+          {tab === 'dispatch' ? (
+            <>
+              <div style={{ maxHeight:380, overflowY:'auto' }}>
+                {alerts.length===0 ? (
+                  <div style={{ padding:'32px 16px', textAlign:'center' }}>
+                    <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>All clear!</div>
+                    <div style={{ fontSize:11, color:'#9ca3af', marginTop:3 }}>No orders due in the next 5 days</div>
                   </div>
-                  <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginTop:4, paddingLeft:14 }}>{o.customerName}</div>
-                  <div style={{ fontSize:11, color:'#6B7280', paddingLeft:14, marginTop:2, display:'flex', alignItems:'center', gap:4 }}>
-                    <span style={{ fontSize:10 }}>📅</span>
-                    <span>Dispatch by <strong style={{ color:urg.color }}>{fmtDate(o.deliveryDate)}</strong></span>
-                  </div>
-                  {items.length>0 && (
-                    <div style={{ marginTop:6, paddingLeft:14 }}>
-                      {items.map((it,j) => (
-                        <div key={j} style={{ fontSize:10.5, color:'#374151', display:'flex', gap:6, background:'#F8FAFF', border:'1px solid #E5EAF2', borderRadius:5, padding:'3px 8px', marginBottom:3, alignItems:'center' }}>
-                          <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.description||it.itemCode}</span>
-                          <span style={{ fontWeight:700, color:'#1e40af', flexShrink:0 }}>{it.qty} {it.unit}</span>
+                ) : alerts.map((o,i) => {
+                  const urg = urgency(o.deliveryDate);
+                  const items = (o.items||[]).slice(0,2);
+                  const moreItems = (o.items||[]).length - 2;
+                  return (
+                    <div key={o.orderId} style={{ padding:'12px 16px', borderBottom:i<alerts.length-1?'1px solid #F1F5F9':'none', background:i%2===0?'#fff':'#FAFAFA' }}>
+                      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ width:8, height:8, borderRadius:'50%', background:urg.dot, flexShrink:0, display:'inline-block' }}/>
+                          <span style={{ fontSize:12, fontWeight:800, color:'#1e293b' }}>{o.orderNo}</span>
                         </div>
-                      ))}
-                      {moreItems>0 && <div style={{ fontSize:10, color:'#9ca3af', paddingLeft:2 }}>+{moreItems} more item{moreItems>1?'s':''}</div>}
+                        <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:urg.bg, color:urg.color, whiteSpace:'nowrap' }}>{urg.label}</span>
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:600, color:'#374151', marginTop:4, paddingLeft:14 }}>{o.customerName}</div>
+                      <div style={{ fontSize:11, color:'#6B7280', paddingLeft:14, marginTop:2, display:'flex', alignItems:'center', gap:4 }}>
+                        <span style={{ fontSize:10 }}>📅</span>
+                        <span>Dispatch by <strong style={{ color:urg.color }}>{fmtDate(o.deliveryDate)}</strong></span>
+                      </div>
+                      {items.length>0 && (
+                        <div style={{ marginTop:6, paddingLeft:14 }}>
+                          {items.map((it,j) => (
+                            <div key={j} style={{ fontSize:10.5, color:'#374151', display:'flex', gap:6, background:'#F8FAFF', border:'1px solid #E5EAF2', borderRadius:5, padding:'3px 8px', marginBottom:3, alignItems:'center' }}>
+                              <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.description||it.itemCode}</span>
+                              <span style={{ fontWeight:700, color:'#1e40af', flexShrink:0 }}>{it.qty} {it.unit}</span>
+                            </div>
+                          ))}
+                          {moreItems>0 && <div style={{ fontSize:10, color:'#9ca3af', paddingLeft:2 }}>+{moreItems} more item{moreItems>1?'s':''}</div>}
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
+              {alerts.length>0 && (
+                <div style={{ padding:'8px 16px', background:'#F8FAFC', borderTop:'1px solid #F1F5F9', fontSize:11, color:'#9ca3af', textAlign:'center' }}>
+                  Showing orders due within 5 days · Updated now
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ maxHeight:380, overflowY:'auto' }}>
+                {approvals.length===0 ? (
+                  <div style={{ padding:'32px 16px', textAlign:'center' }}>
+                    <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:'#374151' }}>Nothing pending</div>
+                    <div style={{ fontSize:11, color:'#9ca3af', marginTop:3 }}>You have no approval requests</div>
+                  </div>
+                ) : approvals.map((n,i) => (
+                  <div key={n.id} onClick={()=>openApproval(n)}
+                    style={{ padding:'12px 16px', borderBottom:i<approvals.length-1?'1px solid #F1F5F9':'none',
+                      background: n.read ? (i%2===0?'#fff':'#FAFAFA') : '#EFF6FF', cursor:'pointer' }}
+                    onMouseEnter={e=>{ e.currentTarget.style.background='#F8FAFC'; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background = n.read ? (i%2===0?'#fff':'#FAFAFA') : '#EFF6FF'; }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        {!n.read && <span style={{ width:7, height:7, borderRadius:'50%', background:'#3B82F6', flexShrink:0, display:'inline-block' }}/>}
+                        <span style={{ fontSize:12, fontWeight:800, color:'#1e293b' }}>{n.recordLabel || n.module}</span>
+                      </div>
+                      <span style={{ fontSize:10, color:'#9ca3af', whiteSpace:'nowrap' }}>{timeAgo(n.createdAt)}</span>
+                    </div>
+                    <div style={{ fontSize:11, color:'#4B5563', marginTop:4, paddingLeft:n.read?0:13, lineHeight:1.4 }}>{n.message}</div>
+                    {n.createdBy && <div style={{ fontSize:10, color:'#9ca3af', marginTop:3, paddingLeft:n.read?0:13 }}>Submitted by {n.createdBy}</div>}
+                  </div>
+                ))}
+              </div>
+              {approvals.length>0 && (
+                <div style={{ padding:'8px 16px', background:'#F8FAFC', borderTop:'1px solid #F1F5F9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontSize:10.5, color:'#9ca3af' }}>{unreadApprovals>0?`${unreadApprovals} unread`:'All read'}</span>
+                  {unreadApprovals>0 && (
+                    <button onClick={markAllApprovalsRead} style={{ fontSize:10.5, fontWeight:700, color:'#EA580C', background:'transparent', border:'none', cursor:'pointer' }}>Mark all read</button>
                   )}
                 </div>
-              );
-            })}
-          </div>
-          {alerts.length>0 && (
-            <div style={{ padding:'8px 16px', background:'#F8FAFC', borderTop:'1px solid #F1F5F9', fontSize:11, color:'#9ca3af', textAlign:'center' }}>
-              Showing orders due within 5 days · Updated now
-            </div>
+              )}
+            </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Finacle-style shortcut-code box: type a menu code (POC, SOV…) and
+   press Enter to jump straight there, with a matching autocomplete list. ── */
+const SHORTCUT_CODES = [
+  { code:'DSH', label:'Dashboard',               path:'/dashboard' },
+  { code:'SOC', label:'Create Sales Order',      path:'/sales-order/create' },
+  { code:'SOV', label:'Sales Order View',        path:'/sales-order/view' },
+  { code:'SOP', label:'Sales Order Pending',     path:'/sales-order/pending' },
+  { code:'POC', label:'Create Purchase Order',   path:'/purchase-order/create' },
+  { code:'POV', label:'Purchase Order View',     path:'/purchase-order/view' },
+  { code:'POP', label:'Purchase Order Pending',  path:'/purchase-order/pending' },
+  { code:'POT', label:'PO Tracking',             path:'/purchase-order/tracking' },
+  { code:'CLV', label:'Client View',             path:'/client/view' },
+  { code:'CLP', label:'Client Pending',          path:'/client/pending' },
+  { code:'CRM', label:'CRM',                     path:'/crm/view' },
+  { code:'VEV', label:'Vendor View',             path:'/vendor/view' },
+  { code:'VEC', label:'Vendor Create',           path:'/vendor/create' },
+  { code:'VEP', label:'Vendor Pending',          path:'/vendor/pending' },
+  { code:'ITV', label:'Items View',              path:'/items/view' },
+  { code:'ITC', label:'Items Create',            path:'/items/create' },
+  { code:'SBV', label:'Sales Bill / Tax Invoice',path:'/sales-bill' },
+  { code:'PBV', label:'Purchase Bill',           path:'/purchase-bill' },
+  { code:'LGM', label:'Ledger Master',           path:'/account/ledger/master' },
+  { code:'LGV', label:'All Ledgers',             path:'/account/ledger/view' },
+  { code:'DUE', label:'Dues / Balance',          path:'/account/dues' },
+  { code:'EXC', label:'Expense Entry',           path:'/account/expense/create' },
+  { code:'EXV', label:'View Expenses',           path:'/account/expense/view' },
+  { code:'PAY', label:'Payment to Vendor',       path:'/account/payment/create' },
+  { code:'REC', label:'Receipt from Client',     path:'/account/receipt/create' },
+  { code:'JV',  label:'Journal Entry',           path:'/account/journal/view' },
+  { code:'DN',  label:'Debit Note',              path:'/account/debit-note/view' },
+  { code:'CN',  label:'Credit Note',             path:'/account/credit-note/view' },
+  { code:'DEP', label:'Deposit',                 path:'/account/deposit/view' },
+  { code:'BNK', label:'Bank Accounts',           path:'/account/bank/view' },
+  { code:'STM', label:'Bank Statement',          path:'/account/statement' },
+  { code:'BLS', label:'Balance Sheet (Tally)',   path:'/account/balance-sheet' },
+  { code:'PNL', label:'Profit & Loss (Tally)',   path:'/account/balance-sheet?tab=pl' },
+  { code:'GST', label:'GST & Compliance',        path:'/gst/compliance' },
+  { code:'JBL', label:'Jobcode List',            path:'/project/list' },
+  { code:'JBC', label:'Project Close',           path:'/project/close' },
+  { code:'MFO', label:'Manufacturing Orders',    path:'/manufacturing/orders' },
+  { code:'JSH', label:'Job Sheets',              path:'/manufacturing/job-sheets' },
+  { code:'COM', label:'Communication Logs',      path:'/communication/logs' },
+  { code:'APV', label:'Approvals',               path:'/approval' },
+  { code:'RPD', label:'Day Book',                path:'/reports/daybook' },
+  { code:'RPC', label:'Cash Book',                path:'/reports/cashbook' },
+  { code:'RPM', label:'Monthly Summary',         path:'/reports/monthly' },
+  { code:'RPS', label:'Sales Register',          path:'/reports/sales-register' },
+  { code:'RPP', label:'Purchase Register',       path:'/reports/purchase-register' },
+  { code:'PNL', label:'P&L Statement',           path:'/reports/pnl' },
+  { code:'CMP', label:'Companies (Admin)',       path:'/admin/companies' },
+  { code:'PWD', label:'Password Manager',        path:'/passwords' },
+  { code:'AI',  label:'Epsilon AI',              path:'/epsilon-ai' },
+];
+
+function ShortcutBox({ onPalette }) {
+  const tk = useHdrTokens();
+  const [q, setQ]         = useState('');
+  const [open, setOpen]   = useState(false);
+  const [focus, setFocus] = useState(false);
+  const [active, setActive] = useState(0);
+  const ref = useRef(null);
+  const navigate = useNavigate();
+  useClickOutside(ref, () => setOpen(false));
+
+  const term = q.trim().toUpperCase();
+  const matches = term
+    ? SHORTCUT_CODES.filter(s => s.code.startsWith(term) || s.label.toUpperCase().includes(term)).slice(0, 8)
+    : [];
+
+  useEffect(() => { setActive(0); }, [q]);
+
+  const go = (s) => { navigate(s.path); setQ(''); setOpen(false); };
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(i+1, matches.length-1)); return; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(i => Math.max(i-1, 0)); return; }
+    if (e.key === 'Enter') {
+      if (matches[active]) go(matches[active]);
+      else {
+        const exact = SHORTCUT_CODES.find(s => s.code === term);
+        if (exact) go(exact);
+      }
+    }
+  };
+
+  return (
+    <div ref={ref} style={{ position:'relative', flexShrink:1, minWidth:150 }}>
+      <div style={{
+        display:'flex', alignItems:'center', gap:8, width:280, maxWidth:'100%', height:34,
+        padding:'0 5px 0 11px', borderRadius: tk.neu ? 11 : 9, boxSizing:'border-box',
+        background: focus ? tk.fieldBgFocus : tk.fieldBg,
+        border:`1px solid ${focus ? tk.fieldBorderFocus : tk.fieldBorder}`,
+        boxShadow: focus ? tk.fieldShadowFocus : tk.fieldShadow,
+        transition:'background 0.12s, border-color 0.12s, box-shadow 0.15s',
+      }}>
+        <Search size={14} strokeWidth={2.2} color={tk.muted} style={{ flexShrink:0 }} />
+        <input
+          className={`hdr-search${tk.neu ? ' neu' : ''}`}
+          value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => { setOpen(true); setFocus(true); }}
+          onBlur={() => setFocus(false)}
+          onKeyDown={onKey}
+          placeholder="Shortcut code… e.g. POC, SOV"
+          title="Type a shortcut code (e.g. POC = Create PO, SOV = Sales Order View) and press Enter"
+          style={{ flex:1, minWidth:0, height:'100%', padding:0, fontSize:12, fontWeight:600, fontFamily:FONT,
+            background:'transparent', border:'none', color:tk.fieldText, outline:'none', letterSpacing:'0.2px' }}
+        />
+        {onPalette && (
+          <button onClick={onPalette} title="Search all pages (Ctrl+K)"
+            style={{ flexShrink:0, height:22, padding:'0 7px', borderRadius: tk.neu ? 7 : 5, cursor:'pointer',
+              fontSize:10, fontWeight:700, fontFamily:FONT, letterSpacing:'0.3px',
+              color:tk.txt, background:tk.kbdBg, border:`1px solid ${tk.kbdBorder}`, boxShadow:tk.kbdShadow }}
+            onMouseEnter={e => { e.currentTarget.style.background = tk.kbdHoverBg; e.currentTarget.style.color = tk.btnHoverColor; }}
+            onMouseLeave={e => { e.currentTarget.style.background = tk.kbdBg; e.currentTarget.style.color = tk.txt; }}>
+            Ctrl K
+          </button>
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <div style={{ position:'absolute', top:'calc(100% + 6px)', left:0, width:300,
+          background:'#fff', borderRadius:10, boxShadow:'0 16px 40px rgba(0,0,0,0.18)',
+          border:'1px solid #E5E7EB', zIndex:9999, overflow:'hidden', fontFamily:FONT }}>
+          {matches.map((s, i) => (
+            <div key={s.code} onClick={() => go(s)} onMouseEnter={() => setActive(i)}
+              style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 12px', cursor:'pointer',
+                background: active === i ? '#EEF2FF' : '#fff' }}>
+              <span style={{ fontSize:10, fontWeight:800, color:'#4f46e5', background:'#EEF2FF',
+                borderRadius:4, padding:'2px 6px', minWidth:32, textAlign:'center', flexShrink:0 }}>{s.code}</span>
+              <span style={{ fontSize:12, color:'#374151', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.label}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -566,289 +745,9 @@ function UserAvatar({ userId, initials, photoExt, size = 30 }) {
   );
 }
 
-/* ── Shared dropdown panel — classic application menu style ─────── */
-function NavDropdown({ group, onNavigate, onClose, alignRight }) {
-  const hasSections = !!group.sections;
-  const cols        = group.sections?.length || 1;
-
-  const itemStyle = (hovered) => ({
-    padding: '6px 20px 6px 14px',
-    cursor: 'pointer',
-    fontSize: 12.5,
-    color: hovered ? '#fff' : '#1a1a1a',
-    background: hovered ? '#3A6186' : 'transparent',
-    borderBottom: '1px solid transparent',
-    display: 'flex', alignItems: 'center', gap: 6,
-    userSelect: 'none',
-    whiteSpace: 'nowrap',
-  });
-
-  const [hoveredPath, setHoveredPath] = useState(null);
-
-  const renderItem = (item) => (
-    <div key={item.path}
-      onClick={() => { onNavigate(item.path); onClose(); }}
-      onMouseEnter={() => setHoveredPath(item.path)}
-      onMouseLeave={() => setHoveredPath(null)}
-      style={itemStyle(hoveredPath === item.path)}>
-      {item.label}
-    </div>
-  );
-
-  return (
-    <div style={{
-      position: 'absolute', top: '100%',
-      ...(alignRight ? { right: 0 } : { left: 0 }),
-      background: '#f0f0f0',
-      boxShadow: '2px 2px 6px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.6)',
-      border: '1px solid #888',
-      zIndex: 9999,
-      minWidth: hasSections ? cols * 170 : 190,
-      display: hasSections ? 'flex' : 'block',
-      fontFamily: FONT,
-      overflow: 'hidden',
-      paddingBottom: 2,
-    }}>
-      {hasSections ? (
-        group.sections.map((sec, si) => (
-          <div key={sec.title} style={{
-            flex: 1, minWidth: 155,
-            borderRight: si < group.sections.length - 1 ? '1px solid #bbb' : 'none',
-          }}>
-            <div style={{
-              padding: '5px 14px 4px',
-              background: 'linear-gradient(180deg,#e8e8e8,#d8d8d8)',
-              borderBottom: '1px solid #aaa',
-              fontSize: 10, fontWeight: 700, color: '#444',
-              textTransform: 'uppercase', letterSpacing: '0.5px',
-            }}>
-              {sec.title}
-            </div>
-            {sec.items.map(renderItem)}
-          </div>
-        ))
-      ) : (
-        <>
-          <div style={{
-            padding: '5px 14px 4px',
-            background: 'linear-gradient(180deg,#e8e8e8,#d8d8d8)',
-            borderBottom: '1px solid #aaa',
-            fontSize: 10, fontWeight: 700, color: '#444',
-            textTransform: 'uppercase', letterSpacing: '0.5px',
-          }}>
-            {group.label}
-          </div>
-          {group.items.map(renderItem)}
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── Single nav group — classic raised menu button ───────────────── */
-function NavGroup({ group, pathname, onNavigate, alignRight }) {
-  const [open,    setOpen]    = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const ref   = useRef(null);
-  const timer = useRef(null);
-  useClickOutside(ref, () => setOpen(false));
-
-  const active   = isPathActive(group.routes, pathname);
-  const isDirect = !!group.path && !group.items && !group.sections;
-
-  const onEnter = () => { clearTimeout(timer.current); setHovered(true); if (!isDirect) setOpen(true); };
-  const onLeave = () => { setHovered(false); timer.current = setTimeout(() => setOpen(false), 180); };
-
-  /* Classic button look: raised on hover, pressed when open */
-  const getBtnStyle = () => {
-    if (active) return {
-      background: '#fff',
-      border: '1px solid #2A4D6E',
-      color: '#2A4D6E',
-      boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.8)',
-    };
-    if (open) return {
-      background: 'rgba(0,0,0,0.18)',
-      border: '1px solid rgba(0,0,0,0.35)',
-      borderBottom: '1px solid #f0f0f0',
-      color: '#fff',
-      boxShadow: 'inset 1px 1px 2px rgba(0,0,0,0.2)',
-    };
-    if (hovered) return {
-      background: 'rgba(255,255,255,0.18)',
-      border: '1px solid rgba(255,255,255,0.5)',
-      color: '#fff',
-      boxShadow: '1px 1px 0 rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.3)',
-    };
-    return {
-      background: 'transparent',
-      border: '1px solid transparent',
-      color: 'rgba(255,255,255,0.92)',
-      boxShadow: 'none',
-    };
-  };
-
-  const btnStyle = getBtnStyle();
-
-  return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}
-      onMouseEnter={onEnter} onMouseLeave={onLeave}
-    >
-      <button
-        onClick={() => { if (isDirect) { onNavigate(group.path); } else setOpen(o => !o); }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          height: 28, padding: '0 11px',
-          borderRadius: 2,
-          cursor: 'pointer', fontFamily: FONT, fontSize: 12,
-          fontWeight: active ? 700 : 500,
-          whiteSpace: 'nowrap', letterSpacing: '0.15px',
-          transition: 'background 0.08s, box-shadow 0.08s, border-color 0.08s',
-          ...btnStyle,
-        }}
-      >
-        {group.icon && <span style={{ fontSize: 12, lineHeight: 1 }}>{group.icon}</span>}
-        {group.label}
-        {!isDirect && (
-          <ChevronDown size={9}
-            color={active ? '#2A4D6E' : 'rgba(255,255,255,0.85)'}
-            style={{ transition: 'transform 0.12s', transform: open ? 'rotate(180deg)' : 'none', marginLeft: 1 }} />
-        )}
-      </button>
-      {open && !isDirect && (
-        <NavDropdown group={group} onNavigate={onNavigate} onClose={() => setOpen(false)} alignRight={alignRight} />
-      )}
-    </div>
-  );
-}
-
-/* ── "More ▾" overflow — classic flyout submenus ────────────────── */
-function MoreMenu({ groups, pathname, onNavigate }) {
-  const [open,    setOpen]    = useState(false);
-  const [subOpen, setSubOpen] = useState(null);
-  const [hovered, setHovered] = useState(false);
-  const [hovSub,  setHovSub]  = useState(null);
-  const ref      = useRef(null);
-  const timer    = useRef(null);
-  const subTimer = useRef(null);
-  useClickOutside(ref, () => { setOpen(false); setSubOpen(null); });
-
-  const anyActive = groups.some(g => isPathActive(g.routes, pathname));
-  const onEnter = () => { clearTimeout(timer.current); setHovered(true); setOpen(true); };
-  const onLeave = () => { setHovered(false); timer.current = setTimeout(() => { setOpen(false); setSubOpen(null); }, 200); };
-
-  if (!groups.length) return null;
-
-  const getBtnStyle = () => {
-    if (anyActive) return { background: '#fff', border: '1px solid #2A4D6E', color: '#2A4D6E', boxShadow: 'inset 1px 1px 0 rgba(255,255,255,0.8)' };
-    if (open)      return { background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(0,0,0,0.35)', borderBottom: '1px solid #f0f0f0', color: '#fff', boxShadow: 'inset 1px 1px 2px rgba(0,0,0,0.2)' };
-    if (hovered)   return { background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.5)', color: '#fff', boxShadow: '1px 1px 0 rgba(255,255,255,0.25), inset 0 1px 0 rgba(255,255,255,0.3)' };
-    return { background: 'transparent', border: '1px solid transparent', color: 'rgba(255,255,255,0.92)', boxShadow: 'none' };
-  };
-
-  return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}
-      onMouseEnter={onEnter} onMouseLeave={onLeave}
-    >
-      <button style={{
-        display: 'flex', alignItems: 'center', gap: 4,
-        height: 28, padding: '0 11px', borderRadius: 2,
-        cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: anyActive ? 700 : 500,
-        whiteSpace: 'nowrap', letterSpacing: '0.15px',
-        transition: 'background 0.08s, box-shadow 0.08s',
-        ...getBtnStyle(),
-      }}>
-        ⚙ More <ChevronDown size={9} color={anyActive ? '#2A4D6E' : 'rgba(255,255,255,0.85)'} style={{ transition: 'transform 0.12s', transform: open ? 'rotate(180deg)' : 'none' }} />
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', right: 0,
-          background: '#f0f0f0',
-          boxShadow: '2px 2px 6px rgba(0,0,0,0.35)',
-          border: '1px solid #888',
-          zIndex: 9999, minWidth: 190, fontFamily: FONT, overflow: 'visible', paddingBottom: 2,
-        }}>
-          {groups.map((g, gi) => {
-            const isAct    = isPathActive(g.routes, pathname);
-            const isDirect = !!g.path && !g.items && !g.sections;
-            const allItems = g.items || (g.sections || []).flatMap(s => s.items);
-            const isSub    = subOpen === g.key;
-            const isHov    = hovSub === g.key;
-
-            return (
-              <div key={g.key} style={{ position: 'relative' }}
-                onMouseEnter={() => { clearTimeout(subTimer.current); setSubOpen(g.key); setHovSub(g.key); }}
-                onMouseLeave={() => { subTimer.current = setTimeout(() => { setSubOpen(null); setHovSub(null); }, 120); }}>
-                <div
-                  onClick={() => { if (isDirect) { onNavigate(g.path); setOpen(false); setSubOpen(null); } }}
-                  style={{
-                    padding: '6px 14px 6px 12px', cursor: 'pointer', fontSize: 12.5,
-                    color: (isHov || isSub) ? '#fff' : isAct ? '#3A6186' : '#1a1a1a',
-                    fontWeight: isAct ? 700 : 400,
-                    background: (isHov || isSub) ? '#3A6186' : 'transparent',
-                    borderBottom: gi < groups.length - 1 ? '1px solid #ccc' : 'none',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    userSelect: 'none',
-                  }}>
-                  <span>{g.icon} {g.label}</span>
-                  {!isDirect && <ChevronRight size={10} color={(isHov || isSub) ? '#fff' : '#888'} />}
-                </div>
-
-                {/* Flyout submenu — opens to the LEFT */}
-                {isSub && !isDirect && allItems.length > 0 && (
-                  <div
-                    onMouseEnter={() => clearTimeout(subTimer.current)}
-                    onMouseLeave={() => { subTimer.current = setTimeout(() => { setSubOpen(null); setHovSub(null); }, 120); }}
-                    style={{
-                      position: 'absolute', top: -1, right: '100%',
-                      background: '#f0f0f0',
-                      boxShadow: '2px 2px 6px rgba(0,0,0,0.35)',
-                      border: '1px solid #888',
-                      zIndex: 10000, minWidth: 190, fontFamily: FONT, overflow: 'hidden',
-                      marginRight: 1, paddingBottom: 2,
-                    }}>
-                    <div style={{
-                      padding: '5px 14px 4px',
-                      background: 'linear-gradient(180deg,#e8e8e8,#d8d8d8)',
-                      borderBottom: '1px solid #aaa',
-                      fontSize: 10, fontWeight: 700, color: '#444',
-                      textTransform: 'uppercase', letterSpacing: '0.5px',
-                    }}>{g.label}</div>
-                    {allItems.map((item) => (
-                      <SubItem key={item.path} item={item}
-                        onClick={() => { onNavigate(item.path); setOpen(false); setSubOpen(null); }} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SubItem({ item, onClick }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <div onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        padding: '6px 20px 6px 14px', cursor: 'pointer', fontSize: 12.5,
-        color: hov ? '#fff' : '#1a1a1a',
-        background: hov ? '#3A6186' : 'transparent',
-        userSelect: 'none', whiteSpace: 'nowrap',
-      }}>
-      {item.label}
-    </div>
-  );
-}
-
 /* ── Logout Modal ───────────────────────────────────────────────── */
 function LogoutModal({ onConfirm, onCancel }) {
+  const neu = useHdrTokens().neu;   // soft (neumorphic) look when SOFT is on
   const [phase, setPhase] = useState('confirm'); // confirm | step1 | step2 | step3
 
   const STEPS = [
@@ -890,12 +789,13 @@ function LogoutModal({ onConfirm, onCancel }) {
         .lo-spin  { display:inline-block; animation: logout-spin 0.9s linear infinite; }
       `}</style>
 
-      <div className="lo-card" style={{ background:'#fff', borderRadius:16,
-        width:360, padding:'32px 28px', boxShadow:'0 24px 60px rgba(0,0,0,0.22)',
+      <div className="lo-card" style={{ background: neu ? NEU.base : '#fff', borderRadius: neu ? 24 : 16,
+        width:360, padding:'32px 28px', boxShadow: neu ? '12px 12px 28px rgba(60,72,92,0.45), -8px -8px 20px rgba(255,255,255,0.25)' : '0 24px 60px rgba(0,0,0,0.22)',
         display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center' }}>
 
         {/* Icon area */}
-        <div style={{ width:64, height:64, borderRadius:16, marginBottom:18,
+        <div style={neu ? { width:64, height:64, borderRadius:18, marginBottom:18, background:NEU.base, boxShadow:NEU.raised,
+          display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.4s ease' } : { width:64, height:64, borderRadius:16, marginBottom:18,
           background: phase==='step3' ? 'linear-gradient(135deg,#16a34a,#15803d)'
                     : phase==='confirm' ? 'linear-gradient(135deg,#dc2626,#b91c1c)'
                     : 'linear-gradient(135deg,#1e40af,#1d4ed8)',
@@ -904,7 +804,7 @@ function LogoutModal({ onConfirm, onCancel }) {
                    : phase==='confirm' ? '0 8px 24px rgba(220,38,38,0.35)'
                    : '0 8px 24px rgba(30,64,175,0.35)',
           transition:'all 0.4s ease' }}>
-          {phase === 'confirm' && <LogOut size={28} color="#fff" strokeWidth={2.5} />}
+          {phase === 'confirm' && <LogOut size={28} color={neu ? '#dc2626' : '#fff'} strokeWidth={2.5} />}
           {phase !== 'confirm' && (
             <span style={{ fontSize:28, lineHeight:1 }}
               className={currentStep?.spin ? 'lo-spin' : ''}>
@@ -916,23 +816,23 @@ function LogoutModal({ onConfirm, onCancel }) {
         {/* Text */}
         {phase === 'confirm' ? (
           <>
-            <div style={{ fontSize:18, fontWeight:800, color:'#0f172a', marginBottom:6 }}>
+            <div style={{ fontSize:18, fontWeight:800, color: neu ? NEU.strong : '#0f172a', marginBottom:6 }}>
               Sign Out?
             </div>
-            <div style={{ fontSize:13, color:'#64748b', marginBottom:28, lineHeight:1.5 }}>
+            <div style={{ fontSize:13, color: neu ? NEU.text : '#64748b', marginBottom:28, lineHeight:1.5 }}>
               You'll be logged out of the current session.<br />
-              Press <kbd style={{ background:'#f1f5f9', border:'1px solid #e2e8f0',
+              Press <kbd style={neu ? { background:NEU.base, boxShadow:NEU.insetSm, border:'none', borderRadius:5, padding:'1px 7px', fontSize:11, fontFamily:'monospace' } : { background:'#f1f5f9', border:'1px solid #e2e8f0',
                 borderRadius:4, padding:'1px 6px', fontSize:11, fontFamily:'monospace' }}>Enter</kbd> to confirm.
             </div>
             <div style={{ display:'flex', gap:10, width:'100%' }}>
               <button onClick={onCancel}
-                style={{ flex:1, height:38, border:'1.5px solid #e2e8f0', borderRadius:8,
+                style={neu ? { flex:1, height:40, border:'none', borderRadius:12, background:NEU.base, boxShadow:NEU.raisedSm, color:NEU.strong, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT } : { flex:1, height:38, border:'1.5px solid #e2e8f0', borderRadius:8,
                   background:'#f8fafc', color:'#374151', fontSize:13, fontWeight:600,
                   cursor:'pointer', fontFamily:FONT }}>
                 Cancel
               </button>
               <button onClick={handleOK} autoFocus
-                style={{ flex:1, height:38, border:'none', borderRadius:8,
+                style={neu ? { flex:1, height:40, border:'none', borderRadius:12, background:NEU.base, boxShadow:NEU.raisedSm, color:'#dc2626', fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:FONT } : { flex:1, height:38, border:'none', borderRadius:8,
                   background:'linear-gradient(135deg,#dc2626,#b91c1c)', color:'#fff',
                   fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT,
                   boxShadow:'0 3px 10px rgba(220,38,38,0.35)' }}>
@@ -942,7 +842,7 @@ function LogoutModal({ onConfirm, onCancel }) {
           </>
         ) : (
           <div key={phase} className="lo-step">
-            <div style={{ fontSize:15, fontWeight:700, color:'#1e293b', marginBottom:6 }}>
+            <div style={{ fontSize:15, fontWeight:700, color: neu ? NEU.strong : '#1e293b', marginBottom:6 }}>
               {currentStep?.text}
             </div>
             {phase !== 'step3' && (
@@ -968,30 +868,81 @@ function LogoutModal({ onConfirm, onCancel }) {
 
 /* ── User dropdown ──────────────────────────────────────────────── */
 function UserDropdown({ user, username, userRole, initials, onLogout, onNavigate }) {
+  const tk = useHdrTokens();
   const [open,       setOpen]       = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false));
 
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0, display:'flex', alignItems:'stretch' }}>
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0, display:'flex', alignItems:'center' }}>
       <button
         onClick={() => setOpen(p => !p)}
-        style={{ display:'flex', alignItems:'center', gap:7,
-          padding:'0 13px', height: 36,
-          background: open ? '#F0F4F4' : 'transparent',
-          border:'none', borderLeft: '1px solid #DDDDDD',
-          cursor:'pointer', fontFamily:FONT }}
-        onMouseEnter={e => { e.currentTarget.style.background='#F0F4F4'; }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background='transparent'; }}>
-        <UserAvatar userId={user?.id||user?.userId} initials={initials} photoExt={user?.photoExt} size={26} />
-        <ChevronDown size={10} color="#666" style={{ transition:'transform 0.2s', transform:open?'rotate(180deg)':'none', flexShrink:0 }} />
+        title={`${username} — ${userRole}`}
+        style={{ display:'flex', alignItems:'center', gap:9,
+          padding:'0 8px 0 4px', height: 38, borderRadius: tk.neu ? 12 : 9,
+          background: open ? tk.btnActiveBg : tk.btnBg,
+          boxShadow: open ? tk.btnActiveShadow : tk.btnShadow,
+          border:'1px solid transparent',
+          cursor:'pointer', fontFamily:FONT, transition:'background 0.12s, box-shadow 0.15s' }}
+        onMouseEnter={e => { e.currentTarget.style.background = tk.btnHoverBg; e.currentTarget.style.boxShadow = tk.btnHoverShadow; }}
+        onMouseLeave={e => { if (!open) { e.currentTarget.style.background = tk.btnBg; e.currentTarget.style.boxShadow = tk.btnShadow; } }}>
+        <span style={{ position:'relative', display:'flex', flexShrink:0 }}>
+          <UserAvatar userId={user?.id||user?.userId} initials={initials} photoExt={user?.photoExt} size={30} />
+          <span style={{ position:'absolute', right:-2, bottom:-2, width:9, height:9, borderRadius:'50%',
+            background:'#22c55e', border:`2px solid ${tk.edge}` }} />
+        </span>
+        <span className="hdr-hide-md" style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', lineHeight:1.2, minWidth:0 }}>
+          <span style={{ fontSize:12.5, fontWeight:700, color:tk.strong, maxWidth:140, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{username}</span>
+          <span style={{ fontSize:10.5, fontWeight:500, color:tk.muted, whiteSpace:'nowrap' }}>{userRole}</span>
+        </span>
+        <ChevronDown size={12} color={tk.txt} style={{ transition:'transform 0.2s', transform:open?'rotate(180deg)':'none', flexShrink:0 }} />
       </button>
 
-      {open && (
-        <div style={{ position:'absolute', top:'calc(100% + 2px)', right:0, width:220,
-          background:'#fff', borderRadius:'0 0 8px 8px', boxShadow:'0 10px 36px rgba(0,0,0,0.14)',
-          border:'1px solid #D1D5DB', borderTop:`2px solid ${TEAL2}`, zIndex:9999, overflow:'hidden', fontFamily:FONT }}>
+      {open && tk.neu && (
+        <div style={{ position:'absolute', top:'calc(100% + 12px)', right:0, width:250, zIndex:9999,
+          background:NEU.base, borderRadius:16, boxShadow:'8px 8px 18px #A3B1C6, -8px -8px 18px #FFFFFF',
+          padding:12, fontFamily:FONT }}>
+          {/* User card — pressed into the panel */}
+          <div style={{ display:'flex', alignItems:'center', gap:11, padding:'11px 12px', borderRadius:13,
+            background:NEU.base, boxShadow:NEU.inset }}>
+            <span style={{ borderRadius:10, boxShadow:NEU.raisedSm, display:'flex' }}>
+              <UserAvatar userId={user?.id||user?.userId} initials={initials} photoExt={user?.photoExt} size={38} />
+            </span>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:NEU.strong, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{username}</div>
+              <div style={{ fontSize:11, color:NEU.muted, marginTop:1 }}>{userRole}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:3 }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#22c55e', display:'inline-block' }}/>
+                <span style={{ fontSize:10, color:'#16a34a', fontWeight:700 }}>Online</span>
+              </div>
+            </div>
+          </div>
+          {[
+            { label:'My Profile', sub:'Account settings', icon:<User size={14} color="#3b82f6" />, color:NEU.strong,
+              onClick:() => { onNavigate('/profile'); setOpen(false); } },
+            { label:'Sign Out', sub:'End this session', icon:<LogOut size={14} color="#DC2626" />, color:'#DC2626',
+              onClick:() => { setOpen(false); setShowLogout(true); } },
+          ].map(m => (
+            <div key={m.label} onClick={m.onClick}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = NEU.raisedSm; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; }}
+              style={{ display:'flex', alignItems:'center', gap:11, marginTop:10, padding:'8px 10px', borderRadius:12,
+                cursor:'pointer', background:NEU.base, transition:'box-shadow 0.15s' }}>
+              <span style={{ width:30, height:30, borderRadius:9, background:NEU.base, boxShadow:NEU.raisedSm,
+                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{m.icon}</span>
+              <span>
+                <span style={{ display:'block', fontSize:12.5, fontWeight:700, color:m.color }}>{m.label}</span>
+                <span style={{ display:'block', fontSize:10.5, color:NEU.muted }}>{m.sub}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {open && !tk.neu && (
+        <div style={{ position:'absolute', top:'calc(100% + 8px)', right:0, width:230,
+          background:'#fff', borderRadius:10, boxShadow:'0 16px 40px rgba(0,0,0,0.18)',
+          border:'1px solid #E5E7EB', borderTop:`3px solid ${TEAL}`, zIndex:9999, overflow:'hidden', fontFamily:FONT }}>
           {/* User info header */}
           <div style={{ padding:'12px 14px', background:`linear-gradient(135deg,${TEAL}15,${TEAL2}10)`, borderBottom:'1px solid #E5E7EB' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -1054,6 +1005,7 @@ function UserDropdown({ user, username, userRole, initials, onLogout, onNavigate
 
 /* ── Company Switch Modal ───────────────────────────────────────── */
 function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
+  const neu = useHdrTokens().neu;   // soft (neumorphic) look when SOFT is on
   const [phase, setPhase] = useState('confirm'); // confirm | checking | success | denied
 
   const PHASES = {
@@ -1104,12 +1056,13 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
         .cs-spin-icon { display:inline-block; animation: cs-spin 0.85s linear infinite; }
       `}</style>
 
-      <div className="cs-card" style={{ background:'#fff', borderRadius:18, width:380,
-        padding:'32px 28px', boxShadow:'0 28px 70px rgba(0,0,0,0.25)',
+      <div className="cs-card" style={{ background: neu ? NEU.base : '#fff', borderRadius: neu ? 24 : 18, width:380,
+        padding:'32px 28px', boxShadow: neu ? '12px 12px 28px rgba(60,72,92,0.45), -8px -8px 20px rgba(255,255,255,0.25)' : '0 28px 70px rgba(0,0,0,0.25)',
         display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center' }}>
 
         {/* Icon */}
-        <div style={{ width:68, height:68, borderRadius:16, marginBottom:18,
+        <div style={neu ? { width:68, height:68, borderRadius:18, marginBottom:18, background:NEU.base, boxShadow:NEU.raised,
+          display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 } : { width:68, height:68, borderRadius:16, marginBottom:18,
           background: phase==='confirm'  ? 'linear-gradient(135deg,#1d4ed8,#1e40af)'
                     : phase==='checking' ? 'linear-gradient(135deg,#1d4ed8,#1e40af)'
                     : phase==='success'  ? 'linear-gradient(135deg,#16a34a,#15803d)'
@@ -1120,7 +1073,7 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
                    : '0 10px 28px rgba(29,78,216,0.4)',
           transition:'all 0.4s ease', flexShrink:0 }}>
           {phase === 'confirm' ? (
-            <Building2 size={30} color="#fff" strokeWidth={2} />
+            <Building2 size={30} color={neu ? '#1d4ed8' : '#fff'} strokeWidth={2} />
           ) : (
             <span style={{ fontSize:30, lineHeight:1 }}
               className={p?.spin ? 'cs-spin-icon' : ''}>{p?.icon}</span>
@@ -1130,13 +1083,13 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
         {/* Content */}
         {phase === 'confirm' ? (
           <>
-            <div style={{ fontSize:17, fontWeight:800, color:'#0f172a', marginBottom:6 }}>
+            <div style={{ fontSize:17, fontWeight:800, color: neu ? NEU.strong : '#0f172a', marginBottom:6 }}>
               Switch Company?
             </div>
-            <div style={{ fontSize:12.5, color:'#64748b', marginBottom:4, lineHeight:1.5 }}>
-              From: <strong style={{ color:'#475569' }}>{currentCompany?.companyName || '—'}</strong>
+            <div style={{ fontSize:12.5, color: neu ? NEU.text : '#64748b', marginBottom:4, lineHeight:1.5 }}>
+              From: <strong style={{ color: neu ? NEU.strong : '#475569' }}>{currentCompany?.companyName || '—'}</strong>
             </div>
-            <div style={{ fontSize:12.5, color:'#64748b', marginBottom:20, lineHeight:1.5 }}>
+            <div style={{ fontSize:12.5, color: neu ? NEU.text : '#64748b', marginBottom:20, lineHeight:1.5 }}>
               To:&nbsp;&nbsp; <strong style={{ color:'#1d4ed8' }}>{company.companyName}</strong>
               {company.gstin && <span style={{ color:'#94a3b8', fontSize:11, marginLeft:6 }}>({company.gstin})</span>}
             </div>
@@ -1146,13 +1099,13 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
             </div>
             <div style={{ display:'flex', gap:10, width:'100%' }}>
               <button onClick={onCancel}
-                style={{ flex:1, height:38, border:'1.5px solid #e2e8f0', borderRadius:8,
+                style={neu ? { flex:1, height:40, border:'none', borderRadius:12, background:NEU.base, boxShadow:NEU.raisedSm, color:NEU.strong, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT } : { flex:1, height:38, border:'1.5px solid #e2e8f0', borderRadius:8,
                   background:'#f8fafc', color:'#374151', fontSize:13, fontWeight:600,
                   cursor:'pointer', fontFamily:FONT }}>
                 Cancel
               </button>
               <button onClick={handleConfirm} autoFocus
-                style={{ flex:1, height:38, border:'none', borderRadius:8,
+                style={neu ? { flex:1, height:40, border:'none', borderRadius:12, background:NEU.base, boxShadow:NEU.raisedSm, color:'#1d4ed8', fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:FONT } : { flex:1, height:38, border:'none', borderRadius:8,
                   background:'linear-gradient(135deg,#1d4ed8,#1e40af)', color:'#fff',
                   fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:FONT,
                   boxShadow:'0 3px 10px rgba(29,78,216,0.35)' }}>
@@ -1162,7 +1115,7 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
           </>
         ) : (
           <div key={phase} className="cs-step">
-            <div style={{ fontSize:15, fontWeight:700, color:'#0f172a', marginBottom:8 }}>{p.text}</div>
+            <div style={{ fontSize:15, fontWeight:700, color: neu ? NEU.strong : '#0f172a', marginBottom:8 }}>{p.text}</div>
             {phase === 'checking' && (
               <div style={{ display:'flex', justifyContent:'center', gap:6, marginTop:10 }}>
                 {[0,1,2].map(i => (
@@ -1186,7 +1139,7 @@ function CompanySwitchModal({ company, currentCompany, onConfirm, onCancel }) {
 
         <div style={{ marginTop:20, fontSize:10.5, color:'#cbd5e1', fontWeight:600,
           borderTop:'1px solid #f1f5f9', paddingTop:12, width:'100%' }}>
-          Universal Core ERP Solutions
+          Super ERP System
         </div>
       </div>
     </div>
@@ -1200,6 +1153,7 @@ const Header = ({ username: usernameProp, onLogout }) => {
   const { user }   = useAuth();
   const { openPanel, total: chatUnread } = useChat() || {};
   const lockCtx = useLock();
+  const tk = useHdrTokens();
   const username  = user?.name || user?.username || usernameProp || 'User';
   const userRole  = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'User';
   const initials  = username ? username.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : 'AD';
@@ -1208,9 +1162,21 @@ const Header = ({ username: usernameProp, onLogout }) => {
   const [showCoSwitch,  setShowCoSwitch]  = useState(false);
   const [pendingCompany,setPendingCompany] = useState(null);
   const [time,          setTime]          = useState(new Date());
-  const [winWidth,      setWinWidth]      = useState(window.innerWidth);
+  // Brand block tracks the sidebar's collapsed state so header + sidebar line up
+  const [navCollapsed, setNavCollapsed] = useState(() => { try { return localStorage.getItem('sidebarnav-collapsed') === '1'; } catch { return false; } });
+  useEffect(() => {
+    const h = e => setNavCollapsed(!!e.detail);
+    window.addEventListener('sidebarnav:collapsed', h);
+    return () => window.removeEventListener('sidebarnav:collapsed', h);
+  }, []);
+  // the sidebar also reports its exact width (the tile rail is 104px) and whether it is compact
+  const [navBox, setNavBox] = useState(() => { try { return localStorage.getItem('sidebarnav-layout') === 'list' ? null : { width: 84, compact: true }; } catch { return { width: 84, compact: true }; } });
+  useEffect(() => {
+    const h = e => setNavBox(e.detail && e.detail.width ? e.detail : null);
+    window.addEventListener('sidebarnav:width', h);
+    return () => window.removeEventListener('sidebarnav:width', h);
+  }, []);
   const navigate   = useNavigate();
-  const { pathname } = useLocation();
   const coRef      = useRef(null);
   const { companies, selectedCompany, selectCompany } = useCompany();
 
@@ -1229,21 +1195,10 @@ const Header = ({ username: usernameProp, onLogout }) => {
     return () => document.removeEventListener('keydown', h);
   }, []);
 
-  useEffect(() => {
-    const onResize = () => setWinWidth(window.innerWidth);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
   const timeStr = time.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true });
-  const dayStr  = DAYS[time.getDay()];
-
-  /* Responsive nav: how many items to show inline vs overflow */
-  const pinnedGroups   = NAV_GROUPS.filter(g => g.alwaysShow);
-  const mainGroups     = NAV_GROUPS.filter(g => !g.alwaysShow);
-  const visibleCount   = winWidth >= 1400 ? 8 : winWidth >= 1200 ? 7 : winWidth >= 1024 ? 6 : winWidth >= 860 ? 5 : winWidth >= 720 ? 4 : 3;
-  const visibleGroups  = mainGroups.slice(0, visibleCount);
-  const overflowGroups = mainGroups.slice(visibleCount);
+  const dateStr = time.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short' });
+  const navW    = navBox ? navBox.width : navCollapsed ? NAV_W_RAIL : NAV_W_OPEN;
+  const navCompact = navBox ? navBox.compact : navCollapsed;
 
   return (
     <>
@@ -1251,191 +1206,176 @@ const Header = ({ username: usernameProp, onLogout }) => {
 
       <div style={{ flexShrink: 0, position: 'relative', zIndex: 200, overflow: 'visible', fontFamily: FONT }}>
 
-        {/* ══ ROW 1 — White utility bar (Finacle: white top row) ══ */}
+        {/* ══ Top bar — navy (classic) or soft neumorphic, framed with the sidebar ══ */}
         <div style={{
-          background: '#FFFFFF',
-          display: 'flex', alignItems: 'center',
-          height: 36,
-          borderBottom: '1px solid #CCCCCC',
-          padding: '0 10px 0 0',
+          background: tk.bg,
+          display: 'flex', alignItems: 'center', gap: 12,
+          height: 50,
+          borderBottom: tk.barBorder,
+          boxShadow: tk.barShadow,
+          padding: '0 12px 0 0',
           overflow: 'visible',
+          transition: 'background 0.25s',
         }}>
-          {/* Brand — left */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            padding: '0 14px', flexShrink: 0, height: '100%',
-            borderRight: '1px solid #DDDDDD',
+          {/* Brand — same width as the sidebar below it, so the two read as one frame */}
+          <div onClick={() => navigate('/dashboard')} title="Go to Dashboard" style={{
+            display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+            width: navW, minWidth: navW, height: '100%', boxSizing: 'border-box',
+            padding: navCompact ? 0 : '0 14px',
+            justifyContent: navCompact ? 'center' : 'flex-start',
+            background: tk.brandBg, borderRight: `1px solid ${tk.line}`,
+            flexShrink: 0, overflow: 'hidden',
+            transition: 'width 0.18s ease, min-width 0.18s ease',
           }}>
             <div style={{
-              width: 24, height: 24, background: TEAL, borderRadius: 4,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+              background: `linear-gradient(135deg, #FB923C, ${TEAL2})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: tk.neu ? NEU.raisedSm : 'inset 0 1px 0 rgba(255,255,255,0.25), 0 2px 6px rgba(0,0,0,0.3)',
             }}>
-              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff" stroke="none" aria-hidden="true">
+                <path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" />
+              </svg>
             </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: TEAL, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>ERP Suite</div>
-              <div style={{ fontSize: 8, color: '#888', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase' }}>Enterprise</div>
-            </div>
+            {!navCompact && (
+              <div style={{ lineHeight: 1.15, whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: tk.strong, letterSpacing: '-0.3px' }}>ERP Suite</div>
+                <div style={{ fontSize: 8.5, color: tk.muted, fontWeight: 700, letterSpacing: '1.4px', textTransform: 'uppercase' }}>Enterprise</div>
+              </div>
+            )}
           </div>
 
-          {/* Spacer */}
+          {/* Shortcut code box — Ctrl K opens the full page search */}
+          <ShortcutBox onPalette={() => setShowPalette(true)} />
+
           <div style={{ flex: 1 }} />
 
-          {/* Right controls — match Finacle: User info | Company | tools | Sign Out */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
-
-            {/* User label (like "User: ADMIN" in Finacle) */}
-            <div style={{ fontSize: 12, color: '#444', padding: '0 12px', borderRight: '1px solid #DDDDDD', whiteSpace: 'nowrap' }}>
-              User: <strong style={{ color: '#111' }}>{username}</strong>
-              {userRole && <span style={{ fontSize: 10.5, color: '#888', marginLeft: 5 }}>({userRole})</span>}
-            </div>
-
-            {/* Company Switcher */}
-            <div ref={coRef} style={{ position: 'relative', flexShrink: 0, height: '100%', display: 'flex', alignItems: 'center' }}>
-              <button onClick={() => setShowCoSwitch(p => !p)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '0 12px', height: 36,
-                  background: showCoSwitch ? '#F0F4F4' : 'transparent',
-                  border: 'none', borderRight: '1px solid #DDDDDD', cursor: 'pointer',
-                  color: '#333', fontSize: 11.5, fontWeight: 600, fontFamily: FONT,
-                  whiteSpace: 'nowrap', maxWidth: 200,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#F0F4F4'; }}
-                onMouseLeave={e => { if (!showCoSwitch) e.currentTarget.style.background = 'transparent'; }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130, display: 'block' }}>
+          {/* Company switcher */}
+          <div ref={coRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={() => setShowCoSwitch(p => !p)}
+              title={selectedCompany?.companyName || 'Select Company'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                padding: '0 10px 0 5px', height: 38, maxWidth: 270,
+                background: showCoSwitch ? tk.pillOpenBg : tk.pillBg,
+                border: `1px solid ${showCoSwitch ? tk.pillOpenBorder : tk.pillBorder}`,
+                boxShadow: showCoSwitch ? tk.pillOpenShadow : tk.pillShadow,
+                borderRadius: tk.neu ? 12 : 9, cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+                transition: 'background 0.12s, border-color 0.12s, box-shadow 0.15s',
+              }}
+              onMouseEnter={e => { if (!showCoSwitch) { e.currentTarget.style.background = tk.pillHoverBg; e.currentTarget.style.borderColor = tk.pillHoverBorder; e.currentTarget.style.boxShadow = tk.pillHoverShadow; } }}
+              onMouseLeave={e => { if (!showCoSwitch) { e.currentTarget.style.background = tk.pillBg; e.currentTarget.style.borderColor = tk.pillBorder; e.currentTarget.style.boxShadow = tk.pillShadow; } }}>
+              <span style={{
+                position: 'relative', width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                background: tk.coTileBg,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: tk.coTileShadow,
+              }}>
+                <Building2 size={15} color={tk.coTileIcon} strokeWidth={2} />
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.2 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: tk.muted, letterSpacing: '0.9px', textTransform: 'uppercase' }}>Company</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: tk.strong, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>
                   {selectedCompany ? selectedCompany.companyName : 'Select Company'}
                 </span>
-                <ChevronDown size={10} color="#666" style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCoSwitch ? 'rotate(180deg)' : 'none' }} />
-              </button>
-              {showCoSwitch && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, minWidth: 270, background: '#fff',
-                  boxShadow: '0 8px 28px rgba(0,0,0,0.16)',
-                  zIndex: 9999, overflow: 'hidden', border: '1px solid #CCCCCC', borderTop: `2px solid ${TEAL2}` }}>
-                  <div style={{ background: '#F8FAFC', padding: '8px 13px', borderBottom: '1px solid #EEEEEE' }}>
-                    <div style={{ fontSize: 9.5, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Switch Company</div>
-                  </div>
-                  {companies.length === 0 ? (
-                    <div style={{ padding: '16px 13px', fontSize: 12.5, color: '#6b7280', textAlign: 'center' }}>
-                      No companies.{' '}<span onClick={() => { navigate('/admin/companies'); setShowCoSwitch(false); }} style={{ color: '#EA580C', cursor: 'pointer', fontWeight: 700 }}>Add one →</span>
-                    </div>
-                  ) : (
-                    <div style={{ maxHeight: 230, overflowY: 'auto' }}>
-                      {companies.map(co => {
-                        const isAct = selectedCompany?.companyId === co.companyId;
-                        return (
-                          <div key={co.companyId} onClick={() => { if (isAct) return; setShowCoSwitch(false); setPendingCompany(co); }}
-                            style={{ padding: '9px 13px', cursor: 'pointer',
-                              background: isAct ? '#EEF9F8' : '#fff', borderBottom: '1px solid #F5F5F5',
-                              borderLeft: `3px solid ${isAct ? TEAL2 : 'transparent'}` }}
-                            onMouseEnter={e => { if (!isAct) e.currentTarget.style.background = '#F8FAFC'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = isAct ? '#EEF9F8' : '#fff'; }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, color: isAct ? TEAL : '#111827', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Building2 size={11} color={isAct ? TEAL2 : '#94a3b8'} />{co.companyName}
-                              {co.isDefault && <span style={{ fontSize: 9, background: '#EEF9F8', color: TEAL, borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>DEFAULT</span>}
-                            </div>
-                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1, paddingLeft: 17 }}>{co.gstin || co.city || ''}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div onClick={() => { navigate('/admin/companies'); setShowCoSwitch(false); }}
-                    style={{ padding: '8px 13px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: TEAL, background: '#F8FAFC', borderTop: '1px solid #EEEEEE', display: 'flex', alignItems: 'center', gap: 5 }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#EEF9F8'} onMouseLeave={e => e.currentTarget.style.background = '#F8FAFC'}>
-                    <Settings size={11} /> Manage Companies
-                  </div>
+              </span>
+              <ChevronDown size={12} color={tk.txt} style={{ flexShrink: 0, transition: 'transform 0.2s', transform: showCoSwitch ? 'rotate(180deg)' : 'none' }} />
+            </button>
+            {showCoSwitch && tk.neu && (
+              <CompanyMenuSoft
+                companies={companies} selectedCompany={selectedCompany}
+                onPick={co => { setShowCoSwitch(false); setPendingCompany(co); }}
+                onManage={() => { navigate('/admin/companies'); setShowCoSwitch(false); }}
+              />
+            )}
+            {showCoSwitch && !tk.neu && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, minWidth: 280, background: '#fff',
+                borderRadius: 10, boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+                zIndex: 9999, overflow: 'hidden', border: '1px solid #E5E7EB', borderTop: `3px solid ${TEAL}` }}>
+                <div style={{ background: '#F8FAFC', padding: '8px 13px', borderBottom: '1px solid #EEEEEE' }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Switch Company</div>
                 </div>
-              )}
-            </div>
+                {companies.length === 0 ? (
+                  <div style={{ padding: '16px 13px', fontSize: 12.5, color: '#6b7280', textAlign: 'center' }}>
+                    No companies.{' '}<span onClick={() => { navigate('/admin/companies'); setShowCoSwitch(false); }} style={{ color: '#EA580C', cursor: 'pointer', fontWeight: 700 }}>Add one →</span>
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 230, overflowY: 'auto' }}>
+                    {companies.map(co => {
+                      const isAct = selectedCompany?.companyId === co.companyId;
+                      return (
+                        <div key={co.companyId} onClick={() => { if (isAct) return; setShowCoSwitch(false); setPendingCompany(co); }}
+                          style={{ padding: '9px 13px', cursor: 'pointer',
+                            background: isAct ? '#FFF3EA' : '#fff', borderBottom: '1px solid #F5F5F5',
+                            borderLeft: `3px solid ${isAct ? TEAL2 : 'transparent'}` }}
+                          onMouseEnter={e => { if (!isAct) e.currentTarget.style.background = '#F8FAFC'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = isAct ? '#FFF3EA' : '#fff'; }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: isAct ? TEAL : '#111827', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Building2 size={11} color={isAct ? TEAL2 : '#94a3b8'} />{co.companyName}
+                            {co.isDefault && <span style={{ fontSize: 9, background: '#FFF3EA', color: TEAL, borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>DEFAULT</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1, paddingLeft: 17 }}>{co.gstin || co.city || ''}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div onClick={() => { navigate('/admin/companies'); setShowCoSwitch(false); }}
+                  style={{ padding: '8px 13px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: TEAL, background: '#F8FAFC', borderTop: '1px solid #EEEEEE', display: 'flex', alignItems: 'center', gap: 5 }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#FFF3EA'} onMouseLeave={e => e.currentTarget.style.background = '#F8FAFC'}>
+                  <Settings size={11} /> Manage Companies
+                </div>
+              </div>
+            )}
+          </div>
 
-            {/* Search */}
-            <button onClick={() => setShowPalette(true)} title="Search (Ctrl+K)"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 36,
-                background: 'transparent', border: 'none', borderRight: '1px solid #DDDDDD',
-                cursor: 'pointer', color: '#555', flexShrink: 0 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4F4'; e.currentTarget.style.color = '#111'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#555'; }}>
-              <Search size={13} strokeWidth={2} />
-            </button>
+          {/* Tools — Look switch / Refresh / Chat / Notifications / Lock */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: tk.neu ? 8 : 2, paddingLeft: 10, height: 34,
+            borderLeft: `1px solid ${tk.line}`, flexShrink: 0 }}>
+            <UiScaleSelect />
+            <NavThemeToggle />
 
-            {/* Refresh */}
             <button onClick={() => window.location.reload()} title="Refresh"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 36,
-                background: 'transparent', border: 'none', borderRight: '1px solid #DDDDDD',
-                cursor: 'pointer', color: '#555', flexShrink: 0 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F0F4F4'; e.currentTarget.style.color = '#111'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#555'; }}>
-              <RefreshCw size={11} strokeWidth={2} />
+              style={ghostBtn(false, tk)} onMouseEnter={ghostIn(tk)} onMouseLeave={ghostOut(false, tk)}>
+              <RefreshCw size={15} strokeWidth={2} />
             </button>
 
-            {/* Chat */}
             {openPanel && (
               <button onClick={openPanel} title="Chat"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 36,
-                  background: 'transparent', border: 'none', borderRight: '1px solid #DDDDDD',
-                  cursor: 'pointer', color: '#EA580C', flexShrink: 0, position: 'relative' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#FFF7ED'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
-                {chatUnread > 0 && <span style={{ position: 'absolute', top: 5, right: 3, width: 12, height: 12, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 7, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{chatUnread > 9 ? '9+' : chatUnread}</span>}
+                style={ghostBtn(false, tk)} onMouseEnter={ghostIn(tk)} onMouseLeave={ghostOut(false, tk)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                {chatUnread > 0 && <span style={countBadge(true, tk)}>{chatUnread > 9 ? '9+' : chatUnread}</span>}
               </button>
             )}
 
-            {/* Notifications */}
-            <div style={{ borderRight: '1px solid #DDDDDD', display: 'flex', alignItems: 'center', padding: '0 3px', height: 36 }}>
-              <NotificationCentre companyId={selectedCompany?.companyId} />
-            </div>
+            <NotificationCentre companyId={selectedCompany?.companyId} userId={user?.id || user?.userId} />
 
-            {/* Lock screen button */}
             {lockCtx?.hasPin && (
               <button onClick={() => lockCtx.lock()} title="Lock Screen"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 36,
-                  background: 'transparent', border: 'none', borderRight: '1px solid #DDDDDD',
-                  cursor: 'pointer', color: '#555', flexShrink: 0 }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.color = '#3b82f6'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#555'; }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                style={ghostBtn(false, tk)} onMouseEnter={ghostIn(tk)} onMouseLeave={ghostOut(false, tk)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                 </svg>
               </button>
             )}
-
-            {/* Time */}
-            <div style={{ padding: '0 10px', textAlign: 'center', flexShrink: 0, lineHeight: 1.25,
-              borderRight: '1px solid #DDDDDD', height: 36,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#222' }}>{timeStr}</div>
-              <div style={{ fontSize: 8.5, color: '#888' }}>{dayStr}</div>
-            </div>
-
-            {/* User / Sign Out — like Finacle's "Sign Out" on the far right */}
-            <UserDropdown
-              user={user} username={username} userRole={userRole} initials={initials}
-              onLogout={onLogout} onNavigate={navigate}
-            />
           </div>
-        </div>
 
-        {/* ══ ROW 2 — Blue menu bar (Finacle-style blue banner) ══ */}
-        <div style={{
-          background: '#3A6186',
-          display: 'flex', alignItems: 'center',
-          height: 36,
-          borderBottom: '2px solid #2A4D6E',
-          padding: '0 6px',
-          gap: 3,
-          overflow: 'visible',
-        }}>
-          {visibleGroups.map(group => (
-            <NavGroup key={group.key} group={group} pathname={pathname} onNavigate={navigate} />
-          ))}
-          <MoreMenu groups={overflowGroups} pathname={pathname} onNavigate={navigate} />
-          {pinnedGroups.map(group => (
-            <NavGroup key={group.key} group={group} pathname={pathname} onNavigate={navigate} alignRight />
-          ))}
+          {/* Date & time */}
+          <div className="hdr-hide-sm" style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center',
+            lineHeight: 1.2, padding: '0 12px', height: 30, flexShrink: 0,
+            borderLeft: `1px solid ${tk.line}`, borderRight: `1px solid ${tk.line}`,
+          }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: tk.strong, whiteSpace: 'nowrap' }}>{timeStr}</span>
+            <span style={{ fontSize: 10, fontWeight: 500, color: tk.muted, whiteSpace: 'nowrap' }}>{dateStr}</span>
+          </div>
+
+          {/* User — name, role and the profile / sign-out menu */}
+          <UserDropdown
+            user={user} username={username} userRole={userRole} initials={initials}
+            onLogout={onLogout} onNavigate={navigate}
+          />
         </div>
 
       </div>

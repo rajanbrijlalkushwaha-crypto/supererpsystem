@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
-import { printDeliveryChallan } from '../../utils/printDeliveryChallan';
+import { useAuth } from '../../context/AuthContext';
+import { printSalesBill } from '../../utils/printSalesBill';
 import AuditTrail from '../../components/AuditTrail';
 import ActivityDrawer from '../../components/ActivityDrawer';
+import { withPrintFont } from '../../utils/printFont';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const P  = '#3A6186';
@@ -17,6 +19,39 @@ const today = () => new Date().toISOString().split('T')[0];
 const billFileUrl = (billId, fileName, companyId, dl=false) =>
   `/api/bills/${billId}/download/${encodeURIComponent(fileName)}?companyId=${companyId}&type=sales${dl?'&dl=1':''}`;
 const isImage = n => /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(n||'');
+/* e-way validity in whole calendar days from today: <0 expired, 0 expires today */
+const ewayDaysLeft = v => {
+  if (!v) return null;
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  if (isNaN(d)) return null;
+  const t = new Date(); t.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0);
+  return Math.round((d - t) / 86400000);
+};
+const ewayOpen = b => b.ewayStatus !== 'delivered' && !!b.ewayValidUpto;
+
+/* Same "Prepared By" lookup as the Sales Order print — the user who created
+   the order, from its audit trail, with a live fetch for their login ID and
+   designation (not stored on the audit snapshot itself). */
+async function getPreparedBy(order) {
+  const createdBy = Array.isArray(order?.audit) ? order.audit.find(a => a.action === 'created')?.by : null;
+  let preparedUser = null;
+  if (createdBy?.id || createdBy?.username) {
+    try {
+      const r = await fetch('/api/auth/users');
+      if (r.ok) {
+        const all = await r.json();
+        preparedUser = all.find(u => String(u.id) === String(createdBy.id)) ||
+                       all.find(u => u.username === createdBy.username) || null;
+      }
+    } catch {}
+  }
+  return {
+    name: createdBy?.name || createdBy?.username || '',
+    loginId: preparedUser?.username || createdBy?.username || '',
+    designation: preparedUser?.designation || '',
+  };
+}
 const isPDF   = n => /\.pdf$/i.test(n||'');
 
 /* Indian Financial Year helpers */
@@ -86,7 +121,7 @@ async function printWarrantyCert(bill, order, company, dcList) {
   const orderDate  = fmtD(order?.orderDate || order?.date);
   const clientPONo = order?.customerPO || order?.orderNo || '—';
   const delivAddr  = order?.shipToAddress || order?.deliveryAddr || order?.address || '—';
-  const refNo      = order?.orderId || bill.orderId || '—';
+  const refNo      = order?.orderNo || bill.orderNo || order?.orderId || bill.orderId || '—';
 
   /* ── DC ── */
   const dc = (dcList||[]).find(d => String(d.dcId) === String(bill.linkedDcId)) || null;
@@ -94,228 +129,193 @@ async function printWarrantyCert(bill, order, company, dcList) {
   /* ── Items ── */
   const billItems = (bill.items || order?.items || []).filter(it => it.description || it.itemName);
 
+  /* ── Prepared By ── */
+  const prepared = await getPreparedBy(order);
+
   const logoTag = logoB64
-    ? `<img src="${logoB64}" style="height:60px;max-width:160px;object-fit:contain;display:block;">`
-    : `<div style="font-size:26pt;font-weight:900;color:#133d80;letter-spacing:2px;">${coName}</div>`;
+    ? `<img src="${logoB64}" style="height:50px;max-width:140px;object-fit:contain;">`
+    : `<span style="font-size:13pt;font-weight:bold;color:#104f4f;">${coName}</span>`;
+
+  const val = v => v || '';
+  const field = (lbl, v) => `
+    <div class="field-row">
+      <span class="field-lbl">${lbl}</span>
+      <span class="field-colon">:</span>
+      <span class="field-val">${val(v)}</span>
+    </div>`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Warranty Certificate</title>
+<title>Warranty Certificate — ${val(bill.billNo)}</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Times New Roman',Times,serif;font-size:10.5pt;color:#1a1a1a;background:#fff;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .page{padding:8mm 12mm 6mm;}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; padding: 12px; }
+  .outer { border: 1.5px solid #000; width: 100%; border-collapse: collapse; }
+  .outer td, .outer th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; }
+  .section-hdr { text-align: center; font-weight: bold; font-size: 11pt; background: #fff; padding: 4px; }
+  .col-hdr { font-weight: bold; text-decoration: underline; font-size: 10pt; }
+  .field-row { display: flex; gap: 2px; margin-bottom: 2px; font-size: 9.5pt; }
+  .field-lbl { min-width: 110px; font-weight: normal; }
+  .field-colon { margin: 0 4px; }
+  .field-val { flex: 1; }
+  .item-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .item-table th { border: 1px solid #000; padding: 4px 5px; font-weight: bold; text-align: center; background: #fff; }
+  .item-table td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; }
+  .wty-grid { display: grid; grid-template-columns: repeat(3,1fr); }
+  .wty-box { border-right: 1px solid #000; padding: 6px 10px; text-align: center; }
+  .wty-box:last-child { border-right: none; }
+  .wty-box .wlbl { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+  .wty-box .wval { font-size: 12pt; font-weight: bold; }
+  .terms { font-size: 9.5pt; line-height: 1.6; padding: 6px 8px; }
+  .terms p { margin-bottom: 6px; }
+  .center { text-align: center; }
+  @media print { @page { margin: 8mm; size: A4; } }
 
-  /* ── Header band ── */
-  .header{display:flex;justify-content:space-between;align-items:center;
-    border-bottom:3px solid #133d80;padding-bottom:10px;margin-bottom:14px;}
-  .co-info{flex:1;}
-  .co-name{font-size:18pt;font-weight:bold;color:#133d80;letter-spacing:0.5px;margin-bottom:3px;}
-  .co-meta{font-size:9pt;color:#555;line-height:1.6;}
-  .logo-area{text-align:right;min-width:160px;}
-
-  /* ── Certificate title ── */
-  .cert-title{text-align:center;margin:0 0 14px;}
-  .cert-title h1{font-size:16pt;font-weight:bold;letter-spacing:3px;text-transform:uppercase;
-    color:#133d80;border-top:1.5px solid #133d80;border-bottom:1.5px solid #133d80;
-    padding:6px 0;display:inline-block;min-width:60%;}
-  .cert-no{font-size:10pt;color:#666;margin-top:4px;}
-
-  /* ── Two-column meta row ── */
-  .meta-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px;}
-  .meta-box{border:1px solid #D1D5DB;border-radius:6px;padding:10px 12px;background:#FAFAFA;}
-  .meta-box .label{font-size:8.5pt;font-weight:bold;text-transform:uppercase;
-    letter-spacing:0.6px;color:#133d80;margin-bottom:6px;border-bottom:1px solid #E5EAF2;padding-bottom:4px;}
-  .meta-box .line{display:flex;gap:6px;margin-bottom:3px;font-size:10pt;}
-  .meta-box .key{font-weight:bold;min-width:90px;color:#374151;}
-  .meta-box .val{color:#1a1a1a;}
-
-  /* ── Certification text ── */
-  .cert-body{margin-bottom:14px;line-height:1.6;font-size:10.5pt;}
-  .order-details{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;
-    margin:8px 0 0 24px;font-size:10.5pt;}
-  .order-details .dk{font-weight:bold;text-align:right;}
-
-  /* ── Product table ── */
-  .prod-section{margin-bottom:14px;}
-  .prod-header{background:#F5A623;color:#1a1a1a;font-weight:bold;font-size:11pt;
-    text-align:center;padding:6px;border:1px solid #d4870a;border-bottom:none;border-radius:4px 4px 0 0;}
-  table.prod{width:100%;border-collapse:collapse;border:1px solid #ccc;}
-  table.prod th{background:#2a3a5a;color:#fff;padding:6px 8px;font-size:9.5pt;
-    font-weight:bold;text-align:center;border:1px solid #1a2a4a;}
-  table.prod td{padding:7px 8px;font-size:10pt;border:1px solid #D1D5DB;vertical-align:top;}
-  table.prod tbody tr:nth-child(odd) td{background:#FAFBFF;}
-  table.prod .blank td{height:24px;background:#fff;}
-
-  /* ── Warranty details box ── */
-  .wty-section{margin-bottom:14px;}
-  .wty-title{font-size:11pt;font-weight:bold;color:#133d80;margin-bottom:8px;
-    border-bottom:2px solid #133d80;padding-bottom:3px;}
-  .wty-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
-  .wty-box{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:8px 12px;text-align:center;}
-  .wty-box .wlbl{font-size:8.5pt;font-weight:bold;text-transform:uppercase;
-    letter-spacing:0.5px;color:#133d80;margin-bottom:4px;}
-  .wty-box .wval{font-size:13pt;font-weight:bold;color:#104f4f;}
-
-  /* ── Terms ── */
-  .terms{font-size:9.5pt;color:#374151;line-height:1.6;margin-bottom:14px;}
-  .terms p{margin-bottom:7px;}
-
-  /* ── Signature ── */
-  .sig-section{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:14px;margin-top:4px;}
-  .sig-box{text-align:center;}
-  .sig-line{border-top:1px solid #555;margin-top:44px;padding-top:5px;font-size:10pt;font-weight:bold;}
-  .sig-sub{font-size:9pt;color:#666;margin-top:2px;}
-
-  /* ── Footer ── */
-  .footer{border-top:2px solid #133d80;border-bottom:2px solid #133d80;padding:5px 0;
-    text-align:center;font-size:9pt;color:#374151;margin-top:6px;}
-
-  @media print{
-    @page{margin:7mm;size:A4 portrait;}
-    .page{padding:0;}
-  }
 </style>
-</head><body><div class="page">
+</head><body>
+<table class="outer" style="margin-bottom:0;">
 
-<!-- ═══ HEADER ═══ -->
-<div class="header">
-  <div class="co-info">
-    <div class="co-name">${coName}</div>
-    <div class="co-meta">
-      ${coAddr ? `${coAddr}<br>` : ''}
-      ${coGstin ? `GSTIN: ${coGstin}` : ''}${coPhone ? `&nbsp;&nbsp;|&nbsp;&nbsp;Ph: ${coPhone}` : ''}${coEmail ? `&nbsp;&nbsp;|&nbsp;&nbsp;${coEmail}` : ''}
+  <!-- Company Header -->
+  <tr>
+    <td colspan="2" style="padding:8px 10px; border-bottom:2px solid #000;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        ${logoTag}
+        <div>
+          <div style="font-size:13pt; font-weight:bold;">${coName}</div>
+          <div style="font-size:8.5pt; color:#333;">${coAddr}</div>
+          <div style="font-size:8.5pt; color:#333;">${coGstin ? `GSTIN: ${coGstin}` : ''}${coPhone ? ` &nbsp;|&nbsp; Ph: ${coPhone}` : ''}${coEmail ? ` &nbsp;|&nbsp; ${coEmail}` : ''}</div>
+        </div>
+      </div>
+    </td>
+  </tr>
+
+  <!-- Title -->
+  <tr><td colspan="2" style="text-align:center; font-size:13pt; font-weight:bold; padding:6px; border-bottom:2px solid #000;">Warranty Certificate</td></tr>
+
+  <!-- Ref / Date -->
+  <tr>
+    <td style="width:50%;">${field('Date', fmtD(bill.billDate))}</td>
+    <td style="width:50%;">${field('Order ID / File No.', refNo)}</td>
+  </tr>
+
+  <!-- Client Details + Order Reference headers -->
+  <tr>
+    <td><span class="col-hdr">Client Details</span></td>
+    <td><span class="col-hdr">Order Reference</span></td>
+  </tr>
+
+  <!-- Client + Order fields -->
+  <tr>
+    <td>
+      ${field('Name', clientName)}
+      ${field('Address', clientAddr)}
+      ${field('GSTIN/UIN', clientGstin)}
+      ${field('Contact', clientPhone)}
+    </td>
+    <td>
+      ${field('Order Date', orderDate)}
+      ${field('Client PO No.', clientPONo)}
+      ${field('Invoice No.', bill.billNo)}
+      ${dc ? field('Challan No.', dc.dcNo) : ''}
+      ${field('Delivery Addr.', delivAddr)}
+    </td>
+  </tr>
+
+  <!-- Certification text -->
+  <tr><td colspan="2" style="padding:8px; font-size:10pt; line-height:1.5;">
+    This is to certify that the following items have been supplied to <strong>${clientName}</strong> and are covered under our warranty as detailed below:
+  </td></tr>
+
+  <!-- Product Description -->
+  <tr><td colspan="2" class="section-hdr" style="border-top:1.5px solid #000; border-bottom:1px solid #000;">Product Description</td></tr>
+  <tr><td colspan="2" style="padding:0;">
+    <table class="item-table">
+      <thead>
+        <tr>
+          <th style="width:5%;">Sr No.</th>
+          <th style="text-align:left;width:32%;">Product</th>
+          <th style="width:7%;">Qty</th>
+          <th style="width:12%;">Invoice Date</th>
+          <th style="width:18%;">Delivery Challan No.</th>
+          <th style="width:12%;">Delivered Date</th>
+          <th style="text-align:left;width:14%;">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${billItems.length === 0
+          ? `<tr><td colspan="7" style="text-align:center;color:#666;font-style:italic;padding:16px;">No items</td></tr>`
+          : billItems.map((it, i) => `
+        <tr>
+          <td class="center">${i+1}</td>
+          <td>${it.description||it.itemName||'—'}</td>
+          <td class="center">${it.qty||'—'}</td>
+          <td class="center">${fmtD(bill.billDate)}</td>
+          <td class="center">${dc?.dcNo || bill.linkedDcNo || bill.billNo || '—'}</td>
+          <td class="center">${dc ? fmtD(dc.dcDate) : '—'}</td>
+          <td>${it.remarks||''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </td></tr>
+
+  <!-- Warranty Terms -->
+  <tr><td colspan="2" class="section-hdr" style="border-top:1.5px solid #000; border-bottom:1px solid #000;">Warranty Terms and Conditions</td></tr>
+  <tr><td colspan="2" style="padding:0;">
+    <div class="wty-grid">
+      <div class="wty-box">
+        <div class="wlbl">Warranty Period</div>
+        <div class="wval">${wtyYears} ${wtyYears === 1 ? 'Year' : 'Years'}</div>
+      </div>
+      <div class="wty-box">
+        <div class="wlbl">Warranty Start Date</div>
+        <div class="wval">${wtyStart}</div>
+      </div>
+      <div class="wty-box">
+        <div class="wlbl">Warranty End Date</div>
+        <div class="wval">${wtyEnd}</div>
+      </div>
     </div>
-  </div>
-  <div class="logo-area">
-    ${logoTag}
-  </div>
-</div>
+  </td></tr>
 
-<!-- ═══ CERTIFICATE TITLE ═══ -->
-<div class="cert-title">
-  <h1>Warranty Certificate</h1>
-  <div class="cert-no">Date: <strong>${fmtD(bill.billDate)}</strong>&nbsp;&nbsp;&nbsp;&nbsp;Ref No.: <strong>${refNo}</strong></div>
-</div>
+  <!-- Terms & Exclusions -->
+  <tr><td colspan="2" class="terms">
+    <p>1. The warranty covers manufacturing defects in materials and workmanship under normal use and maintenance. It does not cover damage resulting from accidents, misuse, abuse, improper maintenance, or unauthorized alterations or repairs. The warranty does not extend to any third-party components or accessories that may be integrated into the cabin.</p>
+    <p><strong>2. Exclusions — The warranty does not cover:</strong><br>
+    &nbsp;&nbsp;a. Normal wear and tear.<br>
+    &nbsp;&nbsp;b. Cosmetic issues that do not affect the cabin's functionality.<br>
+    &nbsp;&nbsp;c. Damage or defects caused by natural disasters, environmental factors, or acts of nature.<br>
+    &nbsp;&nbsp;d. Damage or defects caused by modifications or alterations made by parties other than the supplier or its authorized representatives.</p>
+  </td></tr>
 
-<!-- ═══ CLIENT + ORDER META ═══ -->
-<div class="meta-row">
-  <div class="meta-box">
-    <div class="label">To (Client Details)</div>
-    <div class="line"><span class="key">Name</span><span class="val"><strong>${clientName}</strong></span></div>
-    ${clientAddr ? `<div class="line"><span class="key">Address</span><span class="val">${clientAddr}</span></div>` : ''}
-    ${clientGstin ? `<div class="line"><span class="key">GSTIN/UIN</span><span class="val">${clientGstin}</span></div>` : ''}
-    ${clientPhone ? `<div class="line"><span class="key">Contact</span><span class="val">${clientPhone}</span></div>` : ''}
-  </div>
-  <div class="meta-box">
-    <div class="label">Order Reference</div>
-    <div class="line"><span class="key">Order Date</span><span class="val">${orderDate}</span></div>
-    <div class="line"><span class="key">Client PO No.</span><span class="val"><strong>${clientPONo}</strong></span></div>
-    <div class="line"><span class="key">Invoice No.</span><span class="val">${bill.billNo || '—'}</span></div>
-    ${dc ? `<div class="line"><span class="key">Challan No.</span><span class="val">${dc.dcNo}</span></div>` : ''}
-    <div class="line"><span class="key">Delivery Addr.</span><span class="val">${delivAddr}</span></div>
-  </div>
-</div>
+  <!-- Signature -->
+  <tr>
+    <td style="text-align:center; padding:10px 10px 8px; width:50%;">
+      <div style="height:70px; margin:0 8px 4px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:8.5pt;">Signature</div>
+      <div style="border-top:1px solid #000; margin:0 8px; padding-top:4px;">
+        <strong>Prepared By</strong><br>
+        <span style="font-size:9.5pt;">${prepared.name || '&nbsp;'}</span>
+        ${prepared.loginId ? `<br><span style="font-size:8pt;color:#555;">Login ID: ${prepared.loginId}</span>` : ''}
+        ${prepared.designation ? `<br><span style="font-size:8pt;color:#555;">${prepared.designation}</span>` : ''}
+      </div>
+    </td>
+    <td style="text-align:center; padding:10px 10px 8px; width:50%;">
+      <div style="height:70px; margin:0 8px 4px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:8.5pt;">Signature &amp; Stamp</div>
+      <div style="border-top:1px solid #000; margin:0 8px; padding-top:4px;">
+        <strong>Authorised Signatory</strong><br><span style="font-size:9.5pt;">For ${coName}</span>
+      </div>
+    </td>
+  </tr>
 
-<!-- ═══ CERTIFICATION TEXT ═══ -->
-<div class="cert-body">
-  This is to certify that the following items have been supplied to <strong>${clientName}</strong>
-  and are covered under our warranty as detailed below:
-</div>
+  <tr><td colspan="2" style="border-top:1px solid #000; text-align:right; font-size:8pt; color:#555;">
+    Printed: ${fmtD(new Date().toISOString().slice(0,10))}
+  </td></tr>
 
-<!-- ═══ PRODUCT TABLE ═══ -->
-<div class="prod-section">
-  <div class="prod-header">Product Description</div>
-  <table class="prod">
-    <thead>
-      <tr>
-        <th style="width:5%;">Sr No.</th>
-        <th style="text-align:left;width:32%;">Product</th>
-        <th style="width:7%;">Qty</th>
-        <th style="width:12%;">Invoice Date</th>
-        <th style="width:18%;">Delivery Challan No.</th>
-        <th style="width:12%;">Delivered Date</th>
-        <th style="text-align:left;width:14%;">Remarks</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${billItems.length === 0
-        ? `<tr><td colspan="7" style="text-align:center;color:#888;font-style:italic;padding:16px;">No items</td></tr>`
-        : billItems.map((it, i) => `
-      <tr>
-        <td style="text-align:center;">${i+1}</td>
-        <td>${it.description||it.itemName||'—'}</td>
-        <td style="text-align:center;">${it.qty||'—'}</td>
-        <td style="text-align:center;">${fmtD(bill.billDate)}</td>
-        <td style="text-align:center;">${dc?.dcNo || bill.linkedDcNo || bill.billNo || '—'}</td>
-        <td style="text-align:center;">${dc ? fmtD(dc.dcDate) : '—'}</td>
-        <td>${it.remarks||''}</td>
-      </tr>`).join('')}
-      <tr class="blank"><td colspan="7"></td></tr>
-      <tr class="blank"><td colspan="7"></td></tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- ═══ WARRANTY DETAILS ═══ -->
-<div class="wty-section">
-  <div class="wty-title">Warranty Terms and Conditions</div>
-  <div class="wty-grid">
-    <div class="wty-box">
-      <div class="wlbl">Warranty Period</div>
-      <div class="wval">${wtyYears} ${wtyYears === 1 ? 'Year' : 'Years'}</div>
-    </div>
-    <div class="wty-box">
-      <div class="wlbl">Warranty Start Date</div>
-      <div class="wval">${wtyStart}</div>
-    </div>
-    <div class="wty-box" style="background:#FEF3C7;border-color:#FDE68A;">
-      <div class="wlbl" style="color:#92400E;">Warranty End Date</div>
-      <div class="wval" style="color:#92400E;">${wtyEnd}</div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ TERMS ═══ -->
-<div class="terms">
-  <p>1. The warranty covers manufacturing defects in materials and workmanship under normal use and maintenance. It does not cover damage resulting from accidents, misuse, abuse, improper maintenance, or unauthorized alterations or repairs. The warranty does not extend to any third-party components or accessories that may be integrated into the cabin.</p>
-  <p><strong>2. Exclusions — The warranty does not cover:</strong><br>
-  &nbsp;&nbsp;a. Normal wear and tear.<br>
-  &nbsp;&nbsp;b. Cosmetic issues that do not affect the cabin's functionality.<br>
-  &nbsp;&nbsp;c. Damage or defects caused by natural disasters, environmental factors, or acts of nature.<br>
-  &nbsp;&nbsp;d. Damage or defects caused by modifications or alterations made by parties other than the supplier or its authorized representatives.</p>
-</div>
-
-<!-- ═══ SIGNATURE ═══ -->
-<div style="margin-bottom:6px;font-weight:bold;font-size:10pt;">Please Noted Record &nbsp;&nbsp; For ${coName}</div>
-<div class="sig-section">
-  <div class="sig-box">
-    <div class="sig-line">Customer Signature</div>
-    <div class="sig-sub">Name &amp; Stamp</div>
-  </div>
-  <div class="sig-box">
-    <div class="sig-line">Service Engineer</div>
-    <div class="sig-sub">Name &amp; Sign</div>
-  </div>
-  <div class="sig-box">
-    <div class="sig-line">Authorized Signatory</div>
-    <div class="sig-sub">For ${coName}</div>
-  </div>
-</div>
-
-<!-- ═══ FOOTER ═══ -->
-<div class="footer">
-  <strong>Registered Address:</strong> ${coAddr}
-  ${coPhone ? `&nbsp;&nbsp;|&nbsp;&nbsp;<strong>Mobile:</strong> ${coPhone}` : ''}
-  ${coEmail ? `&nbsp;&nbsp;|&nbsp;&nbsp;<strong>Email:</strong> ${coEmail}` : ''}
-</div>
-
+</table>
 <script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
-</div></body></html>`;
+</body></html>`;
 
   const w = window.open('','_blank','width=900,height=980,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 }
 
 /* ──────────────────────────────────────────────
@@ -383,225 +383,163 @@ async function printCompletionCert(order, company) {
   const itemsTableRows = items.length > 0
     ? items.map((it, idx) => `
         <tr>
-          <td style="padding:5px 8px;border:1px solid #bbb;text-align:center;">${idx+1}</td>
-          <td style="padding:5px 8px;border:1px solid #bbb;">${it.itemName||it.description||'—'}</td>
-          <td style="padding:5px 8px;border:1px solid #bbb;text-align:center;">${it.qty||'—'}</td>
-          <td style="padding:5px 8px;border:1px solid #bbb;text-align:center;">${it.unit||it.uom||'Nos'}</td>
+          <td class="center">${idx+1}</td>
+          <td>${it.itemName||it.description||'—'}</td>
+          <td class="center">${it.qty||'—'}</td>
+          <td class="center">${it.unit||it.uom||'Nos'}</td>
         </tr>`).join('')
-    : `<tr><td colspan="4" style="padding:5px 8px;border:1px solid #bbb;text-align:center;">—</td></tr>`;
+    : `<tr><td colspan="4" style="text-align:center;color:#666;font-style:italic;">—</td></tr>`;
+
+  /* ── Prepared By ── */
+  const prepared = await getPreparedBy(order);
+
+  const val = v => v || '';
+  const field = (lbl, v) => `
+    <div class="field-row">
+      <span class="field-lbl">${lbl}</span>
+      <span class="field-colon">:</span>
+      <span class="field-val">${val(v)}</span>
+    </div>`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Completion Certificate — ${order?.orderNo||order?.orderId}</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Times New Roman',Times,serif;font-size:10.5pt;color:#000;background:#e8eaf0;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
-
-  /* ── OUTER PAGE WRAPPER ── */
-  .page{
-    width:210mm;min-height:297mm;margin:8mm auto;background:#fff;
-    border:3px double #133d80;
-    padding:0;
-    position:relative;
-    display:flex;flex-direction:column;
-  }
-  /* inner gold/blue accent stripe */
-  .page::before{
-    content:'';position:absolute;inset:5px;
-    border:1px solid #c8a951;pointer-events:none;
-  }
-
-  /* ── HEADER BAND ── */
-  .header-band{
-    background:#fff;
-    padding:10px 18px 10px;
-    display:flex;align-items:center;justify-content:space-between;
-    border-bottom:2.5px solid #133d80;
-  }
-  .co-name{font-size:16pt;font-weight:bold;color:#133d80;letter-spacing:0.5px;}
-  .co-meta-head{font-size:8.5pt;color:#444;line-height:1.7;margin-top:4px;}
-  .logo-wrap{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
-  .tagline{font-size:7.5pt;letter-spacing:1.5px;color:#133d80;text-align:right;font-style:italic;}
-
-  /* ── CERT TITLE BAND ── */
-  .cert-title-band{
-    background:#f5f7ff;border-top:1px solid #c8a951;border-bottom:1px solid #c8a951;
-    text-align:center;padding:7px 0 5px;
-  }
-  .cert-title{font-size:14pt;font-weight:bold;letter-spacing:3px;color:#133d80;text-transform:uppercase;}
-  .cert-sub{font-size:8.5pt;color:#555;letter-spacing:1px;margin-top:2px;}
-
-  /* ── BODY ── */
-  .body{padding:8px 20px 6px;flex:1;display:flex;flex-direction:column;gap:5px;}
-
-  .meta-row{display:flex;justify-content:space-between;font-size:9.5pt;margin-bottom:2px;}
-  .meta-row span{font-weight:bold;}
-
-  .to-block{font-size:10pt;line-height:1.55;border-left:3px solid #133d80;padding-left:8px;margin:2px 0 4px;}
-
-  .subject{font-weight:bold;font-size:10pt;text-decoration:underline;margin:2px 0 1px;}
-  .ref-line{font-size:10pt;font-weight:bold;margin-bottom:3px;}
-  .salut{font-size:10pt;margin-bottom:3px;}
-  .body-para{font-size:10pt;line-height:1.6;text-align:justify;}
-
-  /* ── ITEMS TABLE ── */
-  .items-table{width:100%;border-collapse:collapse;font-size:10pt;margin:4px 0;}
-  .items-table th{
-    background:#133d80;color:#fff;padding:5px 8px;
-    border:1px solid #133d80;text-align:center;font-weight:600;
-  }
-  .items-table th.left{text-align:left;}
-  .items-table td{padding:4px 8px;border:1px solid #b0b8cc;}
-  .items-table tr:nth-child(even) td{background:#f2f5fb;}
-  .items-table td.center{text-align:center;}
-
-  /* ── INSTALLATION ADDRESS ── */
-  .inst-addr{
-    border:1px solid #133d80;border-radius:3px;
-    padding:5px 10px;background:#f0f4ff;font-size:10pt;line-height:1.6;
-    margin:2px 0;
-  }
-  .inst-addr-label{color:#133d80;font-weight:bold;font-size:9pt;text-transform:uppercase;
-    letter-spacing:0.5px;margin-bottom:2px;}
-
-  /* ── SIGNATURE ── */
-  .sig-row{display:flex;justify-content:space-between;margin-top:8px;}
-  .sig-col{width:44%;font-size:10pt;}
-  .sig-line{border-top:1px solid #444;margin-top:38px;padding-top:4px;font-weight:bold;font-size:10pt;}
-
-  /* ── FOOTER BAND ── */
-  .footer-band{
-    background:#f5f7ff;border-top:2px solid #133d80;
-    padding:5px 18px;font-size:8pt;color:#333;text-align:center;font-weight:bold;
-    line-height:1.5;
-  }
-
-  @media print{
-    @page{margin:0;size:A4 portrait;}
-    body{background:#fff;}
-    .page{margin:0;width:100%;min-height:100vh;border:3px double #133d80;}
-  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #000; padding: 12px; }
+  .outer { border: 1.5px solid #000; width: 100%; border-collapse: collapse; }
+  .outer td, .outer th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; }
+  .section-hdr { text-align: center; font-weight: bold; font-size: 11pt; background: #fff; padding: 4px; }
+  .field-row { display: flex; gap: 2px; margin-bottom: 2px; font-size: 9.5pt; }
+  .field-lbl { min-width: 110px; font-weight: normal; }
+  .field-colon { margin: 0 4px; }
+  .field-val { flex: 1; }
+  .item-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .item-table th { border: 1px solid #000; padding: 4px 5px; font-weight: bold; text-align: center; background: #fff; }
+  .item-table td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; }
+  .body-para { font-size: 10pt; line-height: 1.6; text-align: justify; padding: 4px 8px; }
+  .center { text-align: center; }
+  @media print { @page { margin: 8mm; size: A4; } }
 </style>
-</head>
-<body>
-<div class="page">
+</head><body>
+<table class="outer" style="margin-bottom:0;">
 
-  <!-- ═══ HEADER BAND ═══ -->
-  <div class="header-band">
-    <div>
-      <div class="co-name">${coName}</div>
-      <div class="co-meta-head">
-        ${coAddr ? coAddr+'<br>' : ''}
-        ${[coCity,coState,coPin].filter(Boolean).join(', ')}
-        ${coGstin ? '<br>GSTIN: <strong>'+coGstin+'</strong>' : ''}
-        ${coPhone ? '&nbsp;&nbsp;|&nbsp;&nbsp;Ph: '+coPhone : ''}
-        ${coEmail ? '&nbsp;&nbsp;|&nbsp;&nbsp;'+coEmail : ''}
+  <!-- Company Header -->
+  <tr>
+    <td colspan="2" style="padding:8px 10px; border-bottom:2px solid #000;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        ${logoTag || `<span style="font-size:13pt;font-weight:bold;color:#104f4f;">${coName}</span>`}
+        <div>
+          <div style="font-size:13pt; font-weight:bold;">${coName}</div>
+          <div style="font-size:8.5pt; color:#333;">${coFullAddr}</div>
+          <div style="font-size:8.5pt; color:#333;">${coGstin ? `GSTIN: ${coGstin}` : ''}${coPhone ? ` &nbsp;|&nbsp; Ph: ${coPhone}` : ''}${coEmail ? ` &nbsp;|&nbsp; ${coEmail}` : ''}</div>
+        </div>
       </div>
-    </div>
-    <div class="logo-wrap">
-      ${logoTag || `<div style="font-size:20pt;font-weight:900;letter-spacing:2px;color:#133d80;">Îµ ERP</div>`}
-      <div class="tagline">Savvish Prefabricated Systems</div>
-    </div>
-  </div>
+    </td>
+  </tr>
 
-  <!-- ═══ CERTIFICATE TITLE ═══ -->
-  <div class="cert-title-band">
-    <div class="cert-title">Completion Certificate</div>
-    <div class="cert-sub">Supply &amp; Installation — Satisfactory Completion</div>
-  </div>
+  <!-- Title -->
+  <tr><td colspan="2" style="text-align:center; font-size:13pt; font-weight:bold; padding:6px; border-bottom:2px solid #000;">
+    Completion Certificate
+    <div style="font-size:9pt; font-weight:normal; color:#333;">Supply &amp; Installation — Satisfactory Completion</div>
+  </td></tr>
 
-  <!-- ═══ BODY ═══ -->
-  <div class="body">
+  <!-- Date / Ref -->
+  <tr>
+    <td style="width:50%;">${field('Date', certDate)}</td>
+    <td style="width:50%;">${field('Ref / PO No.', clientPONo)}${field('Dated', orderDate)}</td>
+  </tr>
 
-    <!-- Meta row -->
-    <div class="meta-row">
-      <div>Date: <span>${certDate}</span></div>
-      <div>Ref / PO No.: <span>${clientPONo}</span>&nbsp;&nbsp;Dated: <span>${orderDate}</span></div>
-    </div>
+  <!-- To -->
+  <tr><td colspan="2" style="padding:6px 8px;">
+    <strong>To,</strong><br>
+    <strong>${clientName}</strong><br>
+    ${clientAddr1 ? clientAddr1+'<br>' : ''}
+    ${[clientCity,clientPin].filter(Boolean).join('-')}${clientCity||clientPin?'<br>':''}
+    ${clientState ? clientState+'<br>' : ''}
+    ${clientGstin ? 'GSTIN/UIN: '+clientGstin+'<br>' : ''}
+    ${clientPhone || ''}
+  </td></tr>
 
-    <!-- To -->
-    <div class="to-block">
-      <strong>To,</strong><br>
-      <strong>${clientName}</strong><br>
-      ${clientAddr1 ? clientAddr1+'<br>' : ''}
-      ${[clientCity,clientPin].filter(Boolean).join('-')}${clientCity||clientPin?'<br>':''}
-      ${clientState ? clientState+'<br>' : ''}
-      ${clientGstin ? 'GSTIN/UIN: '+clientGstin+'<br>' : ''}
-      ${clientPhone || ''}
-    </div>
+  <!-- Subject -->
+  <tr><td colspan="2" style="padding:6px 8px; font-weight:bold; text-decoration:underline; font-size:10pt;">
+    Sub: Successful Completion of ${itemDesc} — Supply &amp; Installation.
+  </td></tr>
 
-    <!-- Subject / Ref -->
-    <div class="subject">Sub: Successful Completion of ${itemDesc} — Supply &amp; Installation.</div>
+  <!-- Opening para -->
+  <tr><td colspan="2" class="body-para">
+    Dear Sir,<br><br>
+    We are pleased to inform you that the supply &amp; installation of the following items, as per the above reference, has been successfully completed to your full satisfaction.
+  </td></tr>
 
-    <!-- Salutation -->
-    <div class="salut">Dear Sir,</div>
-
-    <!-- Opening para -->
-    <div class="body-para">
-      We are pleased to inform you that the supply &amp; installation of the following items,
-      as per the above reference, has been successfully completed to your full satisfaction.
-    </div>
-
-    <!-- ITEMS TABLE -->
-    <table class="items-table">
+  <!-- Items -->
+  <tr><td colspan="2" class="section-hdr" style="border-top:1.5px solid #000; border-bottom:1px solid #000;">Product / Item Description</td></tr>
+  <tr><td colspan="2" style="padding:0;">
+    <table class="item-table">
       <thead>
         <tr>
-          <th style="width:5%;">S.No</th>
-          <th class="left" style="width:65%;">Product / Item Description</th>
-          <th style="width:15%;">Qty</th>
-          <th style="width:15%;">Unit</th>
+          <th style="width:8%;">S.No</th>
+          <th style="text-align:left;width:57%;">Product / Item Description</th>
+          <th style="width:17%;">Qty</th>
+          <th style="width:18%;">Unit</th>
         </tr>
       </thead>
       <tbody>
         ${itemsTableRows}
       </tbody>
     </table>
+  </td></tr>
 
-    <!-- Installation address -->
-    <div>
-      <div class="inst-addr-label">Installation / Site Address</div>
-      <div class="inst-addr">
-        ${shipName !== clientName ? '<strong>'+shipName+'</strong><br>' : ''}
-        ${delivFullAddr || '—'}
+  <!-- Installation Address -->
+  <tr><td colspan="2" class="section-hdr" style="border-top:1.5px solid #000; border-bottom:1px solid #000;">Installation / Site Address</td></tr>
+  <tr><td colspan="2" style="padding:6px 8px; font-size:10pt; line-height:1.5;">
+    ${shipName !== clientName ? '<strong>'+shipName+'</strong><br>' : ''}
+    ${delivFullAddr || '—'}
+  </td></tr>
+
+  <!-- Closing para -->
+  <tr><td colspan="2" class="body-para">
+    The installation, commissioning, and performance testing of the above items were executed satisfactorily. Please treat this letter as the formal <strong>Completion Certificate</strong> acknowledging successful completion of the work.<br><br>
+    Thank you for your confidence in our services.<br><br>
+    Yours faithfully,
+  </td></tr>
+
+  <!-- Signature -->
+  <tr>
+    <td style="text-align:center; padding:10px 10px 8px; width:50%;">
+      <div style="font-size:9.5pt; font-weight:bold; margin-bottom:4px;">For ${coName}</div>
+      <div style="height:70px; margin:0 8px 4px; border:1px solid #999; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:8.5pt;">Signature &amp; Stamp</div>
+      <div style="border-top:1px solid #000; margin:0 8px; padding-top:4px;">
+        <strong>Authorised Signatory</strong><br><span style="font-size:9.5pt;">${coName}</span>
       </div>
-    </div>
-
-    <!-- Closing para -->
-    <div class="body-para">
-      The installation, commissioning, and performance testing of the above items were executed
-      satisfactorily. Please treat this letter as the formal <strong>Completion Certificate</strong>
-      acknowledging successful completion of the work.
-    </div>
-
-    <div class="body-para">Thank you for your confidence in our services.</div>
-
-    <!-- Signature row -->
-    <div style="margin-top:4px;font-size:10pt;">Yours faithfully,</div>
-    <div class="sig-row">
-      <div class="sig-col">
-        <div>For: <strong>${coName}</strong></div>
-        <div class="sig-line">Authorized Signatory</div>
+    </td>
+    <td style="text-align:center; padding:10px 10px 8px; width:50%;">
+      <div style="font-size:9.5pt; font-weight:bold; margin-bottom:4px;">For ${clientName}</div>
+      <div style="height:70px; margin:0 8px 4px; border:1px solid #999; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:8.5pt;">Signature &amp; Stamp</div>
+      <div style="border-top:1px solid #000; margin:0 8px; padding-top:4px;">
+        <strong>Client Authorised Signatory</strong><br><span style="font-size:9.5pt;">${clientName}</span>
+        <div style="font-size:8.5pt; text-align:left; margin-top:6px; line-height:1.9;">
+          Name &nbsp;: ________________________<br>
+          Desig.&nbsp;: ________________________<br>
+          Date &nbsp;&nbsp;: ________________________
+        </div>
       </div>
-      <div class="sig-col" style="text-align:right;">
-        <div>For: <strong>${clientName}</strong></div>
-        <div class="sig-line">Authorized Signatory</div>
-      </div>
+    </td>
+  </tr>
+
+  <tr><td colspan="2" style="border-top:1px solid #000; font-size:8pt; color:#555;">
+    <div style="display:flex; justify-content:space-between;">
+      <span>${prepared.name ? `Prepared by: ${prepared.name}${prepared.loginId ? ` (${prepared.loginId})` : ''}${prepared.designation ? ` — ${prepared.designation}` : ''}` : ''}</span>
+      <span>Printed: ${certDate}</span>
     </div>
+  </td></tr>
 
-  </div><!-- /body -->
-
-  <!-- ═══ FOOTER BAND ═══ -->
-  <div class="footer-band">
-    ${coFullAddr}${coPhone ? '&nbsp;&nbsp;|&nbsp;&nbsp;M: '+coPhone : ''}${coEmail ? '&nbsp;&nbsp;|&nbsp;&nbsp;'+coEmail : ''}
-  </div>
-
-</div><!-- /page -->
+</table>
 <script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script>
 </body></html>`;
 
   const w = window.open('','_blank','width=820,height=980,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 }
 
 /* ──────────────────────────────────────────────
@@ -630,7 +568,7 @@ tr:nth-child(even) td{background:#f7f7f7;}.tot td{font-weight:bold;background:#d
 </div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script></body></html>`;
   const w=window.open('','_blank','width=1100,height=750,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 };
 
 /* ══════════════════════════════════════════════
@@ -638,6 +576,7 @@ tr:nth-child(even) td{background:#f7f7f7;}.tot td{font-weight:bold;background:#d
 ══════════════════════════════════════════════ */
 export default function SalesBill() {
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const cid          = selectedCompany?.companyId;
   const companyState = selectedCompany?.state || '';
 
@@ -648,29 +587,29 @@ export default function SalesBill() {
   const [searchParams, setSearchParams] = useSearchParams();
   const listTab = searchParams.get('tab') || 'dashboard';
   const setListTab = (tab) => setSearchParams({ tab }, { replace: true });
-  const [view,        setView]        = useState('list');      // 'list'|'create'|'issue-dc'
+  const [view,        setView]        = useState('list');      // 'list'|'create'
   const [sbSearch,    setSbSearch]    = useState('');
   const [billStatusFilter, setBillStatusFilter] = useState('all'); // 'all'|'fully'|'partial'|'none'
-  const [fyFilter,    setFyFilter]    = useState('all');
-
-  /* DC creation */
-  const [dcSO,       setDcSO]       = useState('');
-  const [dcSOData,   setDcSOData]   = useState(null);
-  const [dcDate,     setDcDate]     = useState('');
-  const [dcDispatch, setDcDispatch] = useState('');
-  const [dcVehicle,  setDcVehicle]  = useState('');
-  const [dcInvNo,    setDcInvNo]    = useState('');
-  const [dcInvDate,  setDcInvDate]  = useState('');
-  const [dcSaving,   setDcSaving]   = useState(false);
-  const [dcMsg,      setDcMsg]      = useState('');
+  const [fyFilter,    setFyFilter]    = useState(currentFY);
 
   /* Bill create */
   const [selOrder,    setSelOrder]    = useState('');
-  const [selDC,       setSelDC]       = useState('');
   const [order,       setOrder]       = useState(null);
   const [billNo,      setBillNo]      = useState('');
   const [billDate,    setBillDate]    = useState(today());
   const [ewayBillNo,  setEwayBillNo]  = useState('');
+  const [ewayValidUpto, setEwayValidUpto] = useState('');
+  const [ewayGenDate, setEwayGenDate] = useState('');
+  const [vehicleNo,   setVehicleNo]   = useState('');
+  const [approxDistanceKm, setApproxDistanceKm] = useState('');
+  const [dispatchFrom, setDispatchFrom] = useState('');
+  const [ewayMode, setEwayMode] = useState('1 - Road');
+  const [supplyType, setSupplyType] = useState('Outward-Supply');
+  const [transactionType, setTransactionType] = useState('');
+  const [transporterId, setTransporterId] = useState('');
+  const [transporterName, setTransporterName] = useState('');
+  const [vehicleFromCity, setVehicleFromCity] = useState('');
+  const [cewbNo, setCewbNo] = useState('');
   const [irnNo,       setIrnNo]       = useState('');
   const [acknNo,      setAcknNo]      = useState('');
   const [acknDate,    setAcknDate]    = useState('');
@@ -683,6 +622,12 @@ export default function SalesBill() {
   const [loading,     setLoading]     = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [msg,         setMsg]         = useState('');
+  /* e-way bill tracking */
+  const [ewayExtendId,  setEwayExtendId]  = useState(null); // billId currently showing the extend-date input
+  const [ewayExtendVal, setEwayExtendVal] = useState('');
+  const [ewayBusyId,    setEwayBusyId]    = useState(null);
+  const [podFor,        setPodFor]        = useState(null);   // bill being marked delivered
+  const [podForm,       setPodForm]       = useState({ date:'', by:'', mobile:'', file:null });
   /* bill detail view */
   const [viewBill,    setViewBill]    = useState(null);
   const [selBill,     setSelBill]     = useState(null);
@@ -742,7 +687,9 @@ export default function SalesBill() {
       const yr = new Date().getFullYear();
       const next = bills.length + 1;
       setBillNo(`INV/${yr}-${String(yr+1).slice(2)}/${String(next).padStart(3,'0')}`);
-      setEwayBillNo(''); setIrnNo(''); setAcknNo(''); setAcknDate('');
+      setEwayBillNo(''); setEwayValidUpto(''); setEwayGenDate(''); setVehicleNo(''); setApproxDistanceKm(''); setDispatchFrom('');
+      setEwayMode('1 - Road'); setSupplyType('Outward-Supply'); setTransactionType(''); setTransporterId(''); setTransporterName(''); setVehicleFromCity(''); setCewbNo('');
+      setIrnNo(''); setAcknNo(''); setAcknDate('');
     }
   }, [view, bills.length]);
 
@@ -803,51 +750,6 @@ export default function SalesBill() {
     });
     setBillCharges(charges);
   }, [order, editBill]);
-
-  useEffect(() => {
-    if (!dcSO) { setDcSOData(null); return; }
-    axios.get(`/api/sales-orders/${dcSO}?companyId=${cid}`)
-      .then(r => setDcSOData(r.data))
-      .catch(() => setDcSOData(salesOrders.find(o=>String(o.orderId)===String(dcSO))||null));
-  }, [dcSO, cid, salesOrders]);
-
-  const openIssueDC = (soId='') => {
-    setDcSO(soId?String(soId):'');
-    setDcDate(new Date().toISOString().slice(0,10));
-    setDcDispatch(''); setDcVehicle(''); setDcInvNo(''); setDcInvDate(''); setDcMsg('');
-    setView('issue-dc');
-  };
-
-  const handleIssueDC = async () => {
-    if (!dcSO) { setDcMsg('Please select a Sales Order'); return; }
-    setDcSaving(true); setDcMsg('');
-    const so = dcSOData;
-    try {
-      const payload = {
-        companyId:cid, dcDate:dcDate||today(), dispatchThrough:dcDispatch, vehicleNo:dcVehicle,
-        invoiceNo:dcInvNo, invoiceDate:dcInvDate,
-        linkedSalesOrderId:so?.orderId,
-        clientId:so?.clientCode||so?.customerId||'', clientName:so?.customerName||so?.clientName||'',
-        clientGstin:so?.customerGstin||so?.partyGstin||'',
-        erpNo:String(so?.orderId||''), orderNo:so?.orderNo||'',
-        orderDate:so?.orderDate||'', orderType:so?.orderType||'',
-        clientPoDate:so?.clientPoDate||so?.poDate||'', clientOrderNo:so?.clientOrderNo||so?.customerPO||'',
-        deliveryDueDate:so?.deliveryDate||'', paymentTerms:so?.paymentTerms||'',
-        billingName:so?.contactPerson||'', billingMobile:so?.mobile||'', billingEmail:so?.email||'',
-        billingAddress:so?.address||'', billingCity:so?.customerCity||'', billingState:so?.customerState||'', billingPincode:so?.customerPincode||'',
-        shippingName:so?.shipToName||so?.contactPerson||'', shippingMobile:so?.shipToMobile||so?.mobile||'',
-        shippingAddress:so?.shipToAddress||so?.deliveryAddr||'', shippingCity:so?.shipToCity||'',
-        shippingState:so?.shipToState||so?.customerState||'', shippingPincode:so?.shipToPincode||'',
-        items:so?.items||[], addons:so?.addons||[], charges:so?.charges||[],
-        subTotal:so?.subTotal||0, totalGST:so?.totalGST||0, grandTotal:so?.grandTotal||0,
-      };
-      const r = await axios.post('/api/delivery-challans', payload);
-      setDcMsg(`✅ ${r.data.dcNo} issued!`);
-      await load();
-      setTimeout(()=>{ setView('list'); setListTab('pending-dc'); setDcMsg(''); }, 1400);
-    } catch(e) { setDcMsg('Error: '+(e.response?.data?.error||e.message)); }
-    setDcSaving(false);
-  };
 
   /* ── Per-item billing summary (for UI display) ── */
   const itemBillingInfo = (() => {
@@ -928,9 +830,13 @@ export default function SalesBill() {
         items:lines, subTotal,
         totalCGST:intrastate?totalCGST:0, totalSGST:intrastate?totalSGST:0,
         totalIGST:intrastate?0:totalIGST, totalGST, grandTotal,
-        linkedDcId:selDC||undefined, companyId:cid,
+        companyId:cid,
         /* new invoice details */
-        ewayBillNo:ewayBillNo||'', irnNo:irnNo||'', acknNo:acknNo||'', acknDate:acknDate||'',
+        ewayBillNo:ewayBillNo||'', ewayValidUpto:ewayValidUpto||'', ewayGenDate:ewayGenDate||'', vehicleNo:vehicleNo||'',
+        approxDistanceKm:approxDistanceKm||'', dispatchFrom:dispatchFrom||'',
+        ewayMode:ewayMode||'', supplyType:supplyType||'', transactionType:transactionType||'',
+        transporterId:transporterId||'', transporterName:transporterName||'', vehicleFromCity:vehicleFromCity||'', cewbNo:cewbNo||'',
+        irnNo:irnNo||'', acknNo:acknNo||'', acknDate:acknDate||'',
         /* bill to / ship to */
         billToName:order?.contactPerson||'', billToAddress:order?.address||order?.customerAddress||'',
         billToCity:order?.customerCity||'', billToState:order?.customerState||'', billToPincode:order?.customerPincode||'',
@@ -945,9 +851,6 @@ export default function SalesBill() {
       } else {
         // CREATE new bill
         savedBill = await axios.post(`/api/bills?companyId=${cid}`, payload);
-        if (selDC) {
-          await axios.put(`/api/delivery-challans/${selDC}/link-invoice`,{companyId:cid,invoiceId:savedBill.data?.billId||billNo,invoiceNo:billNo}).catch(()=>{});
-        }
       }
       /* upload attachment if provided */
       const billId = editBill?.billId || savedBill.data?.billId;
@@ -960,7 +863,7 @@ export default function SalesBill() {
       await load();
       if (editBill) {
         // after edit → go back to list
-        setTimeout(()=>{ setView('list'); setListTab('bills'); setMsg(''); setSelOrder(''); setOrder(null); setSelDC(''); setBillFile(null); setEditBill(null); }, 1400);
+        setTimeout(()=>{ setView('list'); setListTab('bills'); setMsg(''); setSelOrder(''); setOrder(null); setBillFile(null); setEditBill(null); }, 1400);
       } else {
         // after new bill → stay on page, reset only form fields so user can add another
         resetBillFields();
@@ -971,8 +874,9 @@ export default function SalesBill() {
 
   /* reset only the per-bill fields, keep order selected */
   const resetBillFields = () => {
-    setBillNo(''); setBillDate(today()); setEwayBillNo(''); setIrnNo('');
-    setAcknNo(''); setAcknDate(''); setBillFile(null); setSelDC(''); setBillQtys({});
+    setBillNo(''); setBillDate(today()); setEwayBillNo(''); setEwayValidUpto(''); setEwayGenDate(''); setVehicleNo(''); setApproxDistanceKm(''); setDispatchFrom('');
+    setEwayMode('1 - Road'); setSupplyType('Outward-Supply'); setTransactionType(''); setTransporterId(''); setTransporterName(''); setVehicleFromCity(''); setCewbNo('');
+    setIrnNo(''); setAcknNo(''); setAcknDate(''); setBillFile(null); setBillQtys({});
     setTimeout(()=>setMsg(''),3000);
   };
 
@@ -983,11 +887,22 @@ export default function SalesBill() {
     setBillNo(b.billNo || '');
     setBillDate(b.billDate || today());
     setEwayBillNo(b.ewayBillNo || '');
+    setEwayValidUpto(b.ewayValidUpto || '');
+    setEwayGenDate(b.ewayGenDate || '');
+    setVehicleNo(b.vehicleNo || '');
+    setApproxDistanceKm(b.approxDistanceKm || '');
+    setDispatchFrom(b.dispatchFrom || '');
+    setEwayMode(b.ewayMode || '1 - Road');
+    setSupplyType(b.supplyType || 'Outward-Supply');
+    setTransactionType(b.transactionType || '');
+    setTransporterId(b.transporterId || '');
+    setTransporterName(b.transporterName || '');
+    setVehicleFromCity(b.vehicleFromCity || '');
+    setCewbNo(b.cewbNo || '');
     setIrnNo(b.irnNo || '');
     setAcknNo(b.acknNo || '');
     setAcknDate(b.acknDate || '');
     setBillFile(null);
-    setSelDC(b.linkedDcId ? String(b.linkedDcId) : '');
     /* Load editable charges from saved bill items (those without itemIdx are charges) */
     const chargeItems = (b.items || [])
       .filter(it => it.itemIdx === undefined || it.itemIdx === null)
@@ -1001,16 +916,73 @@ export default function SalesBill() {
     setView('create');
   };
 
+  /* Print the bill in our own Tax Invoice format — pulls the linked Sales
+     Order (if any) just for Order Date / Client PO reference; everything
+     else (IRN, Ack No, E-way Bill, items, GST) comes off the bill itself. */
+  const handlePrintBill = async (b) => {
+    let ord = salesOrders.find(o => String(o.orderId) === String(b.orderId)) || null;
+    if (b.orderId) {
+      try { const r = await axios.get(`/api/sales-orders/${b.orderId}?companyId=${cid}`); ord = r.data; } catch {}
+    }
+    printSalesBill(b, selectedCompany, ord, user);
+  };
+
   const handleDelete = async (billId) => {
     if (!window.confirm(`Delete bill ${billId}?`)) return;
     await axios.delete(`/api/bills/${billId}?companyId=${cid}&type=sales`).catch(()=>{});
     load();
   };
 
-  const handleDeleteDC = async (dc) => {
-    if (!window.confirm(`Delete Delivery Challan ${dc.dcNo}?`)) return;
-    await axios.delete(`/api/delivery-challans/${dc.dcId}?companyId=${cid}`).catch(()=>{});
-    load();
+  /* ── E-way bill tracking actions ── */
+  const extendEwayValidity = async (bill) => {
+    if (!ewayExtendVal) { setMsg('Pick a new Valid Upto date first.'); return; }
+    setEwayBusyId(bill.billId);
+    try {
+      await axios.put(`/api/bills/${bill.billId}?companyId=${cid}&type=sales`, { ewayValidUpto: ewayExtendVal, ewayStatus:'active' });
+      setMsg(`E-way Bill validity for ${bill.billNo||bill.billId} extended to ${fmtD(ewayExtendVal)}`);
+      setEwayExtendId(null); setEwayExtendVal('');
+      load();
+    } catch (e) { setMsg('Error: ' + (e.response?.data?.error||e.message)); }
+    setEwayBusyId(null);
+  };
+
+  const setEwayDelivered = async (bill, delivered) => {
+    setEwayBusyId(bill.billId);
+    try {
+      await axios.put(`/api/bills/${bill.billId}?companyId=${cid}&type=sales`, { ewayStatus: delivered ? 'delivered' : 'active' });
+      setMsg(delivered ? `E-way Bill ${bill.ewayBillNo} marked delivered — goods received.` : `E-way Bill ${bill.ewayBillNo} reopened.`);
+      load();
+    } catch (e) { setMsg('Error: ' + (e.response?.data?.error||e.message)); }
+    setEwayBusyId(null);
+  };
+
+  const openPod = (bill) => {
+    setPodFor(bill);
+    setPodForm({ date: bill.pod?.deliveryDate || today(), by: bill.pod?.receivedBy || '', mobile: bill.pod?.receiverMobile || '', file: null });
+  };
+  const savePod = async () => {
+    const bill = podFor;
+    if (!podForm.date) { setMsg('Enter the delivery date.'); return; }
+    if (!podForm.by.trim()) { setMsg('Enter who received the goods.'); return; }
+    setEwayBusyId(bill.billId);
+    try {
+      let podFile = bill.pod?.fileName ? { fileName: bill.pod.fileName, name: bill.pod.fileOriginal } : null;
+      if (podForm.file) {
+        const fd = new FormData(); fd.append('file', podForm.file);
+        const r = await axios.post(`/api/bills/${bill.billId}/upload?companyId=${cid}&type=sales`, fd, { headers:{'Content-Type':'multipart/form-data'} });
+        const att = (r.data?.attachments || []).slice(-1)[0];
+        if (att) podFile = { fileName: att.fileName, name: att.name };
+      }
+      await axios.put(`/api/bills/${bill.billId}?companyId=${cid}&type=sales`, {
+        ewayStatus: 'delivered',
+        pod: { deliveryDate: podForm.date, receivedBy: podForm.by.trim(), receiverMobile: podForm.mobile.trim(),
+               fileName: podFile?.fileName || '', fileOriginal: podFile?.name || '', savedAt: new Date().toISOString() },
+      });
+      setMsg(`E-way Bill ${bill.ewayBillNo} marked delivered on ${fmtD(podForm.date)} — received by ${podForm.by.trim()}.`);
+      setPodFor(null);
+      load();
+    } catch (e) { setMsg('Error: ' + (e.response?.data?.error||e.message)); }
+    setEwayBusyId(null);
   };
 
   /* ── Compute dashboard rows ── */
@@ -1083,6 +1055,20 @@ export default function SalesBill() {
     }).filter(r => r.so); // only rows with valid SO
   })();
 
+  /* ── E-way bill tracking rows — any bill that actually has an e-way bill no. ── */
+  const ewayRows = bills.filter(b => {
+    // tracked once it has an e-way bill no. and a Valid Upto date — and stays listed for good (no age cut-off)
+    return !!(b.ewayBillNo && b.ewayValidUpto);
+  }).sort((a,b) => {
+    const aDone = a.ewayStatus==='delivered', bDone = b.ewayStatus==='delivered';
+    if (aDone !== bDone) return aDone ? 1 : -1; // undelivered first
+    const ad = new Date(a.ewayValidUpto || 0).getTime();
+    const bd = new Date(b.ewayValidUpto || 0).getTime();
+    return ad - bd; // most urgent (soonest/overdue) first
+  });
+  const soByOrderId = {};
+  salesOrders.forEach(o => { soByOrderId[String(o.orderId)] = o; });
+
   /* ══════════ PDF CONFIRM MODAL (rendered outside view branches) ══════════ */
   const _normName = s => (s||'').toLowerCase()
     .replace(/\bprivate\b/g,'pvt').replace(/\blimited\b/g,'ltd')
@@ -1097,11 +1083,13 @@ export default function SalesBill() {
   const PdfConfirmModal = pdfConfirm ? (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:10500,
       display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      {/* Box never exceeds the window: header + buttons stay put, fields scroll */}
       <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:520,
+        maxHeight:'calc(100vh - 32px)', display:'flex', flexDirection:'column',
         boxShadow:'0 24px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Header */}
-        <div style={{ background:P, padding:'12px 18px', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ background:P, padding:'12px 18px', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
           <span style={{ fontSize:18 }}>📋</span>
           <div>
             <div style={{ fontSize:13, fontWeight:800, color:'#fff' }}>Auto-fill from PDF</div>
@@ -1109,7 +1097,7 @@ export default function SalesBill() {
           </div>
         </div>
 
-        <div style={{ padding:'14px 18px 0' }}>
+        <div style={{ padding:'14px 18px 6px', flex:1, minHeight:0, overflowY:'auto' }}>
 
           {/* ── Duplicate Bill Warning ── */}
           {_isDupe && (
@@ -1150,6 +1138,14 @@ export default function SalesBill() {
             { label:'Tax Invoice No',     key:'billNo' },
             { label:'Invoice Date',       key:'billDate',  type:'date' },
             { label:'E-way Bill No',      key:'ewayBillNo' },
+            { label:'E-way Valid Upto',   key:'ewayValidUpto' },
+            { label:'E-way Generated',    key:'ewayGenDate' },
+            { label:'Vehicle No',         key:'vehicleNo' },
+            { label:'Approx Distance',    key:'approxDistanceKm' },
+            { label:'Dispatch From',      key:'dispatchFrom' },
+            { label:'Mode',               key:'ewayMode' },
+            { label:'Supply Type',        key:'supplyType' },
+            { label:'Transaction Type',   key:'transactionType' },
             { label:'IRN No',             key:'irnNo' },
             { label:'Acknowledgement No', key:'acknNo' },
             { label:'Ack Date',           key:'acknDate',  type:'date' },
@@ -1169,8 +1165,8 @@ export default function SalesBill() {
         </div>
 
         {/* Buttons */}
-        <div style={{ padding:'10px 18px 16px', display:'flex', gap:8, justifyContent:'flex-end',
-          borderTop:'1px solid #E5EAF2', marginTop:6 }}>
+        <div style={{ padding:'10px 18px 14px', display:'flex', gap:8, justifyContent:'flex-end',
+          borderTop:'1px solid #E5EAF2', flexShrink:0, background:'#fff' }}>
           <button onClick={() => setPdfConfirm(null)}
             style={{ height:32, padding:'0 16px', fontSize:12, cursor:'pointer', fontFamily:F,
               background:'#fff', color:'#374151', border:'1px solid #D1D5DB', borderRadius:6, fontWeight:600 }}>
@@ -1187,6 +1183,14 @@ export default function SalesBill() {
             if (pdfConfirm.billNo)     setBillNo(pdfConfirm.billNo);
             if (pdfConfirm.billDate)   setBillDate(pdfConfirm.billDate);
             if (pdfConfirm.ewayBillNo) setEwayBillNo(pdfConfirm.ewayBillNo);
+            if (pdfConfirm.ewayValidUpto) setEwayValidUpto(pdfConfirm.ewayValidUpto);
+            if (pdfConfirm.ewayGenDate) setEwayGenDate(pdfConfirm.ewayGenDate);
+            if (pdfConfirm.vehicleNo)  setVehicleNo(pdfConfirm.vehicleNo);
+            if (pdfConfirm.approxDistanceKm) setApproxDistanceKm(pdfConfirm.approxDistanceKm);
+            if (pdfConfirm.dispatchFrom) setDispatchFrom(pdfConfirm.dispatchFrom);
+            if (pdfConfirm.ewayMode)   setEwayMode(pdfConfirm.ewayMode);
+            if (pdfConfirm.supplyType) setSupplyType(pdfConfirm.supplyType);
+            if (pdfConfirm.transactionType) setTransactionType(pdfConfirm.transactionType);
             if (pdfConfirm.irnNo)      setIrnNo(pdfConfirm.irnNo);
             if (pdfConfirm.acknNo)     setAcknNo(pdfConfirm.acknNo);
             if (pdfConfirm.acknDate)   setAcknDate(pdfConfirm.acknDate);
@@ -1201,9 +1205,55 @@ export default function SalesBill() {
   ) : null;
 
   /* ═══════════════════════ LIST VIEW ═══════════════════════ */
+  const podInp = { width:'100%', height:32, padding:'0 10px', border:'1px solid #CBD5E1', borderRadius:6, fontSize:12, fontFamily:F, outline:'none', boxSizing:'border-box' };
+  const podLbl = { fontSize:11, fontWeight:700, color:'#374151', marginBottom:4, display:'block' };
+  const PodModal = podFor ? (
+    <div onMouseDown={e=>{ if (e.target===e.currentTarget) setPodFor(null); }}
+      style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:10500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', borderRadius:12, width:400, maxWidth:'100%', boxShadow:'0 20px 50px rgba(0,0,0,0.25)', fontFamily:F, overflow:'hidden' }}>
+        <div style={{ background:P, color:'#fff', padding:'10px 16px', fontWeight:800, fontSize:13 }}>
+          ✅ Mark Delivered — {podFor.billNo || podFor.billId}
+          <div style={{ fontSize:10.5, fontWeight:500, opacity:0.85, marginTop:2 }}>E-way Bill {podFor.ewayBillNo} · {podFor.partyName}</div>
+        </div>
+        <div style={{ padding:16, display:'flex', flexDirection:'column', gap:12 }}>
+          <div>
+            <label style={podLbl}>Delivery Date *</label>
+            <input type="date" value={podForm.date} onChange={e=>setPodForm(f=>({ ...f, date:e.target.value }))} style={podInp}/>
+          </div>
+          <div>
+            <label style={podLbl}>Received By (Name) *</label>
+            <input value={podForm.by} onChange={e=>setPodForm(f=>({ ...f, by:e.target.value }))} placeholder="Person who received the goods" style={podInp} autoFocus/>
+          </div>
+          <div>
+            <label style={podLbl}>Receiver Mobile No.</label>
+            <input value={podForm.mobile} onChange={e=>setPodForm(f=>({ ...f, mobile:e.target.value.replace(/[^0-9+ ]/g,'') }))} placeholder="e.g. 9876543210" inputMode="tel" style={podInp}/>
+          </div>
+          <div>
+            <label style={podLbl}>POD (Proof of Delivery)</label>
+            <input type="file" accept=".pdf,image/*" onChange={e=>setPodForm(f=>({ ...f, file:e.target.files?.[0] || null }))} style={{ fontSize:11.5, fontFamily:F }}/>
+            {!podForm.file && podFor.pod?.fileName && (
+              <div style={{ fontSize:10.5, color:'#6b7280', marginTop:4 }}>
+                Current: <a href={billFileUrl(podFor.billId, podFor.pod.fileName, cid)} target="_blank" rel="noreferrer" style={{ color:P, fontWeight:700 }}>{podFor.pod.fileOriginal || podFor.pod.fileName}</a> — choose a file to replace it
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'10px 16px', borderTop:'1px solid #E5EAF2', background:'#F8FAFC' }}>
+          <button onClick={()=>setPodFor(null)}
+            style={{ height:32, padding:'0 16px', background:'#fff', border:'1px solid #CBD5E1', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:F, color:'#374151' }}>Cancel</button>
+          <button onClick={savePod} disabled={ewayBusyId===podFor.billId}
+            style={{ height:32, padding:'0 18px', background:'#059669', border:'none', borderRadius:6, fontSize:12, fontWeight:700, cursor:ewayBusyId===podFor.billId?'wait':'pointer', fontFamily:F, color:'#fff' }}>
+            {ewayBusyId===podFor.billId ? 'Saving…' : '✔ Save & Mark Delivered'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (view==='list') return (
     <div style={{ fontFamily:F, fontSize:12, display:'flex', flexDirection:'column', height:'100%' }}>
       {PdfConfirmModal}
+      {PodModal}
 
       {/* ── PDF / Image Viewer ── */}
       {pdfViewer && (
@@ -1278,6 +1328,11 @@ export default function SalesBill() {
                   ['GST Type',     viewBill.gstType==='intrastate'?'CGST+SGST':'IGST'],
                   ['Grand Total',  `₹${Number(viewBill.grandTotal||0).toFixed(2)}`],
                   ['E-way Bill',   viewBill.ewayBillNo||'—'],
+                  ['E-way Valid Upto', viewBill.ewayValidUpto||'—'],
+                  ['E-way Generated', viewBill.ewayGenDate||'—'],
+                  ['Vehicle No',   viewBill.vehicleNo||'—'],
+                  ['Approx Distance', viewBill.approxDistanceKm?`${viewBill.approxDistanceKm} KM`:'—'],
+                  ['Dispatch From', viewBill.dispatchFrom||'—'],
                   ['IRN No',       viewBill.irnNo||'—'],
                   ['Ack No',       viewBill.acknNo||'—'],
                 ].map(([k,v])=>(
@@ -1354,6 +1409,7 @@ export default function SalesBill() {
             {/* modal footer */}
             <div style={{ padding:'10px 18px',borderTop:'1px solid #E5EAF2',display:'flex',gap:8,justifyContent:'flex-end',background:'#FAFBFC',borderRadius:'0 0 10px 10px' }}>
               <button onClick={()=>setViewBill(null)} style={{ padding:'6px 18px',border:'1px solid #E5EAF2',borderRadius:6,background:'#fff',cursor:'pointer',fontSize:12,fontWeight:600 }}>Close</button>
+              <button onClick={()=>handlePrintBill(viewBill)} style={{ padding:'6px 18px',border:'1px solid #b3c6e8',borderRadius:6,background:'#EFF6FF',color:P,cursor:'pointer',fontSize:12,fontWeight:700 }}>🖨 Print Invoice</button>
               <button onClick={()=>openEditBill(viewBill)} style={{ padding:'6px 18px',border:'none',borderRadius:6,background:P,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700 }}>✏ï¸ Edit Invoice</button>
             </div>
           </div>
@@ -1363,7 +1419,7 @@ export default function SalesBill() {
       {/* ── Order Bills Modal ── */}
       {viewOrderBills && (
         <div onClick={()=>setViewOrderBills(null)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9100,display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
-          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff',borderRadius:10,width:'100%',maxWidth:820,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',fontFamily:F }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:'#fff',borderRadius:10,width:'100%',maxWidth:1180,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',fontFamily:F }}>
             <div style={{ background:P,color:'#fff',padding:'12px 18px',borderRadius:'10px 10px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
               <div>
                 <div style={{ fontSize:15,fontWeight:800 }}>📋 Bills for {viewOrderBills.so?.orderNo||`SO-${viewOrderBills.orderId}`}</div>
@@ -1380,44 +1436,83 @@ export default function SalesBill() {
             <div style={{ flex:1,overflowY:'auto',padding:'14px 18px' }}>
               {viewOrderBills.billList.length===0 ? (
                 <div style={{ textAlign:'center',padding:40,color:'#9CA3AF',fontSize:13 }}>No invoices created yet for this order.</div>
-              ) : viewOrderBills.billList.map((b,i) => (
-                <div key={b.billId} style={{ border:'1px solid #E5EAF2',borderRadius:8,marginBottom:10,overflow:'hidden' }}>
-                  {/* bill card header */}
-                  <div style={{ background:i%2===0?'#F8FAFF':'#FFF',padding:'8px 14px',borderBottom:'1px solid #E5EAF2',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-                    <div>
-                      <span style={{ fontWeight:800,color:P,fontSize:13 }}>{b.billNo||<em style={{color:'#9CA3AF',fontWeight:400}}>Draft</em>}</span>
-                      <span style={{ marginLeft:10,fontSize:11,color:'#6B7280' }}>{fmtD(b.billDate)}</span>
-                      {(b.attachments||[]).length>0 && <span style={{ marginLeft:8,fontSize:10,color:'#059669',fontWeight:700 }}>📎 {(b.attachments||[]).length} file{(b.attachments||[]).length>1?'s':''}</span>}
+              ) : (() => {
+                const so = viewOrderBills.so;
+                const supplied = viewOrderBills.billAmount || 0;
+                const received = Math.max(0, supplied - (viewOrderBills.dueAmt || 0));
+                const dues     = viewOrderBills.dueAmt || 0;
+                return (
+                  <>
+                    <table style={{ width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F }}>
+                      <thead>
+                        <tr>
+                          {['#','Invoice No','Invoice Date','PO No','PO Date','Product','Qty','Amount (₹)','Vehicle No','E-way Bill','Actions'].map(h=>(
+                            <th key={h} style={{ padding:'6px 8px',background:P,color:'#fff',fontSize:10.5,fontWeight:700,textAlign:'left',border:`1px solid ${PD}`,whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewOrderBills.billList.map((b,i) => {
+                          const items = b.items||[];
+                          const qty   = items.reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+                          const product = items.length
+                            ? (items[0].itemName||items[0].description||'—') + (items.length>1?` +${items.length-1} more`:'')
+                            : '—';
+                          return (
+                            <tr key={b.billId} style={{ background:'#fff' }}>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#6b7280' }}>{i+1}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:700,color:P }}>{b.billNo||<em style={{color:'#9CA3AF',fontWeight:400}}>Draft</em>}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{fmtD(b.billDate)}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{so?.customerPO||'—'}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{fmtD(so?.poDate)}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{product}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'center',fontWeight:700 }}>{qty||'—'}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:'#1e293b' }}>{fmt(b.grandTotal)}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{b.vehicleNo||'—'}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontFamily:'monospace',fontSize:10 }}>{b.ewayBillNo||'—'}</td>
+                              <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
+                                <div style={{ display:'flex',gap:4 }}>
+                                  <button onClick={()=>{ setViewOrderBills(null); setViewBill(b); }}
+                                    style={{ padding:'3px 8px',fontSize:10,cursor:'pointer',background:'#EFF6FF',color:P,border:'1px solid #b3c6e8',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>👁 View</button>
+                                  <button onClick={()=>handlePrintBill(b)}
+                                    style={{ padding:'3px 8px',fontSize:10,cursor:'pointer',background:'#F0FDF4',color:'#166534',border:'1px solid #BBF7D0',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>🖨</button>
+                                  <button onClick={()=>{ setViewOrderBills(null); openEditBill(b); }}
+                                    style={{ padding:'3px 8px',fontSize:10,cursor:'pointer',background:'#FFF7ED',color:'#C2410C',border:'1px solid #FED7AA',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>✏️</button>
+                                </div>
+                                {(b.attachments||[]).length>0 && (
+                                  <div style={{ display:'flex',gap:4,flexWrap:'wrap',marginTop:4 }}>
+                                    {(b.attachments||[]).map((a,ai)=>(
+                                      <button key={ai} onClick={()=>setPdfViewer({ url:billFileUrl(b.billId,a.fileName,cid), name:a.name||a.fileName })}
+                                        style={{ padding:'2px 7px',background:'#fff',border:'1px solid #b3c6e8',borderRadius:4,cursor:'pointer',color:P,fontSize:10,fontWeight:600,fontFamily:F }}>
+                                        {isPDF(a.fileName)?'📄':'🖼️'} {a.name||a.fileName}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    <div style={{ marginTop:14, border:'1px solid #E5EAF2', borderRadius:8, overflow:'hidden', maxWidth:360, marginLeft:'auto' }}>
+                      <div style={{ display:'flex',justifyContent:'space-between',padding:'7px 12px',background:'#F8FAFF',borderBottom:'1px solid #E5EAF2',fontSize:11.5 }}>
+                        <span style={{ fontWeight:600,color:'#374151' }}>A · Total Supplied Value</span>
+                        <span style={{ fontWeight:800,color:'#1e293b' }}>₹{fmt(supplied)}</span>
+                      </div>
+                      <div style={{ display:'flex',justifyContent:'space-between',padding:'7px 12px',background:'#fff',borderBottom:'1px solid #E5EAF2',fontSize:11.5 }}>
+                        <span style={{ fontWeight:600,color:'#374151' }}>B · Total Amount Received</span>
+                        <span style={{ fontWeight:800,color:'#16a34a' }}>₹{fmt(received)}</span>
+                      </div>
+                      <div style={{ display:'flex',justifyContent:'space-between',padding:'8px 12px',background:'#FEF2F2',fontSize:12 }}>
+                        <span style={{ fontWeight:800,color:'#991B1B' }}>A − B · Dues</span>
+                        <span style={{ fontWeight:800,color:'#991B1B' }}>₹{fmt(dues)}</span>
+                      </div>
                     </div>
-                    <div style={{ display:'flex',gap:6,alignItems:'center' }}>
-                      <span style={{ fontSize:13,fontWeight:800,color:P }}>₹{fmt(b.grandTotal)}</span>
-                      <button onClick={()=>{ setViewOrderBills(null); setViewBill(b); }}
-                        style={{ padding:'3px 10px',fontSize:11,cursor:'pointer',background:'#EFF6FF',color:P,border:'1px solid #b3c6e8',borderRadius:5,fontFamily:F,fontWeight:700 }}>👁 View</button>
-                      <button onClick={()=>{ setViewOrderBills(null); openEditBill(b); }}
-                        style={{ padding:'3px 10px',fontSize:11,cursor:'pointer',background:'#FFF7ED',color:'#C2410C',border:'1px solid #FED7AA',borderRadius:5,fontFamily:F,fontWeight:700 }}>✏ï¸ Edit</button>
-                    </div>
-                  </div>
-                  {/* bill card details */}
-                  <div style={{ padding:'8px 14px',display:'flex',gap:24,flexWrap:'wrap',fontSize:11,color:'#555' }}>
-                    <span>GST: <strong>{b.gstType==='intrastate'?'CGST+SGST':'IGST'}</strong></span>
-                    <span>Taxable: <strong>₹{fmt(b.subTotal)}</strong></span>
-                    <span>GST Amt: <strong style={{color:'#7C3AED'}}>₹{fmt(b.totalGST)}</strong></span>
-                    {b.ewayBillNo && <span>E-way: <strong>{b.ewayBillNo}</strong></span>}
-                    {b.irnNo && <span>IRN: <strong style={{fontSize:10,wordBreak:'break-all'}}>{b.irnNo}</strong></span>}
-                  </div>
-                  {/* attachments row */}
-                  {(b.attachments||[]).length>0 && (
-                    <div style={{ padding:'6px 14px',background:'#F8FAFF',borderTop:'1px solid #E5EAF2',display:'flex',gap:8,flexWrap:'wrap' }}>
-                      {(b.attachments||[]).map((a,ai)=>(
-                        <button key={ai} onClick={()=>setPdfViewer({ url:billFileUrl(b.billId,a.fileName,cid), name:a.name||a.fileName })}
-                          style={{ display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:'#fff',border:'1px solid #b3c6e8',borderRadius:5,cursor:'pointer',color:P,fontSize:11,fontWeight:600,fontFamily:F }}>
-                          {isPDF(a.fileName)?'📄':'🖼ï¸'} {a.name||a.fileName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </>
+                );
+              })()}
             </div>
             <div style={{ padding:'10px 18px',borderTop:'1px solid #E5EAF2',background:'#FAFBFC',borderRadius:'0 0 10px 10px',display:'flex',justifyContent:'flex-end' }}>
               <button onClick={()=>setViewOrderBills(null)} style={{ padding:'6px 18px',border:'1px solid #E5EAF2',borderRadius:6,background:'#fff',cursor:'pointer',fontSize:12,fontWeight:600 }}>Close</button>
@@ -1444,18 +1539,21 @@ export default function SalesBill() {
         {[
           { key:'dashboard', label:'📊 Order Dashboard', count: dashboardRows.length },
           { key:'bills',     label:'Tax Invoices',       count: bills.length },
-          { key:'pending-dc',label:'🚚 Delivery Challan', count: pendingDCs.length, alert: pendingDCs.filter(d=>d.status==='issued').length > 0 },
+          { key:'eway',      label:'📍 E-way Bill',       count: ewayRows.length, alert: ewayRows.some(b => ewayOpen(b) && ewayDaysLeft(b.ewayValidUpto) <= 0) },
         ].map(t => {
           const isAct = listTab === t.key;
           return (
             <button key={t.key} onClick={() => { setListTab(t.key); setSbSearch(''); setBillStatusFilter('all'); setSelRow(null); }}
-              style={{ display:'flex', alignItems:'center', gap:5, padding:'0 12px', height:'100%',
-                fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', gap:5, padding:'0 12px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight:isAct?700:600, cursor:'pointer',
                 whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-                color:isAct?'#fff':'rgba(255,255,255,0.65)',
-                background:isAct?'rgba(255,255,255,0.12)':'transparent',
-                borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
-                marginBottom:-2 }}>
+                color:isAct?'#fff':'rgba(255,255,255,0.85)',
+                background:isAct?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.07)',
+                border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow:isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius:6, margin:'0 4px' }}
+              onMouseEnter={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+              onMouseLeave={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
               {t.label}
               <span style={{ background:t.alert?'#DC2626':isAct?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)',
                 color:'#fff', borderRadius:10, fontSize:10, padding:'1px 7px', fontWeight:700 }}>
@@ -1479,11 +1577,6 @@ export default function SalesBill() {
 
         {/* Right buttons */}
         <div style={{ display:'flex', alignItems:'center', gap:6, padding:'0 10px', flexShrink:0, marginLeft:'auto' }}>
-          <button onClick={() => openIssueDC()}
-            style={{ height:26, padding:'0 12px', background:'rgba(255,255,255,0.18)', border:'1px solid rgba(255,255,255,0.35)',
-              borderRadius:5, cursor:'pointer', color:'#fff', fontSize:11, fontWeight:700, fontFamily:F, whiteSpace:'nowrap' }}>
-            🚚 New DC
-          </button>
           <button onClick={() => setView('create')}
             style={{ height:26, padding:'0 12px', background:'#fff', border:'none',
               borderRadius:5, cursor:'pointer', color:P, fontSize:11, fontWeight:800, fontFamily:F, whiteSpace:'nowrap' }}>
@@ -1605,7 +1698,7 @@ export default function SalesBill() {
             <div style={{ padding:30, textAlign:'center', color:'#9CA3AF' }}>Loading…</div>
           ) : (
             <div style={{ flex:1, overflow:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed', background:'#fff' }}>
                 <colgroup>
                   <col style={{ width:'9%' }} />{/* Order No */}
                   <col style={{ width:'7%' }} />{/* Order Date */}
@@ -1621,11 +1714,11 @@ export default function SalesBill() {
                   <col style={{ width:'8%' }} />{/* Bill Pending */}
                   <col style={{ width:'5%' }} />{/* Bills */}
                 </colgroup>
-                <thead style={{ position:'sticky', top:0, zIndex:2 }}>
+                <thead>
                   <tr>
                     {['Order No','Order Date','Client Order No','Client Name','Material','Order Value (₹)','Order Qty','Dispatch Qty','Due Qty','Billed Qty','Bill Amount (₹)','Bill Pending (₹)','Bills'].map((h,i)=>(
-                      <th key={h} style={{ padding:'5px 6px', background:P, color:'#fff', fontSize:9.5, fontWeight:700,
-                        textAlign:i>=5&&i<=11?'right':'left', border:`1px solid ${PD}`, whiteSpace:'nowrap', position:'sticky', top:0 }}>{h}</th>
+                      <th key={h} style={{ padding:'5px 6px', background:'#133d80', color:'#fff', fontSize:9.5, fontWeight:700,
+                        textAlign:i>=5&&i<=11?'right':'left', border:'1px solid #000', whiteSpace:'nowrap', position:'sticky', top:0, zIndex:2 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1634,25 +1727,25 @@ export default function SalesBill() {
                     <tr><td colSpan={13} style={{ textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch||billStatusFilter!=='all'||fyFilter!=='all'?'No results':'No sales orders found'}</td></tr>
                   ) : rows.map((r,i)=>{
                     const isSel = selRow?.orderId === r.orderId;
-                    const rowBg = isSel ? '#EEF4FF' : i%2===0?'#fff':'#F8FAFF';
+                    const rowBg = isSel ? '#EEF4FF' : '#fff';
                     return (
                     <tr key={r.orderId} onClick={()=>setSelRow(isSel?null:r)}
                       style={{ background:rowBg, cursor:'pointer', outline:isSel?`2px solid ${P}`:'none', outlineOffset:'-2px' }}
                       onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background='#EEF4FF'; }}
                       onMouseLeave={e=>e.currentTarget.style.background=rowBg}>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',fontWeight:700,color:P,wordBreak:'break-all',fontSize:10.5 }}>{r.so?.orderNo||`SO-${r.orderId}`}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(r.so?.orderDate||r.so?.date)||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',color:'#555',wordBreak:'break-all',fontSize:10.5 }}>{r.clientOrderNo||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',fontWeight:600,lineHeight:1.3 }}>{r.clientName}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',lineHeight:1.3,color:'#374151' }} title={r.material}>{r.material}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:'#1e293b',whiteSpace:'nowrap' }}>{r.orderValue>0?`₹${fmt(r.orderValue)}`:'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right' }}>{r.orderedQty||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:'#059669',fontWeight:600 }}>{r.dispatchQty||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:r.dueQty>0?'#DC2626':'#059669',fontWeight:600 }}>{r.dueQty||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',fontWeight:600 }}>{r.billedQty||'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P,whiteSpace:'nowrap' }}>{r.billAmount>0?`₹${fmt(r.billAmount)}`:'—'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:r.pendingBillAmt>0?'#DC2626':'#059669',fontSize:10 }}>{r.pendingBillAmt>0?`₹${fmt(r.pendingBillAmt)}`:'✓ Billed'}</td>
-                      <td style={{ padding:'4px 6px',border:'1px solid #E5EAF2',textAlign:'center' }}>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',fontWeight:700,color:'#000',wordBreak:'break-all',fontSize:10.5 }}>{r.so?.orderNo||`SO-${r.orderId}`}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',color:'#000',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(r.so?.orderDate||r.so?.date)||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',color:'#000',wordBreak:'break-all',fontSize:10.5 }}>{r.clientOrderNo||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',color:'#000',fontWeight:600,lineHeight:1.3 }}>{r.clientName}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',color:'#000',lineHeight:1.3 }} title={r.material}>{r.material}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',fontWeight:700,color:'#000',whiteSpace:'nowrap' }}>{r.orderValue>0?`₹${fmt(r.orderValue)}`:'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',color:'#000',textAlign:'right' }}>{r.orderedQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',color:'#059669',fontWeight:600 }}>{r.dispatchQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',color:r.dueQty>0?'#DC2626':'#059669',fontWeight:600 }}>{r.dueQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',color:'#7C3AED',fontWeight:600 }}>{r.billedQty||'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',fontWeight:700,color:'#000',whiteSpace:'nowrap' }}>{r.billAmount>0?`₹${fmt(r.billAmount)}`:'—'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'right',fontWeight:700,color:r.pendingBillAmt>0?'#DC2626':'#059669',fontSize:10 }}>{r.pendingBillAmt>0?`₹${fmt(r.pendingBillAmt)}`:'✓ Billed'}</td>
+                      <td style={{ padding:'4px 6px',border:'1px solid #000',textAlign:'center' }}>
                         {r.billCount>0?(
                           <span style={{ fontSize:9.5,fontWeight:700,padding:'1px 6px',borderRadius:10,background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',whiteSpace:'nowrap' }}>{r.billCount}✓</span>
                         ):(
@@ -1683,7 +1776,7 @@ export default function SalesBill() {
           (b.orderNo||'').toLowerCase().includes(q) ||
           (b.ewayBillNo||'').toLowerCase().includes(q)
         );
-        filteredBills = [...filteredBills].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+        filteredBills = [...filteredBills].sort((a,b)=>new Date(b.billDate)-new Date(a.billDate) || new Date(b.createdAt)-new Date(a.createdAt));
 
         return (
         <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
@@ -1735,82 +1828,91 @@ export default function SalesBill() {
 
           {/* scrollable table container */}
           <div style={{ flex:1, overflow:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F, tableLayout:'fixed', background:'#fff' }}>
             <colgroup>
               <col style={{ width:'3%' }} />{/* # */}
-              <col style={{ width:'9%' }} />{/* Bill No */}
-              <col style={{ width:'6%' }} />{/* Bill Date */}
-              <col style={{ width:'9%' }} />{/* Order No */}
-              <col style={{ width:'6%' }} />{/* Order Date */}
-              <col style={{ width:'13%' }} />{/* Client */}
-              <col style={{ width:'8%' }} />{/* E-way */}
-              <col style={{ width:'12%' }} />{/* IRN No */}
-              <col style={{ width:'8%' }} />{/* Ack No */}
+              <col style={{ width:'12%' }} />{/* Bill No */}
+              <col style={{ width:'8%' }} />{/* Bill Date */}
+              <col style={{ width:'12%' }} />{/* Order No */}
+              <col style={{ width:'8%' }} />{/* Order Date */}
+              <col style={{ width:'12%' }} />{/* Client */}
+              <col style={{ width:'9%' }} />{/* Client PO No */}
+              <col style={{ width:'10%' }} />{/* Material */}
+              <col style={{ width:'4%' }} />{/* Qty */}
+              <col style={{ width:'6%' }} />{/* Rate */}
               <col style={{ width:'7%' }} />{/* GST Type */}
-              <col style={{ width:'7%' }} />{/* Taxable */}
-              <col style={{ width:'6%' }} />{/* GST */}
-              <col style={{ width:'6%' }} />{/* Grand Total */}
+              <col style={{ width:'8%' }} />{/* Taxable */}
+              <col style={{ width:'7%' }} />{/* GST */}
+              <col style={{ width:'7%' }} />{/* Grand Total */}
             </colgroup>
-            <thead style={{ position:'sticky', top:0, zIndex:2 }}>
+            <thead>
               <tr>
-                {['#','Bill No','Bill Date','Order No','Order Date','Client','E-way Bill No','IRN No','Ack No','GST Type','Taxable (₹)','GST (₹)','Grand Total (₹)'].map((h,i) => (
-                  <th key={h} style={{ padding:'5px 6px', background:P, color:'#fff', fontSize:9.5, fontWeight:700,
-                    textAlign:i>=10&&i<=12?'right':(i===0?'center':'left'), border:`1px solid ${PD}`, whiteSpace:'nowrap' }}>{h}</th>
+                {['#','Bill No','Bill Date','Order No','Order Date','Client','Client PO No','Material','Qty','Rate (₹)','GST Type','Taxable (₹)','GST (₹)','Grand Total (₹)'].map((h,i) => (
+                  <th key={h} style={{ padding:'5px 6px', background:'#133d80', color:'#fff', fontSize:9.5, fontWeight:700,
+                    textAlign:i===8?'center':i===9?'right':i>=11&&i<=13?'right':(i===0?'center':'left'), border:'1px solid #000', whiteSpace:'nowrap', position:'sticky', top:0, zIndex:2 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={13} style={{ textAlign:'center',padding:30,color:'#9CA3AF' }}>Loading…</td></tr>
+                <tr><td colSpan={14} style={{ textAlign:'center',padding:30,color:'#9CA3AF' }}>Loading…</td></tr>
               ) : filteredBills.length===0 ? (
-                <tr><td colSpan={13} style={{ textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch||fyFilter!=='all'?'No results':'No bills yet'}</td></tr>
+                <tr><td colSpan={14} style={{ textAlign:'center',padding:36,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch||fyFilter!=='all'?'No results':'No bills yet'}</td></tr>
               ) : filteredBills.map((b,i) => {
                 const so = salesOrders.find(o=>String(o.orderId)===String(b.orderId));
                 const isSel = selBill?.billId === b.billId;
-                const rowBg = isSel ? '#EEF4FF' : i%2===0 ? '#fff' : '#F8FAFF';
+                const rowBg = isSel ? '#EEF4FF' : '#fff';
+                /* material items only — exclude freight/packing/other charge lines (no itemIdx) */
+                const matItems = (b.items||[]).filter(it => it.itemIdx !== undefined && it.itemIdx !== null);
+                const matQty = matItems.reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+                const material = matItems.length
+                  ? (matItems[0].itemName||matItems[0].description||'—') + (matItems.length>1?` +${matItems.length-1} more`:'')
+                  : '—';
+                const matRate = matItems.length ? (parseFloat(matItems[0].rate)||0) : null;
                 return (
                 <tr key={b.billId} style={{ background:rowBg,cursor:'pointer', outline:isSel?`2px solid ${P}`:'none', outlineOffset:'-2px' }}
                   onClick={()=>setActivityRec(b)}
                   onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background='#EEF4FF';}}
                   onMouseLeave={e=>{e.currentTarget.style.background=rowBg;}}>
                   {/* # select */}
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#9CA3AF',background:isSel?P:'transparent',cursor:'pointer',fontSize:10 }}
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',textAlign:'center',fontWeight:700,color:isSel?'#fff':'#000',background:isSel?P:'transparent',cursor:'pointer',fontSize:10 }}
                     onClick={e=>{e.stopPropagation();setSelBill(s=>s?.billId===b.billId?null:b);}}>
                     {isSel?'✓':i+1}
                   </td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontWeight:700,color:P,wordBreak:'break-all',fontSize:10.5 }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',fontWeight:700,color:'#000',wordBreak:'break-all',fontSize:10.5 }}>
                     {b.billNo||<span style={{color:'#9CA3AF',fontStyle:'italic',fontWeight:400}}>Draft</span>}
                     {(b.attachments||[]).length>0 && <span style={{marginLeft:3,fontSize:9,color:'#059669'}}>📎{(b.attachments||[]).length}</span>}
                   </td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(b.billDate)}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',color:P,fontWeight:600,wordBreak:'break-all',fontSize:10.5 }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',whiteSpace:'nowrap',fontSize:10.5 }}>{fmtD(b.billDate)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',fontWeight:600,wordBreak:'break-all',fontSize:10.5 }}>
                     {b.orderNo || (so?.orderNo ? so.orderNo : '—')}
                   </td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',color:'#555',whiteSpace:'nowrap',fontSize:10.5 }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',whiteSpace:'nowrap',fontSize:10.5 }}>
                     {fmtD(so?.orderDate || so?.date) || '—'}
                   </td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontWeight:600,lineHeight:1.3 }}>{b.partyName}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:10,color:'#555',wordBreak:'break-all' }}>{b.ewayBillNo||'—'}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:9.5,color:'#555',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }} title={b.irnNo||''}>{b.irnNo||'—'}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',fontSize:10,color:'#555',wordBreak:'break-all' }}>{b.acknNo||'—'}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'center' }}>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',fontWeight:600,lineHeight:1.3 }}>{b.partyName}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',fontSize:10.5,wordBreak:'break-all' }}>{so?.customerPO||'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',fontSize:10.5,wordBreak:'break-word' }}>{material}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',textAlign:'center',fontWeight:700 }}>{matQty||'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',textAlign:'right',whiteSpace:'nowrap' }}>{matRate!==null?fmt(matRate):'—'}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',textAlign:'center' }}>
                     <span style={{ padding:'1px 5px',borderRadius:4,fontSize:9.5,fontWeight:700,background:b.gstType==='intrastate'?'#DCFCE7':'#EEF2FF',color:b.gstType==='intrastate'?'#133d80':'#4338CA',whiteSpace:'nowrap' }}>
                       {b.gstType==='intrastate'?'CGST+SGST':'IGST'}
                     </span>
                   </td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',whiteSpace:'nowrap' }}>{fmt(b.subTotal)}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',whiteSpace:'nowrap' }}>{fmt(b.totalGST)}</td>
-                  <td style={{ padding:'4px 5px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:P,whiteSpace:'nowrap' }}>{fmt(b.grandTotal)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',color:'#000',textAlign:'right',whiteSpace:'nowrap' }}>{fmt(b.subTotal)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',textAlign:'right',color:'#7C3AED',whiteSpace:'nowrap' }}>{fmt(b.totalGST)}</td>
+                  <td style={{ padding:'4px 5px',border:'1px solid #000',textAlign:'right',fontWeight:700,color:'#000',whiteSpace:'nowrap' }}>{fmt(b.grandTotal)}</td>
                 </tr>
               );})}
             </tbody>
             {filteredBills.length>0 && (
               <tfoot style={{ position:'sticky', bottom:0, zIndex:2 }}>
                 <tr style={{ background:'#e8eef8', fontWeight:700 }}>
-                  <td colSpan={10} style={{ padding:'6px 8px',border:'1px solid #E5EAF2',fontWeight:800 }}>TOTAL ({filteredBills.length} bills{fyFilter!=='all'?` · FY ${fyFilter}`:''})</td>
-                  <td style={{ padding:'6px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.subTotal)||0),0))}</td>
-                  <td style={{ padding:'6px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:'#7C3AED',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.totalGST)||0),0))}</td>
-                  <td style={{ padding:'6px 8px',border:'1px solid #E5EAF2',textAlign:'right',color:P,fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.grandTotal)||0),0))}</td>
+                  <td colSpan={11} style={{ padding:'6px 8px',border:'1px solid #000',color:'#000',fontWeight:800 }}>TOTAL ({filteredBills.length} bills{fyFilter!=='all'?` · FY ${fyFilter}`:''})</td>
+                  <td style={{ padding:'6px 8px',border:'1px solid #000',color:'#000',textAlign:'right',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.subTotal)||0),0))}</td>
+                  <td style={{ padding:'6px 8px',border:'1px solid #000',textAlign:'right',color:'#7C3AED',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.totalGST)||0),0))}</td>
+                  <td style={{ padding:'6px 8px',border:'1px solid #000',textAlign:'right',color:'#000',fontWeight:800 }}>{fmt(filteredBills.reduce((s,b)=>s+(parseFloat(b.grandTotal)||0),0))}</td>
                 </tr>
               </tfoot>
             )}
@@ -1820,134 +1922,159 @@ export default function SalesBill() {
         );
       })()}
 
-      {/* ── DC TAB ── */}
-      {listTab==='pending-dc' && (
-        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-          <div style={{ background:'#FFFBEB', borderBottom:'1px solid #FDE68A', padding:'7px 14px', display:'flex', alignItems:'center', gap:10 }}>
-            <span style={{ fontSize:11, color:'#92400E', flex:1 }}><strong>Delivery Challans</strong> — "Invoice Pending" = invoice not yet created.</span>
-            <span style={{ fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FDE68A' }}>
-              {pendingDCs.filter(d=>d.status==='issued').length} Pending Invoice
+      {listTab==='eway' && (
+        <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ background:'#EFF6FF', borderBottom:'1px solid #BFDBFE', padding:'7px 14px', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            <span style={{ fontSize:11, color:'#1E3A5F', flex:1 }}>
+              <strong>E-way Bill Tracking</strong> — monitor each invoice's e-way bill validity. If the vehicle hasn't reached the delivery location yet, extend the "Valid Upto" date; once goods are received, mark it delivered.
             </span>
+            {(() => {
+              const today = ewayRows.filter(b => ewayOpen(b) && ewayDaysLeft(b.ewayValidUpto) === 0).length;
+              return today > 0 && (
+                <span style={{ fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FCD34D',marginRight:6,whiteSpace:'nowrap' }}>
+                  ⏰ {today} Expiring Today — extend or mark delivered
+                </span>
+              );
+            })()}
+            {ewayRows.some(b => ewayOpen(b) && ewayDaysLeft(b.ewayValidUpto) < 0) && (
+              <span style={{ fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:'#FEE2E2',color:'#991B1B',border:'1px solid #FCA5A5',whiteSpace:'nowrap' }}>
+                ⚠ {ewayRows.filter(b => ewayOpen(b) && ewayDaysLeft(b.ewayValidUpto) < 0).length} Expired — Still In Transit
+              </span>
+            )}
           </div>
           {loading ? (
             <div style={{ padding:30,textAlign:'center',color:'#9CA3AF' }}>Loading…</div>
           ) : (
+            /* own scroll area — the panel above clips overflow, so rows past the screen were unreachable */
+            <div style={{ flex:1, minHeight:0, overflow:'auto' }}>
             <table style={{ width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:F }}>
               <thead>
-                <tr>{['DC No','DC Date','Sales Order','Client','Amount (₹)','Dispatched Via','Status','Action'].map((h,i)=>(
-                  <th key={h} style={{ padding:'6px 8px',background:'#b45309',color:'#fff',fontSize:10,fontWeight:700,textAlign:i===4?'right':'left',border:'1px solid #92400e',whiteSpace:'nowrap' }}>{h}</th>
+                <tr>{['Sr No','Client Name','PO No','PO Date','Bill Date','Bill No','Material','Qty','Invoice Value (₹)','Way Bill No','Vehicle No','Valid Upto','Status','Actions'].map(h=>(
+                  <th key={h} style={{ padding:'6px 8px',background:P,color:'#fff',fontSize:10,fontWeight:700,textAlign:'left',border:`1px solid ${PD}`,whiteSpace:'nowrap',position:'sticky',top:0,zIndex:2 }}>{h}</th>
                 ))}</tr>
               </thead>
               <tbody>
                 {(() => {
                   const q = sbSearch.toLowerCase();
-                  const dcs = q ? pendingDCs.filter(d =>
-                    (d.dcNo||'').toLowerCase().includes(q) ||
-                    (d.clientName||'').toLowerCase().includes(q) ||
-                    (d.orderNo||'').toLowerCase().includes(q) ||
-                    (d.dispatchThrough||'').toLowerCase().includes(q)
-                  ) : pendingDCs;
-                  if (dcs.length===0) return <tr><td colSpan={8} style={{ textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch?'No results':'No delivery challans yet.'}</td></tr>;
-                  return dcs.map((d,i)=>{
-                  const isPending=d.status==='issued';
-                  return (
-                    <tr key={d.dcId} style={{ background:i%2===0?'#fff':'#FFFBEB' }}>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:700,color:'#92400e' }}>{d.dcNo}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{fmtD(d.dcDate)}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#555' }}>{d.orderNo||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:600 }}>{d.clientName||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700 }}>{fmt(d.grandTotal)}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#555' }}>{d.dispatchThrough||'—'}</td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
-                        {isPending
-                          ? <span style={{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#FEF3C7',color:'#92400E',border:'1px solid #FDE68A',whiteSpace:'nowrap' }}>⏳ Invoice Pending</span>
-                          : <span style={{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',whiteSpace:'nowrap' }}>✅ {d.linkedInvoiceNo||'Invoiced'}</span>
-                        }
-                      </td>
-                      <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
-                        <div style={{ display:'flex',gap:4 }}>
-                          {isPending && (
-                            <button onClick={()=>{ setSelDC(String(d.dcId)); setSelOrder(String(d.linkedSalesOrderId||'')); setView('create'); }}
-                              style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',borderRadius:4,fontFamily:F,fontWeight:700 }}>
-                              🧾 Invoice
-                            </button>
+                  const rows = q ? ewayRows.filter(b => {
+                    const so = soByOrderId[String(b.orderId)];
+                    const matItems = (b.items||[]).filter(it => it.itemIdx !== undefined && it.itemIdx !== null);
+                    const materialText = matItems.map(it=>it.itemName||it.description||'').join(' ');
+                    const hay = [
+                      b.billNo, b.partyName, b.vehicleNo, b.ewayBillNo,
+                      so?.customerPO, fmtD(so?.poDate), fmtD(b.billDate),
+                      materialText, b.grandTotal, fmtD(b.ewayValidUpto),
+                      b.ewayStatus==='delivered' ? 'delivered' : ewayDaysLeft(b.ewayValidUpto) === 0 ? 'expires today in transit' : ewayDaysLeft(b.ewayValidUpto) < 0 ? 'expired' : 'in transit',
+                      b.pod?.receivedBy, b.pod?.receiverMobile, fmtD(b.pod?.deliveryDate),
+                    ].filter(Boolean).join(' ').toLowerCase();
+                    return hay.includes(q);
+                  }) : ewayRows;
+                  if (rows.length===0) return <tr><td colSpan={14} style={{ textAlign:'center',padding:30,color:'#9CA3AF',fontStyle:'italic' }}>{sbSearch?'No results':'No e-way bills recorded yet — add one from an invoice\'s E-way Bill fields.'}</td></tr>;
+                  return rows.map((b,i) => {
+                    const delivered = b.ewayStatus==='delivered';
+                    const daysLeft  = ewayDaysLeft(b.ewayValidUpto);
+                    const expired   = !delivered && daysLeft !== null && daysLeft < 0;
+                    const dueToday  = !delivered && daysLeft === 0;
+                    const isExtending = ewayExtendId === b.billId;
+                    const busy = ewayBusyId === b.billId;
+                    const so = soByOrderId[String(b.orderId)];
+                    /* material items only — exclude freight/packing/other charge lines (no itemIdx) */
+                    const matItems = (b.items||[]).filter(it => it.itemIdx !== undefined && it.itemIdx !== null);
+                    const matQty = matItems.reduce((s,it)=>s+(parseFloat(it.qty)||0),0);
+                    const material = matItems.length
+                      ? (matItems[0].itemName||matItems[0].description||'—') + (matItems.length>1?` +${matItems.length-1} more`:'')
+                      : '—';
+                    return (
+                      <tr key={b.billId} style={{ background: delivered ? '#F0FDF4' : expired ? '#FEF2F2' : dueToday ? '#FFFBEB' : i%2===0?'#fff':'#F8FAFC' }}>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',color:'#6b7280' }}>{i+1}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:600 }}>{b.partyName||'—'}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{so?.customerPO||'—'}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',whiteSpace:'nowrap' }}>{fmtD(so?.poDate)}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',whiteSpace:'nowrap' }}>{fmtD(b.billDate)}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontWeight:700,color:P }}>{b.billNo||b.billId}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{material}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'center',fontWeight:700 }}>{matQty||'—'}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',textAlign:'right',fontWeight:700,color:'#1e293b' }}>{fmt(b.grandTotal)}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',fontFamily:'monospace',fontSize:10 }}>{b.ewayBillNo}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>{b.vehicleNo||'—'}</td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2',whiteSpace:'nowrap' }}>
+                          {isExtending ? (
+                            <input type="date" value={ewayExtendVal} onChange={e=>setEwayExtendVal(e.target.value)}
+                              style={{ height:24,padding:'0 6px',border:'1px solid #9CA3AF',borderRadius:4,fontSize:11,fontFamily:F,outline:'none' }}/>
+                          ) : (
+                            <>
+                              <span style={{ fontWeight: expired||dueToday?700:400, color: expired?'#DC2626':dueToday?'#B45309':'#111' }}>
+                                {fmtD(b.ewayValidUpto) || '—'}
+                              </span>
+                              {dueToday && <div style={{ fontSize:9.5, fontWeight:800, color:'#B45309', marginTop:1 }}>⏰ Expiring Today</div>}
+                              {expired && <div style={{ fontSize:9.5, fontWeight:800, color:'#DC2626', marginTop:1 }}>Expired {-daysLeft} day{daysLeft === -1 ? '' : 's'} ago</div>}
+                            </>
                           )}
-                          <button onClick={()=>printDeliveryChallan(d,{companyName:selectedCompany?.companyName||'',address:selectedCompany?.address||'',gstin:selectedCompany?.gstin||''})}
-                            style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#EFF6FF',color:P,border:'1px solid #b3c6e8',borderRadius:4,fontFamily:F,fontWeight:700 }}>
-                            🖨 Print
-                          </button>
-                          <button onClick={()=>handleDeleteDC(d)}
-                            style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#FEF2F2',color:'#DC2626',border:'1px solid #FECACA',borderRadius:4,fontFamily:F }}>
-                            🗑
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })})()}
+                        </td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
+                          {delivered
+                            ? <div>
+                                <span style={{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#DCFCE7',color:'#166534',border:'1px solid #86EFAC',whiteSpace:'nowrap' }}>✅ Delivered</span>
+                                {b.pod && (
+                                  <div style={{ fontSize:9.5,color:'#374151',marginTop:3,lineHeight:1.4,whiteSpace:'nowrap' }}>
+                                    {fmtD(b.pod.deliveryDate)} · {b.pod.receivedBy}{b.pod.receiverMobile ? ` (${b.pod.receiverMobile})` : ''}
+                                    {b.pod.fileName && <> · <a href={billFileUrl(b.billId, b.pod.fileName, cid)} target="_blank" rel="noreferrer" style={{ color:P,fontWeight:700 }}>📎 POD</a></>}
+                                  </div>
+                                )}
+                              </div>
+                            : expired
+                              ? <span style={{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#FEE2E2',color:'#991B1B',border:'1px solid #FCA5A5',whiteSpace:'nowrap' }}>⚠ Expired</span>                              : <span style={{ fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:'#DBEAFE',color:'#1E40AF',border:'1px solid #93C5FD',whiteSpace:'nowrap' }}>🚚 In Transit</span>}
+                        </td>
+                        <td style={{ padding:'5px 8px',border:'1px solid #E5EAF2' }}>
+                          <div style={{ display:'flex',gap:4 }}>
+                            {isExtending ? (
+                              <>
+                                <button disabled={busy} onClick={()=>extendEwayValidity(b)}
+                                  style={{ padding:'2px 8px',fontSize:10,cursor:busy?'wait':'pointer',background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',borderRadius:4,fontFamily:F,fontWeight:700 }}>
+                                  ✔ Save
+                                </button>
+                                <button onClick={()=>{setEwayExtendId(null);setEwayExtendVal('');}}
+                                  style={{ padding:'2px 8px',fontSize:10,cursor:'pointer',background:'#F3F4F6',color:'#374151',border:'1px solid #D1D5DB',borderRadius:4,fontFamily:F }}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : !delivered ? (
+                              <>
+                                <button disabled={busy} onClick={()=>{setEwayExtendId(b.billId);setEwayExtendVal(b.ewayValidUpto||'');}}
+                                  style={{ padding:'2px 8px',fontSize:10,cursor:busy?'wait':'pointer',background:'#EFF6FF',color:P,border:'1px solid #b3c6e8',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
+                                  📅 Extend
+                                </button>
+                                <button disabled={busy} onClick={()=>openPod(b)}
+                                  style={{ padding:'2px 8px',fontSize:10,cursor:busy?'wait':'pointer',background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
+                                  ✅ Mark Delivered
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                              <button disabled={busy} onClick={()=>openPod(b)}
+                                style={{ padding:'2px 8px',fontSize:10,cursor:busy?'wait':'pointer',background:'#ECFDF5',color:'#065F46',border:'1px solid #6EE7B7',borderRadius:4,fontFamily:F,fontWeight:700,whiteSpace:'nowrap' }}>
+                                {b.pod ? '✏️ POD' : '📎 Add POD'}
+                              </button>
+                              <button disabled={busy} onClick={()=>setEwayDelivered(b,false)}
+                                style={{ padding:'2px 8px',fontSize:10,cursor:busy?'wait':'pointer',background:'#F3F4F6',color:'#374151',border:'1px solid #D1D5DB',borderRadius:4,fontFamily:F,whiteSpace:'nowrap' }}>
+                                ↺ Reopen
+                              </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
     </div>
   );
-
-  /* ═══════════════════════ ISSUE DC VIEW ═══════════════════════ */
-  if (view==='issue-dc') {
-    const so = dcSOData;
-    return (
-      <div style={{ fontFamily:F, fontSize:12, padding:10 }}>
-        <div style={{ background:'#b45309', color:'#fff', padding:'8px 14px', borderRadius:7, display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-          <div>
-            <div style={{ fontSize:14, fontWeight:800 }}>🚚 Issue Delivery Challan</div>
-            <div style={{ fontSize:10, opacity:0.8, marginTop:1 }}>Goods dispatched — invoice to be raised later</div>
-          </div>
-          <button onClick={()=>{ setView('list'); setListTab('pending-dc'); }}
-            style={{ height:28,padding:'0 14px',background:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.4)',color:'#fff',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:F }}>
-            ← Back
-          </button>
-        </div>
-        {dcMsg && <div style={{ marginBottom:10,padding:'8px 12px',borderRadius:6,fontSize:12,background:dcMsg.startsWith('Error')?'#FEF2F2':'#ECFDF5',color:dcMsg.startsWith('Error')?'#DC2626':'#059669',border:`1px solid ${dcMsg.startsWith('Error')?'#FECACA':'#A7F3D0'}` }}>{dcMsg}</div>}
-        <div style={{ background:'#fff',border:'1px solid #E5EAF2',borderRadius:8,padding:14,marginBottom:10 }}>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
-            <div><label style={lbl}>Select Sales Order *</label>
-              <select style={{ ...inp,cursor:'pointer' }} value={dcSO} onChange={e=>setDcSO(e.target.value)}>
-                <option value="">— Select SO —</option>
-                {salesOrders.map(o=><option key={o.orderId} value={o.orderId}>{o.orderNo||`SO-${o.orderId}`} · {o.customerName||'—'}</option>)}
-              </select>
-            </div>
-            <div><label style={lbl}>DC Date *</label><input type="date" style={inp} value={dcDate} onChange={e=>setDcDate(e.target.value)}/></div>
-            <div><label style={lbl}>Dispatch Through</label><input style={inp} value={dcDispatch} onChange={e=>setDcDispatch(e.target.value)} placeholder="Transport / courier"/></div>
-            <div><label style={lbl}>Vehicle No</label><input style={inp} value={dcVehicle} onChange={e=>setDcVehicle(e.target.value)} placeholder="Vehicle number"/></div>
-            <div><label style={lbl}>Invoice No (if already issued)</label><input style={inp} value={dcInvNo} onChange={e=>setDcInvNo(e.target.value)} placeholder="Optional"/></div>
-            <div><label style={lbl}>Invoice Date</label><input type="date" style={inp} value={dcInvDate} onChange={e=>setDcInvDate(e.target.value)}/></div>
-          </div>
-        </div>
-        {so && (
-          <div style={{ background:'#fff',border:'1px solid #E5EAF2',borderRadius:8,padding:12,marginBottom:10 }}>
-            <div style={{ fontWeight:800,fontSize:12,color:'#1E293B',marginBottom:8 }}>Order Details</div>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10 }}>
-              {[{label:'Client',val:so.customerName||'—'},{label:'Order No',val:so.orderNo||'—'},{label:'Order Date',val:fmtD(so.orderDate)},{label:'Grand Total',val:`₹${fmt(so.grandTotal)}`}].map(x=>(
-                <div key={x.label}>
-                  <div style={{ fontSize:9,color:'#9CA3AF',textTransform:'uppercase' }}>{x.label}</div>
-                  <div style={{ fontSize:12,fontWeight:600,color:'#1E293B',marginTop:2 }}>{x.val}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <div style={{ display:'flex',justifyContent:'flex-end',gap:8 }}>
-          <button onClick={()=>{ setView('list'); setListTab('pending-dc'); }}
-            style={{ height:30,padding:'0 16px',background:'#f5f5f5',border:'1px solid #d1d5db',color:'#374151',borderRadius:5,cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:F }}>Cancel</button>
-          <button onClick={handleIssueDC} disabled={dcSaving||!dcSO}
-            style={{ height:30,padding:'0 20px',background:dcSaving||!dcSO?'#9CA3AF':'#b45309',border:'none',color:'#fff',borderRadius:5,cursor:dcSaving||!dcSO?'not-allowed':'pointer',fontSize:11,fontWeight:700,fontFamily:F }}>
-            {dcSaving?'Issuing…':'🚚 Issue DC'}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   /* ═══════════════════════ CREATE VIEW ═══════════════════════ */
   const partyState = order?.customerState||order?.shipToState||'';
@@ -1974,7 +2101,7 @@ export default function SalesBill() {
           <button onClick={async()=>{
             await handleSave();
             // for edit this already redirects; for new, redirect after saving
-            if (!editBill) setTimeout(()=>{ setView('list'); setListTab('bills'); setMsg(''); setSelOrder(''); setOrder(null); setSelDC(''); setBillFile(null); setEditBill(null); }, 400);
+            if (!editBill) setTimeout(()=>{ setView('list'); setListTab('bills'); setMsg(''); setSelOrder(''); setOrder(null); setBillFile(null); setEditBill(null); }, 400);
           }} disabled={saving}
             style={{ height:30,padding:'0 18px',background: editBill?'#10B981':'#133d80',border:'none',borderRadius:6,cursor:saving?'not-allowed':'pointer',color:'#fff',fontSize:12,fontWeight:800,fontFamily:F,opacity:saving?0.7:1 }}>
             {saving?'Saving…': editBill ? '✔ Update Bill' : '✔ Save & Done'}
@@ -2010,6 +2137,21 @@ export default function SalesBill() {
           <div><label style={lbl}>E-way Bill No</label>
             <input style={inp} value={ewayBillNo} onChange={e=>setEwayBillNo(e.target.value)} placeholder="e.g. 231234567890"/>
           </div>
+          <div><label style={lbl}>E-way Bill Valid Upto</label>
+            <input style={inp} value={ewayValidUpto} onChange={e=>setEwayValidUpto(e.target.value)} placeholder="e.g. 10-07-2026 11:59 PM"/>
+          </div>
+          <div><label style={lbl}>E-way Bill Generated</label>
+            <input style={inp} value={ewayGenDate} onChange={e=>setEwayGenDate(e.target.value)} placeholder="e.g. 08-07-2026 11:05 AM"/>
+          </div>
+          <div><label style={lbl}>Vehicle No</label>
+            <input style={inp} value={vehicleNo} onChange={e=>setVehicleNo(e.target.value.toUpperCase())} placeholder="e.g. MH40CT0743"/>
+          </div>
+          <div><label style={lbl}>Approx Distance (KM)</label>
+            <input style={inp} value={approxDistanceKm} onChange={e=>setApproxDistanceKm(e.target.value)} placeholder="e.g. 1171"/>
+          </div>
+          <div style={{gridColumn:'span 2'}}><label style={lbl}>Dispatch From (if different from company address)</label>
+            <input style={inp} value={dispatchFrom} onChange={e=>setDispatchFrom(e.target.value)} placeholder="Actual warehouse / dispatch location"/>
+          </div>
           <div><label style={lbl}>IRN No</label>
             <input style={inp} value={irnNo} onChange={e=>setIrnNo(e.target.value)} placeholder="Invoice Reference Number"/>
           </div>
@@ -2019,18 +2161,39 @@ export default function SalesBill() {
           <div><label style={lbl}>Acknowledgement Date</label>
             <input type="date" style={inp} value={acknDate} onChange={e=>setAcknDate(e.target.value)}/>
           </div>
+        </div>
+
+        <div style={{ fontSize:11,fontWeight:800,color:'#6B7280',margin:'14px 0 8px',paddingTop:10,borderTop:'1px solid #E5EAF2' }}>e-Way Bill — Extended Details (optional, for the full e-Way Bill print page)</div>
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12 }}>
+          <div><label style={lbl}>Mode</label>
+            <input style={inp} value={ewayMode} onChange={e=>setEwayMode(e.target.value)} placeholder="e.g. 1 - Road"/>
+          </div>
+          <div><label style={lbl}>Supply Type</label>
+            <input style={inp} value={supplyType} onChange={e=>setSupplyType(e.target.value)} placeholder="e.g. Outward-Supply"/>
+          </div>
+          <div><label style={lbl}>Transaction Type</label>
+            <input style={inp} value={transactionType} onChange={e=>setTransactionType(e.target.value)} placeholder="e.g. Regular"/>
+          </div>
+          <div><label style={lbl}>Vehicle From (City)</label>
+            <input style={inp} value={vehicleFromCity} onChange={e=>setVehicleFromCity(e.target.value)} placeholder="e.g. Ahmedabad"/>
+          </div>
+          <div><label style={lbl}>Transporter ID</label>
+            <input style={inp} value={transporterId} onChange={e=>setTransporterId(e.target.value)} placeholder="GSTIN of transporter"/>
+          </div>
+          <div><label style={lbl}>Transporter Name</label>
+            <input style={inp} value={transporterName} onChange={e=>setTransporterName(e.target.value)} placeholder="Transporter name"/>
+          </div>
+          <div><label style={lbl}>CEWB No</label>
+            <input style={inp} value={cewbNo} onChange={e=>setCewbNo(e.target.value)} placeholder="Consolidated e-Way Bill No"/>
+          </div>
+        </div>
+
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginTop:12,paddingTop:10,borderTop:'1px solid #E5EAF2' }}>
           <div><label style={lbl}>Select Sales Order *</label>
             <select style={{ ...inp,cursor:'pointer' }} value={selOrder} onChange={e=>setSelOrder(e.target.value)}>
               <option value="">— Select Sales Order —</option>
               {salesOrders.map(o=><option key={o.orderId} value={o.orderId}>{o.orderNo||`SO-${o.orderId}`} · {o.customerName||o.clientName||'—'}</option>)}
             </select>
-          </div>
-          <div><label style={lbl}>Link Delivery Challan</label>
-            <select style={{ ...inp,cursor:'pointer' }} value={selDC} onChange={e=>setSelDC(e.target.value)}>
-              <option value="">— No DC linked —</option>
-              {pendingDCs.map(d=><option key={d.dcId} value={d.dcId}>{d.dcNo} · {d.clientName||'—'} · {fmtD(d.dcDate)}</option>)}
-            </select>
-            {selDC && <div style={{ fontSize:10,color:'#059669',marginTop:3 }}>✅ DC will be marked as Invoiced</div>}
           </div>
           <div><label style={lbl}>Upload Bill / Invoice PDF</label>
             <input type="file" accept=".pdf,.jpg,.jpeg,.png"

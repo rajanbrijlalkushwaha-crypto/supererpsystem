@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { withPrintFont } from '../../utils/printFont';
 
 const F  = "Arial, 'Helvetica Neue', Helvetica, sans-serif";
 const TH = '#1a3a5c';
@@ -272,14 +273,14 @@ export default function MonthlyReport() {
 
 <!-- FOOTER -->
 <div class="footer">
-  <span>Universal Core ERP Solutions &nbsp;·&nbsp; Confidential</span>
+  <span>Super ERP System &nbsp;·&nbsp; Confidential</span>
   <span>${fyOpt.label} &nbsp;·&nbsp; Generated ${today}</span>
 </div>
 
 </body></html>`;
 
     const w = window.open('', '_blank');
-    w.document.write(html);
+    w.document.write(withPrintFont(html));
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 500);
   };

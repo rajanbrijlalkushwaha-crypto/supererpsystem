@@ -362,13 +362,16 @@ export default function StockIn() {
           const a = pageTab === k;
           return (
             <button key={k} onClick={() => setPageTab(k)}
-              style={{ display:'flex', alignItems:'center', padding:'0 13px', height:'100%',
-                fontSize:11.5, fontWeight:a?700:400, border:'none', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', padding:'0 13px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight:a?700:600, cursor:'pointer',
                 whiteSpace:'nowrap', fontFamily:F,
-                color:a?'#fff':'rgba(255,255,255,0.65)',
-                background:a?'rgba(255,255,255,0.12)':'transparent',
-                borderBottom:a?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
-                marginBottom:-2 }}>
+                color:a?'#fff':'rgba(255,255,255,0.85)',
+                background:a?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.07)',
+                border:`1px solid ${a?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow:a?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius:6, margin:'0 4px' }}
+              onMouseEnter={e=>{if(!a){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+              onMouseLeave={e=>{if(!a){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
               {l}
             </button>
           );

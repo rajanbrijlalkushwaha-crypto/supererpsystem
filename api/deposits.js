@@ -2,7 +2,8 @@ const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
 const multer  = require('multer');
-const { ROOT } = require('./helpers');
+const { ROOT, resolveUser } = require('./helpers');
+const { notifyApprovers } = require('./notifications');
 
 const router = express.Router();
 const cid = req => req.query.companyId || req.body?.companyId || '';
@@ -81,6 +82,19 @@ router.post('/', (req, res) => {
     const dDir = path.join(dir, depositId);
     fs.mkdirSync(dDir, { recursive: true });
     fs.writeFileSync(path.join(dDir, `${depositId}.json`), JSON.stringify(deposit, null, 2));
+
+    if (deposit.status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'deposit', recordId: depositId,
+        recordLabel: `Deposit / BG ${depositId} — ${deposit.customerName || ''}`,
+        message: `Deposit / BG ${depositId} (${deposit.customerName || ''}) needs your approval`,
+        link: '/account/deposit/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json(deposit);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -93,6 +107,19 @@ router.put('/:depositId', (req, res) => {
     const existing = JSON.parse(fs.readFileSync(file, 'utf-8'));
     const updated = { ...existing, ...req.body, depositId: req.params.depositId, updatedAt: new Date().toISOString() };
     fs.writeFileSync(file, JSON.stringify(updated, null, 2));
+
+    if (updated.status === 'pending' && existing.status !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId: cid(req), module: 'deposit', recordId: req.params.depositId,
+        recordLabel: `Deposit / BG ${req.params.depositId} — ${updated.customerName || ''}`,
+        message: `Deposit / BG ${req.params.depositId} (${updated.customerName || ''}) needs your approval`,
+        link: '/account/deposit/view',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: req.body.approverId || null,
+      });
+    }
+
     res.json(updated);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

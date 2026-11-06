@@ -227,6 +227,7 @@ export default function StockOut() {
 
   /* page */
   const [pageTab, setPageTab] = useState('pending');
+  const [pendingSearch, setPendingSearch] = useState('');
 
   /* data */
   const [stockLevels,    setStockLevels]    = useState([]);
@@ -300,6 +301,17 @@ export default function StockOut() {
       );
     });
   }, [salesBills, allGDNs]);
+
+  const filteredPendingBills = useMemo(() => {
+    const q = pendingSearch.trim().toLowerCase();
+    if (!q) return pendingBills;
+    return pendingBills.filter(bill =>
+      (bill.billNo || '').toLowerCase().includes(q) ||
+      (bill.partyName || bill.clientName || '').toLowerCase().includes(q) ||
+      (bill.orderNo || bill.soNo || '').toLowerCase().includes(q) ||
+      String(bill.orderId || '').includes(q)
+    );
+  }, [pendingBills, pendingSearch]);
 
   /* Pre-fill GDN form from a pending sales bill */
   const loadBillForGDN = (bill) => {
@@ -535,13 +547,16 @@ export default function StockOut() {
           const a = pageTab === k;
           return (
             <button key={k} onClick={() => setPageTab(k)}
-              style={{ display: 'flex', alignItems: 'center', padding: '0 13px', height: '100%',
-                fontSize: 11.5, fontWeight: a ? 700 : 400, border: 'none', cursor: 'pointer',
+              style={{ display: 'flex', alignItems: 'center', padding: '0 13px', height: 26, alignSelf:'center',
+                fontSize: 11.5, fontWeight: a ? 700 : 600, cursor: 'pointer',
                 whiteSpace: 'nowrap', fontFamily: F,
-                color: a ? '#fff' : 'rgba(255,255,255,0.65)',
-                background: a ? 'rgba(255,255,255,0.12)' : 'transparent',
-                borderBottom: a ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-                marginBottom: -2 }}>
+                color: a ? '#fff' : 'rgba(255,255,255,0.85)',
+                background: a ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+                border: `1px solid ${a?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow: a?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius: 6, margin: '0 4px' }}
+              onMouseEnter={e=>{if(!a){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+              onMouseLeave={e=>{if(!a){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
               {l}
             </button>
           );
@@ -603,17 +618,15 @@ export default function StockOut() {
             </div>
           ) : (
             <div style={card}>
-              <SH color={P}
-                right={
-                  <button onClick={() => setPageTab('create')}
-                    style={{ height: 24, padding: '0 12px', fontSize: 11, cursor: 'pointer',
-                      background: 'rgba(255,255,255,0.15)', color: '#fff',
-                      border: '1px solid rgba(255,255,255,0.3)', borderRadius: 5, fontWeight: 600 }}>
-                    + Manual GDN
-                  </button>
-                }>
-                Pending Dispatch — {pendingBills.length} Sales Bill{pendingBills.length !== 1 ? 's' : ''} Awaiting
-              </SH>
+              <div style={{ padding: '10px 14px', borderBottom: `1px solid ${BD}` }}>
+                <input
+                  value={pendingSearch}
+                  onChange={e => setPendingSearch(e.target.value)}
+                  placeholder="Search by Bill No, Customer, Order No…"
+                  style={{ height: 32, padding: '0 12px', border: `1px solid ${BD}`, borderRadius: 6,
+                    fontSize: 12, fontFamily: F, outline: 'none', width: 320 }}
+                />
+              </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: F }}>
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
@@ -627,7 +640,7 @@ export default function StockOut() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingBills.map((bill, i) => (
+                    {filteredPendingBills.map((bill, i) => (
                       <tr key={bill.billId || i}
                         style={{ background: i % 2 === 0 ? '#fff' : '#FFFBF5', borderBottom: `1px solid ${BD}`,
                           transition: 'background 0.1s' }}
@@ -671,6 +684,11 @@ export default function StockOut() {
                         </td>
                       </tr>
                     ))}
+                    {filteredPendingBills.length === 0 && (
+                      <tr><td colSpan={8} style={{ padding: '30px 10px', textAlign: 'center', color: '#9CA3AF', fontStyle: 'italic' }}>
+                        No pending bills match "{pendingSearch}"
+                      </td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>

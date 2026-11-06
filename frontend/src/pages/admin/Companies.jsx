@@ -5,7 +5,7 @@ import { useCompany } from '../../context/CompanyContext';
 const emptyForm = () => ({
   companyName: '', address: '', city: '', state: 'Gujarat', pincode: '',
   gstin: '', pan: '', email: '', phone: '', website: '',
-  bankName: '', bankAccount: '', bankIfsc: '', isDefault: false
+  bankName: '', bankAccount: '', bankIfsc: '', bankBranch: '', isDefault: false
 });
 
 const Companies = () => {
@@ -16,6 +16,8 @@ const Companies = () => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [locations, setLocations] = useState([]);   // stores / factories: [{ name, type: 'Store' | 'Factory', address }]
+  const setLoc = (i, k, v) => setLocations(l => l.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
   const { refreshCompanies, selectCompany } = useCompany();
 
   useEffect(() => { fetchCompanies(); }, []);
@@ -38,6 +40,7 @@ const Companies = () => {
       setLoading(true);
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+      fd.append('locations', JSON.stringify(locations.filter(x => x.name.trim())));
       if (logo) fd.append('logo', logo);
       if (editId) {
         await axios.put(`/api/companies/${editId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -46,14 +49,15 @@ const Companies = () => {
         await axios.post('/api/companies', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         setMessage('Company created successfully.');
       }
-      setForm(emptyForm()); setEditId(null); setLogo(null); setShowForm(false);
+      setForm(emptyForm()); setEditId(null); setLogo(null); setShowForm(false); setLocations([]);
       fetchCompanies(); refreshCompanies();
     } catch (err) { setMessage('Error: ' + err.message); }
     finally { setLoading(false); }
   };
 
   const handleEdit = (co) => {
-    setForm({ companyName: co.companyName || '', address: co.address || '', city: co.city || '', state: co.state || 'Gujarat', pincode: co.pincode || '', gstin: co.gstin || '', pan: co.pan || '', email: co.email || '', phone: co.phone || '', website: co.website || '', bankName: co.bankName || '', bankAccount: co.bankAccount || '', bankIfsc: co.bankIfsc || '', isDefault: co.isDefault || false });
+    setForm({ companyName: co.companyName || '', address: co.address || '', city: co.city || '', state: co.state || 'Gujarat', pincode: co.pincode || '', gstin: co.gstin || '', pan: co.pan || '', email: co.email || '', phone: co.phone || '', website: co.website || '', bankName: co.bankName || '', bankAccount: co.bankAccount || '', bankIfsc: co.bankIfsc || '', bankBranch: co.bankBranch || '', isDefault: co.isDefault || false });
+    setLocations(Array.isArray(co.locations) ? co.locations.map(x => ({ name: x.name || '', type: x.type === 'Factory' ? 'Factory' : 'Store', address: x.address || '' })) : []);
     setEditId(co.companyId);
     setShowForm(true);
     setMessage('');
@@ -171,12 +175,43 @@ const Companies = () => {
                   <input type="text" name="bankIfsc" value={form.bankIfsc} onChange={handleInput} />
                 </div>
               </div>
+              <div className="form-row three">
+                <div className="form-group">
+                  <label>Branch Name</label>
+                  <input type="text" name="bankBranch" value={form.bankBranch} onChange={handleInput} />
+                </div>
+              </div>
               <div className="form-row full">
                 <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
                   <input type="checkbox" name="isDefault" checked={form.isDefault} onChange={handleInput} id="isDefault" style={{ width: 'auto' }} />
                   <label htmlFor="isDefault" style={{ marginBottom: 0, fontWeight: 'bold' }}>Set as Default Company</label>
                 </div>
               </div>
+            </div>
+
+            <div className="form-section">
+              <h3 className="section-title">Store &amp; Factory Locations</h3>
+              <p style={{ margin: '0 0 8px', fontSize: 12, color: '#667085' }}>Places where material is kept or made. They are offered when material is received, returned or sent out.</p>
+              {locations.map((l, i) => (
+                <div className="form-row three" key={i} style={{ alignItems: 'flex-end' }}>
+                  <div className="form-group">
+                    <label>Name</label>
+                    <input type="text" value={l.name} onChange={e => setLoc(i, 'name', e.target.value)} placeholder="e.g. Main Store, Changodar Factory" />
+                  </div>
+                  <div className="form-group" style={{ maxWidth: 160 }}>
+                    <label>Type</label>
+                    <select value={l.type} onChange={e => setLoc(i, 'type', e.target.value)}><option>Store</option><option>Factory</option></select>
+                  </div>
+                  <div className="form-group">
+                    <label>Address</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input type="text" value={l.address} onChange={e => setLoc(i, 'address', e.target.value)} style={{ flex: 1 }} />
+                      <button type="button" className="cancel-btn" onClick={() => setLocations(x => x.filter((_, j) => j !== i))} aria-label={`Remove ${l.name || 'location'}`}>✕</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button type="button" className="cancel-btn" onClick={() => setLocations(x => [...x, { name: '', type: 'Store', address: '' }])}>+ Add store / factory</button>
             </div>
 
             <div className="form-actions">

@@ -294,9 +294,10 @@ const PendingClients = () => {
 
         {/* + Create Client */}
         <button onClick={() => navigate('/client-sap')}
-          style={{ display:'flex', alignItems:'center', padding:'0 14px', fontSize:11.5,
-            fontWeight:700, color:'#fff', background:'#059669', border:'none', cursor:'pointer',
-            whiteSpace:'nowrap', flexShrink:0, margin:'auto 6px', borderRadius:5, height:26 }}
+          style={{ display:'flex', alignItems:'center', padding:'0 14px', fontSize:11.5, alignSelf:'center',
+            fontWeight:700, color:'#fff', background:'#059669',
+            border:'1px solid rgba(255,255,255,0.3)', boxShadow:'0 2px 6px rgba(0,0,0,0.2)', cursor:'pointer',
+            whiteSpace:'nowrap', flexShrink:0, margin:'0 6px', borderRadius:6, height:26 }}
           onMouseEnter={e => { e.currentTarget.style.background='#047857'; }}
           onMouseLeave={e => { e.currentTarget.style.background='#059669'; }}>
           + Create Client
@@ -306,19 +307,21 @@ const PendingClients = () => {
         {[
           { label:'👥 View Clients', path:'/client/view' },
           { label:'⏳ Pending',      path:'/client/pending' },
+          { label:'🧾 Tally',        path:'/client/tally' },
         ].map(tab => {
           const isAct = pathname === tab.path;
           return (
             <button key={tab.path} onClick={() => navigate(tab.path)}
-              style={{ display:'flex', alignItems:'center', padding:'0 11px', height:'100%',
-                fontSize:11.5, fontWeight: isAct ? 700 : 400, border:'none', cursor:'pointer',
+              style={{ display:'flex', alignItems:'center', padding:'0 12px', height:26, alignSelf:'center',
+                fontSize:11.5, fontWeight: isAct ? 700 : 600, cursor:'pointer',
                 whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-                color: isAct ? '#fff' : 'rgba(255,255,255,0.65)',
-                background: isAct ? 'rgba(255,255,255,0.12)' : 'transparent',
-                borderBottom: isAct ? '2px solid rgba(255,255,255,0.85)' : '2px solid transparent',
-                marginBottom: -2 }}
-              onMouseEnter={e => { if (!isAct) e.currentTarget.style.background='rgba(255,255,255,0.08)'; }}
-              onMouseLeave={e => { if (!isAct) e.currentTarget.style.background='transparent'; }}>
+                color: isAct ? '#fff' : 'rgba(255,255,255,0.85)',
+                background: isAct ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)',
+                border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+                boxShadow: isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+                borderRadius:6, margin:'0 4px' }}
+              onMouseEnter={e => { if (!isAct) { e.currentTarget.style.background='rgba(255,255,255,0.14)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.55)'; } }}
+              onMouseLeave={e => { if (!isAct) { e.currentTarget.style.background='rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.22)'; } }}>
               {tab.label}
             </button>
           );

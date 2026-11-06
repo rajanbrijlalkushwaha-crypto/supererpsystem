@@ -1,4 +1,5 @@
 const express    = require('express');
+const compression = require('compression');
 const cors       = require('cors');
 const path       = require('path');
 const http       = require('http');
@@ -9,10 +10,18 @@ const app  = express();
 const PORT = process.env.PORT || 5000;
 
 // ── Middleware ──
+// level 4 keeps ~88% of the size win at ~25% less CPU than the default (6),
+// which matters here because the server is a single blocking Node process.
+app.use(compression({ level: 4, threshold: 1024 }));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'frontend', 'build')));
+app.use(express.static(path.join(__dirname, 'frontend', 'build'), {
+  maxAge: '1y',              // hashed bundle filenames — safe to cache hard
+  setHeaders: (res, fp) => {
+    if (fp.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // Normalize companyId — prevents duplicate query params sending an array
 app.use((req, _res, next) => {
@@ -20,33 +29,48 @@ app.use((req, _res, next) => {
   next();
 });
 
+// ── SQLite read index — built from the JSON tree, kept current by a watcher ──
+const sqlite = require('./api/sqlite');
+sqlite.reindexAll();
+sqlite.startWatcher();
+
 // ── Auth routes (no token required — public) ──
 app.use('/api/auth', require('./api/auth').router);
 
 // ── API routes ──
 app.use('/api/clients',           require('./api/clients'));
 app.use('/api/vendors',           require('./api/vendors'));
+app.use('/api/hr',                require('./api/hr'));
 app.use('/api/items',             require('./api/items'));
 app.use('/api/sales-orders',      require('./api/salesOrders'));
 app.use('/api/purchase-orders',   require('./api/purchaseOrders'));
 app.use('/api/companies',         require('./api/companies'));
 app.use('/api/accounts',          require('./api/accounts'));
 app.use('/api/tally',             require('./api/tally'));
+app.use('/api/tally-reports',     require('./api/tallyReports'));   // read-only Balance Sheet / P&L from Tally
 app.use('/api/manufacturing',     require('./api/manufacturing'));
 app.use('/api/stock',             require('./api/stock'));
 app.use('/api/projects',          require('./api/projects'));
 app.use('/api/bills',             require('./api/bills'));
+app.use('/api/proforma-invoices', require('./api/proformaInvoices'));
 app.use('/api/delivery-challans', require('./api/deliveryChallans'));
 app.use('/api/grn',               require('./api/grn'));
+app.use('/api/returns',           require('./api/returns'));
+app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
+app.use('/api/raw-materials',     require('./api/rawMaterials'));   // Raw Material master (manufacturing)   // Return Note (client) / Return to Vendor
 app.use('/api/gdn',               require('./api/gdn'));
 app.use('/api/passwords',         require('./api/passwords'));
+app.use('/api/bank-ifsc',         require('./api/bankIfsc'));   // IFSC → bank, branch, address (read from ifsc.bankifsccode.com)
+app.use('/api/eway-helper',       require('./api/ewayHelper'));   // pairs the E-Way Helper on user PCs and hands it e-way jobs
 app.use('/api/crm',               require('./api/crm'));
 app.use('/api/deposits',          require('./api/deposits'));
 app.use('/api/approvals',         require('./api/approvals'));
+app.use('/api/notifications',     require('./api/notifications').router);
 app.use('/api/ledger',            require('./api/ledger'));
 app.use('/api/communication',     require('./api/communication').router);
 app.use('/api/financial-docs',    require('./api/financial-docs'));
 app.use('/api/chat',              require('./api/chat'));
+app.use('/api/ai',                require('./api/ai'));
 
 // ── Vendor Portal ──
 app.use('/api/vendor-portal', require('./api/vendor-portal').router);
@@ -63,6 +87,7 @@ app.use('/api/sap/tasks',             require('./api/sap/tasks'));
 
 // Serve React app for all non-API routes
 app.get('*', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
 });
 
@@ -175,4 +200,17 @@ io.on('connection', (socket) => {
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  // e-way / GST portal work runs here on the server (headless) — nothing to install on the users' PCs
+  try { require('./api/ewayHelper').startServerHelpers(PORT); } catch (e) { console.warn('[eway] portal workers not started:', e.message); }
 });
+
+// The same app on the standard web port too, so users open just http://<server-ip> (no ":5000").
+// Port 5000 stays — the dev proxy and the chat socket use it. HTTP_PORT=0 turns this off.
+const WEB_PORT = Number(process.env.HTTP_PORT ?? 80);
+if (WEB_PORT && WEB_PORT !== Number(PORT)) {
+  const webServer = http.createServer(app);
+  io.attach(webServer);   // chat / calls work on this port too (the page connects to its own origin)
+  webServer
+    .on('error', e => console.warn(`Port ${WEB_PORT} not opened (${e.code}) — use http://<ip>:${PORT}. ${e.code === 'EADDRINUSE' ? 'Another program is using it.' : ''}`))
+    .listen(WEB_PORT, '0.0.0.0', () => console.log(`Also on http://0.0.0.0:${WEB_PORT} (no port needed in the address)`));
+}

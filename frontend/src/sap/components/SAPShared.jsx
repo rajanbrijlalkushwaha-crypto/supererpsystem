@@ -339,5 +339,5 @@ export function ErrorBox({ msg }) {
 /* ══════════════════════════════════════════════════════════════
    Format helpers
 ══════════════════════════════════════════════════════════════ */
-export const fmt     = (n) => `₹${(n || 0).toFixed(2)}`;
+export const fmt     = (n) => `₹${(Number(n) || 0).toFixed(2)}`;
 export const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';

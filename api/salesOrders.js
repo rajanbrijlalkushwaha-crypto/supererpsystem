@@ -1,9 +1,17 @@
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit } = require('./helpers');
+const { ROOT, upload, saveUploadedFiles, saveJson, auditEntry, pushAudit, resolveUser } = require('./helpers');
 const jstore  = require('./json-store');
+
+/* A suspended client must not get new sales orders (or have an order moved to it). Returns the client name when blocked. */
+const suspendedClient = (companyId, clientId) => {
+  if (!companyId || !clientId) return null;
+  try { const c = jstore.readOne('Client', companyId, clientId); return c && c.status === 'suspended' ? (c.companyName || c.clientName || String(clientId)) : null; }
+  catch { return null; }
+};
 const { addSystemLog } = require('./communication');
+const { notifyApprovers } = require('./notifications');
 
 const soJsonPath = (companyId, orderId) =>
   path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(orderId), `${orderId}.json`);
@@ -13,6 +21,36 @@ const router = express.Router();
 
 const docsBase = (companyId, orderId) =>
   path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(orderId), 'docs');
+
+/* Pairs freshly-uploaded files with their metadata entries by matching against
+   whichever meta entries are still missing a filePath (in order), instead of
+   assuming the uploaded-files array and the full metadata array share the same
+   index. That assumption breaks the moment a save mixes already-uploaded files
+   (no new binary this request) with newly added ones — e.g. editing an order to
+   add one more spec file when three were already attached — which silently
+   corrupted file/metadata pairing (issue: printed "Missing PDF" for attachments
+   that were actually a different file's bytes under the wrong name). */
+const mergeIntoMeta = (meta, saved) => {
+  let si = 0;
+  for (let mi = 0; mi < meta.length && si < saved.length; mi++) {
+    if (meta[mi] && !meta[mi].filePath) { meta[mi].filePath = saved[si].filePath; meta[mi].fileName = saved[si].fileName; si++; }
+  }
+  while (si < saved.length) { meta.push(saved[si]); si++; }
+  return meta;
+};
+
+/* Writes uploaded spec/drawing files into docs/specs/ and returns the same
+   {name, filePath, fileName, fileType} shape saveUploadedFiles() returns. */
+const saveSpecFiles = (files, docsPath) => {
+  if (!files.length) return [];
+  const specsDir = path.join(docsPath, 'specs');
+  fs.mkdirSync(specsDir, { recursive: true });
+  return files.map((sf, i) => {
+    const fname = Date.now() + i + '-' + sf.originalname;
+    fs.writeFileSync(path.join(specsDir, fname), sf.buffer);
+    return { name: sf.originalname, filePath: 'docs/specs/' + fname, fileName: fname, fileType: sf.originalname.split('.').pop().toLowerCase() };
+  });
+};
 
 const parseJ = (v, fb = {}) => {
   if (v && typeof v === 'object') return v;
@@ -96,6 +134,17 @@ router.get('/:orderId/material-balance', async (req, res) => {
     const soItems  = so.items || so.materialPlanningItems || [];
     const soAddons = so.addons || [];
 
+    // Per-item spec text written in the SO's Specifications tab (the
+    // "✍ Write Specs" note beside each item) — stored separately from the
+    // item's own additionalDesc field, keyed by item _id.
+    let specNotesByItemId = {};
+    try {
+      const specSheet = typeof so.specSheet === 'string' ? JSON.parse(so.specSheet) : (so.specSheet || {});
+      (specSheet.itemNotes || []).forEach(n => {
+        if (n && n.itemId && n.text) specNotesByItemId[String(n.itemId)] = n.text;
+      });
+    } catch {}
+
     const purchasedMap = {};
     poList.forEach(poData => {
       (poData.items || []).forEach(it => {
@@ -108,9 +157,11 @@ router.get('/:orderId/material-balance', async (req, res) => {
       const key       = (m.itemName || m.material || m.description || '').toLowerCase().trim();
       const required  = parseFloat(m.qty || m.requiredQty || m.quantity) || 0;
       const purchased = purchasedMap[key] || 0;
+      const writtenSpec = m._id ? specNotesByItemId[String(m._id)] : '';
+      const baseSpec     = m.additionalDesc || m.specs || m.specifications || m.remarks || '';
       return {
         itemName:     m.itemName || m.material || m.description || '',
-        specs:        m.additionalDesc || m.specs || m.specifications || m.remarks || '',
+        specs:        [baseSpec, writtenSpec].filter(Boolean).join(' — '),
         qty:          required,
         unit:         m.unit || 'NOS',
         hsnCode:      m.hsnCode || '',
@@ -177,6 +228,9 @@ router.post('/', soUploadFields, async (req, res) => {
     const b = req.body;
     const companyId = req.query.companyId || (Array.isArray(b.companyId) ? b.companyId[0] : b.companyId);
     const status    = Array.isArray(b.status) ? b.status[0] : (b.status || 'draft');
+    const newClient = Array.isArray(b.customerCode) ? b.customerCode[0] : b.customerCode;
+    const susp = suspendedClient(companyId, newClient);
+    if (susp) return res.status(400).json({ error: `Client ${susp} (${newClient}) is suspended — a sales order cannot be created for this client.` });
 
     const orderId = db.connected
       ? await (async () => {
@@ -197,8 +251,7 @@ router.post('/', soUploadFields, async (req, res) => {
     let attMeta = jp('attachments');
     if (attFiles.length > 0) {
       fs.mkdirSync(docsPath, { recursive: true });
-      const saved = saveUploadedFiles(attFiles, docsPath);
-      saved.forEach((s, i) => { if (attMeta[i]) { attMeta[i].filePath = s.filePath; attMeta[i].fileName = s.fileName; } else attMeta.push(s); });
+      mergeIntoMeta(attMeta, saveUploadedFiles(attFiles, docsPath));
     }
 
     const data = {
@@ -210,10 +263,11 @@ router.post('/', soUploadFields, async (req, res) => {
       shipToName: str('shipToName'), shipToAddress: str('shipToAddress'),
       shipToCity: str('shipToCity'), shipToState: str('shipToState'), shipToPincode: str('shipToPincode'),
       shipToContact: str('shipToContact'), shipToMobile: str('shipToMobile'), shipToEmail: str('shipToEmail'),
+      shipToGstin: str('shipToGstin'), billToContact: str('billToContact'), billToMobile: str('billToMobile'),
       address: str('address'),
       contactPerson: str('contactPerson'), mobile: str('mobile'), email: str('email'),
       customerPO: str('customerPO'), poDate: str('poDate'), enquiryRef: str('enquiryRef'),
-      quotationRef: str('quotationRef'), deliveryDate: str('deliveryDate'), incoterms: str('incoterms'),
+      quotationRef: str('quotationRef'), quotationDate: str('quotationDate'), deliveryDate: str('deliveryDate'), incoterms: str('incoterms'),
       overallDiscount: num('overallDiscount'), freightCharges: num('freightCharges'),
       packingCharges: num('packingCharges'), roundOff: num('roundOff'),
       subTotal: num('subTotal'), totalGST: num('totalGST'), grandTotal: num('grandTotal'),
@@ -238,21 +292,7 @@ router.post('/', soUploadFields, async (req, res) => {
       bankGuarantee: jp('bankGuarantee') || {}, warranty: jp('warranty') || {},
       addons: jp('addons'),
       specSheet: str('specSheet'),
-      specFiles: (() => {
-        let meta = jp('specFiles', []);
-        if (specFiles.length > 0) {
-          const specsDir = path.join(docsPath, 'specs');
-          fs.mkdirSync(specsDir, { recursive: true });
-          specFiles.forEach((sf, i) => {
-            const fname = Date.now() + i + '-' + sf.originalname;
-            fs.writeFileSync(path.join(specsDir, fname), sf.buffer);
-            const rel = 'docs/specs/' + fname;
-            if (meta[i]) { meta[i].filePath = rel; meta[i].fileName = fname; }
-            else meta.push({ name: sf.originalname, fileName: fname, filePath: rel, fileType: sf.originalname.split('.').pop().toLowerCase() });
-          });
-        }
-        return meta;
-      })(),
+      specFiles: mergeIntoMeta(jp('specFiles', []), saveSpecFiles(specFiles, docsPath)),
     };
 
     if (db.connected) {
@@ -271,6 +311,18 @@ router.post('/', soUploadFields, async (req, res) => {
       `Order received — SO #${orderId}${data.orderNo ? ` (${data.orderNo})` : ''} from ${data.customerName || 'Customer'}` +
       (data.grandTotal ? ` for ₹${fmtAmt(data.grandTotal)}` : ''),
       data.orderDate);
+
+    if (status === 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'salesorder', recordId: orderId,
+        recordLabel: `Sales Order ${data.orderNo || orderId} — ${data.customerName || 'Customer'}`,
+        message: `Sales Order ${data.orderNo || orderId} (${data.customerName || 'Customer'}) needs your approval`,
+        link: '/sales-order/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
 
     res.json({ success: true, orderId, message: `Sales Order created with ID: ${orderId}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -311,11 +363,14 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
     const specFiles2 = (req.files && req.files['specUploadFiles'])  || [];
 
     let attMeta = jp('attachments', ex.attachments || []);
-    saveUploadedFiles(attFiles2, docsPath).forEach((s, i) => {
-      if (attMeta[i]) { attMeta[i].filePath = s.filePath; attMeta[i].fileName = s.fileName; } else attMeta.push(s);
-    });
+    mergeIntoMeta(attMeta, saveUploadedFiles(attFiles2, docsPath));
 
     const status = str('status') || ex.status || 'draft';
+    const movedTo = str('customerCode');
+    if (movedTo && String(movedTo) !== String(ex.customerCode || '')) {
+      const susp = suspendedClient(companyId, movedTo);
+      if (susp) return res.status(400).json({ error: `Client ${susp} (${movedTo}) is suspended — the order cannot be moved to this client.` });
+    }
     const data = {
       ...ex, status,
       orderNo: str('orderNo') || ex.orderNo || '', orderDate: str('orderDate') || ex.orderDate || '',
@@ -327,12 +382,13 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
       shipToCity: str('shipToCity') || ex.shipToCity || '', shipToState: str('shipToState') || ex.shipToState || '',
       shipToPincode: str('shipToPincode') || ex.shipToPincode || '',
       shipToContact: str('shipToContact') || ex.shipToContact || '',
+      shipToGstin: str('shipToGstin') || ex.shipToGstin || '', billToContact: str('billToContact') || ex.billToContact || '', billToMobile: str('billToMobile') || ex.billToMobile || '',
       shipToMobile: str('shipToMobile') || ex.shipToMobile || '', shipToEmail: str('shipToEmail') || ex.shipToEmail || '',
       address: str('address') || ex.address || '',
       contactPerson: str('contactPerson') || ex.contactPerson || '', mobile: str('mobile') || ex.mobile || '',
       email: str('email') || ex.email || '', customerPO: str('customerPO') || ex.customerPO || '',
       poDate: str('poDate') || ex.poDate || '', enquiryRef: str('enquiryRef') || ex.enquiryRef || '',
-      quotationRef: str('quotationRef') || ex.quotationRef || '', deliveryDate: str('deliveryDate') || ex.deliveryDate || '',
+      quotationRef: str('quotationRef') || ex.quotationRef || '', quotationDate: str('quotationDate') || ex.quotationDate || '', deliveryDate: str('deliveryDate') || ex.deliveryDate || '',
       incoterms: str('incoterms') || ex.incoterms || '',
       overallDiscount: num('overallDiscount') || ex.overallDiscount || 0,
       freightCharges: num('freightCharges') || ex.freightCharges || 0,
@@ -365,21 +421,7 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
       bankGuarantee: jp('bankGuarantee', ex.bankGuarantee || {}), warranty: jp('warranty', ex.warranty || {}),
       addons: jp('addons', ex.addons || []),
       specSheet: str('specSheet') !== '' ? str('specSheet') : (ex.specSheet || ''),
-      specFiles: (() => {
-        let meta = jp('specFiles', ex.specFiles || []);
-        if (specFiles2.length > 0) {
-          const specsDir = path.join(docsPath, 'specs');
-          fs.mkdirSync(specsDir, { recursive: true });
-          specFiles2.forEach((sf, i) => {
-            const fname = Date.now() + i + '-' + sf.originalname;
-            fs.writeFileSync(path.join(specsDir, fname), sf.buffer);
-            const rel = 'docs/specs/' + fname;
-            if (meta[i]) { meta[i].filePath = rel; meta[i].fileName = fname; }
-            else meta.push({ name: sf.originalname, fileName: fname, filePath: rel, fileType: sf.originalname.split('.').pop().toLowerCase() });
-          });
-        }
-        return meta;
-      })(),
+      specFiles: mergeIntoMeta(jp('specFiles', ex.specFiles || []), saveSpecFiles(specFiles2, docsPath)),
     };
 
     if (db.connected) {
@@ -397,6 +439,18 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
     const soExtra = newStatus !== oldStatus ? { from: oldStatus, to: newStatus } : {};
     saveJson(soJsonPath(companyId, orderId), { ...data, updatedAt: new Date().toISOString(),
       audit: pushAudit(ex, req, soAction, soExtra) });
+
+    if (newStatus === 'pending' && oldStatus !== 'pending') {
+      const submitter = resolveUser(req);
+      notifyApprovers({
+        companyId, module: 'salesorder', recordId: orderId,
+        recordLabel: `Sales Order ${data.orderNo || orderId} — ${data.customerName || 'Customer'}`,
+        message: `Sales Order ${data.orderNo || orderId} (${data.customerName || 'Customer'}) needs your approval`,
+        link: '/sales-order/pending',
+        createdBy: submitter?.name || submitter?.username || 'System',
+        targetUserId: str('approverId') || null,
+      });
+    }
 
     res.json({ success: true, message: 'Sales order updated successfully' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -424,7 +478,12 @@ router.delete('/:orderId', async (req, res) => {
 // GET - Render attachment file as embeddable content (PDF base64, Excel/Word HTML, text)
 router.get('/:orderId/render-attachment/:fileName', async (req, res) => {
   try {
-    const fp = path.join(docsBase(req.query.companyId, req.params.orderId), req.params.fileName);
+    let fp = path.join(docsBase(req.query.companyId, req.params.orderId), req.params.fileName);
+    if (!fs.existsSync(fp)) {
+      /* spec/drawing uploads live under docs/specs/ — fall back there */
+      const specFp = path.join(docsBase(req.query.companyId, req.params.orderId), 'specs', req.params.fileName);
+      if (fs.existsSync(specFp)) fp = specFp;
+    }
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
 
     const ext = path.extname(req.params.fileName).toLowerCase();
@@ -482,7 +541,11 @@ router.get('/:orderId/spec-file/:fileName', (req, res) => {
 // GET - Download/view file
 router.get('/:orderId/download/:fileName', (req, res) => {
   try {
-    const fp = path.join(docsBase(req.query.companyId, req.params.orderId), req.params.fileName);
+    let fp = path.join(docsBase(req.query.companyId, req.params.orderId), req.params.fileName);
+    if (!fs.existsSync(fp)) {
+      const specFp = path.join(docsBase(req.query.companyId, req.params.orderId), 'specs', req.params.fileName);
+      if (fs.existsSync(specFp)) fp = specFp;
+    }
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
     if (req.query.inline) {
       res.sendFile(path.resolve(fp));
@@ -490,6 +553,67 @@ router.get('/:orderId/download/:fileName', (req, res) => {
       res.download(fp);
     }
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST - print pack: the order page (html from the browser) + its spec files and attachments as one PDF
+router.post('/:orderId/print-pack', async (req, res) => {
+  const companyId = req.query.companyId || req.body?.companyId;
+  const html = String(req.body?.html || '');
+  if (!resolveUser(req)) return res.status(401).json({ error: 'Please sign in again.' });
+  if (!companyId || !html) return res.status(400).json({ error: 'companyId and html are needed.' });
+  let browser;
+  try {
+    const so = jstore.readOne('SalesOrder', companyId, req.params.orderId);
+    if (!so) return res.status(404).json({ error: 'Sales order not found' });
+    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    const puppeteer = require('puppeteer');
+    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'load' });
+    const soPdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+    await browser.close(); browser = null;
+
+    const out = await PDFDocument.load(soPdf);
+    const font = await out.embedFont(StandardFonts.HelveticaBold);
+    const docsDir = path.resolve(docsBase(companyId, req.params.orderId));
+    const files = [...(so.specFiles || []).map(f => ({ ...f, kind: 'Specification' })), ...(so.attachments || so.documents || []).map(f => ({ ...f, kind: 'Attachment' }))]
+      .filter(f => f && f.fileName);
+    const seen = new Set(), notPrinted = [];
+    for (const f of files) {
+      if (seen.has(f.fileName)) continue;
+      seen.add(f.fileName);
+      const base = path.basename(String(f.fileName));
+      let fp = path.resolve(docsDir, base);
+      if (!fs.existsSync(fp)) fp = path.resolve(docsDir, 'specs', base);
+      const label = f.name || f.fileName;
+      if (!fp.startsWith(docsDir + path.sep) || !fs.existsSync(fp)) { notPrinted.push(`${label} (missing)`); continue; }
+      const ext = path.extname(fp).toLowerCase();
+      try {
+        const buf = fs.readFileSync(fp);
+        if (ext === '.pdf') {
+          const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+          (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+        } else if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+          const img = ext === '.png' ? await out.embedPng(buf) : await out.embedJpg(buf);
+          const W = 595.28, H = 841.89, M = 28, top = 24;   // A4 in points
+          const pg = out.addPage([W, H]);
+          const title = `${f.kind}: ${label}${f.itemName ? ` (${f.itemName})` : ''} — SO ${so.orderNo || so.orderId}`.replace(/[^\x20-\x7E]/g, ' ');
+          pg.drawText(title.slice(0, 110), { x: M, y: H - M - 10, size: 9, font, color: rgb(0, 0, 0) });
+          const k = Math.min((W - 2 * M) / img.width, (H - 2 * M - top) / img.height, 1.6);
+          const w = img.width * k, h = img.height * k;
+          pg.drawImage(img, { x: (W - w) / 2, y: H - M - top - h, width: w, height: h });
+        } else notPrinted.push(label);
+      } catch { notPrinted.push(`${label} (could not be read)`); }
+    }
+    const bytes = await out.save();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Not-Printed', encodeURIComponent(JSON.stringify(notPrinted)));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Not-Printed');
+    res.send(Buffer.from(bytes));
+  } catch (e) {
+    if (browser) { try { await browser.close(); } catch { /* closed */ } }
+    res.status(500).json({ error: 'Could not make the print: ' + e.message });
+  }
 });
 
 module.exports = router;

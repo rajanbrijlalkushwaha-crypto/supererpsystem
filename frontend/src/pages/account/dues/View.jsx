@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { px } from '../../../utils/uiScale';
 import axios from 'axios';
 import { useLocation } from 'react-router-dom';
 import { useCompany } from '../../../context/CompanyContext';
 import { useAuth } from '../../../context/AuthContext';
+import { withPrintFont } from '../../../utils/printFont';
+import FyDropdown from '../../../components/FyDropdown';
+import { useNavTheme } from '../../../utils/navTheme';
 
 const fmt  = n => (parseFloat(n) || 0).toFixed(2);
 const fmtD = d => {
@@ -182,7 +186,8 @@ function printAdvice(entityName, groupRows, type, companyData, entityDetail, bil
 
     /* 4. Payment / Receipt rows — only Payment/Receipt column */
     linkedPayments.forEach(pmt => {
-      const pmtNarr = ['Payment', pmt.referenceNo, pmt.paymentMode].filter(Boolean).join(' — ');
+      const pmtNarr = pmt.isJournal ? ['Journal', pmt.referenceNo, pmt.narration].filter(Boolean).join(' — ')
+        : ['Payment', pmt.referenceNo, pmt.paymentMode, pmt.isSplit ? `share of ₹${fmt(pmt.fullAmount)}` : ''].filter(Boolean).join(' — ');
       entries.push({ date: pmt.date, narr: pmtNarr, colA: parseFloat(pmt.amount)||0, colB: null });
     });
 
@@ -489,7 +494,195 @@ function printAdvice(entityName, groupRows, type, companyData, entityDetail, bil
   </body></html>`;
 
   const w = window.open('', '_blank');
-  w.document.write(html);
+  w.document.write(withPrintFont(html));
+  w.document.close();
+  w.onload = () => w.print();
+}
+
+/* ══════════════════════════════════════════════════════════
+   PRINT — Format-01 (compact single-block slip per PO, A4 portrait)
+══════════════════════════════════════════════════════════ */
+function printFormat01(entityName, groupRows, type, companyData, entityDetail, currentUser, soMap) {
+  const isVend = type === 'vendor';
+  const logoUrl = (companyData?.logoFileName && companyData?.companyId)
+    ? `/api/companies/logo/${encodeURIComponent(companyData.logoFileName)}?companyId=${companyData.companyId}`
+    : '';
+
+  const coHeader = `
+    <div class="co-hdr">
+      ${logoUrl ? `<img src="${logoUrl}" alt="logo" class="co-logo-img" onerror="this.style.display='none'">` : ''}
+      <div class="co-name">${companyData?.companyName || 'Epsilon Enterprise'}</div>
+      <div class="co-addr">${[companyData?.address, companyData?.city, companyData?.state, companyData?.pincode].filter(Boolean).join(', ')}</div>
+    </div>`;
+
+  const blocks = groupRows.map((row, idx) => {
+    const items = row.items || [];
+
+    const vendorName = isVend ? entityName : (companyData?.companyName || '—');
+    const linkedSO    = isVend ? (soMap && soMap[String(row.linkedSalesOrderId || '')]) : null;
+    const clientName  = isVend
+      ? (linkedSO ? (linkedSO.customerName || linkedSO.clientName || linkedSO.party || '') : (row.clientName || '—'))
+      : entityName;
+
+    const poNo     = row.orderNo || row.poNo || '—';
+    /* "Order ID File no" = the File No. of the linked Sales Order this PO
+       was raised against (e.g. EPSSO2627001) — not the PO's own internal id */
+    const orderId  = linkedSO ? (linkedSO.orderNo || linkedSO.poNo || '—') : (row.linkedSalesOrderId || '—');
+    const poDate   = fmtD(row.orderDate);
+    const dueDate  = fmtD(row.deliveryDate || row.dueDate);
+
+    const payments = row.linkedPayments || [];
+    const paid     = payments.reduce((s,p) => s+(parseFloat(p.amount)||0), 0);
+    const poValue  = parseFloat(row.orderTotal) || 0;
+
+    /* each payment's amount + date stacked in the Paid cell, with a bold
+       total underneath — matches the ledger-style reference layout */
+    const paidCellHtml = payments.length
+      ? payments.map(p => `<div class="pmt-line"><div class="pmt-amt">₹${fmt(p.amount)}</div><div class="pmt-date">${fmtD(p.date)}${p.isJournal ? ` · JV #${p.journalId}${p.narration ? ' ' + p.narration : ''}` : ''}</div></div>`).join('')
+        + `<div class="pmt-total">₹${fmt(paid)}</div>`
+      : (paid ? fmt(paid) : '');
+
+    let sumTaxable = 0, sumGst = 0;
+    const itemRows = items.map(it => {
+      const qty  = parseFloat(it.qty||it.quantity||0);
+      const rate = parseFloat(it.rate||0);
+      const disc = it.discountType==='%' ? qty*rate*(parseFloat(it.discount)||0)/100 : (parseFloat(it.discount)||0);
+      const taxable = qty*rate - disc;
+      const gstPct  = parseFloat(it.gstPercent||it.gstPct||it.gst||0);
+      const gstAmt  = taxable * gstPct / 100;
+      sumTaxable += taxable;
+      sumGst     += gstAmt;
+      return { material: it.itemName||it.description||'—', qty, rate, taxable, gstAmt };
+    });
+
+    /* PO Value / Paid / Dues belong in their own columns, not in the total
+       row — but rather than cramming them into item row 1's natural height
+       (which stretched that single row and left a gap before row 2), they
+       use rowspan to merge across all item rows, so the tall payment list
+       fills the whole merged block evenly instead of distorting one row. */
+    const n = itemRows.length;
+    const itemRowsHtml = itemRows.map((r, j) => `<tr>
+      <td class="c">${j+1}</td>
+      <td>${r.material}</td>
+      <td class="c">${r.qty||''}</td>
+      <td class="r">${fmt(r.rate)}</td>
+      <td class="r">${fmt(r.taxable)}</td>
+      <td class="r">${fmt(r.gstAmt)}</td>
+      ${j===0 ? `<td class="r" rowspan="${n}">${fmt(poValue)}</td>` : ''}
+      ${j===0 ? `<td class="r pmt-cell" rowspan="${n}">${paidCellHtml}</td>` : ''}
+      ${j===0 ? `<td class="r" rowspan="${n}">${fmt(poValue-paid)}</td>` : ''}
+    </tr>`).join('') || `<tr><td colspan="9" class="c eg">No items</td></tr>`;
+
+    /* total row — Taxable/GST sums only; PO Value/Paid/Dues already shown
+       via the rowspanned cells above, so those 3 columns stay blank here */
+    const totRowHtml = `<tr class="tot-row">
+      <td></td><td class="fw">Total</td><td></td><td></td>
+      <td class="r fw">${fmt(sumTaxable)}</td>
+      <td class="r fw">${fmt(sumGst)}</td>
+      <td></td><td></td><td></td>
+    </tr>`;
+
+    /* Dues-with-GST / Dues-without-GST + payment-progress footnote */
+    const duesWithGst = poValue - paid;      // PO value incl. GST − paid
+    const duesWoGst   = sumTaxable - paid;   // basic (taxable) value − paid
+    const pctBasicPaid   = sumTaxable > 0 ? (paid / sumTaxable * 100) : 0;
+    const pctWithGstPaid = poValue   > 0 ? (paid / poValue   * 100) : 0;
+
+    return `
+    <div class="f01-block${idx>0?' page-break':''}">
+      ${coHeader}
+      <table class="f01-info">
+        <tr>
+          <td class="lbl">Vendor Name</td><td class="cn">:</td><td class="val">${vendorName}</td>
+          <td class="lbl">Client Name</td><td class="cn">:</td><td class="val">${clientName}</td>
+        </tr>
+        <tr>
+          <td class="lbl">Po Date</td><td class="cn">:</td><td class="val">${poDate}</td>
+          <td class="lbl">Order ID File no</td><td class="cn">:</td><td class="val">${orderId}</td>
+        </tr>
+        <tr>
+          <td class="lbl">PO No</td><td class="cn">:</td><td class="val">${poNo}</td>
+          <td class="lbl">due Date</td><td class="cn">:</td><td class="val">${dueDate}</td>
+        </tr>
+      </table>
+      <div class="sect-bar">Order Description</div>
+      <table class="f01-item">
+        <thead><tr>
+          <th class="c" style="width:32px">Sr No</th>
+          <th>Material</th>
+          <th class="c" style="width:40px">Qty</th>
+          <th class="r" style="width:72px">Rate</th>
+          <th class="r" style="width:80px">Taxable</th>
+          <th class="r" style="width:64px">GST</th>
+          <th class="r" style="width:80px">PO Value</th>
+          <th class="r" style="width:64px">Paid</th>
+          <th class="r" style="width:72px">Dues</th>
+        </tr></thead>
+        <tbody>
+          ${itemRowsHtml}
+          ${totRowHtml}
+        </tbody>
+      </table>
+      <table class="f01-foot">
+        <tr><td class="lbl">Dues with GST</td><td class="val r">${fmt(duesWithGst)}</td><td class="lbl">% of with GST Paid</td><td class="val r">${pctWithGstPaid.toFixed(2)}%</td></tr>
+        <tr><td class="lbl">Dues W/o GST</td><td class="val r">${fmt(duesWoGst)}</td><td class="lbl">% of Basic Paid</td><td class="val r">${pctBasicPaid.toFixed(2)}%</td></tr>
+      </table>
+      <div class="words">Amount in Words: ${numToWords(poValue)}</div>
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Format-01 — ${entityName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #000; }
+    .f01-block { padding-bottom: 6mm; }
+    .page-break { page-break-before: always; }
+    .co-hdr      { text-align: center; padding-bottom: 6px; }
+    .co-logo-img { height: 42px; margin-bottom: 3px; display: block; margin-left: auto; margin-right: auto; }
+    .co-name     { font-size: 15pt; font-weight: 900; color: #104f4f; }
+    .co-addr     { font-size: 8.5pt; color: #333; margin-top: 2px; }
+    table { border-collapse: collapse; width: 100%; }
+    /* info grid — thick outer frame only, no internal row lines; labels/values bold */
+    .f01-info { border: 2px solid #000; margin-top: 6px; font-size: 10pt; }
+    .f01-info td { border: none; padding: 4px 6px; }
+    .f01-info .lbl { color: #0b4a8a; font-weight: 400 !important; width: 16%; }
+    .f01-info .cn  { width: 1%; text-align: center; color: #0b4a8a; font-weight: 400 !important; }
+    .f01-info .val { color: #b45309; font-weight: 900 !important; width: 33%; }
+    .sect-bar { text-align: center; font-size: 10pt; font-weight: 800; border: 2px solid #000;
+                border-top: none; padding: 3px; letter-spacing: 0.4px; }
+    /* item table — full grid on the header row; body rows keep column
+       (vertical) borders but no row (horizontal) lines between them.
+       The boxed .tot-row (Taxable/GST totals) closes off the item block. */
+    .f01-item { border: 2px solid #000; font-size: 9.5pt; margin-top: -2px; }
+    .f01-item th { border: 1px solid #000; padding: 4px 5px; background: #fff; font-weight: 800; text-align: left; }
+    .f01-item td { border-left: 1px solid #000; border-right: 1px solid #000; border-top: none; border-bottom: none; padding: 3px 5px; vertical-align: top; }
+    .f01-item td:first-child { border-left: none; }
+    .f01-item td:last-child { border-right: none; }
+    .f01-item .tot-row td { border-top: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; padding-top: 4px; padding-bottom: 4px; }
+    .pmt-cell { padding: 2px 5px !important; }
+    .pmt-line { margin-bottom: 2px; }
+    .pmt-amt  { font-weight: 700; }
+    .pmt-date { font-size: 8pt; color: #000; font-weight: 400; }
+    .pmt-total { border-top: 1.5px solid #000; margin-top: 2px; padding-top: 2px; font-weight: 800; }
+    .fw { font-weight: 700; }
+    .r { text-align: right; }
+    .c { text-align: center; }
+    .eg { color: #aaa; font-style: italic; }
+    /* footnote box (Dues + payment % progress) — thick outer frame only */
+    .f01-foot { border: 2px solid #000; border-top: none; margin-top: -2px; font-size: 10pt; }
+    .f01-foot td { border: none; padding: 5px 8px; }
+    .f01-foot .lbl { font-weight: 700; width: 25%; white-space: nowrap; }
+    .f01-foot .val { font-weight: 800; width: 25%; }
+    .words { border: 2px solid #000; border-top: none; margin-top: -2px; padding: 5px 6px; font-size: 9.5pt; font-style: italic; }
+    @media print { body { margin: 0; } .page-break { page-break-before: always; } }
+  </style></head><body>
+  ${blocks}
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(withPrintFont(html));
   w.document.close();
   w.onload = () => w.print();
 }
@@ -497,7 +690,7 @@ function printAdvice(entityName, groupRows, type, companyData, entityDetail, bil
 /* ══════════════════════════════════════════════════════════
    PRINT LIST REPORT (tabular summary, company header + orientation)
 ══════════════════════════════════════════════════════════ */
-const printListReport = async (title, subtitle, cols, rows, groupEnds, rightColsSet, boldColsSet, company, orientation='landscape', subTotalRows=null) => {
+const printListReport = async (title, subtitle, cols, rows, groupEnds, rightColsSet, boldColsSet, company, orientation='landscape', subTotalRows=null, grandCells=null) => {
   /* ── fetch company logo ── */
   let logoB64 = '';
   if (company?.logoFileName && company?.companyId) {
@@ -524,11 +717,32 @@ const printListReport = async (title, subtitle, cols, rows, groupEnds, rightCols
   cols.forEach((c, ci) => {
     const cl = String(c).toLowerCase();
     if (cl.includes('name') || cl.includes('date') || cl.includes('product') ||
-        cl.includes('description') || cl.includes('bill no') || cl.includes('bill') ||
-        cl.includes('narration') || cl.includes('invoice')) {
+        cl.includes('description') || cl.includes('bill') ||
+        cl.includes('narration') || cl.includes('invoice') || cl.endsWith(' no')) {
       wrapCols.add(ci);
     }
   });
+
+  /* ── proportional column widths ──
+     table-layout:fixed + a <colgroup> keeps narrow columns (dates, #,
+     GST%) at a sane width and gives the long Product/Description column
+     the room it needs, instead of letting the browser's auto layout
+     squeeze every column down until header text breaks mid-word. */
+  const colWeight = (label) => {
+    const l = String(label).toLowerCase();
+    if (l === '#') return 2.5;
+    if (l.includes('description') || l.includes('product')) return 19;
+    if (l.includes('name')) return 8.5;
+    if (l.includes('no') && !l.includes('gst')) return 7.5;   // PO No / Order No
+    if (l.includes('date')) return 6.5;
+    if (l.includes('gst%')) return 4;
+    if (l.includes('qty')) return 8;
+    return 7;   // Taxable / GST Amt / Order-PO Value / Payment Amt / Balance Due
+  };
+  const rawWeights = cols.map(colWeight);
+  const totalW = rawWeights.reduce((a,b) => a+b, 0);
+  const colWidths = rawWeights.map(w => (w/totalW*100).toFixed(2)+'%');
+  const colgroupHtml = `<colgroup>${colWidths.map(w=>`<col style="width:${w};">`).join('')}</colgroup>`;
 
   /* build row HTML — include subtotal rows after group-end */
   let rHtml = '';
@@ -554,6 +768,13 @@ const printListReport = async (title, subtitle, cols, rows, groupEnds, rightCols
       }).join('')}</tr>`;
     }
   });
+
+  const tfootHtml = grandCells ? `<tfoot><tr>${grandCells.map((c,ci) => {
+    const tc=[]; if(rightCols.has(ci)) tc.push('r');
+    const clsStr=tc.length?` class="${tc.join(' ')}"`:''
+    const val=c?String(c).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
+    return `<td${clsStr}>${val}</td>`;
+  }).join('')}</tr></tfoot>` : '';
 
   const coHeaderHtml = `
     <div class="co-hdr">
@@ -581,37 +802,37 @@ body{font-family:'Calibri','Segoe UI',Arial,sans-serif;font-size:11.5pt;color:#0
 .report-head{text-align:center;margin-bottom:10px;}
 h1{font-size:14pt;font-weight:bold;color:#1a2a3a;margin-bottom:3px;}
 .sub{font-size:10.5pt;color:#555;padding-bottom:5px;border-bottom:2px solid #1a2a3a;margin-bottom:10px;display:block;}
-/* ── Table ── */
-table{width:100%;border-collapse:collapse;border:2px solid #1a2a3a;}
+/* ── Table — every column/row boundary in solid black ── */
+table{width:100%;border-collapse:collapse;border:2px solid #000;table-layout:fixed;}
 thead{display:table-header-group;}
 thead tr th{
   background:#104f4f;color:#fff;
-  padding:7px 9px;font-size:10pt;font-weight:700;
-  text-align:left;border:1px solid #0b3d3d;white-space:nowrap;
+  padding:7px 6px;font-size:9.5pt;font-weight:700;
+  text-align:left;border:1px solid #000;white-space:normal;overflow-wrap:break-word;line-height:1.25;
 }
 thead tr th.r{text-align:right;}
 tbody tr td{
-  padding:6px 9px;font-size:10pt;
-  border:1px solid #c8d4e0;
+  padding:6px 7px;font-size:10pt;
+  border:1px solid #000;
+  border-top:none;border-bottom:none;
   vertical-align:middle;color:#111;line-height:1.4;
-  white-space:nowrap;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:#fff;
 }
-tbody tr td.wc{white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:120px;}
-tbody tr:nth-child(even) td{background:#f2f7ff;}
-tbody tr.grp-end td{border-bottom:2.5px solid #1a2a3a !important;}
+tbody tr td.wc{white-space:normal;overflow-wrap:break-word;overflow:visible;text-overflow:clip;}
+tbody tr.grp-end td{border-bottom:2px solid #000 !important;}
 tbody tr.sub-row td{
   background:#fefce8 !important;
   font-weight:800;font-size:11.5pt;
-  border-top:1.5px solid #d97706 !important;
-  border-bottom:2.5px solid #1a2a3a !important;
-  color:#78350f;
+  border-top:1px solid #000 !important;
+  border-bottom:2px solid #000 !important;
+  color:#000;
 }
-tbody tr.sub-row td:first-child{border-left:2px solid #d97706;}
 tfoot tr td{
   padding:9px 11px;font-size:12pt;font-weight:800;
-  border:1.5px solid #1a2a3a;background:#dbeafe;color:#1a2a3a;
+  border:1.5px solid #000;background:#dbeafe;color:#000;
 }
-.r{text-align:right;}.b{font-weight:700;}
+.r{text-align:right;}.b{font-weight:700;color:#000;}
 /* ── Footer ── */
 .foot{margin-top:14px;font-size:9.5pt;color:#555;display:flex;justify-content:space-between;align-items:flex-start;border-top:1px solid #aaa;padding-top:6px;}
 .foot-url{color:#104f4f;font-weight:600;}
@@ -619,20 +840,19 @@ tfoot tr td{
   @page{margin:5mm;size:A3 ${orientation};}
   .pg{padding:0;}
   thead{display:table-header-group;}
-  table{page-break-inside:auto;width:100%;table-layout:auto;}
+  table{page-break-inside:auto;width:100%;table-layout:fixed;}
   tr{page-break-inside:avoid;page-break-after:auto;}
   thead tr th{
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
     background:#104f4f !important;color:#fff !important;
-    font-size:8.5pt;padding:5px 6px;white-space:normal;word-break:break-word;
+    font-size:8pt;padding:5px 4px;white-space:normal;overflow-wrap:break-word;line-height:1.2;
+    border:1px solid #000 !important;
   }
-  tbody tr td{font-size:8.5pt;padding:4px 6px;}
-  tbody tr td.wc{max-width:100px;}
-  tbody tr.sub-row td{font-size:9pt;padding:5px 6px;}
-  tfoot tr td{font-size:9.5pt;padding:6px 7px;}
-  tbody tr:nth-child(even) td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#f2f7ff !important;}
-  tbody tr.sub-row td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fefce8 !important;}
-  tfoot tr td{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#dbeafe !important;}
+  tbody tr td{font-size:8.5pt;padding:4px 5px;border:1px solid #000 !important;border-top:none !important;border-bottom:none !important;background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;text-overflow:ellipsis;}
+  tbody tr td.wc{overflow:visible;text-overflow:clip;}
+  tbody tr.grp-end td{border-bottom:2px solid #000 !important;}
+  tbody tr.sub-row td{font-size:9pt;padding:5px 6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fefce8 !important;color:#000 !important;}
+  tfoot tr td{font-size:9.5pt;padding:6px 7px;-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#dbeafe !important;color:#000 !important;border:1.5px solid #000 !important;}
   .foot{page-break-inside:avoid;font-size:8pt;}
 }
 </style>
@@ -643,18 +863,20 @@ ${coHeaderHtml}
 <span class="sub">${subtitle}&nbsp;&nbsp;|&nbsp;&nbsp;${rows.length} line items&nbsp;&nbsp;|&nbsp;&nbsp;Generated: ${today2}</span>
 </div>
 <table>
+${colgroupHtml}
 <thead><tr>${cols.map((c,ci)=>`<th${rightCols.has(ci)?' class="r"':''}>${c}</th>`).join('')}</tr></thead>
 <tbody>${rHtml}</tbody>
+${tfootHtml}
 </table>
 <div class="foot">
-  <span>Printed by Epsilon ERP &nbsp;|&nbsp; ${today2}</span>
+  <span>Printed by Super ERP System &nbsp;|&nbsp; ${today2}</span>
   ${pageUrl ? `<span class="foot-url">${pageUrl}</span>` : ''}
 </div>
 </div><script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
 </body></html>`;
   const w=window.open('','_blank','width=1500,height=900,scrollbars=yes');
   if(!w){alert('Allow pop-ups to print.');return;}
-  w.document.write(html); w.document.close();
+  w.document.write(withPrintFont(html)); w.document.close();
 };
 
 /* ── Financial Year helper ── */
@@ -668,7 +890,7 @@ const getFYV = (dateStr) => {
 /* ══════════════════════════════════════════════════════════
    PRINT SELECT MODAL — choose which orders to print
 ══════════════════════════════════════════════════════════ */
-function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLookup, grnsLookup, companyData, entityDetail, currentUser, onClose }) {
+function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLookup, grnsLookup, companyData, entityDetail, currentUser, onClose, format='advice', soMap }) {
   const [checked, setChecked] = useState(() => {
     const m = {}; orders.forEach(o => { m[o.orderId] = true; }); return m;
   });
@@ -681,18 +903,35 @@ function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLoo
 
   const handlePrint = () => {
     if (selected.length === 0) { alert('Select at least one order.'); return; }
-    printAdvice(entityName, selected, type, companyData, entityDetail, billsLookup, salesBillsLookup, grnsLookup, currentUser);
+    if (format === 'format01') {
+      printFormat01(entityName, selected, type, companyData, entityDetail, currentUser, soMap);
+    } else {
+      printAdvice(entityName, selected, type, companyData, entityDetail, billsLookup, salesBillsLookup, grnsLookup, currentUser);
+    }
     onClose();
+  };
+
+  const isF01 = format === 'format01';
+
+  /* format01 needs more scan-at-a-glance info per row to pick orders */
+  const f01Row = (o) => {
+    const linkedSO = soMap && soMap[String(o.linkedSalesOrderId || '')];
+    const fileNo    = linkedSO ? (linkedSO.orderNo || linkedSO.poNo || '—') : (o.linkedSalesOrderId || '—');
+    const clientName = linkedSO
+      ? (linkedSO.customerName || linkedSO.clientName || linkedSO.party || '—')
+      : (o.clientName || '—');
+    const material = (o.items || []).map(it => it.itemName || it.description).filter(Boolean).join(', ') || '—';
+    return { fileNo, clientName, material };
   };
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000,
       display:'flex', alignItems:'center', justifyContent:'center', fontFamily:F }}>
-      <div style={{ background:'#fff', borderRadius:10, width:540, maxHeight:'82vh',
+      <div style={{ background:'#fff', borderRadius:10, width:isF01?900:540, maxWidth:'95vw', maxHeight:'82vh',
         display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }}>
         <div style={{ background:P, color:'#fff', padding:'11px 16px', borderRadius:'10px 10px 0 0',
           display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <span style={{ fontWeight:700, fontSize:13 }}>🖨 Print Advice — {entityName}</span>
+          <span style={{ fontWeight:700, fontSize:13 }}>🖨 Print {isF01?'Format-01':'Advice'} — {entityName}</span>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'#fff', fontSize:18, cursor:'pointer', lineHeight:1 }}>✕</button>
         </div>
         <div style={{ padding:'8px 16px', borderBottom:`1px solid ${BD}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -702,8 +941,38 @@ function PrintSelectModal({ entityName, orders, type, salesBillsLookup, billsLoo
             {allSel ? 'Unselect All' : 'Select All'}
           </button>
         </div>
+
+        {isF01 && (
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 16px', background:'#f3f6fb',
+            borderBottom:`1px solid ${BD}`, fontSize:10, fontWeight:700, color:'#6B7280', textTransform:'uppercase' }}>
+            <span style={{ width:14 }}/>
+            <span style={{ width:90 }}>File No</span>
+            <span style={{ width:130 }}>Client</span>
+            <span style={{ width:110 }}>Vendor</span>
+            <span style={{ width:76 }}>Po Date</span>
+            <span style={{ width:120 }}>PO No</span>
+            <span style={{ flex:1 }}>Material</span>
+            <span style={{ width:90, textAlign:'right' }}>PO Value</span>
+          </div>
+        )}
+
         <div style={{ flex:1, overflow:'auto' }}>
-          {orders.map((o, i) => (
+          {orders.map((o, i) => isF01 ? (
+            <label key={o.orderId} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 16px',
+              borderBottom:`1px solid ${BD}`, cursor:'pointer', background:i%2===0?'#fff':'#f8faff' }}>
+              <input type="checkbox" checked={!!checked[o.orderId]} onChange={()=>toggle(o.orderId)}
+                style={{ width:14, height:14, cursor:'pointer', flexShrink:0 }}/>
+              {(() => { const r = f01Row(o); return (<>
+                <span style={{ width:90, fontSize:11, color:'#555', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.fileNo}</span>
+                <span style={{ width:130, fontSize:11, fontWeight:600, color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.clientName}</span>
+                <span style={{ width:110, fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{entityName}</span>
+                <span style={{ width:76, fontSize:11, color:'#999' }}>{fmtD(o.orderDate)}</span>
+                <span style={{ width:120, fontSize:11, color:'#555', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.orderNo||'—'}</span>
+                <span style={{ flex:1, fontSize:11, color:'#333', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.material}>{r.material}</span>
+                <span style={{ width:90, fontSize:12, fontWeight:700, textAlign:'right' }}>₹{fmt(o.orderTotal)}</span>
+              </>); })()}
+            </label>
+          ) : (
             <label key={o.orderId} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 16px',
               borderBottom:`1px solid ${BD}`, cursor:'pointer', background:i%2===0?'#fff':'#f8faff' }}>
               <input type="checkbox" checked={!!checked[o.orderId]} onChange={()=>toggle(o.orderId)}
@@ -753,7 +1022,7 @@ function DuesSearchBox({ entityList, entityFlt, setEntityFlt, search, setSearch,
   const openDrop = () => {
     if (inputRef.current) {
       const r = inputRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: Math.max(r.width, 220) });
+      setPos({ top: px(r.bottom + window.scrollY) + 2, left: px(r.left + window.scrollX), width: Math.max(px(r.width), 220) });
     }
     setQ(''); setOpen(true);
   };
@@ -850,10 +1119,12 @@ const ViewDues = () => {
   const [showCleared, setShowCleared] = useState(false);
   const [search,      setSearch]      = useState('');
   const [fy,          setFy]          = useState(() => getFYV(null));
+  const neu = useNavTheme()[0] === 'neu';
   const [entityFlt,   setEntityFlt]   = useState('all');
   const [printModal,      setPrintModal]      = useState(null);
+  const [printFormat,     setPrintFormat]     = useState('advice');
   const [showClientInPrint, setShowClientInPrint] = useState(true);
-  const [listPrintOpts,   setListPrintOpts]   = useState(null); // { orient:'landscape'|'portrait' } or null
+  const [listPrintOpts,   setListPrintOpts]   = useState(null); // { mode:'landscape'|'portrait'|'format01' } or null
 
   const fetchAll = useCallback(async () => {
     if (!cid) return;
@@ -956,6 +1227,7 @@ const ViewDues = () => {
 
   const fyList = useMemo(() => {
     const set = new Set(rows.map(r => getFYV(r.orderDate)));
+    set.add(getFYV(null));               // the current FY is always offered (it is the default)
     return ['all', ...[...set].sort().reverse()];
   }, [rows]);
 
@@ -1029,9 +1301,9 @@ const ViewDues = () => {
   }, [filtered, tableRows, activeTab]);
 
   const TH = ({children, right, style:sx={}}) => (
-    <th style={{ padding:'6px 8px', background:P, color:'#fff', fontWeight:700,
+    <th style={{ padding:'6px 8px', background:'#133d80', color:'#fff', fontWeight:700,
       fontSize:10, textAlign:right?'right':'left', whiteSpace:'nowrap',
-      borderRight:`1px solid ${PD}`, position:'sticky', top:0, zIndex:2, ...sx }}>
+      border:'1px solid #000', position:'sticky', top:0, zIndex:2, ...sx }}>
       {children}
     </th>
   );
@@ -1040,27 +1312,30 @@ const ViewDues = () => {
     if (filtered.length === 0) { alert('No orders to print.'); return; }
     const isVendorTab = activeTab === 'vendor';
 
-    /* ── column definitions ── */
+    /* ── column definitions ──
+       Bill columns (Purchase/Sales Bill No + Bill Date) are left out of
+       print — they're almost always empty on a dues list and just eat
+       width that the long Product/Description text needs. */
     let cols, rightCols, boldCols;
     if (isVendorTab) {
-      // #(0) | PO No(1) | [Client Name(2)] | Vendor | PO Date | Due Date | Product | Qty×Rate | Taxable | GST% | GST Amt | PO Value | Bill No | Bill Date | Payment Date | Payment Amt | Balance Due
+      // #(0) | PO No(1) | [Client Name(2)] | Vendor | PO Date | Due Date | Product | Qty×Rate | Taxable | GST% | GST Amt | PO Value | Payment Date | Payment Amt | Balance Due
       cols = ['#', 'PO No'];
       if (showClientInPrint) cols.push('Client Name');
       cols.push('Vendor Name', 'PO Date', 'Due Date', 'Product / Description',
         'Qty × Rate', 'Taxable (₹)', 'GST%', 'GST Amt (₹)',
-        'PO Value (₹)', 'Purchase Bill No', 'Bill Date', 'Payment Date', 'Payment Amt (₹)', 'Balance Due (₹)');
+        'PO Value (₹)', 'Payment Date', 'Payment Amt (₹)', 'Balance Due (₹)');
       // Qty×Rate starts at index 7 (with client) or 6 (without)
       const baseQtyIdx = showClientInPrint ? 7 : 6;
-      // right-align: Qty×Rate(+0), Taxable(+1), GST Amt(+3), PO Value(+4), Payment Amt(+8), Balance Due(+9)
-      rightCols = new Set([baseQtyIdx, baseQtyIdx+1, baseQtyIdx+3, baseQtyIdx+4, baseQtyIdx+8, baseQtyIdx+9]);
-      boldCols  = new Set([baseQtyIdx+4, baseQtyIdx+9]);
+      // right-align: Qty×Rate(+0), Taxable(+1), GST Amt(+3), PO Value(+4), Payment Amt(+6), Balance Due(+7)
+      rightCols = new Set([baseQtyIdx, baseQtyIdx+1, baseQtyIdx+3, baseQtyIdx+4, baseQtyIdx+6, baseQtyIdx+7]);
+      boldCols  = new Set([baseQtyIdx+4, baseQtyIdx+7]);
     } else {
-      // #(0) | Order No(1) | Client Name(2) | Order Date(3) | Cust PO No(4) | Due Date(5) | Product(6) | Qty×Rate(7) | Taxable(8) | GST%(9) | GST Amt(10) | Order Value(11) | Sales Bill(12) | Bill Date(13) | Receipt Date(14) | Receipt Amt(15) | Balance Due(16)
+      // #(0) | Order No(1) | Client Name(2) | Order Date(3) | Cust PO No(4) | Due Date(5) | Product(6) | Qty×Rate(7) | Taxable(8) | GST%(9) | GST Amt(10) | Order Value(11) | Receipt Date(12) | Receipt Amt(13) | Balance Due(14)
       cols = ['#', 'Order No', 'Client Name', 'Order Date', 'Cust PO No', 'Due Date',
         'Product / Description', 'Qty × Rate', 'Taxable (₹)', 'GST%', 'GST Amt (₹)',
-        'Order Value (₹)', 'Sales Bill No', 'Bill Date', 'Receipt Date', 'Receipt Amt (₹)', 'Balance Due (₹)'];
-      rightCols = new Set([7,8,10,11,15,16]);
-      boldCols  = new Set([11,15,16]);
+        'Order Value (₹)', 'Receipt Date', 'Receipt Amt (₹)', 'Balance Due (₹)'];
+      rightCols = new Set([7,8,10,11,13,14]);
+      boldCols  = new Set([11,13,14]);
     }
 
     const pRows = [];
@@ -1081,16 +1356,12 @@ const ViewDues = () => {
     orderIds2.forEach(orderId => {
       const { row, seq, items, receipts } = orderMap2.get(orderId);
 
-      const orderBills = isVendorTab
-        ? (billsLookup[String(row.orderId)] || []).slice().sort((a,b)=>new Date(a.billDate||0)-new Date(b.billDate||0))
-        : (salesBillsLookup[String(row.orderId)] || []).slice().sort((a,b)=>new Date(a.billDate||0)-new Date(b.billDate||0));
-
-      /* one print-row per item OR per receipt/bill — whichever is more */
-      const maxRows = Math.max(items.length || 1, orderBills.length, receipts.length, 1);
+      /* one print-row per item OR per receipt — whichever is more (bills
+         aren't printed, so they no longer factor into the row count) */
+      const maxRows = Math.max(items.length || 1, receipts.length, 1);
 
       for (let j = 0; j < maxRows; j++) {
         const item    = items[j]      || null;
-        const bill    = orderBills[j] || null;
         const receipt = receipts[j]   || null;
         const isFirst = j === 0;
 
@@ -1135,9 +1406,7 @@ const ViewDues = () => {
           item ? `${gstPctPrint}%` : '',
           item ? fmt(gstAmtPrint) : '',
           isFirst ? fmt(row.orderTotal) : '',
-          /* each bill/receipt on its own row — matching portal display */
-          bill    ? (bill.billNo || bill.vendorBillNo || `B#${bill.billId}`) : '',
-          bill    ? fmtD(bill.billDate) : '',
+          /* each receipt on its own row — matching portal display */
           receipt ? fmtD(receipt.date) : '',
           receipt ? fmt(parseFloat(receipt.amount)||0) : '',
           isFirst ? fmt(Math.max(0, row.due)) : '',
@@ -1169,15 +1438,15 @@ const ViewDues = () => {
           subCells[bi+1] = fmt(totTax);
           subCells[bi+3] = fmt(totGst);
           subCells[bi+4] = fmt(ov);
-          subCells[bi+8] = fmt(totRec);
-          subCells[bi+9] = fmt(totDue);
+          subCells[bi+6] = fmt(totRec);
+          subCells[bi+7] = fmt(totDue);
         } else {
           subCells[6]  = 'ORDER TOTAL';
           subCells[8]  = fmt(totTax);
           subCells[10] = fmt(totGst);
           subCells[11] = fmt(ov);
-          subCells[15] = fmt(totRec);
-          subCells[16] = fmt(totDue);
+          subCells[13] = fmt(totRec);
+          subCells[14] = fmt(totDue);
         }
         subTotalRowsMap.set(groupEndIdx, subCells);
       }
@@ -1189,10 +1458,28 @@ const ViewDues = () => {
     }
     groupEnds.add(pRows.length - 1);
 
+    /* grand total row — mirrors the on-screen TOTAL strip */
+    const grandCells = new Array(cols.length).fill('');
+    grandCells[0] = 'TOTAL';
+    if (isVendorTab) {
+      const bi = showClientInPrint ? 7 : 6;
+      grandCells[bi+1] = fmt(totals.taxable);
+      grandCells[bi+3] = fmt(totals.gst);
+      grandCells[bi+4] = fmt(totals.orderVal);
+      grandCells[bi+6] = fmt(totals.received);
+      grandCells[bi+7] = fmt(totals.due);
+    } else {
+      grandCells[8]  = fmt(totals.taxable);
+      grandCells[10] = fmt(totals.gst);
+      grandCells[11] = fmt(totals.orderVal);
+      grandCells[13] = fmt(totals.received);
+      grandCells[14] = fmt(totals.due);
+    }
+
     const title    = isVendorTab ? 'Payables — Vendor List' : 'Receivables — Client List';
     const subtitle = (fy==='all' ? 'All FY' : `FY ${fy}`) + (entityFlt!=='all' ? ` | ${entityFlt}` : '');
-    const orient   = listPrintOpts?.orient || 'landscape';
-    printListReport(title, subtitle, cols, pRows, groupEnds, rightCols, boldCols, selectedCompany, orient, subTotalRowsMap);
+    const orient   = listPrintOpts?.mode === 'portrait' ? 'portrait' : 'landscape';
+    printListReport(title, subtitle, cols, pRows, groupEnds, rightCols, boldCols, selectedCompany, orient, subTotalRowsMap, grandCells);
     setListPrintOpts(null);
   };
 
@@ -1200,13 +1487,16 @@ const ViewDues = () => {
     const isAct = tab === activeTab;
     return (
       <button key={tab} onClick={() => { setActiveTab(tab); setSearch(''); setEntityFlt('all'); }}
-        style={{ display:'flex', alignItems:'center', padding:'0 14px', height:'100%',
-          fontSize:11.5, fontWeight:isAct?700:400, border:'none', cursor:'pointer',
+        style={{ display:'flex', alignItems:'center', padding:'0 14px', height:26, alignSelf:'center',
+          fontSize:11.5, fontWeight:isAct?700:600, cursor:'pointer',
           whiteSpace:'nowrap', flexShrink:0, fontFamily:F,
-          color:isAct?'#fff':'rgba(255,255,255,0.65)',
-          background:isAct?'rgba(255,255,255,0.12)':'transparent',
-          borderBottom:isAct?'2px solid rgba(255,255,255,0.85)':'2px solid transparent',
-          marginBottom:-2 }}>
+          color:isAct?'#fff':'rgba(255,255,255,0.85)',
+          background:isAct?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.07)',
+          border:`1px solid ${isAct?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}`,
+          boxShadow:isAct?'0 2px 6px rgba(0,0,0,0.22)':'0 1px 2px rgba(0,0,0,0.12)',
+          borderRadius:6, margin:'0 4px' }}
+        onMouseEnter={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.14)';e.currentTarget.style.borderColor='rgba(255,255,255,0.55)';}}}
+        onMouseLeave={e=>{if(!isAct){e.currentTarget.style.background='rgba(255,255,255,0.07)';e.currentTarget.style.borderColor='rgba(255,255,255,0.22)';}}}>
         {label}
       </button>
     );
@@ -1228,6 +1518,8 @@ const ViewDues = () => {
           companyData={selectedCompany}
           entityDetail={activeTab==='client' ? clientDetailMap[printModal] : vendorDetailMap[printModal]}
           currentUser={currentUser}
+          format={printFormat}
+          soMap={soMap}
           onClose={() => setPrintModal(null)}
         />
       )}
@@ -1268,19 +1560,7 @@ const ViewDues = () => {
 
         {/* FY filter */}
         <span style={{ fontSize:9.5, color:'rgba(255,255,255,0.65)', fontWeight:700, alignSelf:'center', flexShrink:0 }}>FY:</span>
-        {fyList.map(f => {
-          const active = fy===f;
-          return (
-            <button key={f} onClick={() => setFy(f)}
-              style={{ height:22, padding:'0 7px', borderRadius:4, flexShrink:0, alignSelf:'center', marginLeft:3,
-                cursor:'pointer', fontFamily:F, whiteSpace:'nowrap', fontSize:10, fontWeight:active?700:400,
-                border:active?'1.5px solid rgba(255,255,255,0.88)':'1px solid rgba(255,255,255,0.2)',
-                background:active?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.07)',
-                color:active?PD:'rgba(255,255,255,0.8)' }}>
-              {f==='all'?'All':`FY ${f}`}
-            </button>
-          );
-        })}
+        <FyDropdown value={fy} options={fyList} onChange={setFy} neu={neu} current={getFYV(null)} />
 
         <div style={{ width:1, height:20, background:'rgba(255,255,255,0.2)', alignSelf:'center', flexShrink:0, margin:'0 4px' }} />
 
@@ -1314,7 +1594,7 @@ const ViewDues = () => {
 
         {/* 🖨 Advice — always visible, prints current entity filter or prompts */}
         <button onClick={() => {
-            if (entityFlt !== 'all') { setPrintModal(entityFlt); }
+            if (entityFlt !== 'all') { setPrintFormat('advice'); setPrintModal(entityFlt); }
             else if (filtered.length > 0) { alert(`Select a specific ${activeTab==='client'?'client':'vendor'} from the search box to print Advice.`); }
             else { alert('No data to print.'); }
           }}
@@ -1324,9 +1604,9 @@ const ViewDues = () => {
           🖨 Advice
         </button>
 
-        {/* 🖨 Print List */}
+        {/* 🖨 Print List — orientation + (vendor only) Format-01 live in one menu */}
         <div style={{ position:'relative', flexShrink:0, alignSelf:'center', margin:'0 4px' }}>
-          <button onClick={() => setListPrintOpts(o => o ? null : { orient:'landscape' })}
+          <button onClick={() => setListPrintOpts(o => o ? null : { mode:'landscape' })}
             style={{ height:26, padding:'0 8px', fontSize:10.5, fontFamily:F, cursor:'pointer',
               borderRadius:4, border:'1px solid rgba(255,255,255,0.3)',
               background:listPrintOpts?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.12)',
@@ -1337,19 +1617,31 @@ const ViewDues = () => {
             <div style={{ position:'absolute', top:34, right:0, zIndex:9999, background:'#fff', border:`1px solid ${BD}`,
               borderRadius:8, padding:14, width:220, boxShadow:'0 4px 16px rgba(0,0,0,0.18)', fontFamily:F }}>
               <div style={{ fontSize:11, fontWeight:700, color:'#374151', marginBottom:10 }}>Print Options</div>
-              {[['landscape','A3 Landscape (wide)'],['portrait','A3 Portrait (tall)']].map(([val,lbl])=>(
+              {[
+                ['landscape','A3 Landscape (wide)'],
+                ['portrait','A3 Portrait (tall)'],
+                ...(activeTab==='vendor' ? [['format01','Format-01 (compact slip)']] : []),
+              ].map(([val,lbl])=>(
                 <label key={val} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, cursor:'pointer', fontSize:12 }}>
                   <input type="radio" name="listOrient" value={val}
-                    checked={listPrintOpts.orient===val}
-                    onChange={()=>setListPrintOpts(o=>({...o,orient:val}))}
+                    checked={listPrintOpts.mode===val}
+                    onChange={()=>setListPrintOpts(o=>({...o,mode:val}))}
                     style={{ accentColor:P, cursor:'pointer' }}/>
-                  <span style={{ color:listPrintOpts.orient===val?P:'#374151', fontWeight:listPrintOpts.orient===val?700:400 }}>{lbl}</span>
+                  <span style={{ color:listPrintOpts.mode===val?P:'#374151', fontWeight:listPrintOpts.mode===val?700:400 }}>{lbl}</span>
                 </label>
               ))}
               <div style={{ display:'flex', gap:6, marginTop:12 }}>
                 <button onClick={()=>setListPrintOpts(null)}
                   style={{ flex:1, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:`1px solid ${BD}`, borderRadius:5, background:'#fff', color:'#6B7280' }}>Cancel</button>
-                <button onClick={handlePrintList}
+                <button onClick={() => {
+                    if (listPrintOpts.mode === 'format01') {
+                      if (entityFlt !== 'all') { setPrintFormat('format01'); setPrintModal(entityFlt); setListPrintOpts(null); }
+                      else if (filtered.length > 0) { alert('Select a specific vendor from the search box to print Format-01.'); }
+                      else { alert('No data to print.'); }
+                    } else {
+                      handlePrintList();
+                    }
+                  }}
                   style={{ flex:2, height:28, fontSize:11, fontFamily:F, cursor:'pointer', border:'none', borderRadius:5, background:P, color:'#fff', fontWeight:700 }}>🖨 Print Now</button>
               </div>
             </div>
@@ -1380,7 +1672,7 @@ const ViewDues = () => {
           <div style={{ background:'#fff' }}>
             {activeTab === 'client' ? (
             /* ══ RECEIVABLE TABLE (client) ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
+            <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0, fontSize:11, fontFamily:F, background:'#fff' }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1402,7 +1694,7 @@ const ViewDues = () => {
               <tbody>
                 {tableRows.map((tr, ridx) => {
                   const { row, item, rowSpan, isFirst, seq, salesBills, receipts } = tr;
-                  const bg = seq%2===0 ? '#fff' : '#f8fbff';
+                  const bg = '#fff';
                   const qty=item?parseFloat(item.qty||item.quantity||0):0;
                   const rate=item?parseFloat(item.rate||0):0;
                   const disc=item?(item.discountType==='%'?qty*rate*(parseFloat(item.discount)||0)/100:(parseFloat(item.discount)||0)):0;
@@ -1411,7 +1703,7 @@ const ViewDues = () => {
                   const gstAmt=taxable*gstPct/100;
                   const totalReceipt=receipts.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
                   const C = (content, right=false, extra={}) => rowSpan > 0 ? (
-                    <td rowSpan={rowSpan} style={{ padding:'6px 9px', borderRight:'1px solid #e5e7eb', borderBottom:'1px solid #e5e7eb', background:bg, textAlign:right?'right':'left', verticalAlign:'top', ...extra }}>{content}</td>
+                    <td rowSpan={rowSpan} style={{ padding:'6px 9px', borderRight:'1px solid #000', borderBottom:'1px solid #000', background:bg, textAlign:right?'right':'left', verticalAlign:'top', ...extra }}>{content}</td>
                   ) : null;
                   return (
                     <tr key={`${row.orderId}-${ridx}`}>
@@ -1419,28 +1711,28 @@ const ViewDues = () => {
                       {C(<div><div style={{fontWeight:700,color:'#1e293b'}}>{row.orderNo||'—'}</div>{(row.customerPO||row.reference)&&<div style={{fontSize:9.5,color:'#9ca3af',marginTop:1}}>{row.customerPO||row.reference}</div>}</div>)}
                       {C(<div><div style={{fontWeight:600,color:'#111827'}}>{row.entityName||'—'}</div><div style={{fontSize:9.5,color:'#9ca3af',marginTop:1}}>{fmtD(row.orderDate)}</div></div>)}
                       {C(<span style={{color:'#6b7280',whiteSpace:'nowrap'}}>{fmtD(row.deliveryDate||row.dueDate)||'—'}</span>)}
-                      <td style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#374151'}}>
+                      <td style={{padding:'6px 9px',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#374151'}}>
                         {item ? <div>{item.itemName||item.description||item.name||'—'}</div> : <span style={{color:'#9ca3af',fontStyle:'italic'}}>No items</span>}
                       </td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(rate):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(taxable):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${gstPct}%`:'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmt):'—'}</td>
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg}}>{item?fmt(rate):'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg}}>{item?fmt(taxable):'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#6b7280'}}>{item?`${gstPct}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmt):'—'}</td>
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {salesBills.length===0?<span style={{color:'#9ca3af'}}>—</span>:salesBills.map((b,bi)=>(
                           <div key={bi} style={{marginBottom:bi<salesBills.length-1?4:0}}><div style={{fontWeight:600,color:P,whiteSpace:'nowrap'}}>{b.billNo||`SB#${b.billId}`}</div>{b.billDate&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(b.billDate)}</div>}</div>
                         ))}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {(receipts.length===0 && !(row.linkedCreditNotes||[]).length) ? <span style={{color:'#9ca3af'}}>—</span> : <>
-                          {receipts.map((p,pi)=>(<div key={pi} style={{marginBottom:4}}><div style={{color:'#2e7d32',fontWeight:600,whiteSpace:'nowrap'}}>₹{fmt(p.amount)}</div>{p.date&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(p.date)}</div>}</div>))}
+                          {receipts.map((p,pi)=>(<div key={pi} style={{marginBottom:4}}><div style={{color:p.isJournal?'#7c3aed':'#2e7d32',fontWeight:600,whiteSpace:'nowrap'}}>₹{fmt(p.amount)}</div>{p.date&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(p.date)}</div>}{p.isJournal&&<div title={p.narration||''} style={{fontSize:9.5,color:'#7c3aed',fontWeight:700,whiteSpace:'nowrap'}}>JV #{p.journalId}{p.narration?` · ${p.narration}`:''}</div>}{p.isSplit&&<div style={{fontSize:9.5,color:'#9ca3af'}}>share of ₹{fmt(p.fullAmount)}</div>}</div>))}
                           {(row.linkedCreditNotes||[]).map((cn,ci)=>(<div key={`cn${ci}`} style={{marginBottom:4}}><div style={{color:'#7c3aed',fontWeight:600,whiteSpace:'nowrap',fontSize:10}}>CN ₹{fmt(cn.amount)}</div><div style={{fontSize:9,color:'#7c3aed',opacity:0.8}}>{cn.cnNo} {cn.date&&fmtD(cn.date)}</div></div>))}
-                          {(receipts.length+(row.linkedCreditNotes||[]).length)>1&&<div style={{borderTop:'1px solid #e5e7eb',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalReceipt+(row.creditNotesAmt||0))}</div>}
+                          {(receipts.length+(row.linkedCreditNotes||[]).length)>1&&<div style={{borderTop:'1px solid #000',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalReceipt+(row.creditNotesAmt||0))}</div>}
                         </>}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#6b7280':'#16a34a',whiteSpace:'nowrap'}}>{row.due<0?`↑ Adv ₹${fmt(-row.due)}`:row.due===0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#6b7280':'#16a34a',whiteSpace:'nowrap'}}>{row.due<0?`↑ Adv ₹${fmt(-row.due)}`:row.due===0?'✓ Cleared':`₹${fmt(row.due)}`}</td>}
                     </tr>
                   );
                 })}
@@ -1462,7 +1754,7 @@ const ViewDues = () => {
             </table>
             ) : (
             /* ══ PAYABLE TABLE (vendor) ══ */
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11, fontFamily:F }}>
+            <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0, fontSize:11, fontFamily:F, background:'#fff' }}>
               <thead>
                 <tr>
                   <TH style={{width:30}}>#</TH>
@@ -1485,7 +1777,7 @@ const ViewDues = () => {
               <tbody>
                 {tableRows.map((tr, ridx) => {
                   const { row, item, rowSpan, seq, salesBills, receipts } = tr;
-                  const bg = seq%2===0 ? '#fff' : '#f8fbff';
+                  const bg = '#fff';
                   const qty=item?parseFloat(item.qty||item.quantity||0):0;
                   const rate=item?parseFloat(item.rate||0):0;
                   const disc=item?(item.discountType==='%'?qty*rate*(parseFloat(item.discount)||0)/100:(parseFloat(item.discount)||0)):0;
@@ -1496,7 +1788,7 @@ const ViewDues = () => {
                   const linkedSO = soMap[String(row.linkedSalesOrderId||'')];
                   const clientName = linkedSO ? (linkedSO.customerName||linkedSO.clientName||linkedSO.party||'') : (row.clientName||'');
                   const C = (content, right=false, extra={}) => rowSpan > 0 ? (
-                    <td rowSpan={rowSpan} style={{ padding:'6px 9px', borderRight:'1px solid #e5e7eb', borderBottom:'1px solid #e5e7eb', background:bg, textAlign:right?'right':'left', verticalAlign:'top', ...extra }}>{content}</td>
+                    <td rowSpan={rowSpan} style={{ padding:'6px 9px', borderRight:'1px solid #000', borderBottom:'1px solid #000', background:bg, textAlign:right?'right':'left', verticalAlign:'top', ...extra }}>{content}</td>
                   ) : null;
                   return (
                     <tr key={`${row.orderId}-${ridx}`}>
@@ -1509,28 +1801,28 @@ const ViewDues = () => {
                         {row.poType==='expense'&&<span style={{marginLeft:5,fontSize:9,padding:'1px 5px',background:'#fff7ed',color:'#c2410c',border:'1px solid #fed7aa',borderRadius:3,fontWeight:700,verticalAlign:'middle'}}>EXP</span>}
                         {row.category&&<div style={{fontSize:9.5,color:'#9ca3af',marginTop:1}}>{row.category}</div>}
                       </div>)}
-                      <td style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#374151'}}>
+                      <td style={{padding:'6px 9px',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#374151'}}>
                         {item ? <div>{item.itemName||item.description||item.name||'—'}{item.isAddon&&<span style={{fontSize:9,marginLeft:4,padding:'1px 4px',background:'#fff3e0',color:'#b45309',border:'1px solid #fbbf24',borderRadius:2,fontWeight:700}}>Add-on</span>}</div> : row.description ? <div style={{color:'#374151'}}>{row.description}{row.invoiceNo&&<span style={{marginLeft:6,fontSize:9.5,color:'#9ca3af'}}>Inv: {row.invoiceNo}</span>}</div> : <span style={{color:'#9ca3af',fontStyle:'italic'}}>No items</span>}
                       </td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(rate):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg}}>{item?fmt(taxable):'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#6b7280'}}>{item?`${gstPctV}%`:'—'}</td>
-                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmtV):'—'}</td>
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg}}>{item?fmt(rate):'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,whiteSpace:'nowrap'}}>{item?`${qty.toFixed(2)} ${item.unit||''}`.trim():'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',fontWeight:600,borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg}}>{item?fmt(taxable):'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#6b7280'}}>{item?`${gstPctV}%`:'—'}</td>
+                      <td style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,color:'#7c2d12'}}>{item?fmt(gstAmtV):'—'}</td>
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,fontWeight:700,color:'#1e293b',verticalAlign:'top',whiteSpace:'nowrap'}}>₹{fmt(row.orderTotal)}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {salesBills.length===0?<span style={{color:'#9ca3af'}}>—</span>:salesBills.map((b,bi)=>(
                           <div key={bi} style={{marginBottom:bi<salesBills.length-1?4:0}}><div style={{fontWeight:600,color:'#7c3aed',whiteSpace:'nowrap'}}>{b.billNo||`PB#${b.billId}`}</div>{b.billDate&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(b.billDate)}</div>}</div>
                         ))}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontSize:10.5}}>
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderRight:'1px solid #000',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontSize:10.5}}>
                         {(receipts.length===0 && !(row.linkedDebitNotes||[]).length) ? <span style={{color:'#9ca3af'}}>—</span> : <>
-                          {receipts.map((p,pi)=>(<div key={pi} style={{marginBottom:4}}><div style={{color:'#2e7d32',fontWeight:600,whiteSpace:'nowrap'}}>₹{fmt(p.amount)}</div>{p.date&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(p.date)}</div>}</div>))}
+                          {receipts.map((p,pi)=>(<div key={pi} style={{marginBottom:4}}><div style={{color:p.isJournal?'#7c3aed':'#2e7d32',fontWeight:600,whiteSpace:'nowrap'}}>₹{fmt(p.amount)}</div>{p.date&&<div style={{fontSize:9.5,color:'#9ca3af'}}>{fmtD(p.date)}</div>}{p.isJournal&&<div title={p.narration||''} style={{fontSize:9.5,color:'#7c3aed',fontWeight:700,whiteSpace:'nowrap'}}>JV #{p.journalId}{p.narration?` · ${p.narration}`:''}</div>}{p.isSplit&&<div style={{fontSize:9.5,color:'#9ca3af'}}>share of ₹{fmt(p.fullAmount)}</div>}</div>))}
                           {(row.linkedDebitNotes||[]).map((dn,di)=>(<div key={`dn${di}`} style={{marginBottom:4}}><div style={{color:'#b45309',fontWeight:600,whiteSpace:'nowrap',fontSize:10}}>DN ₹{fmt(dn.amount)}</div><div style={{fontSize:9,color:'#b45309',opacity:0.8}}>{dn.dnNo} {dn.date&&fmtD(dn.date)}</div></div>))}
-                          {(receipts.length+(row.linkedDebitNotes||[]).length)>1&&<div style={{borderTop:'1px solid #e5e7eb',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalPayment+(row.debitNotesAmt||0))}</div>}
+                          {(receipts.length+(row.linkedDebitNotes||[]).length)>1&&<div style={{borderTop:'1px solid #000',marginTop:3,paddingTop:2,fontWeight:700,color:'#1e293b'}}>₹{fmt(totalPayment+(row.debitNotesAmt||0))}</div>}
                         </>}
                       </td>}
-                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #e5e7eb',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<0?`↑ Credit ₹${fmt(-row.due)}`:row.due===0?'✓ Paid':`₹${fmt(row.due)}`}</td>}
+                      {rowSpan>0&&<td rowSpan={rowSpan} style={{padding:'6px 9px',textAlign:'right',borderBottom:'1px solid #000',background:bg,verticalAlign:'top',fontWeight:700,fontSize:12,color:row.due<0?'#0891b2':row.due===0?'#2e7d32':'#b71c1c',whiteSpace:'nowrap'}}>{row.due<0?`↑ Credit ₹${fmt(-row.due)}`:row.due===0?'✓ Paid':`₹${fmt(row.due)}`}</td>}
                     </tr>
                   );
                 })}

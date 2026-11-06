@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
 import { printDeliveryChallan } from '../../utils/printDeliveryChallan';
 
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -386,6 +387,7 @@ export default function DeliveryChallanModule() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const cid = selectedCompany?.companyId;
 
   const [salesOrders, setSOs] = useState([]);
@@ -467,7 +469,7 @@ export default function DeliveryChallanModule() {
         </div>
         <DCList
           dcs={dcs}
-          onPrint={d => printDeliveryChallan(d, selectedCompany)}
+          onPrint={d => printDeliveryChallan(d, selectedCompany, user)}
           onDelete={handleDelete}
           onEdit={d => setEditDC(d)}
           emptyMsg="No delivery challans issued yet."

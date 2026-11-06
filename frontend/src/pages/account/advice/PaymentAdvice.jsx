@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useCompany } from '../../../context/CompanyContext';
+import { withPrintFont } from '../../../utils/printFont';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const BD = '#E5EAF2';
@@ -560,7 +561,7 @@ ${allScope.length > 0 ? `
 
   const w = window.open('', '_blank', 'width=900,height=1200,scrollbars=yes');
   if (!w) { alert('Allow pop-ups to print.'); return; }
-  w.document.write(html);
+  w.document.write(withPrintFont(html));
   w.document.close();
 }
 

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
+import { useStaffNames } from '../../hooks/useStaffNames';
+import ApproverPickerModal from '../../components/ApproverPicker';
 
 /* ═══════════════════════════════════════════════════
    CONSTANTS
@@ -23,8 +25,6 @@ const INDUSTRY_TYPES = [
   'Manufacturing','Media & Entertainment','Mining','Pharmaceuticals',
   'Real Estate','Retail','Telecom','Textile','Trading','Others',
 ];
-
-const PURCHASE_PERSONS = ['Rajesh Kumar','Priya Sharma','Amit Singh','Sunita Verma','Mohit Gupta'];
 
 const STATE_GST_MAP = {
   1:'Jammu and Kashmir',2:'Himachal Pradesh',3:'Punjab',4:'Chandigarh',
@@ -294,11 +294,13 @@ const CreateVendor = () => {
 
   const { selectedCompany } = useCompany();
   const navigate = useNavigate();
+  const PURCHASE_PERSONS = useStaffNames();
   const [activeTab, setActiveTab] = useState('basic');
   const [form, setForm]           = useState(INIT_FORM);
   const [errs, setErrs]           = useState({});
   const [toast, setToast]         = useState(null);
   const [loading, setLoading]     = useState(false);
+  const [showApproverPicker, setShowApproverPicker] = useState(false);
   const [gstWarn, setGstWarn]     = useState('');
   const [idLoading, setIdLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
@@ -461,7 +463,7 @@ const CreateVendor = () => {
     return e;
   };
 
-  const submitForm = async (statusArg) => {
+  const submitForm = async (statusArg, approverId) => {
     // In edit mode always preserve the existing status; in create mode use the passed arg
     const status = isEdit ? (form.status || 'approved') : statusArg;
     const e = runValidate();
@@ -474,6 +476,7 @@ const CreateVendor = () => {
     setLoading(true);
     try {
       const fd = new FormData();
+      fd.append('approverId', approverId || '');
       Object.entries({
         vendorName: form.vendorName, vendorCode: form.vendorCode,
         businessType: form.businessType, industryType: form.industryType,
@@ -620,7 +623,7 @@ const CreateVendor = () => {
       )}
 
       {/* ── Tab Bar — flat horizontal, same as Sales Order ── */}
-      <div style={{ flexShrink: 0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
+      <div className="soft-tabs" style={{ flexShrink: 0, background:'#F8FAFC', borderBottom:`2px solid ${BD}`, display:'flex', flexWrap:'nowrap', padding:'0 2px' }}>
         {TABS.map(t => {
           const isActive = activeTab === t.id;
           const hasErr   = Object.keys(errs).length > 0 && tabHasErr(t.id, errs);
@@ -996,11 +999,16 @@ const CreateVendor = () => {
               fontSize:11.5,fontWeight:700,fontFamily:F,
             }}>💾 Save Draft</button>
           )}
-          <button type="button" onClick={()=>submitForm(isEdit ? 'active' : 'pending')} disabled={loading} style={{
+          <button type="button" onClick={()=> isEdit ? submitForm('active') : setShowApproverPicker(true)} disabled={loading} style={{
             height:32,padding:'0 18px',borderRadius:6,cursor:'pointer',
             background:'#2563EB',border:'none',color:'#fff',
             fontSize:11.5,fontWeight:700,fontFamily:F,
           }}>{loading ? '⏳ Saving…' : isEdit ? '✅ Update Vendor' : '📤 Submit for Approval'}</button>
+          {showApproverPicker && (
+            <ApproverPickerModal module="vendor" recordLabel={`Vendor ${form.vendorName||''}`}
+              onConfirm={(approverId)=>{ setShowApproverPicker(false); submitForm('pending', approverId); }}
+              onCancel={()=>setShowApproverPicker(false)} />
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import ActivityDrawer from '../../../components/ActivityDrawer';
+import { useAuth } from '../../../context/AuthContext';
+import { can } from '../../../utils/permissions';
 
 const fmt = (n) => (parseFloat(n) || 0).toFixed(2);
 
@@ -11,6 +13,7 @@ const ViewPayments = () => {
   const [filter,      setFilter]      = useState('all');
   const [message,     setMessage]     = useState('');
   const [activityRec, setActivityRec] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => { fetchData(); }, []);
 
@@ -21,6 +24,18 @@ const ViewPayments = () => {
       setRecords(res.data);
     } catch (e) { setMessage('Error: ' + e.message); }
     finally { setLoading(false); }
+  };
+
+  /* Approve a pending payment / receipt — only for users with that module's approve rights.
+     'confirmed' is the approved status the Approvals module uses for payments and receipts. */
+  const canApproveRec = r => r.status === 'pending' && can(user, r.type === 'receipt' ? 'accReceipt' : 'accPayment', 'approve');
+  const handleApprove = async (r) => {
+    if (!window.confirm(`Approve ${r.type === 'receipt' ? 'receipt' : 'payment'} ${r.paymentId}?`)) return;
+    try {
+      await axios.put(`/api/accounts/payments/${r.paymentId}`,
+        { status: 'confirmed', approvedBy: user?.name || user?.username || 'Admin', approvedAt: new Date().toISOString() });
+      fetchData();
+    } catch (e) { setMessage('Error: ' + (e.response?.data?.error || e.message)); }
   };
 
   const handleDelete = async (id) => {
@@ -117,7 +132,11 @@ const ViewPayments = () => {
                     <div style={{ fontSize: 11, color: '#888' }}>{r.entityType}</div>
                   </td>
                   <td>
-                    {r.orderId ? (
+                    {(r.poAllocations || []).length > 1 ? (
+                      <span title="One payment split over several POs" style={{ fontFamily: 'monospace', fontWeight: 600, color: '#104f4f', fontSize: 12 }}>
+                        {r.poAllocations.map(a => <div key={a.orderId}>{a.poNo || `PO #${a.orderId}`} · ₹{fmt(a.amount)}</div>)}
+                      </span>
+                    ) : r.orderId ? (
                       <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#104f4f' }}>
                         {r.orderType === 'purchase' ? 'PO' : 'SO'} #{r.orderId}
                       </span>
@@ -126,7 +145,10 @@ const ViewPayments = () => {
                   <td><strong>₹{fmt(r.amount)}</strong></td>
                   <td>{r.paymentMode}</td>
                   <td>{r.referenceNo || '—'}</td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {canApproveRec(r) && (
+                      <button className="approve-btn" style={{ marginRight: 6 }} onClick={e => { e.stopPropagation(); handleApprove(r); }}>✓ Approve</button>
+                    )}
                     <button className="delete-btn" onClick={e => { e.stopPropagation(); handleDelete(r.paymentId); }}>🗑ï¸ Delete</button>
                   </td>
                 </tr>

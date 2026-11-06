@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../../context/CompanyContext';
+import { withPrintFont } from '../../utils/printFont';
 
 const F  = "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
 const TC = '#104f4f';   // teal
@@ -321,7 +322,7 @@ ${expenses.length>0?`
 
   const w = window.open('', '_blank', 'width=1100,height=900');
   if (!w) { alert('Allow pop-ups to print the report.'); return; }
-  w.document.write(html);
+  w.document.write(withPrintFont(html));
   w.document.close();
 }
 
@@ -509,6 +510,13 @@ export default function ProjectClose() {
           borderBottom:'1px solid #c8c8c8',
           color:'#555', zIndex:0, marginBottom:0, borderRadius:'3px 3px 0 0',
         }}>Jobcodes</button>
+        <button onClick={()=>navigate('/project/report')} style={{
+          height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
+          fontFamily:F, fontWeight:400, position:'relative',
+          background:'#e4e8ed', border:'1px solid #c8c8c8',
+          borderBottom:'1px solid #c8c8c8',
+          color:'#555', zIndex:0, marginBottom:0, borderRadius:'3px 3px 0 0',
+        }}>Report</button>
         <button onClick={()=>navigate('/project/close')} style={{
           height:28, padding:'0 12px', fontSize:12, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
           fontFamily:F, fontWeight:700, position:'relative', marginRight:8,

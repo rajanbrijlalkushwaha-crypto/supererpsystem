@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { printSalesOrder } from '../../utils/printSalesOrder';
 import { useCompany } from '../../context/CompanyContext';
+import { useAuth } from '../../context/AuthContext';
 import { OrderModal } from './Pending';
 import ActivityDrawer from '../../components/ActivityDrawer';
 
@@ -55,6 +56,7 @@ export default function ViewSalesOrders() {
   const toggleCol = name => setExpandedCols(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   const navigate = useNavigate();
   const { selectedCompany } = useCompany();
+  const { user } = useAuth();
   const cid = selectedCompany?.companyId;
 
   useEffect(() => { fetchOrders(); }, [cid]); // eslint-disable-line
@@ -300,7 +302,7 @@ export default function ViewSalesOrders() {
             { label:'👁 View',       fn:()=>setModalOrder(selectedOrder) },
             { label:'📊 Dashboard',  fn:()=>navigate(`/sales-order/project/${selectedOrder.orderId}`) },
             { label:'✏️ Edit',       fn:()=>navigate(`/sales-order/edit/${selectedOrder.orderId}`) },
-            { label:'🖨️ Print',      fn:()=>printSalesOrder(selectedOrder, selectedCompany) },
+            { label:'🖨️ Print',      fn:()=>printSalesOrder(selectedOrder, selectedCompany, user) },
             { label:'🗑️ Delete',     fn:()=>handleDelete(selectedOrder.orderId), danger:true },
           ].map(btn => (
             <button key={btn.label} onClick={btn.fn}

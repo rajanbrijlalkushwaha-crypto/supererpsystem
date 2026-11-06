@@ -2,134 +2,89 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useVendorAuth } from '../../context/VendorAuthContext';
+import { setUiVersion } from '../../utils/uiVersion';
 
 const F    = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const TEAL = '#0d5c5c';
-const TEAL2= '#14837e';
+const INK    = '#1F2A33';   // brand slate (logo colour)
+const INK2   = '#33505F';
+const ACCENT = '#EA580C';   // app accent orange
 
-const ICONS = {
-  CRM:        { bg:'#e0f2fe', fg:'#0369a1', symbol:'👥' },
-  ERP:        { bg:'#ede9fe', fg:'#7c3aed', symbol:'⚡' },
-  Projects:   { bg:'#fef3c7', fg:'#d97706', symbol:'📋' },
-  Production: { bg:'#dcfce7', fg:'#16a34a', symbol:'🏭' },
-  Quality:    { bg:'#fff1f2', fg:'#e11d48', symbol:'✅' },
-  Testing:    { bg:'#f0fdf4', fg:'#15803d', symbol:'🧪' },
-  Finance:    { bg:'#fdf4ff', fg:'#9333ea', symbol:'💰' },
-  Inventory:  { bg:'#fff7ed', fg:'#ea580c', symbol:'📦' },
-  HR:         { bg:'#fce7f3', fg:'#db2777', symbol:'👤' },
-  Reports:    { bg:'#e0f7fa', fg:'#0097a7', symbol:'📊' },
-};
-const INNER = ['CRM','ERP','Projects','Production','Quality'];
-const OUTER = ['Finance','Inventory','HR','Reports','Testing'];
+const MODULES = [
+  { name:'CRM',        icon:'👥' }, { name:'Sales',      icon:'🧾' },
+  { name:'Purchase',   icon:'🛒' }, { name:'Inventory',  icon:'📦' },
+  { name:'Production', icon:'🏭' }, { name:'Projects',   icon:'📋' },
+  { name:'Quality',    icon:'✅' }, { name:'Finance',    icon:'💰' },
+  { name:'HR',         icon:'👤' }, { name:'Reports',    icon:'📊' },
+];
 
 const CSS = `
 * { box-sizing:border-box; margin:0; padding:0; }
-@keyframes orbitInner { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-@keyframes orbitOuter { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
-@keyframes counterIn  { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
-@keyframes counterOut { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-@keyframes centerPulse {
-  0%,100%{box-shadow:0 0 0 0 rgba(13,92,92,0.25),0 12px 40px rgba(13,92,92,0.2);}
-  50%{box-shadow:0 0 0 16px rgba(13,92,92,0),0 12px 40px rgba(13,92,92,0.25);}
-}
-@keyframes bgDrift {
-  0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%}
-}
 @keyframes spin360    { to{transform:rotate(360deg)} }
-@keyframes slideIn    { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+@keyframes riseIn     { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
 @keyframes loginPop   { 0%{transform:scale(0.82);opacity:0} 100%{transform:scale(1);opacity:1} }
 @keyframes loginFade  { 0%{opacity:0;transform:translateY(10px)} 100%{opacity:1;transform:none} }
 @keyframes loginSpin  { to{transform:rotate(360deg)} }
 @keyframes dot-bounce { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+@keyframes glow       { 0%,100%{opacity:0.55} 50%{opacity:0.9} }
 .login-overlay-card { animation: loginPop 0.25s cubic-bezier(.34,1.56,.64,1) both; }
 .login-step         { animation: loginFade 0.3s ease both; }
 .login-spin-icon    { display:inline-block; animation: loginSpin 0.9s linear infinite; }
 
-.login-wrapper { height:100vh; overflow-y:auto; }
-.login-left  { width:60%; flex-shrink:0; }
-.login-right { width:40%; flex-shrink:0; }
+.lg-wrap  { min-height:100vh; min-height:calc(100vh / var(--ui-zoom, 1)); display:flex; font-family:${F}; background:#F3F5F8; }
+.lg-brand { width:54%; flex-shrink:0; position:relative; overflow:hidden; color:#fff;
+            background:linear-gradient(150deg, #17212A 0%, ${INK} 45%, ${INK2} 100%);
+            display:flex; flex-direction:column; padding:44px 56px 28px; }
+.lg-brand::before { content:''; position:absolute; inset:0; pointer-events:none;
+            background-image:radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px);
+            background-size:22px 22px; }
+.lg-glow  { position:absolute; border-radius:50%; filter:blur(60px); pointer-events:none; animation:glow 6s ease-in-out infinite; }
+.lg-mod   { display:flex; flex-direction:column; align-items:center; text-align:center; gap:7px; padding:14px 6px; border-radius:12px;
+            background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.10);
+            font-size:13px; font-weight:600; color:rgba(255,255,255,0.92);
+            transition:background 0.2s, transform 0.2s; }
+.lg-mod:hover { background:rgba(255,255,255,0.11); transform:translateY(-2px); }
+.lg-mod-ic { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,0.10);
+             display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
 
-@media (max-width: 860px) {
-  .login-wrapper { height:auto; min-height:100vh; }
-  .login-left  { display:none !important; }
-  .login-right { width:100% !important; min-width:0 !important; }
-}
-@media (max-width: 480px) {
-  .login-right .fin-content { padding:20px 24px 16px !important; }
-}
+.lg-side  { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px; }
+.lg-card  { width:100%; max-width:410px; background:#fff; border-radius:18px; padding:34px 34px 26px;
+            box-shadow:0 1px 2px rgba(16,24,40,0.04), 0 18px 48px rgba(16,24,40,0.10); animation:riseIn 0.45s ease both; }
+.lg-seg   { display:flex; background:#EEF1F5; border-radius:10px; padding:4px; gap:4px; margin-bottom:22px; }
+.lg-seg button { flex:1; height:34px; border:none; border-radius:8px; background:transparent; cursor:pointer;
+            font-family:${F}; font-size:12.5px; font-weight:700; color:#5B6573; transition:all 0.15s; }
+.lg-seg button.on { background:#fff; color:${INK}; box-shadow:0 1px 3px rgba(16,24,40,0.12); }
+.lg-lbl   { display:block; font-size:12px; font-weight:700; color:#344054; margin-bottom:6px; }
+.lg-field { position:relative; margin-bottom:16px; }
+.lg-field .ic { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:14px; color:#98A2B3; pointer-events:none; }
+.lg-in    { width:100%; height:44px; padding:0 40px 0 38px; border:1.5px solid #D0D5DD; border-radius:10px;
+            font-size:14px; font-family:${F}; color:#101828; background:#fff; outline:none;
+            transition:border-color 0.15s, box-shadow 0.15s; }
+.lg-in::placeholder { color:#98A2B3; }
+.lg-in:focus { border-color:${INK2}; box-shadow:0 0 0 4px rgba(51,80,95,0.14); }
+.lg-eye   { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none;
+            cursor:pointer; font-size:12px; font-weight:700; color:#667085; font-family:${F}; padding:4px; }
+.lg-btn   { width:100%; height:46px; border:none; border-radius:10px; cursor:pointer; margin-top:6px;
+            background:linear-gradient(180deg, #F26B1D 0%, ${ACCENT} 100%); color:#fff;
+            font-family:${F}; font-size:14.5px; font-weight:800; letter-spacing:0.2px;
+            box-shadow:0 6px 16px rgba(234,88,12,0.32); transition:transform 0.12s, box-shadow 0.15s, opacity 0.15s; }
+.lg-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 22px rgba(234,88,12,0.36); }
+.lg-btn:disabled { opacity:0.65; cursor:not-allowed; }
+.lg-link  { background:none; border:none; cursor:pointer; color:${INK2}; font-size:12.5px; font-weight:700; font-family:${F}; padding:0; }
+.lg-link:hover { color:${ACCENT}; text-decoration:underline; }
+.lg-beta  { width:100%; height:40px; margin-top:16px; border:1.5px dashed #C7D2FE; border-radius:10px; background:#F5F7FF; cursor:pointer;
+            display:flex; align-items:center; justify-content:center; gap:8px; font-family:${F}; font-size:13px; font-weight:700; color:#4338CA;
+            transition:all 0.15s; }
+.lg-beta:hover { background:#EEF2FF; border-color:#818CF8; }
+.lg-beta .tag { font-size:10px; font-weight:800; letter-spacing:0.6px; color:#fff; padding:2px 7px; border-radius:999px;
+            background:linear-gradient(135deg,#4F46E5,#7C3AED); }
 
-.fin-field {
-  width:100%; height:30px; padding:0 10px;
-  border:1.5px solid #AAAAAA;
-  font-size:13.5px; font-family:${F};
-  background:#FFFFFF; color:#111; outline:none;
-  border-radius:2px;
-  transition:border-color 0.15s, box-shadow 0.15s;
+@media (max-width: 960px) {
+  .lg-brand { display:none; }
 }
-.fin-field:focus {
-  border-color:#3A6186;
-  box-shadow:0 0 0 3px rgba(58,97,134,0.15);
+@media (max-width: 460px) {
+  .lg-card { padding:26px 20px 20px; border-radius:14px; }
 }
-.fin-select {
-  height:30px; padding:0 8px;
-  border:1.5px solid #AAAAAA; border-radius:2px;
-  font-size:13px; font-family:${F};
-  background:#FFFFFF; color:#111; cursor:pointer; outline:none;
-  min-width:130px;
-}
-.fin-btn {
-  height:30px; padding:0 22px;
-  background:linear-gradient(180deg,#4A7FAA 0%,#2D5F8A 100%);
-  border:1px solid #1E4A70;
-  font-size:13px; font-family:${F}; font-weight:700;
-  cursor:pointer; color:#fff; border-radius:3px;
-  letter-spacing:0.3px;
-  transition:all 0.15s;
-  box-shadow:0 2px 4px rgba(0,0,0,0.25);
-}
-.fin-btn:hover:not(:disabled) {
-  background:linear-gradient(180deg,#5A8FBA 0%,#3D6F9A 100%);
-}
-.fin-btn:disabled { opacity:0.6; cursor:not-allowed; }
 `;
-
-function OrbitRing({ radius, modules, duration, reverse, iconSize=52 }) {
-  return (
-    <div style={{
-      position:'absolute', width:radius*2, height:radius*2,
-      top:'50%', left:'50%', marginTop:-radius, marginLeft:-radius,
-      borderRadius:'50%', border:'1.5px dashed rgba(13,92,92,0.12)',
-      animation:`${reverse?'orbitOuter':'orbitInner'} ${duration}s linear infinite`,
-    }}>
-      {modules.map((name,i) => {
-        const angle=(2*Math.PI*i)/modules.length;
-        const x=radius+radius*Math.cos(angle)-iconSize/2;
-        const y=radius+radius*Math.sin(angle)-iconSize/2;
-        const m=ICONS[name];
-        return (
-          <div key={name} style={{
-            position:'absolute', left:x, top:y,
-            width:iconSize, height:iconSize,
-            animation:`${reverse?'counterOut':'counterIn'} ${duration}s linear infinite`,
-          }}>
-            <div style={{
-              width:'100%', height:'100%', borderRadius:16,
-              background:m.bg, display:'flex', flexDirection:'column',
-              alignItems:'center', justifyContent:'center',
-              boxShadow:'0 4px 14px rgba(0,0,0,0.1)',
-              border:`1.5px solid ${m.fg}22`,
-            }}>
-              <span style={{ fontSize:iconSize*0.36, lineHeight:1 }}>{m.symbol}</span>
-              <span style={{ fontSize:9, fontWeight:700, color:m.fg, marginTop:3, letterSpacing:'0.02em' }}>
-                {name.toUpperCase()}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 export default function Login() {
   const { login, user }         = useAuth();
@@ -165,6 +120,7 @@ export default function Login() {
       if (mode === 'company') {
         if (!username.trim() || !password) { setError('Please enter username and password.'); setLoading(false); return; }
         await login(username.trim(), password);
+        setUiVersion('classic');   // signed in from the classic page → classic look
         setLoading(false);
         runLoginAnimation('/dashboard');
       } else {
@@ -240,220 +196,141 @@ export default function Login() {
             {/* ERP name at bottom */}
             <div style={{ marginTop:24, fontSize:11, color:'#94a3b8', fontWeight:600,
               letterSpacing:'0.3px', borderTop:'1px solid #f1f5f9', paddingTop:14, width:'100%' }}>
-              Universal Core ERP Solutions
+              Super ERP System
             </div>
           </div>
         </div>
       )}
 
-      <div className="login-wrapper" style={{ display:'flex', fontFamily:F, background:'#fff' }}>
+      <div className="lg-wrap">
 
-        {/* ══════════ LEFT — orbit animation ══════════ */}
-        <div className="login-left" style={{
-          position:'relative', display:'flex',
-          flexDirection:'column', alignItems:'center', justifyContent:'center',
-          background:'#EDEAE4',
-          overflow:'hidden', minHeight:'100vh',
-        }}>
-          <div style={{ position:'absolute', top:'-8%', left:'-6%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(13,92,92,0.06),transparent 70%)', pointerEvents:'none' }} />
-          <div style={{ position:'absolute', bottom:'-8%', right:'-5%', width:340, height:340, borderRadius:'50%', background:'radial-gradient(circle,rgba(20,131,126,0.05),transparent 70%)', pointerEvents:'none' }} />
+        {/* ══════════ LEFT — brand panel ══════════ */}
+        <div className="lg-brand">
+          <div className="lg-glow" style={{ width:340, height:340, top:-90, right:-60, background:'rgba(234,88,12,0.30)' }} />
+          <div className="lg-glow" style={{ width:380, height:380, bottom:-140, left:-100, background:'rgba(56,189,248,0.18)', animationDelay:'3s' }} />
 
-          <div style={{ position:'relative', width:360, height:360 }}>
-            <OrbitRing radius={160} modules={OUTER} duration={28} reverse iconSize={40} />
-            <OrbitRing radius={102} modules={INNER} duration={18} reverse={false} iconSize={42} />
-            <div style={{
-              position:'absolute', top:'50%', left:'50%',
-              width:80, height:80, marginTop:-40, marginLeft:-40,
-              borderRadius:20, background:`linear-gradient(135deg,${TEAL2},${TEAL})`,
-              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-              boxShadow:'0 8px 28px rgba(13,92,92,0.3)',
-              animation:'centerPulse 3s ease-in-out infinite', zIndex:10,
-            }}>
-              <span style={{ fontSize:26, lineHeight:1 }}>⚡</span>
-              <span style={{ fontSize:8, fontWeight:800, color:'#fff', marginTop:4, letterSpacing:'0.08em' }}>EPSILON</span>
+          <div style={{ position:'relative', display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ width:42, height:42, borderRadius:12, background:ACCENT, display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:20, boxShadow:'0 8px 20px rgba(234,88,12,0.45)' }}>⚡</div>
+            <div>
+              <div style={{ fontSize:16, fontWeight:800, letterSpacing:'0.2px' }}>Super ERP System</div>
+              <div style={{ fontSize:10.5, color:'rgba(255,255,255,0.6)', letterSpacing:'1.5px', textTransform:'uppercase' }}>Epsilon Group</div>
             </div>
           </div>
 
-          <div style={{ textAlign:'center', marginTop:20, position:'relative', zIndex:2 }}>
-            <div style={{ fontSize:24, fontWeight:800, color:TEAL, letterSpacing:'-0.3px' }}>Universal Core ERP Solutions</div>
-            <div style={{ fontSize:12.5, color:'#64748b', marginTop:6, fontWeight:500 }}>
-              Enterprise Resource Planning · CRM · Production · Quality
+          <div style={{ position:'relative', flex:1, display:'flex', flexDirection:'column', justifyContent:'center', maxWidth:680 }}>
+            <div style={{ display:'inline-flex', alignSelf:'flex-start', alignItems:'center', gap:8, padding:'5px 12px', borderRadius:20,
+              background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.14)', fontSize:11.5, fontWeight:700,
+              color:'rgba(255,255,255,0.85)', marginBottom:18 }}>
+              <span style={{ width:7, height:7, borderRadius:'50%', background:'#22C55E', boxShadow:'0 0 0 3px rgba(34,197,94,0.25)' }} />
+              Version 2.0.1
+            </div>
+            <h1 style={{ fontSize:40, lineHeight:1.12, fontWeight:800, letterSpacing:'-0.8px', margin:0 }}>
+              Super ERP<br/>
+              <span style={{ color:'#FDBA74' }}>System</span>
+            </h1>
+            <p style={{ fontSize:15, lineHeight:1.6, color:'rgba(255,255,255,0.72)', marginTop:14, maxWidth:470 }}>
+              One place for sales, purchase, inventory, production, projects and accounts — from enquiry to final payment.
+            </p>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:10, marginTop:30, maxWidth:680 }}>
+              {MODULES.map(m => (
+                <div key={m.name} className="lg-mod">
+                  <span className="lg-mod-ic">{m.icon}</span>{m.name}
+                </div>
+              ))}
             </div>
           </div>
-          <div style={{ position:'absolute', bottom:14, fontSize:10.5, color:'#94a3b8' }}>
-            © 2025 Epsilon Enterprise · epsilonprefab.org
+
+          <div style={{ position:'relative', fontSize:11, color:'rgba(255,255,255,0.5)', display:'flex', justifyContent:'space-between', gap:12 }}>
+            <span>© {new Date().getFullYear()} Epsilon Group · epsilonprefab.org</span>
+            <span>Secure sign-in</span>
           </div>
         </div>
 
-        {/* ══════════ RIGHT — Finacle-style login panel ══════════ */}
-        <div className="login-right" style={{
-          position:'relative', minHeight:'100vh',
-          display:'flex', flexDirection:'column',
-          background:'#ffffff',
-          boxShadow:'-8px 0 40px rgba(0,0,0,0.22)',
-          overflow:'hidden',
-          animation:'slideIn 0.5s ease both',
-        }}>
-
-          {/* Red decorative triangle — exact Finacle signature shape */}
-          <svg style={{ position:'absolute', bottom:0, left:0, display:'block', zIndex:1 }}
-            width="160" height="240" viewBox="0 0 160 240">
-            <polygon points="0,240 160,240 0,0" fill="#CC0000"/>
-          </svg>
-
-          {/* Subtle top border */}
-          <div style={{ height:4, background:'linear-gradient(90deg,#CC0000,#3A6186)', position:'relative', zIndex:3 }} />
-
-          {/* ── Top-right brand logo (like Finacle red logo) ── */}
-          <div style={{ padding:'20px 28px 0', textAlign:'right', position:'relative', zIndex:3 }}>
-            <div style={{ display:'inline-flex', alignItems:'center', gap:10 }}>
-              <div>
-                <div style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'flex-end' }}>
-                  {/* Red square logo */}
-                  <div style={{
-                    width:36, height:36, background:'#CC0000', borderRadius:4,
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    boxShadow:'0 3px 10px rgba(204,0,0,0.35)',
-                  }}>
-                    <span style={{ fontSize:18, color:'#fff', fontWeight:900, lineHeight:1 }}>⚡</span>
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:19, fontWeight:900, color:'#CC0000', letterSpacing:'-0.3px', lineHeight:1 }}>
-                      Finacle ERP
-                    </div>
-                    <div style={{ fontSize:9, color:'#888', letterSpacing:'1px', marginTop:2, fontStyle:'italic' }}>
-                      Transforming Business
-                    </div>
-                  </div>
-                </div>
+        {/* ══════════ RIGHT — sign-in card ══════════ */}
+        <div className="lg-side">
+          <div className="lg-card">
+            <div style={{ textAlign:'center', marginBottom:22 }}>
+              <img src="/brand/client-logo.png" alt="Epsilon" style={{ height:38, maxWidth:'100%', objectFit:'contain' }} />
+              <div style={{ fontSize:21, fontWeight:800, color:'#101828', marginTop:18, letterSpacing:'-0.3px' }}>Sign in</div>
+              <div style={{ fontSize:13, color:'#667085', marginTop:4 }}>
+                {mode === 'vendor' ? 'Vendor Portal — use your registered email' : 'Welcome back — sign in to continue'}
               </div>
             </div>
-          </div>
 
-          {/* ── Main content ── */}
-          <div className="fin-content" style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center',
-            padding:'24px 52px 20px 52px', position:'relative', zIndex:3 }}>
-
-            {/* Title — exact Finacle style */}
-            <div style={{ marginBottom:40 }}>
-              <h1 style={{ fontSize:28, color:'#111', lineHeight:1.25, margin:0, letterSpacing:'-0.5px' }}>
-                <span style={{ fontWeight:300 }}>Universal Core </span>
-                <span style={{ fontWeight:900 }}>ERP Solution</span>
-              </h1>
-              <div style={{ fontSize:14, color:'#777', textAlign:'right', marginTop:6, fontStyle:'italic' }}>
-                Version 2.0.1
-              </div>
-              <div style={{ width:'100%', height:1, background:'linear-gradient(90deg,transparent,#AAAAAA,transparent)', marginTop:16 }} />
+            {/* Company user / Vendor portal */}
+            <div className="lg-seg" role="tablist">
+              <button type="button" role="tab" aria-selected={mode==='company'} className={mode==='company' ? 'on' : ''}
+                onClick={() => { setMode('company'); setError(''); }}>🏢 Company User</button>
+              <button type="button" role="tab" aria-selected={mode==='vendor'} className={mode==='vendor' ? 'on' : ''}
+                onClick={() => { setMode('vendor'); setError(''); }}>🤝 Vendor Portal</button>
             </div>
 
-            {/* ── Finacle-style classic form ── */}
             <form onSubmit={handleSubmit} autoComplete="off">
-              <table style={{ borderCollapse:'collapse', width:'100%' }}>
-                <tbody>
+              <label className="lg-lbl" htmlFor="lg-user">{mode === 'vendor' ? 'Email address' : 'User name'}</label>
+              <div className="lg-field">
+                <span className="ic">{mode === 'vendor' ? '✉' : '👤'}</span>
+                {mode === 'vendor' ? (
+                  <input id="lg-user" type="email" autoFocus value={email} className="lg-in" placeholder="name@company.com"
+                    onChange={e => { setEmail(e.target.value); setError(''); }} />
+                ) : (
+                  <input id="lg-user" type="text" autoFocus value={username} className="lg-in" placeholder="Enter your user name"
+                    onChange={e => { setUsername(e.target.value); setError(''); }} />
+                )}
+              </div>
 
-                  {/* User Name / Email */}
-                  <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600,
-                      color:'#2C2C2C', whiteSpace:'nowrap', verticalAlign:'middle', width:110 }}>
-                      {mode === 'vendor' ? 'Email:' : 'User Name:'}
-                    </td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      {mode === 'vendor' ? (
-                        <input type="email" autoFocus value={email} className="fin-field"
-                          onChange={e => { setEmail(e.target.value); setError(''); }} />
-                      ) : (
-                        <input type="text" autoFocus value={username} className="fin-field"
-                          onChange={e => { setUsername(e.target.value); setError(''); }} />
-                      )}
-                    </td>
-                  </tr>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+                <label className="lg-lbl" htmlFor="lg-pwd">Password</label>
+                <button type="button" className="lg-link" style={{ fontSize:12 }}
+                  onClick={() => navigate(mode === 'vendor' ? '/vendor-forgot-password' : '/forgot-password')}>
+                  Forgot password?
+                </button>
+              </div>
+              <div className="lg-field">
+                <span className="ic">🔒</span>
+                <input id="lg-pwd" type={showPwd ? 'text' : 'password'} value={password} className="lg-in" placeholder="Enter your password"
+                  onChange={e => { setPassword(e.target.value); setError(''); }} />
+                <button type="button" className="lg-eye" onClick={() => setShowPwd(p => !p)} aria-label={showPwd ? 'Hide password' : 'Show password'}>
+                  {showPwd ? 'HIDE' : 'SHOW'}
+                </button>
+              </div>
 
-                  {/* Password */}
-                  <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', verticalAlign:'middle' }}>
-                      Password:
-                    </td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle', position:'relative' }}>
-                      <div style={{ position:'relative' }}>
-                        <input type={showPwd ? 'text' : 'password'} value={password} className="fin-field"
-                          onChange={e => { setPassword(e.target.value); setError(''); }}
-                          style={{ paddingRight:36 }} />
-                        <button type="button" onClick={() => setShowPwd(p=>!p)}
-                          style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
-                            background:'none', border:'none', cursor:'pointer', fontSize:13, color:'#888', padding:0, lineHeight:1 }}>
-                          {showPwd ? '🙈' : '👁️'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-
-                  {/* Login As + Login button (like Language + Login in Finacle) */}
-                  <tr>
-                    <td style={{ padding:'9px 0', paddingRight:18, fontSize:13.5, fontWeight:600, color:'#2C2C2C', verticalAlign:'middle' }}>
-                      Login As:
-                    </td>
-                    <td style={{ padding:'9px 0', verticalAlign:'middle' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <select className="fin-select" value={mode} onChange={e => { setMode(e.target.value); setError(''); }}>
-                          <option value="company">Company User</option>
-                          <option value="vendor">Vendor Portal</option>
-                        </select>
-                        <button type="submit" disabled={loading} className="fin-btn">
-                          {loading ? (
-                            <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
-                              <span style={{ width:12, height:12, border:'2px solid rgba(255,255,255,0.4)', borderTopColor:'#fff', borderRadius:'50%', display:'inline-block', animation:'spin360 0.6s linear infinite' }} />
-                              Wait…
-                            </span>
-                          ) : 'Login'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* Error message */}
               {error && (
-                <div style={{ marginTop:14, padding:'8px 12px',
-                  background:'#FEE2E2', border:'1px solid #FCA5A5', borderLeft:'3px solid #DC2626',
-                  fontSize:12.5, color:'#DC2626', borderRadius:3, display:'flex', alignItems:'center', gap:6 }}>
+                <div role="alert" style={{ marginBottom:12, padding:'9px 12px', background:'#FEF3F2', border:'1px solid #FECDCA',
+                  borderRadius:10, fontSize:12.5, color:'#B42318', display:'flex', alignItems:'center', gap:8 }}>
                   <span>⚠</span> {error}
                 </div>
               )}
 
-              {/* Links */}
-              <div style={{ marginTop:16, display:'flex', gap:16 }}>
-                <button type="button"
-                  onClick={() => navigate(mode === 'vendor' ? '/vendor-forgot-password' : '/forgot-password')}
-                  style={{ background:'none', border:'none', cursor:'pointer', color:'#3A6186',
-                    fontSize:12, textDecoration:'underline', fontFamily:F, padding:0 }}>
-                  Forgot Password?
-                </button>
-                {mode === 'vendor' && (
-                  <button type="button" onClick={() => navigate('/vendor-register')}
-                    style={{ background:'none', border:'none', cursor:'pointer', color:'#3A6186',
-                      fontSize:12, textDecoration:'underline', fontFamily:F, padding:0 }}>
-                    Register as Vendor
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
+              <button type="submit" disabled={loading} className="lg-btn">
+                {loading ? (
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                    <span style={{ width:14, height:14, border:'2px solid rgba(255,255,255,0.45)', borderTopColor:'#fff', borderRadius:'50%',
+                      display:'inline-block', animation:'spin360 0.6s linear infinite' }} />
+                    Signing in…
+                  </span>
+                ) : (mode === 'vendor' ? 'Sign in to Vendor Portal' : 'Sign in')}
+              </button>
 
-          {/* ── Bottom: Epsilongroup brand (like "Infosys" in Finacle) ── */}
-          <div style={{ textAlign:'right', padding:'0 28px 10px', position:'relative', zIndex:3 }}>
-            <div style={{
-              fontSize:28, fontWeight:900, color:'#003580',
-              fontStyle:'italic', letterSpacing:'-0.5px', lineHeight:1,
-              textShadow:'0 1px 2px rgba(0,53,128,0.15)',
-            }}>
-              Epsilongroup
+              {mode === 'vendor' && (
+                <div style={{ textAlign:'center', marginTop:16, fontSize:12.5, color:'#667085' }}>
+                  New supplier?{' '}
+                  <button type="button" className="lg-link" onClick={() => navigate('/vendor-register')}>Register as Vendor</button>
+                </div>
+              )}
+            </form>
+
+            <button type="button" className="lg-beta" onClick={() => navigate('/beta/login')} title="Try the new design (same login)">
+              <span className="tag">BETA</span> Try the new UI <span aria-hidden="true">→</span>
+            </button>
+
+            <div style={{ borderTop:'1px solid #EAECF0', marginTop:18, paddingTop:14, textAlign:'center', fontSize:11, color:'#98A2B3' }}>
+              Super ERP System · Version 2.0.1
             </div>
           </div>
-
-          {/* Copyright */}
-          <div style={{ textAlign:'center', fontSize:10, color:'#888', padding:'0 20px 14px', position:'relative', zIndex:3, lineHeight:1.6 }}>
-            Copyright © 2024–2025 Epsilon Group Limited. All rights reserved. epsilonprefab.org
+          <div style={{ fontSize:11, color:'#98A2B3', marginTop:16, textAlign:'center' }}>
+            © {new Date().getFullYear()} Epsilon Group Limited. All rights reserved.
           </div>
         </div>
 

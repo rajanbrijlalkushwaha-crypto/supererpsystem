@@ -444,5 +444,5 @@ export function FnSpinner() {
 }
 
 /* Format helpers */
-export const fnFmt     = (n) => `₹${(n || 0).toFixed(2)}`;
+export const fnFmt     = (n) => `₹${(Number(n) || 0).toFixed(2)}`;
 export const fnFmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
