@@ -315,7 +315,11 @@ async function runJob(cfg, job) {
   /* GST search needs no login: every search gets a brand-new, empty Chrome profile (no cookies / session of the last
      search — a reused profile made the next search fail with "The GST search page did not open"); it is deleted afterwards */
   const gstJob = job.kind === 'gst';
-  const profile = gstJob ? fs.mkdtempSync(path.join(os.tmpdir(), 'epsilon-gst-')) : path.join(HOME, 'browser-profile');
+  /* kept under HOME, not os.tmpdir(): on a Windows server started from Remote Desktop, TEMP is a per-session folder
+     (…\Temp\2) that Windows deletes at log-off while the ERP keeps running → mkdtemp failed with ENOENT */
+  const gstRoot = path.join(HOME, 'gst-profiles');
+  if (gstJob) fs.mkdirSync(gstRoot, { recursive: true });
+  const profile = gstJob ? fs.mkdtempSync(path.join(gstRoot, 'epsilon-gst-')) : path.join(HOME, 'browser-profile');
   const browser = await puppeteer.launch({ executablePath: exe, headless: headless ? 'new' : false, defaultViewport: headless ? { width: 1366, height: 900 } : null,
     args: [...(headless ? [] : place), ...(gstJob ? ['--no-first-run', '--no-default-browser-check'] : []), ...(job.portal ? [job.portal] : [])], userDataDir: profile });
   /* Stop in the ERP (or a newer search) → close this Chrome at once instead of at the next step */

@@ -4,7 +4,7 @@ import { useCompany } from '../../context/CompanyContext';
 
 const emptyForm = () => ({
   companyName: '', address: '', city: '', state: 'Gujarat', pincode: '',
-  gstin: '', pan: '', email: '', phone: '', website: '',
+  gstin: '', pan: '', email: '', phone: '', website: '', jurisdiction: '',
   bankName: '', bankAccount: '', bankIfsc: '', bankBranch: '', isDefault: false
 });
 
@@ -56,7 +56,7 @@ const Companies = () => {
   };
 
   const handleEdit = (co) => {
-    setForm({ companyName: co.companyName || '', address: co.address || '', city: co.city || '', state: co.state || 'Gujarat', pincode: co.pincode || '', gstin: co.gstin || '', pan: co.pan || '', email: co.email || '', phone: co.phone || '', website: co.website || '', bankName: co.bankName || '', bankAccount: co.bankAccount || '', bankIfsc: co.bankIfsc || '', bankBranch: co.bankBranch || '', isDefault: co.isDefault || false });
+    setForm({ companyName: co.companyName || '', address: co.address || '', city: co.city || '', state: co.state || 'Gujarat', pincode: co.pincode || '', gstin: co.gstin || '', pan: co.pan || '', email: co.email || '', phone: co.phone || '', website: co.website || '', jurisdiction: co.jurisdiction || '', bankName: co.bankName || '', bankAccount: co.bankAccount || '', bankIfsc: co.bankIfsc || '', bankBranch: co.bankBranch || '', isDefault: co.isDefault || false });
     setLocations(Array.isArray(co.locations) ? co.locations.map(x => ({ name: x.name || '', type: x.type === 'Factory' ? 'Factory' : 'Store', address: x.address || '' })) : []);
     setEditId(co.companyId);
     setShowForm(true);
@@ -127,6 +127,10 @@ const Companies = () => {
                 <div className="form-group">
                   <label>Website</label>
                   <input type="text" name="website" value={form.website} onChange={handleInput} />
+                </div>
+                <div className="form-group">
+                  <label>Jurisdiction (city / district)</label>
+                  <input type="text" name="jurisdiction" value={form.jurisdiction} onChange={handleInput} placeholder="e.g. Ahmedabad" />
                 </div>
                 <div className="form-group">
                   <label>Company Logo</label>

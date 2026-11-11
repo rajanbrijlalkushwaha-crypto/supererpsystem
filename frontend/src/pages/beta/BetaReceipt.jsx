@@ -141,7 +141,7 @@ const CSS = `
 
 /* preset = { orderId } opens just the receipt form in a pop-up for that order's client (used from Dues);
    onSaved(text) runs after it is saved, onClose closes the pop-up. */
-export default function BetaReceipt({ preset = null, onClose, onSaved } = {}) {
+export default function BetaReceipt({ preset = null, onClose, onSaved, base = '/beta/receipt' } = {}) {
   const { selectedCompany } = useCompany() || {};
   const companyId = selectedCompany?.companyId;
   const navigate = useNavigate();
@@ -328,7 +328,7 @@ export default function BetaReceipt({ preset = null, onClose, onSaved } = {}) {
         }
         for (const p of editing) if (!used.some(r => r.id === String(p.orderId))) await axios.delete(`/api/accounts/payments/${p.paymentId}`, { params: { companyId } });
         const what = status === 'draft' ? 'saved as draft' : status === 'pending' ? 'sent for approval' : 'saved';
-        resetForm(); setReload(x => x + 1); navigate('/beta/receipt?tab=list');
+        resetForm(); setReload(x => x + 1); navigate(`${base}?tab=list`);
         setListMsg({ ok: true, text: `Receipt ${ids.join(', ')} updated and ${what} — ₹ ${amt(total)} from ${name}.` });
       } catch (err) {
         setMsg({ ok: false, text: `${err.response?.data?.error || 'Could not save the changes.'} Some orders may already be updated — check the list before saving again.` });
@@ -397,7 +397,7 @@ export default function BetaReceipt({ preset = null, onClose, onSaved } = {}) {
       txnDate: (h.transactionDate || h.date || today()).slice(0, 10), refNo: h.referenceNo || h.reference || '', notes: h.notes || '' });
     setMulti(false); setEditing(rs);
   };
-  const cancelEdit = () => { resetForm(); navigate('/beta/receipt?tab=list'); };
+  const cancelEdit = () => { resetForm(); navigate(`${base}?tab=list`); };
   const advice = rs => printReceiptAdvice({ rs, company: selectedCompany, user, banks, soMap, client: clients.find(c => String(c.clientId) === String(rs[0].entityId)) });
 
   // list: Esc or a click outside the list / toolbar clears the selection
@@ -416,7 +416,7 @@ export default function BetaReceipt({ preset = null, onClose, onSaved } = {}) {
         {TABS.map((t, i) => (
           <React.Fragment key={t.key}>
             {i === 1 && <span className="rc-sep" />}
-            <button type="button" role="tab" aria-selected={tab === t.key} className={`rc-tab${tab === t.key ? ' on' : ''}`} onClick={() => { if (editing) resetForm(); navigate(`/beta/receipt?tab=${t.key}`); }}>
+            <button type="button" role="tab" aria-selected={tab === t.key} className={`rc-tab${tab === t.key ? ' on' : ''}`} onClick={() => { if (editing) resetForm(); navigate(`${base}?tab=${t.key}`); }}>
               {t.label}{t.key === 'list' && <span className="n">{receipts.length}</span>}
             </button>
           </React.Fragment>

@@ -5,7 +5,7 @@
 import axios from 'axios';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
-import { fillPage, fitPage } from './BetaDCPrint';
+import { fillPage, fitPage, fillBody } from './BetaDCPrint';
 import { loadGrns, billItemsFor, billCounts, poStatusOf } from './BetaPurchaseLib';
 
 const n = v => parseFloat(v) || 0;
@@ -27,16 +27,18 @@ async function logoOf(co) {
   } catch { return ''; }
 }
 
-function printHtml(html, id) {
+/* fillMm: for a one-page advice, the printable page height — the blank row grows so it fills the A4 page */
+function printHtml(html, id, fillMm) {
   document.getElementById(id)?.remove();
   const fr = document.createElement('iframe');
   fr.id = id;
   fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  // laid out at the printable A4 width (210 − 2×9 mm) so the blank row can be sized to the page
+  fr.style.cssText = fillMm ? 'position:fixed;left:-10000px;top:0;width:192mm;height:279mm;border:0;visibility:hidden' : 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => { w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
+  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
 }
 
 /* ── Dues list ── */
@@ -206,7 +208,7 @@ export async function printOrderAdvice({ r, receipts, company, user, banks }) {
   </thead>
   <tbody>
     ${items}${chLines}
-    <tr class="fill"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr class="fill" id="fillrow"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     <tr class="st"><td colspan="5" class="r">Total</td><td class="r">${amt(taxable + r.other)}</td><td></td><td class="r">${amt(r.gst)}</td><td class="r">${amt(r.value)}</td></tr>
   </tbody>
 </table>
@@ -246,7 +248,7 @@ export async function printOrderAdvice({ r, receipts, company, user, banks }) {
 </div>
 <div class="pby"><span>${brandLine(user)}</span><span>Printed: ${esc(now())}</span></div>
 </body></html>`;
-  printHtml(html, 'du-advice-frame');
+  printHtml(html, 'du-advice-frame', 279);
 }
 
 const PO_ADV_CSS = ADV_CSS + `

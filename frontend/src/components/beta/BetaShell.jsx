@@ -29,9 +29,28 @@ import BetaGRN from '../../pages/beta/BetaGRN';
 import BetaReturns from '../../pages/beta/BetaReturns';
 import BetaStock from '../../pages/beta/BetaStock';
 import BetaRawMaterial, { RawStock } from '../../pages/beta/BetaRawMaterial';
+import BetaMfg from '../../pages/beta/BetaMfg';
 import BetaItems from '../../pages/beta/BetaItems';
 import BetaBG from '../../pages/beta/BetaBG';
 import BetaWarranty from '../../pages/beta/BetaWarranty';
+import BetaCompletion from '../../pages/beta/BetaCompletion';
+import BetaProfile from '../../pages/beta/BetaProfile';
+import BetaInsurance, { insCan } from '../../pages/beta/BetaInsurance';
+import BetaAccPayment from '../../pages/beta/BetaAccPayment';
+import BetaBooks from '../../pages/beta/BetaBooks';
+import BetaGstReturns from '../../pages/beta/BetaGstReturns';
+import BetaFixedAssets from '../../pages/beta/BetaFixedAssets';
+import BetaJournal from '../../pages/beta/BetaJournal';
+import BetaNotes from '../../pages/beta/BetaNotes';
+import BetaExpense from '../../pages/beta/BetaExpense';
+import BetaHREmployees from '../../pages/beta/BetaHREmployees';
+import BetaHRAssets from '../../pages/beta/BetaHRAssets';
+import BetaHRAttendance from '../../pages/beta/BetaHRAttendance';
+import BetaHRPayroll from '../../pages/beta/BetaHRPayroll';
+import BetaHRPolicy from '../../pages/beta/BetaHRPolicy';
+import { hrCan } from '../../pages/beta/BetaHRKit';
+import BetaJobSheet from '../../pages/beta/BetaJobSheet';
+import BetaJobcode from '../../pages/beta/BetaJobcode';
 import ApprovalView from '../../pages/approval/View';
 import Companies from '../../pages/admin/Companies';
 import AdminUsers from '../../pages/admin/Users';
@@ -47,21 +66,47 @@ const SIDE_NAV = [
     sub: [
       { label: 'Client', path: '/beta/client' },
       { label: 'Order', path: '/beta/order' }, { label: 'Proforma Invoice', path: '/beta/proforma' }, { label: 'Receipt', path: '/beta/receipt' }, { label: 'Sales', path: '/beta/sales' }, { label: 'Delivery Challan', path: '/beta/delivery-challan' }, { label: 'Return Note', path: '/beta/return-note' },
-      { label: 'Warranty Certificate', path: '/beta/warranty' }, { label: 'Bank Guarantee', path: '/beta/bank-guarantee', perm: 'accDeposit' }, { label: 'Dues', path: '/beta/dues' },
+      { label: 'Warranty Certificate', path: '/beta/warranty' }, { label: 'Completion Certificate', path: '/beta/completion' }, { label: 'BG / FD / SD', path: '/beta/bank-guarantee', perm: 'accDeposit' }, { label: 'Dues', path: '/beta/dues' },
     ] },
   { key: 'po', label: 'Purchase Order', icon: 'cart', perm: 'purchaseOrder',
     sub: [
       { label: 'Vendor', path: '/beta/vendor' }, { label: 'PO', path: '/beta/po' }, { label: 'Payment', path: '/beta/payment' }, { label: 'Purchase', path: '/beta/purchase-bill' }, { label: 'Goods Receipt', path: '/beta/grn' }, { label: 'Return to Vendor', path: '/beta/return-vendor' }, { label: 'Dues', path: '/beta/purchase-dues' },
     ] },
+  { key: 'job', label: 'Jobcode', icon: 'folder', perm: 'project', path: '/beta/jobcode' },
   { key: 'mfg', label: 'Manufacturing', icon: 'factory', perm: 'mfgOrders',
     sub: [
-      { label: 'Raw Material', path: '/beta/mfg/raw-material' },
+      { label: 'Job Sheet', path: '/beta/mfg/job-sheet', perm: 'jobSheets' }, { label: 'BOM', path: '/beta/mfg/bom', perm: 'mfgOrders' }, { label: 'Raw Material', path: '/beta/mfg/raw-material' },
+      { label: 'Material Issue / Return', path: '/beta/mfg/issue', perm: 'jobSheets' }, { label: 'Planning (MRP)', path: '/beta/mfg/mrp', perm: 'mfgOrders' },
+      { label: 'QC Inspection', path: '/beta/mfg/qc', perm: 'jobSheets' }, { label: 'Production Cost', path: '/beta/mfg/cost', perm: 'mfgOrders' },
     ] },
   { key: 'stock', label: 'Stock', icon: 'box', perms: ['stock', 'items'],
     sub: [
       { label: 'Stock Items', path: '/beta/items', perm: 'items' },
       { label: 'Material — where lying', path: '/beta/stock', perm: 'stock' },
       { label: 'Raw Material Stock', path: '/beta/raw-stock', perm: 'stock' },
+    ] },
+  { key: 'acc', label: 'Account', icon: 'ledger', perms: ['accPayment', 'accReceipt', 'accJournal', 'accDebitNote', 'accCreditNote', 'accExpense'],
+    sub: [
+      { label: 'Payment', path: '/beta/account/payment', perm: 'accPayment' }, { label: 'Receipt', path: '/beta/account/receipt', perm: 'accReceipt' },
+      { label: 'Journal', path: '/beta/account/journal', perm: 'accJournal' }, { label: 'Debit Note', path: '/beta/account/debit-note', perm: 'accDebitNote' },
+      { label: 'Credit Note', path: '/beta/account/credit-note', perm: 'accCreditNote' }, { label: 'Expense', path: '/beta/account/expense', perm: 'accExpense' },
+    ] },
+  { key: 'books', label: 'Books & Reports', icon: 'chart', perms: ['accLedger', 'accReports', 'accBank', 'accDues', 'gst', 'accAsset'],
+    sub: [
+      { label: 'Ledger', path: '/beta/books/ledger', perm: 'accLedger' }, { label: 'Chart of Accounts', path: '/beta/books/chart', perm: 'accLedger' },
+      { label: 'Trial Balance', path: '/beta/books/trial', perm: 'accReports' }, { label: 'Profit & Loss', path: '/beta/books/pl', perm: 'accReports' },
+      { label: 'Balance Sheet', path: '/beta/books/bs', perm: 'accReports' }, { label: 'Cash / Bank Book', path: '/beta/books/cash', perm: 'accBank' },
+      { label: 'GST Returns', path: '/beta/books/gst', perm: 'gst' }, { label: 'TDS', path: '/beta/books/tds', perm: 'accReports' },
+      { label: 'Ageing', path: '/beta/books/ageing', perm: 'accDues' }, { label: 'Fixed Assets', path: '/beta/books/assets', perm: 'accAsset' },
+    ] },
+  { key: 'hr', label: 'HR', icon: 'users', perm: 'hr',
+    sub: [
+      { label: 'Employees', path: '/beta/hr/employees' }, { label: 'Company Assets', path: '/beta/hr/assets' },
+      { label: 'Attendance', path: '/beta/hr/attendance' }, { label: 'Payroll', path: '/beta/hr/payroll' }, { label: 'HR Policy', path: '/beta/hr/policy' },
+    ] },
+  { key: 'ins', label: 'Insurance', icon: 'shield', perm: 'insurance',
+    sub: [
+      { label: 'Policies', path: '/beta/insurance/policies' }, { label: 'Claims', path: '/beta/insurance/claims' },
     ] },
   { key: 'pm', label: 'Password Manager', icon: 'lock', perm: 'passwords', path: '/beta/passwords' },
   /* Admin: each page shows only to those allowed (perm 'admin' = admin role only) */
@@ -72,7 +117,7 @@ const SIDE_NAV = [
       { label: 'Users', path: '/beta/admin/users', perm: 'userMgmt' },
     ] },
 ];
-const allowed = (user, perm) => (perm === 'admin' ? user?.role === 'admin' : can(user, perm, 'view'));
+const allowed = (user, perm) => (perm === 'admin' ? user?.role === 'admin' : perm === 'insurance' ? insCan(user, 'view') : perm === 'hr' ? hrCan(user, 'view') : can(user, perm, 'view'));
 
 const sectionsOf = g => g.sections || (g.items ? [{ title: null, items: g.items }] : []);
 const initials = s => (s || '').replace(/^M\/s\.?\s*/i, '').split(/\s+/).filter(w => /^[A-Za-z]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'U';
@@ -200,7 +245,7 @@ export default function BetaShell() {
   const { pathname, search } = useLocation();
 
   const [menu, setMenu] = useState(null);   // 'co' | 'me'
-  const sideNav = useMemo(() => SIDE_NAV.filter(n => (n.perms ? n.perms.some(p => allowed(user, p)) : can(user, n.perm, 'view')))
+  const sideNav = useMemo(() => SIDE_NAV.filter(n => (n.perms ? n.perms.some(p => allowed(user, p)) : allowed(user, n.perm)))
     .map(n => (n.sub ? { ...n, sub: n.sub.filter(x => !x.perm || allowed(user, x.perm)) } : n)), [user]);
   const [openNav, setOpenNav] = useState({});   // the one side nav button whose sub menu is open (opening one closes the others)
   const inSub = (n, p) => (n.sub || []).some(x => x.path && (p === x.path || p.startsWith(x.path + '/')));
@@ -353,7 +398,7 @@ export default function BetaShell() {
             {menu === 'me' && (
               <div className="bx-pop" role="menu">
                 <div className="hd"><b>{userName}</b><small>{user?.email || user?.username}</small></div>
-                <Link to="/profile" className="bx-mi" role="menuitem"><span className="ico"><Svg name="settings" size={16} /></span>Profile settings</Link>
+                <Link to="/beta/profile" className="bx-mi" role="menuitem" onClick={() => setMenu(null)}><span className="ico"><Svg name="settings" size={16} /></span>Profile settings</Link>
                 <button type="button" className="bx-mi" role="menuitem" onClick={openChat}>
                   <span className="ico"><Svg name="mail" size={16} /></span>Chat
                   {chatUnread > 0 && <span className="cnt">{chatUnread > 99 ? '99+' : chatUnread}</span>}
@@ -386,8 +431,29 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/raw-stock') && <RawStock key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/items') && <BetaItems key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/warranty') && <BetaWarranty key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/completion') && <BetaCompletion key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/profile') && <BetaProfile />}
+          {pathname.startsWith('/beta/account/payment') && <BetaAccPayment key={`ap-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/account/receipt') && <BetaReceipt base="/beta/account/receipt" key={`ar-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/account/journal') && <BetaJournal key={`aj-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/account/debit-note') && <BetaNotes kind="debit" key={`dn-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/account/credit-note') && <BetaNotes kind="credit" key={`cn-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/account/expense') && <BetaExpense key={`ae-${selectedCompany?.companyId || 'none'}`} />}
+          {['ledger', 'chart', 'trial', 'pl', 'bs', 'cash', 'tds', 'ageing'].map(v => pathname.startsWith(`/beta/books/${v}`) && <BetaBooks key={`bk-${v}-${selectedCompany?.companyId || 'none'}`} view={v} />)}
+          {pathname.startsWith('/beta/books/gst') && <BetaGstReturns key={`gst-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/books/assets') && <BetaFixedAssets key={`fa-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/hr/employees') && <BetaHREmployees key={`he-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/hr/assets') && <BetaHRAssets key={`ha-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/hr/attendance') && <BetaHRAttendance key={`hat-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/hr/payroll') && <BetaHRPayroll key={`hp-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/hr/policy') && <BetaHRPolicy key={`hpo-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/insurance/policies') && <BetaInsurance view="policies" key={`ip-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/insurance/claims') && <BetaInsurance view="claims" key={`ic-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/bank-guarantee') && <BetaBG key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/jobcode') && <BetaJobcode key={`jc-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/mfg/job-sheet') && <BetaJobSheet key={`js-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/mfg/raw-material') && <BetaRawMaterial key={selectedCompany?.companyId || 'none'} />}
+          {['bom', 'issue', 'mrp', 'qc', 'cost'].map(v => pathname.startsWith(`/beta/mfg/${v}`) && <BetaMfg key={`mfg-${v}-${selectedCompany?.companyId || 'none'}`} view={v} />)}
           {pathname.startsWith('/beta/admin/') && (
             <div style={{ height: '100%', overflow: 'auto', padding: 16, background: '#fff' }}>
               {pathname.startsWith('/beta/admin/approvals') && (allowed(user, 'approvals') ? <ApprovalView /> : <p>You do not have access to Approvals.</p>)}

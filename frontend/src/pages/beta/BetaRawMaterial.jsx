@@ -4,7 +4,7 @@
  *   RawStock        Raw Material Stock (Stock → Raw Material Stock): per item opening · received (GRN of "For stock" POs) ·
  *                   issued · returned · closing · average rate · value; red when below the minimum level
  * Average rate = (opening qty × opening rate + every purchase bill's taxable value) ÷ (opening qty + billed qty).
- * Issue / return to Job Cards come in the next step; until then those columns stay 0. */
+ * Issued / returned come from the Material Issue / Return slips (Manufacturing → Material Issue). */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -14,7 +14,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
 import { CSS as SALES_CSS, useClearSel } from './BetaSales';
 import { num, fdate } from './BetaSalesBill';
-import { n, r2, r3, key, today, loadGrns, grnQtyOf, billCounts } from './BetaPurchaseLib';
+import { n, today } from './BetaPurchaseLib';
+import { useMfg, rawStock } from './BetaMfgLib';
 import { PX_CSS } from './BetaPurchaseParts';
 import { printList, esc } from './BetaPurchasePrint';
 
@@ -184,39 +185,11 @@ export function RawStock() {
   const { selectedCompany } = useCompany() || {};
   const companyId = selectedCompany?.companyId;
   const { user } = useAuth() || {};
-  const [data, setData] = useState(null);
+  const data = useMfg(companyId, 0);
   const [slot, setSlot] = useState(null);
   const [q, setQ] = useState('');
   const [onlyLow, setOnlyLow] = useState(false);
-
-  useEffect(() => {
-    if (!companyId) return;
-    const get = (url, extra) => axios.get(url, { params: { companyId, ...extra } }).then(r => (Array.isArray(r.data) ? r.data : [])).catch(() => []);
-    Promise.all([get('/api/raw-materials'), get('/api/purchase-orders'), loadGrns(companyId), get('/api/bills', { type: 'purchase' })])
-      .then(([rms, pos, grns, pbills]) => setData({ rms, pos, grns, pbills }));
-  }, [companyId]);
-
-  const rows = useMemo(() => {
-    if (!data) return [];
-    const stockPo = new Set(data.pos.filter(p => p.poType === 'Stock').map(p => String(p.orderId)));
-    const match = (rm, it) => (it.itemCode && String(it.itemCode) === rm.code) || key(it.itemName || it.description) === key(rm.name);
-    return data.rms.map(rm => {
-      const oq = n(rm.opening?.qty), orate = n(rm.opening?.rate);
-      let rec = 0, bq = 0, bv = 0, lastGrn = '';
-      data.grns.filter(g => g.status !== 'deleted' && stockPo.has(String(g.poId))).forEach(g => (g.items || []).forEach(it => {
-        if (match(rm, it)) { rec += grnQtyOf(it); if (String(g.receiptDate || '') > lastGrn) lastGrn = String(g.receiptDate || ''); }
-      }));
-      data.pbills.filter(billCounts).forEach(b => (b.items || []).forEach(li => {
-        const po = li.poId != null && li.poId !== '' ? String(li.poId) : String(b.orderId || '');
-        if (!(String(li.itemCode || '') === rm.code || (stockPo.has(po) && match(rm, li)))) return;
-        bq += n(li.qty); bv += n(li.taxable) || n(li.qty) * n(li.rate);
-      }));
-      const avg = oq + bq > 0 ? (oq * orate + bv) / (oq + bq) : 0;
-      const issued = 0, returned = 0;   // Job Card issue / return — next step
-      const closing = r3(oq + rec - issued + returned);
-      return { rm, opening: oq, rec: r3(rec), issued, returned, closing, avg: r2(avg), value: r2(closing * avg), low: n(rm.minLevel) > 0 && closing < n(rm.minLevel), lastGrn };
-    });
-  }, [data]);
+  const rows = useMemo(() => (data ? Object.values(rawStock(data)).sort((a, b) => String(a.rm.name).localeCompare(String(b.rm.name))) : []), [data]);
 
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = rows.filter(r => (!onlyLow || r.low) && (!words.length || words.every(x => `${r.rm.code} ${r.rm.name} ${r.rm.category}`.toLowerCase().includes(x))));
@@ -225,10 +198,10 @@ export function RawStock() {
   const doPrint = () => printList({
     title: 'Raw Material Stock', company: selectedCompany, user,
     filter: [`As on ${fdate(new Date())}`, onlyLow && 'Below minimum only', q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '),
-    cols: [['Code', '', '7%'], ['Raw Material', '', '20%'], ['Unit', 'c', '5%'], ['Opening', 'r', '8%'], ['Received (GRN)', 'r', '9%'], ['Issued', 'r', '7%'], ['Returned', 'r', '7%'], ['Closing', 'r', '8%'], ['Min level', 'r', '7%'], ['Avg rate', 'r', '10%'], ['Value', 'r', '12%']],
-    rows: shown.map(r => [esc(r.rm.code), esc(r.rm.name), esc(r.rm.unit), num(r.opening), num(r.rec), num(r.issued), num(r.returned), `<b>${num(r.closing)}</b>${r.low ? ' (LOW)' : ''}`,
+    cols: [['Code', '', '7%'], ['Raw Material', '', '20%'], ['Unit', 'c', '5%'], ['Opening', 'r', '8%'], ['Received (GRN)', 'r', '9%'], ['Issued', 'r', '7%'], ['Returned', 'r', '7%'], ['Closing', 'r', '8%'], ['On order', 'r', '7%'], ['Min level', 'r', '6%'], ['Avg rate', 'r', '9%'], ['Value', 'r', '11%']],
+    rows: shown.map(r => [esc(r.rm.code), esc(r.rm.name), esc(r.rm.unit), num(r.opening), num(r.rec), num(r.issued), num(r.returned), `<b>${num(r.closing)}</b>${r.low ? ' (LOW)' : ''}`, r.ordered ? num(r.ordered) : '—',
       r.rm.minLevel ? num(r.rm.minLevel) : '—', money(r.avg), money(r.value)]),
-    total: ['', '', '', '', '', '', '', '', '', 'Total', `<b>${money(totVal)}</b>`],
+    total: ['', '', '', '', '', '', '', '', '', '', 'Total', `<b>${money(totVal)}</b>`],
   });
 
   return (
@@ -248,20 +221,21 @@ export function RawStock() {
       {!data ? <div className="sb-empty">Loading…</div> : (
         <div className="sb-list">
           <table className="sb-t px rmx">
-            <colgroup><col style={{ width: '7%' }} /><col style={{ width: '19%' }} /><col style={{ width: '5%' }} /><col style={{ width: '8%' }} /><col style={{ width: '9%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '10%' }} /><col style={{ width: '13%' }} /></colgroup>
-            <thead><tr><th>Code</th><th>Raw Material</th><th>Unit</th><th className="r">Opening</th><th className="r">Received (GRN)</th><th className="r">Issued</th><th className="r">Returned</th><th className="r">Closing</th><th className="r">Min level</th><th className="r">Avg rate</th><th className="r">Value</th></tr></thead>
+            <colgroup><col style={{ width: '7%' }} /><col style={{ width: '19%' }} /><col style={{ width: '5%' }} /><col style={{ width: '8%' }} /><col style={{ width: '9%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '8%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '11%' }} /></colgroup>
+            <thead><tr><th>Code</th><th>Raw Material</th><th>Unit</th><th className="r">Opening</th><th className="r">Received (GRN)</th><th className="r">Issued</th><th className="r">Returned</th><th className="r">Closing</th><th className="r">On order</th><th className="r">Min level</th><th className="r">Avg rate</th><th className="r">Value</th></tr></thead>
             <tbody>
-              {!shown.length && <tr><td colSpan={11} className="sb-empty">{q || onlyLow ? 'Nothing matches.' : 'No raw materials yet — add them in Manufacturing → Raw Material.'}</td></tr>}
+              {!shown.length && <tr><td colSpan={12} className="sb-empty">{q || onlyLow ? 'Nothing matches.' : 'No raw materials yet — add them in Manufacturing → Raw Material.'}</td></tr>}
               {shown.map(r => (
                 <tr key={r.rm.rmId} className={r.low ? 'low' : ''}>
                   <td className="b">{r.rm.code}</td><td title={r.rm.name}>{r.rm.name}{r.rm.category ? <span className="mut"> · {r.rm.category}</span> : null}</td><td>{r.rm.unit}</td>
                   <td className="r">{num(r.opening)}</td><td className="r" title={r.lastGrn ? `Last GRN ${fdate(r.lastGrn)}` : ''}>{num(r.rec)}</td>
                   <td className="r">{num(r.issued)}</td><td className="r">{num(r.returned)}</td>
                   <td className={`r ${r.low ? 'lowt' : 'b'}`} title={r.low ? 'Below the minimum level — order more' : ''}>{num(r.closing)}{r.low ? ' ▼' : ''}</td>
+                  <td className="r" title="Still to come on open stock POs">{r.ordered ? num(r.ordered) : '—'}</td>
                   <td className="r">{r.rm.minLevel ? num(r.rm.minLevel) : '—'}</td><td className="r">{r.avg ? money(r.avg) : '—'}</td><td className="r b">{money(r.value)}</td>
                 </tr>
               ))}
-              {shown.length > 0 && <tr><td colSpan={10} className="r b">Total value</td><td className="r b">{money(totVal)}</td></tr>}
+              {shown.length > 0 && <tr><td colSpan={11} className="r b">Total value</td><td className="r b">{money(totVal)}</td></tr>}
             </tbody>
           </table>
         </div>

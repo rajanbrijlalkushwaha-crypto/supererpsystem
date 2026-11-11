@@ -75,6 +75,24 @@ export function fillPage(doc) {
   fill.querySelectorAll('td').forEach(td => { td.style.height = h + 'px'; });
 }
 
+/* grow the #fillrow blank row so the WHOLE page (document + footer lines) reaches the bottom of the A4 page.
+   pageMm = paper height minus the @page top + bottom margins. Laid out in a frame as wide as the printable area. */
+export function fillBody(doc, pageMm = 281) {
+  try {
+    const fill = doc.getElementById('fillrow'); if (!fill) return;
+    const probe = doc.createElement('div'); probe.style.cssText = `position:absolute;visibility:hidden;height:${pageMm}mm;width:1px`;
+    doc.body.appendChild(probe); const page = probe.getBoundingClientRect().height; probe.remove();
+    const kids = [...doc.body.children].filter(el => !['STYLE', 'SCRIPT'].includes(el.tagName));
+    if (!kids.length) return;
+    const last = kids[kids.length - 1];
+    const used = last.getBoundingClientRect().bottom + (parseFloat(doc.defaultView.getComputedStyle(last).marginBottom) || 0) - kids[0].getBoundingClientRect().top;
+    const spare = Math.floor(page - used - 6);
+    if (spare <= 0) return;
+    const h = fill.getBoundingClientRect().height + spare;
+    fill.querySelectorAll('td').forEach(td => { td.style.height = `${h}px`; });
+  } catch { /* print as is */ }
+}
+
 /* one A4 page when it nearly fits: shrink the whole document (up to 25%) if it is a little taller than the page;
    a much longer document is left as it is and runs on to more pages instead of becoming unreadably small */
 export function fitPage(doc, pageMm = 281) {

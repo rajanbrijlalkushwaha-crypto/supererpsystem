@@ -5,6 +5,7 @@
 import axios from 'axios';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
+import { fillBody } from './BetaDCPrint';
 import { STATUS, orderNoOf, bankLabel } from './BetaReceipt';
 
 const n = v => parseFloat(v) || 0;
@@ -23,16 +24,18 @@ async function logoOf(co) {
   } catch { return ''; }
 }
 
-function printHtml(html, id) {
+/* fillMm: for a one-page advice, the printable page height — the blank row grows so it fills the A4 page */
+function printHtml(html, id, fillMm) {
   document.getElementById(id)?.remove();
   const fr = document.createElement('iframe');
   fr.id = id;
   fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  // laid out at the printable A4 width (210 − 2×9 mm) so the blank row can be sized to the page
+  fr.style.cssText = fillMm ? 'position:fixed;left:-10000px;top:0;width:192mm;height:279mm;border:0;visibility:hidden' : 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => { w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
+  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
 }
 
 /* ── Receipt Advice ── */
@@ -118,7 +121,7 @@ tr.tot td { font-weight:bold; font-size:10.5pt; background:#F2F2F2; }
   <thead><tr class="hd"><th>Sl</th><th>Sales Order No.</th><th>Order Date</th><th>Client PO No.</th><th>PO Date</th><th>Amount (₹)</th></tr></thead>
   <tbody>
     ${lines.replace(/<tr>/g, '<tr class="it">')}
-    <tr class="fill"><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr class="fill" id="fillrow"><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     <tr class="tot"><td colspan="5" class="r">Total Received</td><td class="r">₹ ${amt(total)}</td></tr>
     <tr><td colspan="6"><span class="lbl">Amount in words:</span> <b>${esc(inWords(total))}</b></td></tr>
     ${h.notes ? `<tr><td colspan="6"><span class="lbl">Remarks:</span> ${esc(h.notes)}</td></tr>` : ''}
@@ -135,7 +138,7 @@ tr.tot td { font-weight:bold; font-size:10.5pt; background:#F2F2F2; }
 </div>
 <div class="pby"><span>${brandLine(user)}</span><span>Printed: ${esc(now())}</span></div>
 </body></html>`;
-  printHtml(html, 'rc-advice-frame');
+  printHtml(html, 'rc-advice-frame', 279);
 }
 
 /* ── Receipt List ── */

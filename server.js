@@ -58,7 +58,10 @@ app.use('/api/grn',               require('./api/grn'));
 app.use('/api/returns',           require('./api/returns'));
 app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
 app.use('/api/warranty-certs',    require('./api/warrantyCerts'));   // Warranty Certificates
+app.use('/api/completion-certs',  require('./api/completionCerts')); // Completion Certificates
+app.use('/api/insurance',         require('./api/insurance'));       // Insurance policies + claims
 app.use('/api/raw-materials',     require('./api/rawMaterials'));   // Raw Material master (manufacturing)   // Return Note (client) / Return to Vendor
+app.use('/api/production',        require('./api/production'));    // BOM, material issue / return, QC, job cost
 app.use('/api/gdn',               require('./api/gdn'));
 app.use('/api/passwords',         require('./api/passwords'));
 app.use('/api/bank-ifsc',         require('./api/bankIfsc'));   // IFSC → bank, branch, address (read from ifsc.bankifsccode.com)
@@ -68,6 +71,7 @@ app.use('/api/deposits',          require('./api/deposits'));
 app.use('/api/approvals',         require('./api/approvals'));
 app.use('/api/notifications',     require('./api/notifications').router);
 app.use('/api/ledger',            require('./api/ledger'));
+app.use('/api/books',             require('./api/books'));
 app.use('/api/communication',     require('./api/communication').router);
 app.use('/api/financial-docs',    require('./api/financial-docs'));
 app.use('/api/chat',              require('./api/chat'));

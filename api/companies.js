@@ -27,6 +27,8 @@ const toApiRow = r => ({
   bankAccount:  r.bank_account || r.bankAccount,
   bankIfsc:     r.bank_ifsc || r.bankIfsc,
   bankBranch:   r.bank_branch || r.bankBranch,
+  // court jurisdiction printed on documents (city / district) — kept in the company JSON
+  jurisdiction: r.jurisdiction != null ? r.jurisdiction : ((jstore.readOneCompany(r.id || r.companyId) || {}).jurisdiction || ''),
   isDefault:    r.is_default !== undefined ? !!r.is_default : !!r.isDefault,
   logoFileName: r.logo_file || r.logoFileName || '',
   createdAt:    r.created_at || r.createdAt,
@@ -47,7 +49,7 @@ router.get('/', async (_req, res) => {
 // POST - Create company
 router.post('/', upload.single('logo'), async (req, res) => {
   try {
-    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault } = req.body;
+    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault, jurisdiction } = req.body;
 
     let companyId;
     if (db.connected) {
@@ -78,7 +80,7 @@ router.post('/', upload.single('logo'), async (req, res) => {
     const now = new Date().toISOString();
     saveJson(companyJsonPath(companyId), {
       companyId, companyName, address, city, state, pincode, gstin, pan,
-      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch,
+      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, jurisdiction: String(jurisdiction || '').trim(),
       isDefault: isDefault === 'true', logoFileName: logoFile,
       createdAt: now, updatedAt: now,
     });
@@ -98,7 +100,7 @@ router.post('/', upload.single('logo'), async (req, res) => {
 router.put('/:companyId', upload.single('logo'), async (req, res) => {
   try {
     const { companyId } = req.params;
-    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault } = req.body;
+    const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault, jurisdiction } = req.body;
 
     let logoFile = '';
     if (db.connected) {
@@ -137,7 +139,7 @@ router.put('/:companyId', upload.single('logo'), async (req, res) => {
     saveJson(companyJsonPath(companyId), {
       ...prev,
       companyId, companyName, address, city, state, pincode, gstin, pan,
-      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch,
+      email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, jurisdiction: jurisdiction != null ? String(jurisdiction).trim() : (prev.jurisdiction || ''),
       isDefault: isDefault === 'true', logoFileName: logoFile, locations,
       updatedAt: new Date().toISOString(),
     });

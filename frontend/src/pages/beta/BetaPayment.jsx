@@ -52,7 +52,7 @@ const PAY_CSS = `
 `;
 
 /* preset = { poId } opens just the payment form in a pop-up for that PO's vendor (used from Dues) */
-export default function BetaPayment({ preset = null, onClose, onSaved } = {}) {
+export default function BetaPayment({ preset = null, onClose, onSaved, base = '/beta/payment' } = {}) {
   const { selectedCompany } = useCompany() || {};
   const companyId = selectedCompany?.companyId;
   const { user } = useAuth() || {};
@@ -157,7 +157,7 @@ export default function BetaPayment({ preset = null, onClose, onSaved } = {}) {
     try {
       if (editing) {
         await axios.put(`/api/accounts/payments/${editing.paymentId}`, body, { params: { companyId } });
-        resetForm(); setReload(x => x + 1); navigate('/beta/payment?tab=list');
+        resetForm(); setReload(x => x + 1); navigate(`${base}?tab=list`);
         setListMsg({ ok: true, text: `Payment ${editing.paymentId} updated: ${text}.` });
       } else {
         const r = await axios.post('/api/accounts/payments', body, { params: { companyId } });
@@ -230,7 +230,7 @@ export default function BetaPayment({ preset = null, onClose, onSaved } = {}) {
         {TABS.map((t, i) => (
           <React.Fragment key={t.key}>
             {i === 1 && <span className="rc-sep" />}
-            <button type="button" role="tab" aria-selected={tab === t.key} className={`rc-tab${tab === t.key ? ' on' : ''}`} onClick={() => { if (editing) resetForm(); navigate(`/beta/payment?tab=${t.key}`); }}>
+            <button type="button" role="tab" aria-selected={tab === t.key} className={`rc-tab${tab === t.key ? ' on' : ''}`} onClick={() => { if (editing) resetForm(); navigate(`${base}?tab=${t.key}`); }}>
               {t.label}{t.key === 'list' && <span className="n">{vendorPays.length}</span>}
             </button>
           </React.Fragment>
@@ -353,7 +353,7 @@ export default function BetaPayment({ preset = null, onClose, onSaved } = {}) {
 
           <div className="rc-bar">
             <span className="info">{vendor ? <>{vendor.vendorName} · {used.length} PO{used.length === 1 ? '' : 's'} · <b>₹ {amt(total)}</b>{editing && <> · was ₹ {amt(editing.amount)}</>}</> : 'Choose the vendor'}</span>
-            {editing && <button type="button" className="rc-b ghost" disabled={busy} onClick={() => { resetForm(); navigate('/beta/payment?tab=list'); }}>Cancel</button>}
+            {editing && <button type="button" className="rc-b ghost" disabled={busy} onClick={() => { resetForm(); navigate(`${base}?tab=list`); }}>Cancel</button>}
             <button type="button" className="rc-b ghost" disabled={busy} onClick={() => save('draft')}>Save as Draft</button>
             <button type="button" className="rc-b pri" disabled={busy} onClick={() => save('pending')}>{busy ? 'Saving…' : 'Send for Approval'}</button>
           </div>

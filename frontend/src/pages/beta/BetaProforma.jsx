@@ -10,6 +10,7 @@ import { useCompany } from '../../context/CompanyContext';
 import { withLatestClient } from '../../utils/latestClient';
 import { useAuth } from '../../context/AuthContext';
 import { brandLine } from '../../utils/printBranding';
+import { fillBody } from './BetaDCPrint';
 import { Svg } from '../../components/ui/Icon';
 
 const TEAL = '#03444f';
@@ -770,7 +771,7 @@ tr.net td { font-weight:bold; font-size:12pt; padding:6px 6px !important; backgr
   <thead class="hd"><tr><th>Sl</th><th>Description of Goods</th><th>HSN/SAC</th><th>Due Date</th><th>Qty</th><th>Unit</th><th>Rate</th><th>GST</th><th>Amount (₹)</th></tr></thead>
   <tbody>
     ${itemRows.replace(/<tr>/g, '<tr class="it">') || `<tr class="it"><td colspan="${NCOL}" class="c mut">No products</td></tr>`}
-    <tr class="fill"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr class="fill" id="fillrow"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     <tr class="gt"><td colspan="${NCOL - 1}" class="r">Product Value</td><td class="r">${amt(prodValue)}</td></tr>
     ${chGst.map(c => sumLine(`Add: ${esc(c.chargeType || 'Charges')}${c.description && !/% of taxable$/.test(c.description) ? ` — ${esc(c.description)}` : ''}${chPct(c) ? ` <span class="mut">(${chPct(c)}% of product value)</span>` : ''}`, amt(c.amount), 'sum')).join('')}
     ${sumLine('Total Taxable Value', amt(totalTaxable), 'sum st')}
@@ -869,6 +870,7 @@ tr.net td { font-weight:bold; font-size:12pt; padding:6px 6px !important; backgr
       const pageH = probe.getBoundingClientRect().height; probe.remove();
       const h = doc.body.scrollHeight;
       if (pageH > 0 && h > pageH && pageH / h >= 0.75) doc.body.style.zoom = String(Math.floor(pageH / h * 1000) / 1000);
+      else if (h <= pageH) fillBody(doc, 283);   // shorter than a page → the blank row grows so it fills the A4 sheet
     } catch { /* print as is */ }
     w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
   }, 400);

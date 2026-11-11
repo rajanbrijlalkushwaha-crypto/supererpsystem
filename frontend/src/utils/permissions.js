@@ -5,7 +5,7 @@ export const ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve'];
 export const GROUP_ORDER = [
   'Dashboard','CRM','Vendor','Inventory',
   'Sales Order','Sales Bill','Purchase Order','Purchase Bill',
-  'Manufacturing','Account','Stock','GST','Projects','Communication','Other','Admin',
+  'Manufacturing','Account','HR','Insurance','Stock','GST','Projects','Communication','Other','Admin',
 ];
 
 /* navKey maps each module to the Sidebar top-level key it lives under */
@@ -55,6 +55,14 @@ export const MODULES = [
   { key:'accDues',         label:'View Balance / Dues',      group:'Account',        navKey:'finance',       actions:['view'] },
   { key:'accApproval',     label:'Account Approval',         group:'Account',        navKey:'finance',       actions:['view','approve'] },
   { key:'accDeposit',      label:'Deposit',                  group:'Account',        navKey:'finance',       actions:['view','create','edit'] },
+  { key:'accReports',      label:'Books & Reports (Trial Balance, P&L, Balance Sheet, TDS)', group:'Account', navKey:'finance', actions:['view'] },
+  { key:'accAsset',        label:'Fixed Assets & Depreciation', group:'Account',     navKey:'finance',       actions:['view','create','edit','delete'] },
+
+  /* HR */
+  { key:'hr',              label:'HR & Payroll',             group:'HR',             navKey:'hrPayroll',     actions:['view','create','edit','delete'] },
+
+  /* Insurance */
+  { key:'insurance',       label:'Insurance Policies & Claims', group:'Insurance', navKey:'insurance',    actions:['view','create','edit','delete'] },
 
   /* Stock */
   { key:'stock',           label:'Stock View',               group:'Stock',          navKey:'stock',         actions:['view'] },
