@@ -192,6 +192,8 @@ router.delete('/:id', guard('delete'), (req, res) => {
 });
 
 /* for the E-Way Helper (server side only): the first readable login whose URL contains host */
+/* the first saved login whose URL passes test(url) */
+router.findLoginBy = (cid, test) => read(cid).find(p => !p.unreadable && p.password && test(String(p.url || '').toLowerCase())) || null;
 router.findLogin = (cid, host) => read(cid).find(p => !p.unreadable && p.password && String(p.url || '').toLowerCase().includes(String(host).toLowerCase())) || null;
 
 module.exports = router;

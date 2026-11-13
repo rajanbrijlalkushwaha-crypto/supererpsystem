@@ -7,11 +7,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCompany } from '../../context/CompanyContext';
 import { useChat } from '../../context/ChatContext';
-import { NAV_GROUPS } from '../../utils/navGroups';
-import { canViewNav, can } from '../../utils/permissions';
+import { can } from '../../utils/permissions';
 import { PRODUCT_NAME } from '../../utils/brand';
 import { Svg } from '../ui/Icon';
 import { VOUCHERS, isTransactionPath } from '../VoucherBar';
+import BetaDashboard from '../../pages/beta/BetaDashboard';
 import BetaClients from '../../pages/beta/BetaClients';
 import BetaOrders from '../../pages/beta/BetaOrders';
 import BetaProforma from '../../pages/beta/BetaProforma';
@@ -39,6 +39,7 @@ import BetaInsurance, { insCan } from '../../pages/beta/BetaInsurance';
 import BetaAccPayment from '../../pages/beta/BetaAccPayment';
 import BetaBooks from '../../pages/beta/BetaBooks';
 import BetaGstReturns from '../../pages/beta/BetaGstReturns';
+import BetaGstPortal from '../../pages/beta/BetaGstPortal';
 import BetaFixedAssets from '../../pages/beta/BetaFixedAssets';
 import BetaJournal from '../../pages/beta/BetaJournal';
 import BetaNotes from '../../pages/beta/BetaNotes';
@@ -60,6 +61,37 @@ const LAST_VOUCHER_KEY = 'bx-last-voucher';   // the voucher screen used last �
 
 /* true while the person is typing somewhere — single-letter keys must not fire then */
 const typing = el => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+/* the colour of each module's icon in the side nav (white icon on a coloured tile) */
+const NAV_COLOR = {
+  so: '#2E90FA', po: '#F79009', job: '#7A5AF8', mfg: '#E9A100', stock: '#12B76A', acc: '#06AED4', books: '#6172F3',
+  hr: '#EE46BC', ins: '#F04438', pm: '#66C61C', admin: '#9E77ED', crm: '#0BA5EC', gst: '#DD2590', dash: '#15B79E',
+};
+/* Finacle-style menu shortcuts: type the code in the "Menu" box (top bar) and press Enter to open the page */
+const SHORTCUTS = {
+  '/dashboard': 'DASH',
+  '/beta/client': 'CLNT', '/beta/order': 'SO', '/beta/order?tab=create': 'SOC', '/beta/proforma': 'PI', '/beta/receipt': 'RCPT', '/beta/sales': 'SINV',
+  '/beta/delivery-challan': 'DC', '/beta/return-note': 'RN', '/beta/warranty': 'WTY', '/beta/completion': 'CC', '/beta/bank-guarantee': 'BG', '/beta/dues': 'SDUE',
+  '/beta/vendor': 'VEND', '/beta/po': 'PO', '/beta/payment': 'PPAY', '/beta/purchase-bill': 'PBILL', '/beta/grn': 'GRN', '/beta/return-vendor': 'RTV', '/beta/purchase-dues': 'PDUE',
+  '/beta/jobcode': 'JOB',
+  '/beta/mfg/job-sheet': 'JS', '/beta/mfg/bom': 'BOM', '/beta/mfg/raw-material': 'RM', '/beta/mfg/issue': 'MI', '/beta/mfg/mrp': 'MRP', '/beta/mfg/qc': 'QC', '/beta/mfg/cost': 'PCOST',
+  '/beta/items': 'ITEM', '/beta/stock': 'STK', '/beta/raw-stock': 'RMSTK',
+  '/beta/account/payment': 'PAY', '/beta/account/receipt': 'REC', '/beta/account/journal': 'JV', '/beta/account/debit-note': 'DN', '/beta/account/credit-note': 'CN',
+  '/beta/account/expense': 'EXP', '/beta/account/expense?tab=create': 'EXPC',
+  '/beta/books/ledger': 'LED', '/beta/books/chart': 'COA', '/beta/books/trial': 'TB', '/beta/books/pl': 'PL', '/beta/books/bs': 'BS', '/beta/books/cash': 'CB',
+  '/beta/books/gst': 'GST', '/beta/books/gst-portal': 'GSTP', '/beta/books/tds': 'TDS', '/beta/books/ageing': 'AGE', '/beta/books/assets': 'FA',
+  '/beta/hr/employees': 'EMP', '/beta/hr/assets': 'HRA', '/beta/hr/attendance': 'ATT', '/beta/hr/payroll': 'PR', '/beta/hr/policy': 'HRP',
+  '/beta/insurance/policies': 'INS', '/beta/insurance/claims': 'CLM', '/beta/passwords': 'PWD',
+  '/beta/admin/approvals': 'APR', '/beta/admin/company': 'CO', '/beta/admin/users': 'USR',
+  '/beta/profile': 'PROF', '/beta/profile?tab=signature': 'SIGN',
+};
+/* extra entries that are not in the side nav (create screens, own profile) */
+const EXTRA_PAGES = [
+  { path: '/dashboard', label: 'Dashboard', group: 'Home', key: 'dash' },
+  { path: '/beta/order?tab=create', label: 'Create sales order', group: 'Sales Order', key: 'so', perm: 'salesOrder' },
+  { path: '/beta/account/expense?tab=create', label: 'Add expense', group: 'Account', key: 'acc', perm: 'accExpense' },
+  { path: '/beta/profile', label: 'My profile', group: 'Me', key: 'pm' },
+  { path: '/beta/profile?tab=signature', label: 'My signature', group: 'Me', key: 'pm' },
+];
 /* side nav buttons — added one by one as decided */
 const SIDE_NAV = [
   { key: 'so', label: 'Sales Order', icon: 'file', perm: 'salesOrder',
@@ -96,7 +128,7 @@ const SIDE_NAV = [
       { label: 'Ledger', path: '/beta/books/ledger', perm: 'accLedger' }, { label: 'Chart of Accounts', path: '/beta/books/chart', perm: 'accLedger' },
       { label: 'Trial Balance', path: '/beta/books/trial', perm: 'accReports' }, { label: 'Profit & Loss', path: '/beta/books/pl', perm: 'accReports' },
       { label: 'Balance Sheet', path: '/beta/books/bs', perm: 'accReports' }, { label: 'Cash / Bank Book', path: '/beta/books/cash', perm: 'accBank' },
-      { label: 'GST Returns', path: '/beta/books/gst', perm: 'gst' }, { label: 'TDS', path: '/beta/books/tds', perm: 'accReports' },
+      { label: 'GST Returns', path: '/beta/books/gst', perm: 'gst' }, { label: 'GST — As per Portal', path: '/beta/books/gst-portal', perm: 'gst' }, { label: 'TDS', path: '/beta/books/tds', perm: 'accReports' },
       { label: 'Ageing', path: '/beta/books/ageing', perm: 'accDues' }, { label: 'Fixed Assets', path: '/beta/books/assets', perm: 'accAsset' },
     ] },
   { key: 'hr', label: 'HR', icon: 'users', perm: 'hr',
@@ -119,14 +151,13 @@ const SIDE_NAV = [
 ];
 const allowed = (user, perm) => (perm === 'admin' ? user?.role === 'admin' : perm === 'insurance' ? insCan(user, 'view') : perm === 'hr' ? hrCan(user, 'view') : can(user, perm, 'view'));
 
-const sectionsOf = g => g.sections || (g.items ? [{ title: null, items: g.items }] : []);
 const initials = s => (s || '').replace(/^M\/s\.?\s*/i, '').split(/\s+/).filter(w => /^[A-Za-z]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'U';
 
 const CSS = `
 .bx { display:flex; height:100vh; height:calc(100vh / var(--ui-zoom, 1)); overflow:hidden; font-family:${F}; background:#F5F7FA; -webkit-font-smoothing:antialiased; }
 .bx * { box-sizing:border-box; }
 
-/* side nav — brand teal #03444f */
+/* side nav — brand teal #03444f; each module's icon has its own colour (NAV_COLOR) */
 .bx-side { width:188px; flex-shrink:0; display:flex; flex-direction:column; background:#03444f; border-right:1px solid #023840; }
 .bx-brand { height:40px; flex-shrink:0; display:flex; align-items:center; gap:7px; padding:0 12px; background:#023a43; border-bottom:1px solid rgba(255,255,255,.08); text-decoration:none; }
 .bx-mark { width:20px; height:20px; flex-shrink:0; border-radius:4px; display:grid; place-items:center; color:#fff; font-weight:800; font-size:11px; background:#fff; color:#03444f; }
@@ -135,8 +166,11 @@ const CSS = `
   background:rgba(255,255,255,.06); color:#E8F3F4; font:600 12.5px ${F}; text-align:left; transition:background .15s, border-color .15s; }
 .bx-g:hover { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.18); }
 .bx-g.on { background:#fff; color:#03444f; border-color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.18); }
-.bx-g .ico { width:24px; height:24px; flex-shrink:0; border-radius:6px; display:grid; place-items:center; background:rgba(255,255,255,.12); color:#fff; }
-.bx-g.on .ico { background:#03444f; color:#fff; }
+.bx-g .ico { width:24px; height:24px; flex-shrink:0; border-radius:7px; display:grid; place-items:center; color:#fff;
+  background:var(--c, rgba(255,255,255,.12)); background-image:linear-gradient(145deg, rgba(255,255,255,.28), rgba(255,255,255,0) 55%, rgba(0,0,0,.12));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 1px 3px rgba(0,0,0,.25); }
+.bx-g:hover .ico { filter:brightness(1.08) saturate(1.1); }
+.bx-g.on .ico { box-shadow:0 2px 6px rgba(0,0,0,.18); }
 .bx-g .lbl { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .bx-nav > div + div { margin-top:6px; }
 .bx-g .chev { display:grid; opacity:.7; transition:transform .15s; }
@@ -163,18 +197,35 @@ const CSS = `
   background:#03444f; border-bottom:1px solid #023840; color:#fff; }
 .bx-grow { flex:1; min-width:0; }
 
-.bx-search { position:relative; width:100%; max-width:420px; flex:0 1 420px; }
-.bx-search input { width:100%; height:28px; padding:0 54px 0 28px; border:1px solid rgba(255,255,255,.18); border-radius:6px; background:rgba(255,255,255,.1); outline:none;
-  font:400 12.5px ${F}; color:#fff; }
-.bx-search input::placeholder { color:rgba(255,255,255,.6); }
-.bx-search input:focus { background:#fff; color:#101828; border-color:#fff; }
-.bx-search input:focus::placeholder { color:#98A2B3; }
-.bx-search input:focus::placeholder { color:#98A2B3; }
-.bx-search .s-ic { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.65); pointer-events:none; display:grid; }
-.bx-search input:focus ~ .s-ic, .bx-search:focus-within .s-ic { color:#98A2B3; }
-.bx-search kbd { position:absolute; right:5px; top:50%; transform:translateY(-50%); padding:1px 5px; border-radius:3px; border:1px solid rgba(255,255,255,.25);
-  font:500 10px ${F}; color:rgba(255,255,255,.7); pointer-events:none; background:none; }
-.bx-search:focus-within kbd { color:#98A2B3; border-color:#EAECF0; }
+.bx-mc { position:relative; display:flex; align-items:center; height:28px; border:1px solid rgba(255,255,255,.22); border-radius:6px; background:rgba(255,255,255,.08); overflow:visible; }
+.bx-mc .lb { height:100%; display:grid; place-items:center; padding:0 8px; background:rgba(255,255,255,.14); color:#fff; font:700 10.5px ${F}; letter-spacing:.6px; text-transform:uppercase; border-radius:5px 0 0 5px; }
+.bx-mc input { width:104px; height:100%; border:0; outline:none; background:transparent; color:#fff; padding:0 8px; font:700 12.5px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing:1.2px; text-transform:uppercase; }
+.bx-mc input::placeholder { color:rgba(255,255,255,.55); font:500 12px ${F}; letter-spacing:0; text-transform:none; }
+.bx-mc:focus-within { background:#fff; border-color:#fff; } .bx-mc:focus-within input { color:#03444f; } .bx-mc:focus-within input::placeholder { color:#98A2B3; }
+.bx-mc:focus-within .lb { background:#03444f; }
+.bx-mc .go, .bx-mc .hl { height:100%; width:26px; border:0; border-left:1px solid rgba(255,255,255,.18); background:transparent; color:#fff; display:grid; place-items:center; cursor:pointer; font:700 12px ${F}; }
+.bx-mc:focus-within .go, .bx-mc:focus-within .hl { color:#03444f; border-left-color:#E4E7EC; }
+.bx-mc .go:disabled { opacity:.45; cursor:default; } .bx-mc .hl { border-radius:0 5px 5px 0; }
+.bx-mc .go:hover:not(:disabled), .bx-mc .hl:hover { background:rgba(255,255,255,.14); } .bx-mc:focus-within .go:hover:not(:disabled), .bx-mc:focus-within .hl:hover { background:#F2F4F7; }
+.bx-mc .bx-res { right:auto; width:380px; top:31px; }
+.bx-res .pg { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bx-res code { min-width:46px; padding:2px 6px; border-radius:4px; background:var(--c); color:#fff; font:700 11px ui-monospace, Menlo, Consolas, monospace; letter-spacing:.6px; text-align:center; }
+.bx-res .pg { font-weight:600; }
+.bx-res .ft { display:flex; gap:12px; padding:6px 9px 3px; margin-top:4px; border-top:1px solid #F2F4F7; font-size:10.5px; color:#98A2B3; }
+.bx-cl-ov { position:fixed; inset:0; z-index:9500; background:rgba(16,24,40,.5); display:flex; align-items:flex-start; justify-content:center; padding-top:7vh; }
+.bx-cl { width:min(860px, 94vw); max-height:84vh; background:#fff; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.35); font-family:${F}; }
+.bx-cl .h { display:flex; align-items:center; gap:10px; padding:12px 14px; background:#03444f; color:#fff; flex-wrap:wrap; }
+.bx-cl .h b { font-size:14.5px; } .bx-cl .h small { flex:1; color:#BFE3E8; font-size:12px; } .bx-cl .h small b { font-size:12px; }
+.bx-cl .h input { width:220px; height:30px; border:0; border-radius:6px; padding:0 10px; font:13px ${F}; outline:none; }
+.bx-cl .h button { border:0; background:none; color:#fff; font-size:22px; cursor:pointer; padding:0 4px; }
+.bx-cl .b { flex:1; overflow:auto; padding:12px 14px; columns:3 240px; column-gap:16px; }
+.bx-cl .g { break-inside:avoid; margin-bottom:12px; }
+.bx-cl .gh { display:flex; align-items:center; gap:7px; font-size:11.5px; font-weight:700; color:#344054; text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+.bx-cl .gh i { width:10px; height:10px; border-radius:3px; }
+.bx-cl .g button { display:flex; align-items:center; gap:10px; width:100%; border:0; background:none; padding:5px 6px; border-radius:6px; cursor:pointer; text-align:left; font:13px ${F}; color:#101828; }
+.bx-cl .g button:hover { background:#EEF6F7; }
+.bx-cl code { min-width:52px; padding:2px 6px; border-radius:4px; background:#F2F5F6; color:#03444f; font:700 11.5px ui-monospace, Menlo, Consolas, monospace; letter-spacing:.6px; text-align:center; border:1px solid #DCE6E8; }
+.bx-cl .none { color:#667085; padding:12px; }
 .bx-res { position:absolute; left:0; right:0; top:32px; z-index:50; padding:4px; border-radius:6px; background:#fff; border:1px solid #D0D5DD;
   box-shadow:0 10px 28px rgba(16,24,40,.18); max-height:360px; overflow-y:auto; }
 .bx-res a { display:flex; align-items:center; gap:10px; padding:6px 9px; border-radius:4px; text-decoration:none; color:#101828; font-size:12.5px; }
@@ -219,9 +270,9 @@ const CSS = `
   .bx-nav { padding:8px 4px; }
   .bx-g { justify-content:center; padding:0; }
   .bx-g .lbl, .bx-g .chev, .bx-sub { display:none; }
-  .bx-brand b, .bx-btn .nm, .bx-btn .cv, .bx-search kbd { display:none; }
+  .bx-brand b, .bx-btn .nm, .bx-btn .cv { display:none; }
   .bx-top { padding:0 6px; gap:4px; }
-  .bx-search input { padding-right:10px; }
+  .bx-mc input { width:70px; }
 }
 `;
 
@@ -260,36 +311,40 @@ export default function BetaShell() {
   useOutside(menu === 'me', () => setMenu(null), meRef);
   useOutside(qOpen, () => setQOpen(false), searchBox);
 
-  /* search: every page in the menu this user may open (one entry per page) */
+  /* menu shortcuts: every beta page this user may open, with its code */
   const allItems = useMemo(() => {
     const out = [], seen = new Set();
-    const add = it => { if (!it.path || seen.has(it.path)) return; seen.add(it.path); out.push(it); };
-    NAV_GROUPS.filter(g => canViewNav(user, g.key)).forEach(g => {
-      if (g.path) add({ label: g.label, path: g.path, group: '' });
-      sectionsOf(g).forEach(sec => sec.items.forEach(it => add({ label: it.label, path: it.path, group: g.label + (sec.title ? ` · ${sec.title}` : '') })));
-    });
+    const add = it => { if (!it.path || seen.has(it.path)) return; seen.add(it.path); out.push({ ...it, code: SHORTCUTS[it.path] || '' }); };
+    sideNav.forEach(n => { if (n.path && !n.sub) add({ label: n.label, path: n.path, group: n.label, key: n.key }); (n.sub || []).forEach(x => add({ label: x.label, path: x.path, group: n.label, key: n.key })); });
+    EXTRA_PAGES.filter(x => !x.perm || allowed(user, x.perm)).forEach(add);
     return out;
-  }, [user]);
+  }, [sideNav, user]);
+  /* a code typed: the exact code first, then codes that start with it, then page names that contain the words */
   const results = useMemo(() => {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    return allItems.filter(it => { const hay = `${it.label} ${it.group}`.toLowerCase(); return words.every(w => hay.includes(w)); }).slice(0, 10);
+    const t = q.trim().toUpperCase();
+    if (!t) return [];
+    const words = t.toLowerCase().split(/\s+/).filter(Boolean);
+    const score = it => (it.code === t ? 0 : it.code.startsWith(t) ? 1 : words.every(w => `${it.label} ${it.group}`.toLowerCase().includes(w)) ? 2 : 9);
+    return allItems.map(it => [score(it), it]).filter(([sc]) => sc < 9).sort((a, b) => a[0] - b[0] || a[1].code.length - b[1].code.length).slice(0, 10).map(([, it]) => it);
   }, [q, allItems]);
+  const [codeList, setCodeList] = useState(false);
+  const [listQ, setListQ] = useState('');
   useEffect(() => setSel(0), [q]);
   const go = path => { setQ(''); setQOpen(false); searchRef.current?.blur(); navigate(path); };
   const onSearchKey = e => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(s + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(s - 1, 0)); }
-    else if (e.key === 'Enter' && results[sel]) go(results[sel].path);
-    else if (e.key === 'Escape') { setQOpen(false); searchRef.current?.blur(); }
+    else if (e.key === 'Enter') { if (results[sel]) go(results[sel].path); }
+    else if (e.key === 'Escape') { setQ(''); setQOpen(false); searchRef.current?.blur(); }
   };
 
-  /* keys: Ctrl+K = search, V = vouchers (last used voucher screen, like Tally) */
+  /* keys: Ctrl+K or F2 = menu shortcut box, F1 = list of all shortcuts, V = vouchers (last used voucher screen, like Tally) */
   const onTxn = isTransactionPath(pathname);
   useEffect(() => { if (onTxn) try { localStorage.setItem(LAST_VOUCHER_KEY, pathname); } catch { /* ignore */ } }, [onTxn, pathname]);
   useEffect(() => {
     const k = e => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); searchRef.current?.focus(); setQOpen(true); return; }
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') || e.key === 'F2') { e.preventDefault(); searchRef.current?.focus(); searchRef.current?.select(); setQOpen(true); return; }
+      if (e.key === 'F1') { e.preventDefault(); setCodeList(true); return; }
       if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.repeat || onTxn) return;
       if (typing(e.target) || typing(document.activeElement) || document.querySelector('.ls-overlay')) return;
       if (e.key !== 'v' && e.key !== 'V') return;
@@ -324,7 +379,7 @@ export default function BetaShell() {
               <div key={n.key}>
                 <button type="button" className={`bx-g${open ? ' open' : ''}${n.path && pathname.startsWith(n.path) ? ' on' : ''}`} title={n.label} aria-expanded={n.sub ? open : undefined}
                   onClick={() => (n.path && !n.sub ? navigate(n.path) : setOpenNav(o => (o[n.key] ? {} : { [n.key]: true })))}>
-                  <span className="ico"><Svg name={n.icon} size={14} /></span>
+                  <span className="ico" style={{ '--c': NAV_COLOR[n.key] }}><Svg name={n.icon} size={14} /></span>
                   <span className="lbl">{n.label}</span>
                   {n.sub && <span className="chev"><Svg name="chevRight" size={13} /></span>}
                 </button>
@@ -343,20 +398,22 @@ export default function BetaShell() {
         <header className="bx-top">
           <div className="bx-grow" />
 
-          {/* search — middle */}
-          <div className="bx-search" ref={searchBox}>
-            <span className="s-ic"><Svg name="search" size={14} /></span>
-            <input ref={searchRef} value={q} placeholder="Search pages…" aria-label="Search pages"
-              onChange={e => { setQ(e.target.value); setQOpen(true); }} onFocus={() => setQOpen(true)} onKeyDown={onSearchKey} />
-            <kbd>Ctrl K</kbd>
+          {/* menu shortcut — Finacle style: type a code (SO, SINV, GST…) and press Enter */}
+          <div className="bx-mc" ref={searchBox}>
+            <span className="lb">Menu</span>
+            <input ref={searchRef} value={q} placeholder="Shortcut" aria-label="Menu shortcut — type a code like SO, PO, GST and press Enter" spellCheck={false} autoComplete="off"
+              onChange={e => { setQ(e.target.value.toUpperCase()); setQOpen(true); }} onFocus={() => setQOpen(true)} onKeyDown={onSearchKey} />
+            <button type="button" className="go" title="Open" onClick={() => results[sel] && go(results[sel].path)} disabled={!results.length}><Svg name="arrow" size={13} /></button>
+            <button type="button" className="hl" title="All shortcuts (F1)" onClick={() => { setQOpen(false); setCodeList(true); }}>?</button>
             {qOpen && q.trim() && (
               <div className="bx-res" role="listbox">
                 {results.length ? results.map((r, i) => (
                   <a key={r.path} href={r.path} className={i === sel ? 'sel' : ''} role="option" aria-selected={i === sel}
                     onMouseEnter={() => setSel(i)} onClick={e => { e.preventDefault(); go(r.path); }}>
-                    {r.label}<small>{r.group}</small>
+                    <code style={{ '--c': NAV_COLOR[r.key] || '#03444f' }}>{r.code || '—'}</code><span className="pg">{r.label}</span><small>{r.group}</small>
                   </a>
-                )) : <div className="none">No page matches “{q}”.</div>}
+                )) : <div className="none">No shortcut “{q}”. Press <b>F1</b> for the list.</div>}
+                <div className="ft"><span>↑↓ move</span><span>↵ open</span><span>F1 all shortcuts</span><span>Esc close</span></div>
               </div>
             )}
           </div>
@@ -410,7 +467,27 @@ export default function BetaShell() {
           </div>
         </header>
 
+        {codeList && (() => {
+          const w = listQ.trim().toLowerCase();
+          const groups = [];
+          allItems.filter(it => !w || `${it.code} ${it.label} ${it.group}`.toLowerCase().includes(w)).forEach(it => { let g = groups.find(x => x.name === it.group); if (!g) groups.push(g = { name: it.group, key: it.key, items: [] }); g.items.push(it); });
+          return (
+            <div className="bx-cl-ov" onMouseDown={e => { if (e.target === e.currentTarget) setCodeList(false); }} onKeyDown={e => { if (e.key === 'Escape') setCodeList(false); }}>
+              <div className="bx-cl" role="dialog" aria-modal="true" aria-label="Menu shortcuts">
+                <div className="h"><b>Menu shortcuts</b><small>Type a code in the <b>Menu</b> box (Ctrl+K or F2) and press Enter</small>
+                  <input autoFocus value={listQ} onChange={e => setListQ(e.target.value)} placeholder="Find a page or code…" aria-label="Find a shortcut" />
+                  <button type="button" onClick={() => setCodeList(false)} aria-label="Close">×</button></div>
+                <div className="b">{groups.map(g => (
+                  <div key={g.name} className="g"><div className="gh"><i style={{ background: NAV_COLOR[g.key] || '#03444f' }} />{g.name}</div>
+                    {g.items.map(it => <button key={it.path} type="button" onClick={() => { setCodeList(false); setListQ(''); navigate(it.path); }}><code>{it.code || '—'}</code><span>{it.label}</span></button>)}
+                  </div>))}
+                  {!groups.length && <div className="none">Nothing matches “{listQ}”.</div>}
+                </div>
+              </div>
+            </div>);
+        })()}
         <div className="bx-body">
+          {(pathname === '/dashboard' || pathname === '/beta' || pathname === '/beta/') && <BetaDashboard key={`dash-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/client') && <BetaClients key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/order') && <BetaOrders key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/proforma') && <BetaProforma key={selectedCompany?.companyId || 'none'} />}
@@ -440,7 +517,8 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/account/credit-note') && <BetaNotes kind="credit" key={`cn-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/account/expense') && <BetaExpense key={`ae-${selectedCompany?.companyId || 'none'}`} />}
           {['ledger', 'chart', 'trial', 'pl', 'bs', 'cash', 'tds', 'ageing'].map(v => pathname.startsWith(`/beta/books/${v}`) && <BetaBooks key={`bk-${v}-${selectedCompany?.companyId || 'none'}`} view={v} />)}
-          {pathname.startsWith('/beta/books/gst') && <BetaGstReturns key={`gst-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/books/gst-portal') && <BetaGstPortal key={`gsp-${selectedCompany?.companyId || 'none'}`} />}
+          {pathname.startsWith('/beta/books/gst') && !pathname.startsWith('/beta/books/gst-portal') && <BetaGstReturns key={`gst-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/books/assets') && <BetaFixedAssets key={`fa-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/hr/employees') && <BetaHREmployees key={`he-${selectedCompany?.companyId || 'none'}`} />}
           {pathname.startsWith('/beta/hr/assets') && <BetaHRAssets key={`ha-${selectedCompany?.companyId || 'none'}`} />}

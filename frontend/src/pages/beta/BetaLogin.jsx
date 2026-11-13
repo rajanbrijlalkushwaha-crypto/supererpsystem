@@ -1,16 +1,21 @@
-/* Beta (new UI) — sign-in page (layout in components/auth/AuthShell).
- * Same login as the classic page: Employee (company user) or Supplier (vendor portal). Classic stays at /login. */
+/* Sign-in page — one design for both looks (layout in components/auth/AuthShell).
+ *   <LoginScreen />          /beta/login  — signing in opens the new (beta) look
+ *   <LoginScreen classic />  /login       — signing in opens the classic look
+ * Employee (company user) or Supplier (vendor portal). */
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useVendorAuth } from '../../context/VendorAuthContext';
 import AuthShell, { Field, Alert, Btn, Svg } from '../../components/auth/AuthShell';
 import { setUiVersion } from '../../utils/uiVersion';
+import { PRODUCT_NAME, PRODUCT_VERSION } from '../../utils/brand';
 
 const REMEMBER_KEY = 'login-remember';   // { mode, id } — only the user name / email, never the password
 const readRemember = () => { try { return JSON.parse(localStorage.getItem(REMEMBER_KEY)) || null; } catch { return null; } };
 
-export default function BetaLogin() {
+export default function BetaLogin() { return <LoginScreen />; }
+
+export function LoginScreen({ classic = false }) {
   const { login, user }         = useAuth();
   const { vendorLogin, vendor } = useVendorAuth();
   const navigate = useNavigate();
@@ -26,7 +31,7 @@ export default function BetaLogin() {
   const [errN, setErrN]         = useState(0);      // counts errors — shakes the form
 
   // this person chose the new UI — the forgot / reset pages bring them back here
-  useEffect(() => { setUiVersion('beta'); }, []);
+  useEffect(() => { if (!classic) setUiVersion('beta'); }, [classic]);
   useEffect(() => { if (user && !phase) navigate('/dashboard', { replace: true }); }, [user, phase, navigate]);
   useEffect(() => { if (vendor && !phase) navigate('/vendor-portal', { replace: true }); }, [vendor, phase, navigate]);
   useEffect(() => { (saved?.id ? pwdRef : idRef).current?.focus(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -49,7 +54,7 @@ export default function BetaLogin() {
     setMsg(null); setPhase('busy');
     try {
       if (vendorMode) await vendorLogin(v, password);
-      else await login(v, password);
+      else { await login(v, password); if (classic) setUiVersion('classic'); }
       try {
         if (remember) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ mode, id: v }));
         else localStorage.removeItem(REMEMBER_KEY);
@@ -62,18 +67,18 @@ export default function BetaLogin() {
     }
   };
 
-  const goClassic = () => { setUiVersion('classic'); navigate('/login'); };
+  const switchLook = () => { if (classic) navigate('/beta/login'); else { setUiVersion('classic'); navigate('/login'); } };
 
   return (
     <AuthShell
-      kicker={vendorMode ? 'Supplier portal' : 'Enterprise resource planning'}
-      heading={vendorMode ? 'Work with us on every order, end to end.' : 'One platform to run your entire business.'}
+      kicker={vendorMode ? 'Supplier portal' : `${PRODUCT_NAME} · v${PRODUCT_VERSION}`}
+      heading={vendorMode ? <>Work with us on <em>every order</em>, end to end.</> : <>One platform to run your <em>entire business</em>.</>}
       text={vendorMode
         ? 'Track purchase orders, share dispatch details and follow every payment — in one secure place.'
         : 'Sales, purchase, inventory, projects, accounts and HR on a single connected system, with Tally reconciliation built in.'}
       modules
       shakeKey={errN}
-      top={<>New look (beta)<span style={{ color: '#D0D5DD' }}>|</span><button type="button" className="as-link" onClick={goClassic}>Switch to classic</button></>}
+      top={<>{classic ? 'Classic look' : 'New look (beta)'}<span style={{ color: '#D0D5DD' }}>|</span><button type="button" className="as-link" onClick={switchLook}>{classic ? 'Try the new look' : 'Switch to classic'}</button></>}
       title="Sign in"
       subtitle={vendorMode ? 'Use the email address you registered with.' : 'Welcome back. Enter your credentials to continue.'}
     >

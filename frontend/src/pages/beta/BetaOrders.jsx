@@ -12,6 +12,7 @@ import { dash, fmtDate, orderValue, soItems, fmtQty } from './BetaClients';
 import BetaCreateSO from './BetaCreateSO';
 import OrderPopup, { printInPlace } from './BetaOrderView';
 import { Svg } from '../../components/ui/Icon';
+import { previewHtml } from './printKit';
 
 /* plain amount: no ₹, no commas, no trailing .00 (paise shown only when there are any) */
 const PLAIN_FMT = new Intl.NumberFormat('en-IN', { useGrouping: false, maximumFractionDigits: 2 });   // built once — see fmtDate
@@ -171,12 +172,8 @@ ${legalNoteHtml()}
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => {
-    w.focus();
-    w.print();            // waits here until the print dialog is closed
-    window.focus();
-    setTimeout(() => fr.remove(), 1000);
-  }, 300);
+  fr.remove();
+  previewHtml(html);   // the preview: Email · Save PDF · Print
 }
 
 const RIGHT = ['Qty', 'Rate', 'GST', 'Order Value', 'Grand Total'];

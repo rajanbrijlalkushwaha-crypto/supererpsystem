@@ -4,6 +4,7 @@
 import axios from 'axios';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
+import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
@@ -110,9 +111,11 @@ tr.st td { font-weight:bold; }
 tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !important; }
 .words { font-size:9pt; }
 .pre { white-space:normal; }
-.sig td { height:24mm; vertical-align:top !important; }
+.sig td { height:38mm; vertical-align:top !important; }
 .sig .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; }
-.sig .row3 { display:flex; justify-content:space-between; gap:8px; }
+/* three equal columns, labels on one line at the bottom, each signature right above its own label */
+.sig .row3 { display:flex; align-items:flex-end; gap:6px; }
+.sig .row3 b { flex:1 1 0; text-align:center; }
 .sig .row3 b, .sig .rcv b { font-weight:bold; color:#000; }
 .jur { text-align:center; font-size:7.8pt; margin-top:3px; font-weight:bold; color:#000; }
 .pby { font-size:7.4pt; margin-top:3px; font-weight:bold; color:#000; text-align:center; }
@@ -226,36 +229,51 @@ ${o.termsConditions || o.customerNotes ? `<!-- terms -->
   await new Promise(r => setTimeout(r, 400));
   fillPage(w.document);
 
+  // e-mail (order acceptance) and e-signatures
+  const names = items.map(nameOf);
+  const contact = o.billToContact || o.contactPerson || '';
+  const poRef = [o.customerPO, o.poDate && `dt. ${d(o.poDate)}`].filter(Boolean).join(' ');
+  const meta = {
+    sign: o.orderId ? { type: 'salesOrder', id: o.orderId, perm: 'salesOrder' } : null,
+    reprint: () => printSO({ order, company, user }),
+    mail: {
+      subject: `Order Acceptance – ${o.customerPO ? `Your PO ${poRef}` : `Our SO ${o.orderNo || o.orderId}`} – ${prodText(names)}`,
+      message: `Dear ${contact || 'Sir / Madam'},\n\nThank you for your purchase order${o.customerPO ? ` no. ${poRef}` : ''}. We are pleased to confirm that we have accepted it, and it is booked with us as Sales Order ${o.orderNo || o.orderId}.\n\nThe order acceptance is attached. Please check the items, quantities, prices and delivery date, and let us know within 2 days if anything needs to be corrected.`,
+      summary: [['Our sales order', `${o.orderNo || o.orderId}${o.orderDate ? `  ·  ${d(o.orderDate)}` : ''}`], ['Your PO', poRef], ['Products', items.map(it => `${nameOf(it)} — ${n(it.qty)} ${it.unit || ''}`.trim()).join('\n')],
+        ['Order value', `₹ ${amt(total)} (incl. GST)`], ['Delivery due', d(o.dueDate || o.deliveryDate)], ['Payment terms', o.paymentTerms || '']],
+    },
+  };
+
   // drawings / spec files / attachments: one PDF from the server — the order first, then each file
   const files = encl.filter(f => f.fileName);
   if (files.length && o.orderId && companyId) {
     try {
-      const page = '<!DOCTYPE html>' + w.document.documentElement.outerHTML;
-      const r = await axios.post(`/api/sales-orders/${o.orderId}/print-pack`, { companyId, html: page }, { params: { companyId }, responseType: 'blob' });
+      // the order + its files as one PDF, with the signatures on the order and the page signatures on the files;
+      // made again (in the open preview) after each signing
+      const base = withTeal('<!DOCTYPE html>' + w.document.documentElement.outerHTML);
+      const pack = async () => {
+        const pg = await signHtml(base, meta.sign);
+        const res = await axios.post(`/api/sales-orders/${o.orderId}/print-pack`, { companyId, html: pg }, { params: { companyId }, responseType: 'blob' });
+        return { r: res, page: pg, blob: await finalPdf(res.data, meta.sign) };
+      };
+      const { r, page, blob } = await pack();
+      meta.rebuild = async () => (await pack()).blob;
       let notPrinted = [];
       try { notPrinted = JSON.parse(decodeURIComponent(r.headers['x-not-printed'] || '%5B%5D')); } catch { notPrinted = []; }
-      fr.remove();
-      printPdf(r.data);
+      const t = w.document.title; fr.remove();
+      printPdf(blob, t, page, meta);
       return { files: files.length, notPrinted };
     } catch {
       // the order alone still prints
-      w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+      previewFrame(fr, undefined, meta);   // opens the preview: Sign · Email · Save PDF · Print
       return { files: files.length, error: 'The attached files could not be added to the print — only the order is printed.' };
     }
   }
-  w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+  previewFrame(fr, undefined, meta);   // opens the preview: Sign · Email · Save PDF · Print
   return { files: 0, notPrinted: [] };
 }
 
 /* print a PDF (blob) from a hidden frame on this page */
-function printPdf(blob) {
-  const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-  document.getElementById('so-pack-frame')?.remove();
-  const fr = document.createElement('iframe');
-  fr.id = 'so-pack-frame'; fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0';
-  fr.onload = () => setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { window.open(url, '_blank'); } }, 300);
-  fr.src = url;
-  document.body.appendChild(fr);
-  setTimeout(() => { fr.remove(); URL.revokeObjectURL(url); }, 10 * 60 * 1000);
+function printPdf(blob, title, html, meta = {}) {
+  previewPdf(blob, title || 'Document', undefined, { html, ...meta });   // html: to find the client's e-mail for the To box   // the preview: Email · Save PDF · Print
 }

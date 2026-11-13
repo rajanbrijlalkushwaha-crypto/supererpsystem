@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Super ERP</string>
+    <string name="title_activity_main">Super ERP</string>
+    <string name="package_name">com.supererp.app</string>
+    <string name="custom_url_scheme">com.supererp.app</string>
+</resources>

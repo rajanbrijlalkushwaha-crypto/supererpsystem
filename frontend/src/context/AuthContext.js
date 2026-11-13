@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { isAppMode } from '../appBridge';
 
 const AuthContext = createContext(null);
 
@@ -68,7 +69,7 @@ export const AuthProvider = ({ children }) => {
      ref's timer is reset) so this can't trigger a re-render storm on
      something as frequent as mousemove. */
   useEffect(() => {
-    if (!user) return;
+    if (!user || isAppMode()) return;   // the Android app has its own PIN lock
 
     const resetTimer = () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);

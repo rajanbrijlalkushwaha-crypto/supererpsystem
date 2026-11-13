@@ -13,7 +13,8 @@ import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, today, words, hit, Picker } from './BetaAccKit';
 import { hrCan, STATUS_PILL, loadEmployees, loadSettings, viewHrFile, toForm } from './BetaHRKit';
-import { printAssetAgreement } from './BetaHRPrint';
+import { printAssetAgreement, printAssetIssueForm } from './BetaHRPrint';
+import { EMP_PM_CSS } from './BetaHREmployees';
 
 const TYPES = ['SIM card', 'Mobile phone', 'Laptop', 'Desktop', 'Tablet', 'Data card / router', 'Vehicle', 'Two-wheeler', 'ID card', 'Access card / keys', 'Tools', 'Safety kit / PPE', 'Uniform', 'Fuel card', 'Credit card', 'Other'];
 const CONDS = ['New', 'Good', 'Fair', 'Damaged'];
@@ -45,7 +46,7 @@ export default function BetaHRAssets() {
   const go = k => { setEditing(null); navigate(`/beta/hr/assets?tab=${k}`); };
   return (
     <div className="sb">
-      <style>{SALES_CSS + PX_CSS + ACC_CSS}</style>
+      <style>{SALES_CSS + PX_CSS + ACC_CSS + EMP_PM_CSS}</style>
       <div className="sb-tabs" role="tablist">
         {[['list', 'Company Assets'], ...(canAdd || editing ? [['create', editing ? (editing.returning ? `Return ${editing.rec.assetName}` : `Edit ${editing.rec.assetName}`) : 'Issue Asset']] : [])].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={cur === k} className={`sb-tab${cur === k ? ' on' : ''}`} onClick={() => go(k)}>{l}{k === 'list' && rows && <span className="n">{rows.length}</span>}</button>
@@ -80,6 +81,8 @@ function AssetList({ rows, emps, settings, company, user, slot, companyId, onEdi
     try { await axios.delete(`/api/hr/assets/${a.id}`, { params: { companyId } }); setAsk(null); setSelId(null); onChanged(`Deleted ${a.assetName}.`); }
     catch (e) { onChanged(e.response?.data?.error || 'Could not delete.'); } finally { setBusy(false); }
   };
+  const [pm, setPm] = useState(false);   // the Print menu
+  useEffect(() => { if (!pm) return undefined; const c = e => { if (!e.target.closest('.emp-pm')) setPm(false); }; document.addEventListener('mousedown', c); return () => document.removeEventListener('mousedown', c); }, [pm]);
   const upload = async e => {
     const fl = [...(e.target.files || [])]; e.target.value = '';
     if (!fl.length || !sel) return;
@@ -97,7 +100,13 @@ function AssetList({ rows, emps, settings, company, user, slot, companyId, onEdi
           rows: list.map(a => [a.assetType, a.assetName, [a.serialNo, a.simNo, a.mobileNo].filter(Boolean).join(' · '), `${a.empCode || ''} ${a.empName || ''}`.trim(), dmy(a.issuedOn), a.issueCondition, dmy(a.returnedOn), a.returnCondition, amt(a.value), ST_LABEL[a.status] || a.status]) })}><Svg name="file" size={13} />Print register</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>{sel.assetName}</b> : 'Select an asset'}</span>
-          <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printAssetAgreement({ assets: [sel], emp: empOf(sel), settings, company, user })}><Svg name="file" size={13} />Agreement</button>
+          <div className="emp-pm">
+            <button type="button" className="sb-tbtn" onClick={() => setPm(v => !v)} aria-expanded={pm} aria-haspopup="menu"><Svg name="file" size={13} />Print<Svg name="chevDown" size={12} /></button>
+            {pm && <div className="emp-pmm" role="menu" onClick={() => setPm(false)}>
+              <button type="button" role="menuitem" onClick={() => printAssetIssueForm({ emp: sel ? empOf(sel) : null, settings, company, user })}><b>{sel ? 'Asset issue form' : 'Blank asset issue form'}</b><small>Fill by hand when giving assets, then enter them here</small></button>
+              <button type="button" role="menuitem" disabled={!sel} onClick={() => printAssetAgreement({ assets: [sel], emp: empOf(sel), settings, company, user })}><b>Asset agreement</b><small>Handover agreement of the selected asset</small></button>
+            </div>}
+          </div>
           {canEdit && <label className="sb-tbtn" style={{ cursor: sel ? 'pointer' : 'default', opacity: sel ? 1 : 0.5 }} title="Upload the signed agreement"><Svg name="file" size={13} />Upload signed<input type="file" hidden accept=".pdf,image/*" disabled={!sel} onChange={upload} /></label>}
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel || sel.status !== 'issued'} onClick={() => onReturn(sel)}><Svg name="refresh" size={13} />Return</button>}
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => onEdit(sel)}><Svg name="settings" size={13} />Edit</button>}

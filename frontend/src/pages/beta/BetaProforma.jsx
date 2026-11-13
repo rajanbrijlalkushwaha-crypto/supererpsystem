@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { brandLine } from '../../utils/printBranding';
 import { fillBody } from './BetaDCPrint';
 import { Svg } from '../../components/ui/Icon';
+import { previewFrame, prodText } from './printKit';
 
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -872,6 +873,16 @@ tr.net td { font-weight:bold; font-size:12pt; padding:6px 6px !important; backgr
       if (pageH > 0 && h > pageH && pageH / h >= 0.75) doc.body.style.zoom = String(Math.floor(pageH / h * 1000) / 1000);
       else if (h <= pageH) fillBody(doc, 283);   // shorter than a page → the blank row grows so it fills the A4 sheet
     } catch { /* print as is */ }
-    w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+    const poRef = [o.customerPO, o.poDate && `dt. ${d(o.poDate)}`].filter(Boolean).join(' ');
+    previewFrame(fr, undefined, {   // the preview: Sign · Email · Save PDF · Print
+      sign: pi.piId ? { type: 'proforma', id: pi.piId, perm: 'salesBill' } : null,
+      reprint: () => printPI(pi, company, companyId, user),
+      to: o.billToEmail || o.email || undefined,
+      mail: {
+        subject: `Proforma Invoice ${pi.piNo || pi.piId} for payment${o.customerPO ? ` – your PO ${poRef}` : ''} – ${prodText(items.map(it => it.description || it.material || it.itemName))}`,
+        message: `Dear ${o.billToContact || o.contactPerson || 'Sir / Madam'},\n\nPlease find attached our Proforma Invoice ${pi.piNo || pi.piId} for ₹ ${amt(total)} (${pct})${o.customerPO ? ` against your purchase order ${poRef}` : ''}.\n\nKindly release the payment and share the transaction details so that we can proceed further.`,
+        summary: [['Proforma invoice', `${pi.piNo || pi.piId}  ·  ${d(pi.piDate || pi.createdAt)}`], ['Your PO', poRef], ['Our sales order', o.orderNo || ''], ['For', pct], ['Amount payable', `₹ ${amt(total)}`]],
+      },
+    });
   }, 400);
 }

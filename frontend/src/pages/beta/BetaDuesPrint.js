@@ -7,6 +7,7 @@ import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillPage, fitPage, fillBody } from './BetaDCPrint';
 import { loadGrns, billItemsFor, billCounts, poStatusOf } from './BetaPurchaseLib';
+import { previewFrame } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -38,7 +39,7 @@ function printHtml(html, id, fillMm) {
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
+  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); previewFrame(fr); }, 400);
 }
 
 /* ── Dues list ── */
@@ -451,7 +452,7 @@ export async function printPoAdvice({ r, so, payments, vendor, company, user, ba
   await new Promise(res => setTimeout(res, 400));
   fillPage(w.document);
   fitPage(w.document);   // a little over one page (e.g. only the footer spills) → shrink to fit one page
-  w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+  previewFrame(fr);   // opens the preview: Email · Save PDF · Print
 }
 
 export { logoOf, ADV_CSS };

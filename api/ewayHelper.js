@@ -19,6 +19,8 @@
  * Job kinds: "generate" (bulk JSON upload), "cancel" (cancel one e-way bill on the portal, within 24 hours of
  * generation) and "check" (read the e-way bill's status on the portal — used when the user says it is already
  * cancelled). A confirmed cancel marks the DC's e-way bill as cancelled.
+ * "gstret": log in to the GST portal (login from the Password Manager, captcha / OTP typed in the ERP), then for each
+ * month open the returns dashboard and download the GSTR-1 and GSTR-2B JSON — saved by api/gstPortal.js.
  */
 const express = require('express');
 const path = require('path');
@@ -33,6 +35,15 @@ const HELPERS = path.join(DIR, 'helpers.json');
 const JOBS = path.join(DIR, 'jobs.json');
 const PORTAL = process.env.EWAY_PORTAL_LOGIN || 'https://ewaybillgst.gov.in/Login.aspx';   // env only for testing against a mock portal
 const GST_SEARCH = process.env.GST_SEARCH_URL || 'https://services.gst.gov.in/services/searchtp';   // public taxpayer search (env only for tests)
+const GST_LOGIN = process.env.GST_LOGIN_URL || 'https://services.gst.gov.in/services/login';
+const GST_DASH = process.env.GST_DASH_URL || 'https://return.gst.gov.in/returns/auth/dashboard';
+/* the GST portal login in the Password Manager: a URL on gst.gov.in that is not the e-way bill / e-invoice portal */
+const isGstLogin = u => /(^|[/.])gst\.gov\.in/.test(u) && !/ewaybill|einv|einvoice/.test(u);
+const gstPortal = require('./gstPortal');
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const perName = p => `${MON3[+String(p).slice(0, 2) - 1] || ''} ${String(p).slice(2)}`;
+/* GSTR-1 files the portal is making → kept on the month (the ERP shows "in progress", then "ready") */
+const noteRequests = j => (j.results || []).forEach(x => { if (x && x.kind === 'r1' && x.status === 'requested') { try { gstPortal.markRequested(j.companyId, String(x.period)); } catch { /* ignore */ } } });
 
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const writeJ = (f, v) => { fs.mkdirSync(DIR, { recursive: true }); const t = f + '.tmp'; fs.writeFileSync(t, JSON.stringify(v, null, 2)); fs.renameSync(t, f); };
@@ -166,7 +177,23 @@ router.delete('/helpers/:id', needUser, (req, res) => {
 /* ── jobs (ERP side) ── */
 router.post('/jobs', needUser, (req, res) => {
   const { companyId, json, docs } = req.body || {};
-  const kind = ['cancel', 'check', 'gst'].includes(req.body?.kind) ? req.body.kind : 'generate';
+  const kind = ['cancel', 'check', 'gst', 'gstret'].includes(req.body?.kind) ? req.body.kind : 'generate';
+  /* GST returns download: months (MMYYYY) + which returns */
+  if (kind === 'gstret') {
+    if (!companyId) return res.status(400).json({ error: 'companyId required' });
+    const periods = [...new Set((Array.isArray(req.body?.periods) ? req.body.periods : []).map(String))].filter(x => /^(0[1-9]|1[0-2])20\d\d$/.test(x)).slice(0, 12);
+    const what = (Array.isArray(req.body?.what) ? req.body.what : []).filter(x => ['r1', 'r2b'].includes(x));
+    if (!periods.length || !what.length) return res.status(400).json({ error: 'Pick the month(s) and the return(s).' });
+    const on = runnersFor(req.erpUser.id);
+    if (!on.length) return res.status(409).json({ error: NOT_RUNNING() });
+    if (!passwords.findLoginBy(companyId, isGstLogin)) return res.status(409).json({ error: 'No GST portal login in the Password Manager — add one with URL https://services.gst.gov.in' });
+    if (jobs.some(x => x.kind === 'gstret' && x.companyId === companyId && !['done', 'failed'].includes(x.status))) return res.status(409).json({ error: 'A GST download for this company is already running.' });
+    const job = { id: crypto.randomBytes(8).toString('hex'), userId: req.erpUser.id, userName: req.erpUser.name || req.erpUser.username, companyId,
+      kind, periods, what, docs: [], status: 'queued', message: 'Waiting for the portal worker…', results: [], createdAt: now(), updatedAt: now() };
+    jobs.unshift(job); saveJobs();
+    wake(on);
+    return res.json(publicJob(job));
+  }
   /* GST search: the helper opens the GST portal's public taxpayer search; nothing is saved here, the form fills itself */
   if (kind === 'gst') {
     const gstin = String(req.body?.gstin || '').toUpperCase().replace(/\s/g, '');
@@ -216,6 +243,13 @@ const takeJob = h => {
   const j = jobs.slice().reverse().find(x => (h.server || x.userId === h.userId) && x.status === 'queued' && Date.now() - new Date(x.createdAt).getTime() < 30 * 60 * 1000);
   if (!j) return null;
   const gst = j.kind === 'gst';
+  if (j.kind === 'gstret') {
+    const lg = passwords.findLoginBy(j.companyId, isGstLogin);
+    j.status = 'picked'; j.helperId = h.id; j.machine = h.machine; j.message = `Opening the GST portal ${h.server ? 'on the server' : `on ${h.machine}`}…`; j.updatedAt = now(); saveJobs();
+    const idx = gstPortal.readIndex(j.companyId);
+    const r1Req = Object.fromEntries(j.periods.filter(p => idx[p]?.r1Req && !idx[p]?.r1).map(p => [p, idx[p].r1Req.at]));   // asked for before: only take the file
+    return { id: j.id, kind: 'gstret', periods: j.periods, what: j.what, r1Req, portal: GST_LOGIN, dashboard: GST_DASH, username: lg?.username || '', password: lg?.password || '' };
+  }
   const login = gst ? null : passwords.findLogin(j.companyId, 'ewaybillgst.gov.in');
   j.status = 'picked'; j.helperId = h.id; j.machine = h.machine; j.message = `Opening the ${gst ? 'GST' : 'e-way'} portal ${h.server ? 'on the server' : `on ${h.machine}`}…`; j.updatedAt = now(); saveJobs();
   if (gst) return { id: j.id, kind: 'gst', gstin: j.gstin, portal: GST_SEARCH };
@@ -239,6 +273,9 @@ router.post('/helper/jobs/:id/progress', needHelper, (req, res) => {
     j.status = String(req.body?.status || j.status).slice(0, 30); j.message = String(req.body?.message || '').slice(0, 300);
     // a captcha picture (GST search / e-way login) for the user to read in the ERP
     const cap = req.body?.captcha;
+    if (req.body?.ask === 'otp') { j.ask = 'otp'; j.captchaImg = null; j.captchaSeq = parseInt(req.body.captchaSeq, 10) || (j.captchaSeq || 0) + 1; j.captchaAnswer = null; }
+    else if (typeof cap === 'string') j.ask = 'captcha';
+    if (Array.isArray(req.body?.results)) { j.results = req.body.results.slice(0, 60); if (j.kind === 'gstret') noteRequests(j); }
     if (typeof cap === 'string' && /^data:image\/(png|jpe?g|gif);base64,[A-Za-z0-9+/=]+$/.test(cap) && cap.length < 400000) {
       j.captchaImg = cap; j.captchaSeq = parseInt(req.body.captchaSeq, 10) || (j.captchaSeq || 0) + 1; j.captchaAnswer = null;
     }
@@ -262,10 +299,35 @@ router.post('/jobs/:id/captcha', needUser, (req, res) => {
   const seq = parseInt(req.body?.seq, 10);
   if (seq !== j.captchaSeq) return res.status(409).json({ error: 'A new captcha is shown — type that one.' });
   const text = String(req.body?.answer || '').trim().slice(0, 20);
-  if (!req.body?.refresh && !text) return res.status(400).json({ error: 'Type the captcha.' });
+  if (!req.body?.refresh && !text) return res.status(400).json({ error: j.ask === 'otp' ? 'Type the OTP.' : 'Type the captcha.' });
   j.captchaAnswer = req.body?.refresh ? { seq, refresh: true } : { seq, text };
-  j.message = req.body?.refresh ? 'Getting a new captcha…' : 'Searching on the GST portal…';
+  j.message = req.body?.refresh ? 'Getting a new captcha…' : j.kind === 'gstret' ? (j.ask === 'otp' ? 'Checking the OTP…' : 'Logging in to the GST portal…') : 'Searching on the GST portal…';
   j.updatedAt = now(); saveJobs();
+  res.json({ ok: true });
+});
+
+/* GST returns download: one file (JSON or ZIP) for one month + return → saved by api/gstPortal.js */
+router.post('/helper/jobs/:id/file', needHelper, async (req, res) => {
+  const j = jobs.find(x => x.id === req.params.id && x.helperId === req.helper.id);
+  if (!j || j.kind !== 'gstret') return res.status(404).json({ error: 'Not found' });
+  const { period, kind, name, data } = req.body || {};
+  if (!j.periods.includes(String(period)) || !['r1', 'r2b'].includes(kind) || typeof data !== 'string') return res.status(400).json({ error: 'Bad file' });
+  try { res.json(await gstPortal.saveDownload(j.companyId, String(period), kind, String(name || ''), Buffer.from(data, 'base64'), { jobId: j.id, by: j.userName })); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+/* what the portal showed when a step failed (picture + text) — kept to fix the steps */
+router.post('/helper/jobs/:id/debug', needHelper, (req, res) => {
+  const j = jobs.find(x => x.id === req.params.id && x.helperId === req.helper.id);
+  if (!j) return res.status(404).json({ error: 'Not found' });
+  try {
+    const d = path.join(DIR, 'gst-debug'); fs.mkdirSync(d, { recursive: true });
+    const tag = `${new Date().toISOString().replace(/[:.]/g, '-')}-${String(req.body?.step || 'step').replace(/[^\w-]/g, '').slice(0, 30)}`;
+    const shot = String(req.body?.shot || '');
+    if (/^[A-Za-z0-9+/=]+$/.test(shot)) fs.writeFileSync(path.join(d, tag + '.jpg'), Buffer.from(shot, 'base64'));
+    fs.writeFileSync(path.join(d, tag + '.txt'), `${req.body?.url || ''}\n\n${String(req.body?.text || '').slice(0, 20000)}\n\n${String(req.body?.html || '').slice(0, 300000)}`);
+    // only the last 40 pairs are kept
+    const all = fs.readdirSync(d).sort(); all.slice(0, Math.max(0, all.length - 80)).forEach(f => fs.rmSync(path.join(d, f), { force: true }));
+  } catch { /* only for checking */ }
   res.json({ ok: true });
 });
 
@@ -274,7 +336,19 @@ const dcFile = (cid, id) => path.join(ROOT, 'Database', 'Companies', cid, 'Deliv
 router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
   const j = jobs.find(x => x.id === req.params.id && x.helperId === req.helper.id);
   if (!j) return res.status(404).json({ error: 'Not found' });
-  delete j.captchaImg; delete j.captchaAnswer;   // the captcha picture is not kept once the job ends
+  delete j.captchaImg; delete j.captchaAnswer; delete j.ask;   // the captcha picture is not kept once the job ends
+  if (j.kind === 'gstret') {
+    const r = (Array.isArray(req.body?.results) ? req.body.results : []).slice(0, 60).map(x => ({ period: String(x.period || ''), kind: String(x.kind || ''), status: String(x.status || ''), message: String(x.message || '').slice(0, 300) }));
+    const ok = r.filter(x => x.status === 'saved').length;
+    const error = String(req.body?.error || '').slice(0, 300);
+    j.results = r; noteRequests(j);
+    const asked = r.filter(x => x.status === 'requested').map(x => perName(x.period));
+    j.status = ok || (!error && r.length) ? 'done' : 'failed';
+    j.message = error ? (ok ? `${ok} file(s) saved, then: ${error}` : error)
+      : `${ok} of ${r.length} return(s) downloaded from the GST portal.${asked.length ? ` GSTR-1 of ${asked.join(', ')}: the portal is making the file — it shows "Ready" here in about 20 minutes.` : ''}`;
+    j.updatedAt = now(); saveJobs();
+    return res.json({ ok: true });
+  }
   if (j.kind === 'gst') {
     // taxpayer details read from the GST portal — only handed back to the form, never written to a file here
     const g = req.body?.gst && typeof req.body.gst === 'object' ? req.body.gst : null;

@@ -14,7 +14,7 @@ import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, today, words, hit } from './BetaAccKit';
 import { hrCan, EMP_STATUS, DEPARTMENTS, STATUS_PILL, grossOf, salaryFor, loadEmployees, loadSettings, viewHrFile, toForm } from './BetaHRKit';
-import { printEmploymentAgreement, printAssetAgreement, printEmployeeReport, printFnf, fnfCalc, kindOf, printRevisionLetter, monthLabel } from './BetaHRPrint';
+import { printEmploymentAgreement, printAssetAgreement, printEmployeeReport, printFnf, fnfCalc, kindOf, printRevisionLetter, monthLabel, printJoiningForm, printAssetIssueForm, printIdCards, photoFileOf } from './BetaHRPrint';
 
 const BLANK = { empCode: '', name: '', fatherName: '', dob: '', gender: '', maritalStatus: '', bloodGroup: '', mobile: '', altMobile: '', email: '', currentAddress: '', permanentAddress: '',
   emergencyName: '', emergencyMobile: '', department: '', designation: '', joiningDate: today(), employmentType: 'Permanent', reportingTo: '', workLocation: '',
@@ -51,7 +51,7 @@ export default function BetaHREmployees() {
   const go = k => { setEditing(null); navigate(`/beta/hr/employees?tab=${k}`); };
   return (
     <div className="sb">
-      <style>{SALES_CSS + PX_CSS + ACC_CSS + '.hr-chk { display:flex; gap:14px; flex-wrap:wrap; } .hr-chk label { display:flex; gap:5px; align-items:center; font-size:12.5px; } .hr-chk input { width:15px !important; height:15px !important; accent-color:#03444f; }'}</style>
+      <style>{SALES_CSS + PX_CSS + ACC_CSS + '.hr-chk { display:flex; gap:14px; flex-wrap:wrap; } .hr-chk label { display:flex; gap:5px; align-items:center; font-size:12.5px; } .hr-chk input { width:15px !important; height:15px !important; accent-color:#03444f; }' + EMP_PM_CSS}</style>
       <div className="sb-tabs" role="tablist">
         {[['list', 'Employees'], ...(canAdd || editing ? [['create', editing ? `${editing.fnf ? 'Full & Final — ' : editing.rev ? 'Salary revision — ' : 'Edit '}${editing.rec.empCode || editing.rec.name}` : 'Add Employee (Joining)']] : [])].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={cur === k} className={`sb-tab${cur === k ? ' on' : ''}`} onClick={() => go(k)}>{l}{k === 'list' && emps && <span className="n">{emps.length}</span>}</button>
@@ -91,6 +91,21 @@ function EmpList({ emps, assets, settings, company, user, slot, companyId, onEdi
       setAsk(null); setSelId(null); onChanged(what === 'delete' ? `Deleted ${e.name}.` : `${e.name} — employment agreement marked signed today.`);
     } catch (er) { onChanged(er.response?.data?.error || 'Could not do that.'); } finally { setBusy(false); }
   };
+  /* the signed joining form (filled by hand by the employee) — kept with the employee's documents */
+  /* signed copies (filled / signed by hand by the employee) — kept with the employee's documents
+     joining: the joining form · agreement: the employment agreement (also marks it signed today, if not marked yet) */
+  const uploadSigned = (what) => async ev => {
+    const fl = [...(ev.target.files || [])]; ev.target.value = '';
+    if (!fl.length || !sel) return;
+    setUm(false); setBusy(true);
+    if (what === 'photo' && !/^image\//.test(fl[0].type)) { onChanged('Choose a photo (JPG / PNG) for the ID card.'); return; }
+    const doc = what === 'agreement' ? 'Signed employment agreement' : what === 'photo' ? 'Photo' : 'Signed joining form';
+    const fields = what === 'agreement' ? { termsAcceptedOn: sel.termsAcceptedOn || today() } : what === 'photo' ? {} : { joiningFormOn: sel.joiningFormOn || today() };
+    try { await axios.put(`/api/hr/employees/${sel.id}`, toForm({ companyId, ...fields }, fl, fl.map(f => `${doc} — ${f.name}`)), { params: { companyId } }); onChanged(`${doc} uploaded for ${sel.name}.`); }
+    catch (er) { onChanged(er.response?.data?.error || 'Could not upload the file.'); } finally { setBusy(false); }
+  };
+  const [pm, setPm] = useState(false), [am, setAm] = useState(false), [um, setUm] = useState(false);   // the Print, Actions and Upload menus
+  useEffect(() => { if (!pm && !am && !um) return undefined; const c = e => { if (!e.target.closest('.emp-pm')) { setPm(false); setAm(false); setUm(false); } }; document.addEventListener('mousedown', c); return () => document.removeEventListener('mousedown', c); }, [pm, am, um]);
   const report = async () => {
     setBusy(true);
     try { const r = await axios.get(`/api/hr/employees/${sel.id}/history`, { params: { companyId } }); await printEmployeeReport({ emp: r.data.employee || sel, history: r.data, company, user }); }
@@ -106,12 +121,34 @@ function EmpList({ emps, assets, settings, company, user, slot, companyId, onEdi
           rows: list.map(e => [e.empCode, e.name, e.designation, e.department, e.mobile, dmy(e.joiningDate), e.employmentType, amt(grossOf(e.salary)), e.pan, e.uan, dmy(e.termsAcceptedOn), e.status]) })}><Svg name="file" size={13} />Print list</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>{sel.empCode || sel.name}</b> : 'Select an employee'}</span>
-          <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printEmploymentAgreement({ emp: sel, settings, company, user })} title="Employment agreement — Permanent / Temporary / Trainee, terms & conditions and policies"><Svg name="file" size={13} />Agreement</button>
-          <button type="button" className="sb-tbtn" disabled={!sel || busy} onClick={report} title="All details, joining till date, attendance and salary month-wise"><Svg name="file" size={13} />Full report</button>
-          {canEdit && <button type="button" className="sb-tbtn" disabled={!sel || sel.status === 'Left'} onClick={() => onRevise(sel)} title="Increase / change the salary from a month"><Svg name="trendUp" size={13} />Salary revision</button>}
-          {canEdit && <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => onFnf(sel)} title="Full & final settlement — when the employee resigns / leaves (saving marks the employee On notice; with the paid date, Left)"><Svg name="wallet" size={13} />Full &amp; Final</button>}
-          <button type="button" className="sb-tbtn" disabled={!sel || !assetsOf(sel).length} onClick={() => printAssetAgreement({ assets: assetsOf(sel), emp: sel, settings, company, user })} title="Agreement for all company assets with this employee"><Svg name="file" size={13} />Asset agreement</button>
-          {canEdit && <button type="button" className="sb-tbtn" disabled={!sel || !!sel.termsAcceptedOn || busy} onClick={() => act(sel, 'accept')} title="The employee signed the employment agreement"><Svg name="check" size={13} />Signed</button>}
+          <div className="emp-pm">
+            <button type="button" className="sb-tbtn" onClick={() => { setAm(false); setUm(false); setPm(v => !v); }} aria-expanded={pm} aria-haspopup="menu"><Svg name="file" size={13} />Print<Svg name="chevDown" size={12} /></button>
+            {pm && <div className="emp-pmm" role="menu" onClick={() => setPm(false)}>
+              <button type="button" role="menuitem" onClick={() => printJoiningForm({ emp: sel, company, user })}><b>{sel ? 'Joining form' : 'Blank joining form'}</b><small>{sel ? `Filled from ${sel.name}'s record — to check & sign` : 'Give to the new employee to fill by hand'}</small></button>
+              <button type="button" role="menuitem" onClick={() => printAssetIssueForm({ emp: sel, settings, company, user })}><b>Asset issue form</b><small>Fill by hand when giving assets</small></button>
+              <button type="button" role="menuitem" disabled={!sel} onClick={() => printEmploymentAgreement({ emp: sel, settings, company, user })}><b>Employment agreement</b><small>Permanent / temporary / trainee terms</small></button>
+              <button type="button" role="menuitem" disabled={!sel || !assetsOf(sel).length} onClick={() => printAssetAgreement({ assets: assetsOf(sel), emp: sel, settings, company, user })}><b>Asset agreement</b><small>All company assets with this employee</small></button>
+              <button type="button" role="menuitem" onClick={() => printIdCards({ emps: sel ? [sel] : all.filter(x => x.status === 'Active'), company, user })}><b>{sel ? 'ID card' : 'ID cards — all active employees'}</b><small>{sel ? `${photoFileOf(sel) ? 'With photo' : 'No photo yet — Upload ▸ Photo for ID card'} · front & back` : `${all.filter(x => x.status === 'Active').length} cards, 3 per A4 page`}</small></button>
+              {sel && <button type="button" role="menuitem" onClick={() => printIdCards({ emps: all.filter(x => x.status === 'Active'), company, user })}><b>ID cards — all active employees</b><small>{all.filter(x => x.status === 'Active').length} cards, 3 per A4 page</small></button>}
+              <button type="button" role="menuitem" disabled={!sel || busy} onClick={report}><b>Full report</b><small>Joining till date, attendance &amp; salary</small></button>
+            </div>}
+          </div>
+          {canEdit && <div className="emp-pm">
+            <button type="button" className="sb-tbtn" disabled={!sel || busy} onClick={() => { setPm(false); setAm(false); setUm(v => !v); }} aria-expanded={um} aria-haspopup="menu" title="Upload a signed copy (PDF / photo) or the photo for the ID card"><Svg name="file" size={13} />Upload<Svg name="chevDown" size={12} /></button>
+            {um && sel && <div className="emp-pmm" role="menu">
+              <label role="menuitem" className="emp-up"><b>Joining form</b><small>{sel.joiningFormOn ? `Uploaded ${dmy(sel.joiningFormOn)} — add another file` : 'The form filled & signed by the employee'}</small><input type="file" hidden multiple accept=".pdf,image/*" onChange={uploadSigned('joining')} /></label>
+              <label role="menuitem" className="emp-up"><b>Employment agreement</b><small>{hasDoc(sel, 'Signed employment agreement') ? 'Uploaded — add another file' : 'Signed by the employee — also marks the agreement signed'}</small><input type="file" hidden multiple accept=".pdf,image/*" onChange={uploadSigned('agreement')} /></label>
+              <label role="menuitem" className="emp-up"><b>Photo for ID card</b><small>{photoFileOf(sel) ? 'Photo on file — choose to replace it' : 'Passport-size photo (JPG / PNG)'}</small><input type="file" hidden accept="image/*" onChange={uploadSigned('photo')} /></label>
+            </div>}
+          </div>}
+          {canEdit && <div className="emp-pm">
+            <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => { setPm(false); setUm(false); setAm(v => !v); }} aria-expanded={am} aria-haspopup="menu"><Svg name="settings" size={13} />Actions<Svg name="chevDown" size={12} /></button>
+            {am && sel && <div className="emp-pmm" role="menu" onClick={() => setAm(false)}>
+              <button type="button" role="menuitem" disabled={sel.status === 'Left'} onClick={() => onRevise(sel)}><b>Salary revision</b><small>Increase / change the salary from a month</small></button>
+              <button type="button" role="menuitem" onClick={() => onFnf(sel)}><b>Full &amp; final settlement</b><small>When the employee resigns / leaves</small></button>
+              <button type="button" role="menuitem" disabled={!!sel.termsAcceptedOn || busy} onClick={() => act(sel, 'accept')}><b>Agreement signed</b><small>{sel.termsAcceptedOn ? 'Already marked signed' : 'The employee signed the employment agreement'}</small></button>
+            </div>}
+          </div>}
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => onEdit(sel)}><Svg name="settings" size={13} />Edit</button>}
           {canDel && <button type="button" className="sb-tbtn del" disabled={!sel} onClick={() => setAsk(sel)}><Svg name="x" size={13} />Delete</button>}
         </div>
@@ -135,10 +172,11 @@ function EmpList({ emps, assets, settings, company, user, slot, companyId, onEdi
                 : list.map((e, i) => { const [bg, fg] = STATUS_PILL[e.status] || STATUS_PILL.Active, as = assetsOf(e); return (
                   <tr key={e.id} className={selId === e.id ? 'sel' : ''} onClick={() => setSelId(e.id)} onDoubleClick={() => canEdit && onEdit(e)} style={{ cursor: 'pointer' }}>
                     <td className="r">{i + 1}</td><td className="mono b">{e.empCode}</td>
-                    <td className="b">{e.name}{e.fatherName && <span className="sm">S/o {e.fatherName}</span>}</td>
+                    <td className="b">{e.name}{e.fatherName && <span className="sm">S/o {e.fatherName}</span>}{e.joiningFormOn && <span className="sm" style={{ color: '#067647' }}>✓ joining form signed</span>}</td>
                     <td>{e.designation || '—'}<span className="sm" style={{ fontWeight: 700, color: FIXED.includes(kindOf(e)) ? '#B54708' : '#067647' }}>{kindOf(e)}{e.contractEndDate && FIXED.includes(kindOf(e)) ? ` till ${dmy(e.contractEndDate)}` : ''}</span></td><td>{e.department || '—'}</td>
                     <td className="d">{e.mobile || '—'}</td><td className="d">{dmy(e.joiningDate)}</td><td className="r b d">{amt(grossOf(e.salary))}{(e.salaryHistory || []).length > 0 && <span className="sm">from {monthLabel(e.salaryHistory[e.salaryHistory.length - 1].effectiveFrom)}</span>}</td>
-                    <td>{e.termsAcceptedOn ? <span className="ac-pill" style={{ background: '#ECFDF3', color: '#067647' }}>✓ {dmy(e.termsAcceptedOn)}</span> : <span className="ac-pill" style={{ background: '#FEF3F2', color: '#B42318' }}>Pending</span>}</td>
+                    <td>{e.termsAcceptedOn ? <span className="ac-pill" style={{ background: '#ECFDF3', color: '#067647' }}>✓ {dmy(e.termsAcceptedOn)}</span> : <span className="ac-pill" style={{ background: '#FEF3F2', color: '#B42318' }}>Pending</span>}
+                      {e.termsAcceptedOn && <span className="sm" style={{ color: hasDoc(e, 'Signed employment agreement') ? '#067647' : '#B54708' }}>{hasDoc(e, 'Signed employment agreement') ? '✓ signed copy on file' : 'signed copy not uploaded'}</span>}</td>
                     <td>{as.length ? as.map(a => a.assetType || a.assetName).join(', ') : '—'}</td>
                     <td><span className="ac-pill" style={{ background: bg, color: fg }}>{e.status}</span>{e.fnf && <span className="sm">F&amp;F {e.fnf.paidOn ? 'paid' : 'prepared'}{e.fnf.returnCopyOn ? ' · copy back' : ''}</span>}</td>
                   </tr>); })}
@@ -407,3 +445,16 @@ function RevisionForm({ companyId, emp, company, user, onSaved, onCancel }) {
     </div>
   );
 }
+
+/* the Print menu on the employee toolbar (keeps the toolbar short enough to fit) */
+/* is a signed copy of this document among the employee's files? */
+const hasDoc = (e, doc) => (e?.files || []).some(f => String(f.name || '').startsWith(doc));
+
+export const EMP_PM_CSS = `
+.emp-pm { position:relative; display:flex; align-items:stretch; }
+.emp-pm > .sb-tbtn { gap:5px; }
+.emp-pmm { position:absolute; right:0; top:100%; z-index:60; width:280px; background:#fff; border:1px solid #CFDCDE; border-radius:8px; box-shadow:0 12px 30px rgba(16,24,40,.18); padding:5px; }
+.emp-pmm button { display:block; width:100%; text-align:left; border:0; background:none; padding:7px 10px; border-radius:6px; cursor:pointer; font:13px Inter, Arial, sans-serif; color:#101828; }
+.emp-pmm button:hover:not(:disabled) { background:#EEF6F7; } .emp-pmm button:disabled { opacity:.45; cursor:default; }
+.emp-pmm .emp-up { display:block; padding:7px 10px; border-radius:6px; cursor:pointer; font:13px Inter, Arial, sans-serif; color:#101828; } .emp-pmm .emp-up:hover { background:#EEF6F7; }
+.emp-pmm b { display:block; font-weight:600; } .emp-pmm small { display:block; font-size:11.5px; color:#667085; margin-top:1px; }`;

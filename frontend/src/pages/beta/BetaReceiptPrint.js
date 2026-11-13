@@ -7,6 +7,7 @@ import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillBody } from './BetaDCPrint';
 import { STATUS, orderNoOf, bankLabel } from './BetaReceipt';
+import { previewFrame } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -35,7 +36,7 @@ function printHtml(html, id, fillMm) {
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
+  setTimeout(() => { if (fillMm) fillBody(w.document, fillMm); previewFrame(fr); }, 400);
 }
 
 /* ── Receipt Advice ── */

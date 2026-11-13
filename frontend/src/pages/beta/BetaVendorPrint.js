@@ -4,6 +4,7 @@
 import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
+import { previewFrame } from './printKit';
 
 const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const d = v => { const x = v ? new Date(v) : null; return x && !isNaN(x) ? `${String(x.getDate()).padStart(2, '0')}-${String(x.getMonth() + 1).padStart(2, '0')}-${x.getFullYear()}` : ''; };
@@ -23,6 +24,7 @@ const CSS = ADV_CSS + `
 .ls tbody tr.fill td { height:1mm; border-top:0 !important; border-bottom:0 !important; }
 .sg td { height:24mm; vertical-align:top !important; }
 .sg .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; }
+.sg .row3 { display:flex; align-items:flex-end; gap:6px; } .sg .row3 b { flex:1 1 0; text-align:center; } .sg .apv { font-size:7.6pt; text-align:right; }
 .decl { font-size:8.2pt; }
 .pby { color:#000; font-weight:bold; font-size:7.6pt; }
 @media print { @page { margin:8mm; size:A4 portrait; } }
@@ -125,8 +127,9 @@ export async function printVendor({ v, company, user }) {
   <colgroup><col style="width:50%"><col></colgroup>
   <tbody><tr>
     <td><div class="box"><b>For ${esc(v.vendorName)}</b><b>Signature &amp; Seal</b></div></td>
-    <td><div class="box" style="text-align:right"><b>for ${esc(co.companyName || co.name || '')}</b>
-      <span>${approved ? `Approved by: ${esc(who(approved.by))}${approved.at ? ` on ${d(approved.at)}` : ''}<br>` : ''}<b>Authorised Signatory</b></span></div></td>
+    <td><div class="box"><b style="text-align:right">for ${esc(co.companyName || co.name || '')}</b>
+      ${approved ? `<span class="apv">Approved by: ${esc(who(approved.by))}${approved.at ? ` on ${d(approved.at)}` : ''}</span>` : ''}
+      <div class="row3"><b>Prepared By</b><b>Verified By</b><b>Authorised Signatory</b></div></div></td>
   </tr></tbody>
 </table>
 </div>
@@ -142,7 +145,7 @@ export async function printVendor({ v, company, user }) {
   w.document.open(); w.document.write(html); w.document.close();
   await new Promise(res => setTimeout(res, 400));
   fillPage(w.document);
-  w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+  previewFrame(fr);   // opens the preview: Email · Save PDF · Print
 }
 
 const remarksLine = v => (v.remarks ? `<div style="margin-top:4px"><b>Remarks:</b> ${esc(v.remarks)}</div>` : '');

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
+import { previewFrame, prodText } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -24,7 +25,7 @@ async function logoOf(co) {
 }
 
 /* laid out at the printable A4 size so the blank item row can stretch the invoice to the bottom of the page */
-function printHtml(html, id, collect) {
+function printHtml(html, id, collect, meta) {
   document.getElementById(id)?.remove();
   const fr = document.createElement('iframe');
   fr.id = id;
@@ -36,8 +37,8 @@ function printHtml(html, id, collect) {
   // collect: give back the laid-out page (for one PDF with other documents) instead of printing it
   return new Promise(res => setTimeout(() => {
     fillPage(w.document);
-    if (collect) { const page = '<!DOCTYPE html>' + w.document.documentElement.outerHTML; fr.remove(); res(page); return; }
-    w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); res();
+    if (collect) { const page = '<!DOCTYPE html>' + w.document.documentElement.outerHTML; fr.remove(); res({ page, meta: meta || {} }); return; }   // for one PDF with other documents
+    previewFrame(fr, undefined, meta); res();
   }, 400));
 }
 
@@ -207,5 +208,19 @@ ${b.ewayBillNo ? `<table>
 </div>
 <div class="pby"><span>${brandLine(user)}</span><span>Printed: ${esc(now())}</span></div>
 </body></html>`;
-  return printHtml(html, `sb-bill-frame${collect ? '-c' : ''}`, collect);
+  // e-mail and e-signatures
+  const goods = items.filter(li => !(li.unit === 'LOT' && li.itemIdx == null));
+  const poRef = [o.customerPO, o.poDate && `dt. ${d(o.poDate)}`].filter(Boolean).join(' ');
+  const meta = {
+    sign: bill.billId ? { type: 'salesBill', id: bill.billId, perm: 'salesBill' } : null,
+    reprint: () => printSalesBill({ b: bill, order, company, user }),
+    to: o.billToEmail || o.email || undefined,
+    mail: {
+      subject: `Tax Invoice ${b.billNo || b.billId}${o.customerPO ? ` against your PO ${poRef}` : ''} – ${prodText(goods.map(li => li.description))}`,
+      message: `Dear ${o.billToContact || o.contactPerson || 'Sir / Madam'},\n\nPlease find attached our Tax Invoice ${b.billNo || b.billId}${b.billDate ? ` dated ${d(b.billDate)}` : ''}${o.customerPO ? ` against your purchase order ${poRef}` : ''}.\n\nKindly arrange the payment of ₹ ${amt(payable)} as per the agreed terms and share the payment details with us.`,
+      summary: [['Invoice', `${b.billNo || b.billId}${b.billDate ? `  ·  ${d(b.billDate)}` : ''}`], ['Your PO', poRef], ['Our sales order', o.orderNo || ''],
+        ['Products', goods.map(li => `${li.description} — ${n(li.qty)} ${li.unit || ''}`.trim()).join('\n')], ['Invoice amount', `₹ ${amt(payable)}`], ['E-way bill', b.ewayBillNo || ''], ['Payment terms', o.paymentTerms || '']],
+    },
+  };
+  return printHtml(html, `sb-bill-frame${collect ? '-c' : ''}`, collect, meta);
 }

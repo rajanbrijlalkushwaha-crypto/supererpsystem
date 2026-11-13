@@ -42,7 +42,7 @@ export const CSS = `
 .sb-slot .sb-fyb { height:auto; border:0; border-right:1px solid #B9D0D3; border-radius:0; padding:0 12px; }
 .sb-slot .sb-fyb.set { background:#E8F3F4; }
 .sb-slot .sb-fyp { top:41px; }
-.sb-slot .sb-search { height:auto; width:250px; flex-shrink:1; border:0; border-right:1px solid #B9D0D3; border-radius:0; padding:0 12px; }
+.sb-slot .sb-search { height:auto; width:250px; flex-shrink:1; min-width:110px; border:0; border-right:1px solid #B9D0D3; border-radius:0; padding:0 12px; }
 .sb-slot .sb-search:focus { box-shadow:inset 0 0 0 2px rgba(3,68,79,.35); }
 .sb-slot .sb-chk { height:auto; border:0; border-right:1px solid #B9D0D3; border-radius:0; padding:0 12px; }
 .sb-slot .sb-tools { margin-left:auto; gap:0; align-items:stretch; }

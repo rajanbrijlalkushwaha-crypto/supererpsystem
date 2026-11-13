@@ -1,7 +1,9 @@
 /* Beta — Expense entry (Account → Expense), /api/accounts/expenses — the same records as the classic Expense page.
  * Three kinds, as on the classic page: Office (no order), Manufacturing (vendor required, order optional) and
  * Order (against a sales order, "Expense by" ledger required — goes for approval). Amount + GST → total, bill no,
- * documents. List: kind switch, search + status, Print list, Print voucher, Approve, Edit, Delete. */
+ * documents. List: kind switch, search + status, Print list, Print voucher, Approve, Edit, Delete.
+ * RCM (reverse charge — transport/GTA, rent, legal, security…): the supplier charges no GST, so the bill total is
+ * the amount; we pay the GST ourselves (rcmRate % of the amount) and take the same as ITC — see GSTR-3B 3.1(d) / 4(A)(3). */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -16,6 +18,10 @@ import { printDepList, printVoucher, inWords, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, r2, today, words, hit, Pill, Picker, AttachBox, uploadAttach, loadLedgerGroups } from './BetaAccKit';
 
 const GST_RATES = ['0', '5', '12', '18', '28'];
+const RCM_RATES = ['5', '12', '18', '28'];
+/* the usual RCM rate for a category: GTA / transport 5 %, rent, legal, security, sub-contract etc. 18 % */
+const rcmRateFor = cat => (/transport|freight|courier|conveyance/i.test(cat || '') ? '5' : '18');
+export const rcmTaxOf = e => (e && e.rcm ? r2((Number(e.amount) || 0) * (Number(e.rcmRate) || 0) / 100) : 0);
 const KINDS = {
   office: { label: 'Office', note: 'Admin, rent, utilities, travel — no order link',
     cats: ['Rent', 'Utilities', 'Internet / Telephone', 'Office Supplies', 'Travel & Conveyance', 'Printing & Stationery', 'Meals & Entertainment', 'Salaries & Wages', 'Insurance', 'Maintenance & Repairs', 'Advertisement', 'Professional Fees', 'Miscellaneous'] },
@@ -146,7 +152,7 @@ function ExpenseList({ rows, company, user, slot, companyId, onEdit, onChanged }
                     <td>{partyOf(e) || '—'}</td>
                     <td className="mono">{e.orderNo || '—'}{e.clientName && <span className="sm">{e.clientName}</span>}</td>
                     <td className="mono">{e.invoiceNo || '—'}</td>
-                    <td className="r b d">{amt(e.grandTotal || e.amount)}{Number(e.taxRate) > 0 && <span className="sm">incl. {e.taxRate}% GST</span>}</td>
+                    <td className="r b d">{amt(e.grandTotal || e.amount)}{Number(e.taxRate) > 0 && <span className="sm">incl. {e.taxRate}% GST</span>}{e.rcm && <span className="sm" style={{ color: '#B54708' }}>RCM {e.rcmRate}% · ₹ {amt(rcmTaxOf(e))}</span>}</td>
                     <td><Pill s={e.status} /></td>
                   </tr>
                 ))}
@@ -162,7 +168,8 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
   const [v, setV] = useState(() => ({ kind: edit ? kindOf(e0) : 'office', date: e0.date || today(), category: e0.expenseCategory || e0.category || '', description: e0.description || '',
     amount: e0.amount ? String(e0.amount) : '', gst: String(e0.taxRate ?? '0'), invoiceNo: e0.invoiceNo || '', notes: e0.notes || '',
     paidTo: e0.vendor || '', vendorId: e0.vendorId ? String(e0.vendorId) : '', vendorName: e0.vendorName || '', soId: e0.soId ? String(e0.soId) : '',
-    ledgerId: e0.ledgerId ? String(e0.ledgerId) : '', ledgerName: e0.ledgerName || '' }));
+    ledgerId: e0.ledgerId ? String(e0.ledgerId) : '', ledgerName: e0.ledgerName || '',
+    rcm: !!e0.rcm, rcmRate: String(e0.rcmRate || '18'), rcmInter: !!e0.rcmInter }));
   const [lg, setLg] = useState({ groups: [], vendors: [] });
   const [files, setFiles] = useState([]);
   const [atts, setAtts] = useState(e0.attachments || []);
@@ -171,7 +178,9 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
   useEffect(() => { if (companyId) loadLedgerGroups(companyId).then(setLg); }, [companyId]);
   const set = k => e => { const x = e.target.value; setV(o => ({ ...o, [k]: x })); setMsg(null); };
   const K = KINDS[v.kind];
-  const base = Number(v.amount) || 0, gstAmt = r2(base * (Number(v.gst) || 0) / 100), total = r2(base + gstAmt);
+  const base = Number(v.amount) || 0, gstAmt = v.rcm ? 0 : r2(base * (Number(v.gst) || 0) / 100), total = r2(base + gstAmt);
+  const rcmTax = v.rcm ? r2(base * (Number(v.rcmRate) || 0) / 100) : 0;
+  const toggleRcm = on => { setV(o => ({ ...o, rcm: on, gst: on ? '0' : o.gst, rcmRate: on && !o.rcm ? rcmRateFor(o.category) : o.rcmRate })); setMsg(null); };
   const so = orders.find(o => String(o.orderId) === v.soId) || null;
   const soGroups = useMemo(() => [{ group: 'Sales orders', items: [...orders].sort((a, b) => String(b.orderDate || '').localeCompare(String(a.orderDate || '')))
     .map(o => ({ key: String(o.orderId), label: `${String(o.orderNo || o.orderId).trim()} — ${o.customerName || o.clientName || ''}`, sub: o.customerPO ? `PO ${o.customerPO}` : '' })) }], [orders]);
@@ -190,7 +199,8 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
     const status = v.kind === 'order' ? 'pending_approval' : 'approved';   // as on the classic page (an edited order expense goes for approval again)
     const payload = {
       companyId, expenseType: v.kind, expenseCategory: v.category, category: v.category, date: v.date, description: v.description.trim(), amount: v.amount,
-      taxRate: v.gst, grandTotal: total, invoiceNo: v.invoiceNo.trim(), notes: v.notes.trim(), status,
+      taxRate: v.rcm ? '0' : v.gst, grandTotal: total,
+      rcm: v.rcm, rcmRate: v.rcm ? v.rcmRate : '', rcmInter: v.rcm ? v.rcmInter : false, rcmTax, invoiceNo: v.invoiceNo.trim(), notes: v.notes.trim(), status,
       vendor: v.kind === 'office' ? v.paidTo.trim() : '',
       vendorId: v.kind === 'manufacturing' ? v.vendorId : '', vendorName: v.kind === 'manufacturing' ? v.vendorName.trim() : '',
       soId: v.kind === 'office' ? '' : v.soId, orderNo: v.kind === 'office' ? '' : (so ? String(so.orderNo || '').trim() : (v.soId ? e0.orderNo || '' : '')),
@@ -224,8 +234,16 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
         <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="wallet" size={13} /></span><b>Amount &amp; party</b></div>
           <table className="sf-kv"><tbody>
             <tr><th>Amount ₹ <i>*</i></th><td><input className="num" inputMode="decimal" value={v.amount} onChange={e => setV(o => ({ ...o, amount: e.target.value.replace(/[^\d.]/g, '') }))} placeholder="Before GST" /></td></tr>
-            <tr><th>GST %</th><td><select value={v.gst} onChange={set('gst')}>{[...new Set([...GST_RATES, v.gst])].map(g => <option key={g} value={g}>{g}%</option>)}</select>
-              <div style={{ fontSize: 11, color: '#667085', marginTop: 3 }}>GST ₹ {amt(gstAmt)} · <b>Total ₹ {amt(total)}</b></div></td></tr>
+            <tr><th>RCM</th><td><label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={v.rcm} onChange={e => toggleRcm(e.target.checked)} style={{ width: 'auto', height: 'auto' }} />Reverse charge — we pay the GST (transport, rent, legal…)</label></td></tr>
+            {v.rcm ? <>
+              <tr><th>RCM GST %</th><td style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select value={v.rcmRate} onChange={set('rcmRate')} style={{ width: 90 }}>{[...new Set([...RCM_RATES, v.rcmRate])].map(g => <option key={g} value={g}>{g}%</option>)}</select>
+                <select value={v.rcmInter ? 'i' : 'l'} onChange={e => setV(o => ({ ...o, rcmInter: e.target.value === 'i' }))} style={{ width: 'auto', flex: 1 }} aria-label="RCM tax type">
+                  <option value="l">Same state — CGST + SGST</option><option value="i">Other state — IGST</option></select>
+                <div style={{ fontSize: 11, color: '#B54708', width: '100%' }}>RCM tax ₹ {amt(rcmTax)} (we pay in cash, then claim as ITC) · <b style={{ color: '#101828' }}>Bill total ₹ {amt(total)}</b></div></td></tr>
+            </> : <tr><th>GST %</th><td><select value={v.gst} onChange={set('gst')}>{[...new Set([...GST_RATES, v.gst])].map(g => <option key={g} value={g}>{g}%</option>)}</select>
+              <div style={{ fontSize: 11, color: '#667085', marginTop: 3 }}>GST ₹ {amt(gstAmt)} · <b>Total ₹ {amt(total)}</b></div></td></tr>}
             {v.kind === 'office' && <tr><th>Paid to</th><td><input value={v.paidTo} onChange={set('paidTo')} placeholder="Shop / person (optional)" /></td></tr>}
             {v.kind === 'manufacturing' && <tr><th>Vendor <i>*</i></th><td><Picker value={v.vendorName} groups={vendorGroups} placeholder="Type vendor name…" ariaLabel="Vendor" onPick={o => setV(x => ({ ...x, vendorId: o.key, vendorName: o.label }))} /></td></tr>}
             {v.kind !== 'office' && <tr><th>Sales order{v.kind === 'order' && <i> *</i>}</th><td><Picker value={soLabel} groups={soGroups} placeholder={v.kind === 'order' ? 'Type order no. or client…' : 'Optional'} ariaLabel="Sales order" onPick={o => setV(x => ({ ...x, soId: o.key }))} />
@@ -236,7 +254,7 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
       <AttachBox entity="expense" rec={edit ? { ...edit, attachments: atts } : null} idKey="expenseId" companyId={companyId} files={files} setFiles={setFiles} onRemoved={setAtts} />
       {msg && <div className={`sf-msg ${msg.k}`} role="status">{msg.t}</div>}
       <div className="sf-bar">
-        <div className="info">{K.label} expense · ₹ {amt(base)} + GST ₹ {amt(gstAmt)} = <b>₹ {amt(total)}</b>{v.kind === 'order' ? ' · goes for approval' : ''}</div>
+        <div className="info">{K.label} expense · {v.rcm ? <>₹ {amt(base)} (no GST from supplier) = <b>₹ {amt(total)}</b> · RCM {v.rcmRate}% ₹ {amt(rcmTax)}</> : <>₹ {amt(base)} + GST ₹ {amt(gstAmt)} = <b>₹ {amt(total)}</b></>}{v.kind === 'order' ? ' · goes for approval' : ''}</div>
         <button type="button" className="sf-b ghost" onClick={onCancel} disabled={busy}>Cancel</button>
         <button type="button" className="sf-b pri" onClick={save} disabled={busy}>{busy ? 'Saving…' : edit ? 'Update' : 'Save'}</button>
       </div>

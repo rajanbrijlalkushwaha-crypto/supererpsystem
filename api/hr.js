@@ -31,7 +31,7 @@ const EMP_FIELDS = ['empCode', 'name', 'fatherName', 'dob', 'gender', 'maritalSt
   'emergencyName', 'emergencyMobile', 'department', 'designation', 'joiningDate', 'employmentType', 'reportingTo', 'workLocation', 'status', 'leavingDate', 'leavingReason',
   'pan', 'aadhaar', 'uan', 'pfNo', 'esicNo', 'bankName', 'bankAccount', 'ifsc', 'accountHolder', 'qualification', 'experience', 'remarks', 'candidateId',
   // joining terms (printed on the joining letter) and when the employee accepted them
-  'probationMonths', 'noticeDays', 'workHours', 'weeklyOff', 'shift', 'termsAcceptedOn', 'termsNote',
+  'probationMonths', 'noticeDays', 'workHours', 'weeklyOff', 'shift', 'termsAcceptedOn', 'termsNote', 'joiningFormOn',
   'contractEndDate', 'stipend'];   // temporary / contract / trainee: the agreed end date; trainee: stipend wording
 const SALARY_FIELDS = ['basic', 'hra', 'conveyance', 'special', 'other', 'pfApplicable', 'esiApplicable', 'ptApplicable', 'tds'];
 const pick = (b, fields) => Object.fromEntries(fields.filter(k => b[k] !== undefined).map(k => [k, typeof b[k] === 'string' ? b[k].trim() : b[k]]));

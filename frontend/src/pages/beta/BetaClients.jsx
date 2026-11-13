@@ -10,6 +10,7 @@ import { can } from '../../utils/permissions';
 import { legalNoteHtml } from '../../utils/printFont';
 import { brandLine } from '../../utils/printBranding';
 import GstFetch, { STATES } from './BetaGstFetch';
+import { previewHtml } from './printKit';
 
 export const TEAL = '#03444f';
 export const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -353,6 +354,9 @@ function ClientPopup({ client: c, companyId, company, onClose, onEdit, onChanged
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Client ${esc(c.clientId)} - ${esc(c.companyName || c.clientName)}</title>
 <style>
+table.sig { width:100%; border-collapse:collapse; } table.sig td { border:0; padding:4px 6px; }
+.sig .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; min-height:30mm; }
+.sig .row3 { display:flex; align-items:flex-end; gap:6px; } .sig .row3 b { flex:1 1 0; text-align:center; }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Times New Roman', Times, Georgia, serif; font-size:10.5pt; color:#000; background:#fff; }
 .page { padding:12px; }
@@ -427,6 +431,12 @@ body { font-family:'Times New Roman', Times, Georgia, serif; font-size:10.5pt; c
     <tbody>${orderRows}</tbody></table>
   </td></tr>
 
+  <tr><td colspan="2" style="padding:0;">
+    <table class="sig"><tr>
+      <td style="width:40%; height:32mm; vertical-align:top; border-right:1px solid #000;"><div class="box"><b>For ${esc(c.companyName || c.clientName || '')}</b><b>Signature &amp; Seal</b></div></td>
+      <td style="height:32mm; vertical-align:top;"><div class="box"><b style="text-align:right">For ${esc(co.companyName || '')}</b><div class="row3"><b>Prepared By</b><b>Verified By</b><b>Authorised Signatory</b></div></div></td>
+    </tr></table>
+  </td></tr>
   <tr><td colspan="2" style="font-size:8.5pt; color:#444;">
     <div style="display:flex; justify-content:space-between;"><span>${brandLine(user)}</span><span>Printed: ${esc(today)}</span></div>
   </td></tr>
@@ -444,12 +454,8 @@ ${legalNoteHtml()}
     w.document.open();
     w.document.write(html);
     w.document.close();
-    setTimeout(() => {
-      w.focus();
-      w.print();                 // waits here until the print dialog is closed
-      window.focus();            // keys (Esc) work on the pop-up again
-      setTimeout(() => fr.remove(), 1000);
-    }, 300);
+    fr.remove();
+    previewHtml(html);   // the preview: Email · Save PDF · Print
   };
 
   const fld = (label, value, cls) => <div className={`cp-f${cls ? ' ' + cls : ''}`}><label>{label}</label><div>{dash(value)}</div></div>;

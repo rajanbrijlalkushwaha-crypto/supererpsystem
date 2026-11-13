@@ -4,6 +4,7 @@ import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
+import { previewFrame } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -138,5 +139,5 @@ export async function printPaymentAdvice({ p, allocs, poMap, soMap, vendor, comp
   w.document.open(); w.document.write(html); w.document.close();
   await new Promise(res => setTimeout(res, 400));
   fillPage(w.document);
-  w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000);
+  previewFrame(fr);   // opens the preview: Email · Save PDF · Print
 }

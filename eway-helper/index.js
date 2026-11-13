@@ -314,7 +314,7 @@ async function runJob(cfg, job) {
   const headless = !!(process.env.EWAY_HEADLESS || SERVER_MODE);
   /* GST search needs no login: every search gets a brand-new, empty Chrome profile (no cookies / session of the last
      search — a reused profile made the next search fail with "The GST search page did not open"); it is deleted afterwards */
-  const gstJob = job.kind === 'gst';
+  const gstJob = job.kind === 'gst' || job.kind === 'gstret';   // GST returns download: also a fresh profile (no old portal session)
   /* kept under HOME, not os.tmpdir(): on a Windows server started from Remote Desktop, TEMP is a per-session folder
      (…\Temp\2) that Windows deletes at log-off while the ERP keeps running → mkdtemp failed with ENOENT */
   const gstRoot = path.join(HOME, 'gst-profiles');
@@ -332,6 +332,7 @@ async function runJob(cfg, job) {
     browser.on('targetcreated', async t => { const p = await t.page().catch(() => null); if (p) p.on('dialog', d => d.accept().catch(() => {})); });
     page.on('dialog', d => d.accept().catch(() => {}));
     if (job.kind === 'gst') return await gstSearchFlow(cfg, browser, page, job, step);
+    if (job.kind === 'gstret') return await gstReturnFlow(cfg, browser, page, job, step);
     await login(cfg, browser, page, job, step);
     log('logged in:', page.url());
     const mainUrl = page.url();
@@ -587,6 +588,386 @@ async function ewbStatusFlow(browser, page, job, step, mainUrl) {
   return { results: [{ ewbNo: job.ewbNo, status: 'unknown' }], error: 'No clear answer was read from the portal within 4 minutes.' };
 }
 
+/* ── GST returns download (job kind "gstret") ──
+   services.gst.gov.in login (id + password from the Password Manager; captcha — and an OTP if the portal asks — typed in
+   the ERP) → notices closed → for each month: return.gst.gov.in returns dashboard → Financial Year, Quarter, Period →
+   Search → GSTR-1 tile "Download" → JSON file(s), GSTR-2B tile "Download" → JSON. Each file is sent to the ERP.
+   GSTR-1: the portal makes the file on request (~20 minutes). The worker only asks for it and ends; the ERP shows the
+   month "in progress", then "ready" — a new download then only takes the ready file (the portal refuses a page
+   opened again by its address in the same session, so the worker does not wait and come back). When a step fails a picture of the page goes to the ERP
+   (Database/EwayHelper/gst-debug) so the steps can be tuned. */
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function periodInfo(p) {   // '102025' → FY 2025-26, quarter 3, October
+  const m = +p.slice(0, 2), y = +p.slice(2), fy = m >= 4 ? y : y - 1;
+  return { period: p, m, y, fy: `${fy}-${String((fy + 1) % 100).padStart(2, '0')}`, q: m >= 4 ? Math.ceil((m - 3) / 3) : 4, mon: MONTHS[m - 1], label: `${MONTHS[m - 1].slice(0, 3)} ${y}` };
+}
+async function sendDebug(cfg, job, page, stepName) {
+  try {
+    const shot = await Promise.race([page.screenshot({ type: 'jpeg', quality: 55, fullPage: true, encoding: 'base64' }), sleep(8000).then(() => '')]);
+    const text = (await safe(page, () => (document.body ? document.body.innerText : ''))) || '';
+    const html = (await safe(page, () => document.documentElement.outerHTML)) || '';
+    await api(cfg, 'POST', `/helper/jobs/${job.id}/debug`, { step: stepName, url: page.url(), shot, text, html }, 30000);
+    log('debug sent for step', stepName, page.url());
+  } catch (e) { log('debug not sent:', e.message); }
+}
+const visText = (f, re) => safe(f, src => {
+  const rx = new RegExp(src, 'i');
+  return [...document.querySelectorAll('body *')].some(e => e.children.length === 0 && e.getClientRects().length && rx.test(e.innerText || ''));
+}, re.source);
+
+/* login with the captcha (and OTP) typed in the ERP */
+async function gstLogin(cfg, browser, page, job, step) {
+  await step('login', 'Opening the GST portal login…');
+  await page.goto(job.portal, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => {});
+  const inside = () => /\/auth\//i.test(page.url()) && !/\/login/i.test(page.url());
+  if (inside()) return;
+  await page.waitForSelector('#username', { visible: true, timeout: 45000 }).catch(() => { throw new Error('The GST portal login page did not open (the portal may be down). Try again later.'); });
+  await dismissPopups(page);
+  const typeIn = async (sel, v) => {
+    const h = await page.$(sel); if (!h) return;
+    await h.click({ clickCount: 3 }).catch(() => {}); await page.keyboard.press('Backspace').catch(() => {});
+    await safe(page, s => { const e = document.querySelector(s); if (e) e.value = ''; }, sel);
+    await h.type(v, { delay: 15 }); await h.dispose();
+  };
+  const fill = async () => {
+    await typeIn('#username', job.username); await typeIn('#user_pass', job.password);
+    await page.waitForSelector('#imgCaptcha', { visible: true, timeout: 15000 }).catch(() => {});
+    await sleep(800);
+  };
+  await fill();
+  const otpBox = () => safe(page, () => {
+    const b = [...document.querySelectorAll('input')].find(e => e.getClientRects().length && !e.disabled && /otp/i.test(`${e.id} ${e.name} ${e.placeholder} ${e.getAttribute('aria-label') || ''}`));
+    if (!b) return null; b.setAttribute('data-erp-otp', '1'); return true;
+  });
+  const loginErr = () => safe(page, () => {
+    const t = document.body ? document.body.innerText : '';
+    return (t.split('\n').find(l => /invalid\s+(user\s*name|username|password|credential)|(user\s*name|password).{0,30}(invalid|incorrect|wrong)|locked|suspended|disabled|cancell?ed registration/i.test(l)) || '').trim().slice(0, 200);
+  });
+  let seq = 0, note = '';
+  const t0 = Date.now();
+  while (!inside()) {
+    if (Date.now() - t0 > 3 * WAIT_LOGIN_MS) throw new Error('Login to the GST portal was not completed');
+    // OTP page (two-step login)
+    if (await otpBox()) {
+      seq++;
+      const p = await api(cfg, 'POST', `/helper/jobs/${job.id}/progress`, { status: 'otp', ask: 'otp', captchaSeq: seq, message: note || 'The GST portal sent an OTP to the registered mobile / e-mail — type it here.' }).catch(() => ({}));
+      if (p.cancelled) throw new Error('Cancelled in the ERP');
+      let a = null; const tw = Date.now();
+      while (!a) {
+        if (Date.now() - tw > WAIT_LOGIN_MS) throw new Error('The OTP was not typed within 5 minutes');
+        const r = await api(cfg, 'GET', `/helper/jobs/${job.id}/captcha?seq=${seq}`).catch(() => ({}));
+        if (r.cancelled) throw new Error('Cancelled in the ERP');
+        if (r.answer) a = r.answer; else await sleep(900);
+      }
+      await typeIn('[data-erp-otp="1"]', a);
+      await clickText(page, /^\s*(verify|submit|login|proceed|continue|validate)/);
+      await step('login', 'Checking the OTP…');
+      const t1 = Date.now(); note = '';
+      while (Date.now() - t1 < 25000 && !inside()) { await sleep(1000); if (await visText(page, /invalid\s+otp|otp.{0,20}(invalid|incorrect|expired)/)) { note = 'That OTP was not accepted — type it again (or the new one).'; break; } }
+      continue;
+    }
+    let img = await captchaImage(page);
+    for (let i = 0; !img && i < 8; i++) { await sleep(1000); img = await captchaImage(page); }
+    if (!img) { await sendDebug(cfg, job, page, 'login-no-captcha'); throw new Error('The captcha picture of the GST portal login could not be read. Try again.'); }
+    seq++;
+    const a = await askCaptcha(cfg, job, img, seq, note || 'Type the captcha of the GST portal login.', async () => inside());
+    if (a.done) break;
+    if (a.refresh) { await safe(page, () => { const b = document.querySelector('button[ng-click*="refreshCaptcha"]'); if (b) b.click(); }); await sleep(1500); note = ''; continue; }
+    if (!(await safe(page, () => (document.getElementById('user_pass') || {}).value))) await fill();
+    await typeIn('#captcha', a.answer);
+    const before = img;
+    await safe(page, () => { const b = [...document.querySelectorAll('button[type=submit], button')].find(e => e.getClientRects().length && /^\s*login\s*$/i.test(e.innerText || '')); if (b) b.click(); });
+    await step('login', 'Logging in to the GST portal…');
+    const t1 = Date.now(); note = '';
+    while (Date.now() - t1 < 30000) {
+      await sleep(1000);
+      if (inside() || await otpBox()) break;
+      const bad = await loginErr();
+      if (bad) throw new Error(`GST portal: ${bad} — check the GST login in the Password Manager.`);
+      if (await visText(page, /valid\s+letters|invalid\s+captcha|captcha.{0,20}(invalid|incorrect|wrong|not\s+match)/)) { note = 'That captcha was not accepted — type the new one.'; break; }
+      const now = await captchaImage(page);
+      if (now && now !== before) { note = 'That captcha was not accepted — type the new one.'; break; }
+    }
+    if (!inside() && !note && !(await otpBox())) note = 'Not logged in yet — type the captcha again.';
+  }
+  log('GST portal: logged in —', page.url());
+  // let the welcome page finish (it sets the session for the other GST sites — return.gst.gov.in)
+  await page.waitForNetworkIdle({ idleTime: 1500, timeout: 30000 }).catch(() => {});
+  await sleep(1500);
+  for (let i = 0; i < 3; i++) { await dismissPopups(page); await sleep(800); }
+}
+
+/* what the page is now: 'ok' | 'login' (sent back to the login) | 'denied' (portal refused the page) */
+async function pageState(page) {
+  const s = await safe(page, () => {
+    const vis = e => e && e.getClientRects().length > 0;
+    const t = document.body ? document.body.innerText : '';
+    return { login: vis(document.getElementById('username')) && vis(document.getElementById('user_pass')), title: document.title || '', short: t.length < 3000 ? t : '', text: t.slice(0, 400) };
+  }) || {};
+  const u = page.url();
+  if (/services\/login|\/login(\?|$)/i.test(u) || s.login) return { st: 'login', ...s, url: u };
+  if (/access\s*denied|you\s+don'?t\s+have\s+permission|request\s+rejected|requested\s+url\s+was\s+rejected/i.test(`${s.title} ${s.short}`)) return { st: 'denied', ...s, url: u };
+  return { st: 'ok', ...s, url: u };
+}
+/* open the returns dashboard: from the welcome page's own button / menu (as a person does), else by its address */
+async function toDashboard(cfg, job, page) {
+  const onDash = () => /return\.gst\.gov\.in\/returns\/auth\/dashboard/i.test(page.url());
+  const onWelcome = () => /services\.gst\.gov\.in\/services\/auth\/fowelcome/i.test(page.url());
+  const settle = async () => { await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {}); await sleep(1500); await dismissPopups(page); };
+  const state = async how => { const st = await pageState(page); log(`returns dashboard (${how}): ${st.st} — ${st.url} — ${String(st.text || '').replace(/\s+/g, ' ').slice(0, 120)}`); return st; };
+  const click = fn => safe(page, fn);
+  if (onDash()) return;
+  /* the GST portal refuses a page opened by typing its address ("Access Denied") — only its own links / buttons are
+     clicked, as a person does: the page's Back button → a link to the returns dashboard → menu Dashboard → Return Dashboard */
+  const steps = [
+    ['back button', () => click(() => { const b = [...document.querySelectorAll('button, a, input[type=button]')].find(e => e.getClientRects().length && /^\s*back\s*$/i.test(e.innerText || e.value || '')); if (!b) return false; b.click(); return true; })],
+    ['returns dashboard link', () => click(() => { const a = [...document.querySelectorAll('a')].find(e => /returns\/auth\/dashboard/i.test(e.getAttribute('href') || '') || /^\s*returns?\s*dashboard\s*$/i.test(e.textContent || '')); if (!a) return false; a.removeAttribute('target'); a.click(); return true; })],
+    ['menu Dashboard', () => click(() => { const a = [...document.querySelectorAll('a')].find(e => /services\/auth\/fowelcome/i.test(e.getAttribute('href') || '')) || [...document.querySelectorAll('header a, nav a, .navbar a')].find(e => /^\s*dashboard\s*$/i.test(e.textContent || '')); if (!a) return false; a.removeAttribute('target'); a.click(); return true; })],
+  ];
+  for (const [how, go] of onWelcome() ? [] : steps) {
+    if (!(await go())) continue;
+    await settle();
+    if (onDash()) { if ((await state(how)).st === 'ok') return; }
+    if (onWelcome()) break;   // on the welcome page: its Return Dashboard button below
+  }
+  // the welcome page: its Return Dashboard button (this is how the first visit works)
+  if (onWelcome()) {
+    const ok = await click(() => {
+      const els = [...document.querySelectorAll('a, button')].filter(e => e.getClientRects().length);
+      const b = els.find(e => /return\s*dashboard/i.test(e.innerText || '')) || els.find(e => /returns\/auth\/dashboard/i.test(e.getAttribute('href') || ''));
+      if (!b) return false; b.removeAttribute('target'); b.click(); return true;
+    });
+    if (ok) { await settle(); if (onDash() && (await state('welcome button')).st === 'ok') return; }
+    else if (!job.__dashOnce) {   // very first visit and no button: the address (worked on the first visit)
+      await page.goto(job.dashboard, { waitUntil: 'networkidle2', timeout: 90000 }).catch(() => {});
+      if (onDash() && (await state('address')).st === 'ok') return;
+    }
+  } else {
+    await page.goBack({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {}); await sleep(1500);
+    if (onDash() && (await state('history back')).st === 'ok') return;
+  }
+  const st = await state('failed');
+  await sendDebug(cfg, job, page, `dashboard-${st.st}`);
+  throw new Error(st.st === 'login' ? 'The GST portal sent the robot back to its login (picture saved in gst-debug).' : 'The GST portal did not open the returns dashboard (it refused the page — picture saved in gst-debug).');
+}
+
+/* returns dashboard → FY / quarter / month → Search */
+async function openPeriod(cfg, job, page, P) {
+  await toDashboard(cfg, job, page);
+  job.__dashOnce = true;
+  for (let i = 0; i < 2; i++) { await dismissPopups(page); await sleep(500); }
+  // the three drop-downs, found by their options
+  const tag = () => safe(page, () => {
+    const sels = [...document.querySelectorAll('select')].filter(s => s.getClientRects().length);
+    const has = (s, re) => [...s.options].some(o => re.test(o.text));
+    const fy = sels.find(s => has(s, /^\s*20\d\d\s*-\s*\d{2}\s*$/)), q = sels.find(s => has(s, /quarter/i)), m = sels.find(s => s !== q && has(s, /january|april|october/i));
+    if (fy) fy.setAttribute('data-erp', 'fy'); if (q) q.setAttribute('data-erp', 'q'); if (m) m.setAttribute('data-erp', 'm');
+    return { fy: !!fy, q: !!q, m: !!m };
+  });
+  const pick = async (key, re) => {
+    const v = await safe(page, (k, src) => { const s = document.querySelector(`select[data-erp="${k}"]`); if (!s) return null; const o = [...s.options].find(x => new RegExp(src, 'i').test(x.text)); return o ? o.value : null; }, key, re.source);
+    if (v == null) return false;
+    await page.select(`select[data-erp="${key}"]`, v); await sleep(1200); return true;
+  };
+  let t = null; const t0 = Date.now();
+  while (Date.now() - t0 < 40000) { t = await tag(); if (t && t.fy) break; await dismissPopups(page); await sleep(1000); }
+  if (!t || !t.fy) { await sendDebug(cfg, job, page, 'dashboard'); throw new Error('The returns dashboard did not open on the GST portal.'); }
+  if (!(await pick('fy', new RegExp(`^\\s*${P.fy}\\s*$`)))) throw new Error(`Financial year ${P.fy} is not in the portal's list.`);
+  await tag();
+  if (!(await pick('q', new RegExp(`quarter\\s*${P.q}\\b`)))) { await sendDebug(cfg, job, page, 'quarter'); throw new Error(`Quarter ${P.q} could not be picked for ${P.fy}.`); }
+  await tag();
+  if (!(await pick('m', new RegExp(`^\\s*${P.mon}\\s*$`)))) { await sendDebug(cfg, job, page, 'month'); throw new Error(`${P.mon} could not be picked.`); }
+  await clickText(page, /^\s*search\s*$/);
+  // the return tiles
+  const t1 = Date.now();
+  while (Date.now() - t1 < 40000) { await sleep(1000); await dismissPopups(page); if (await visText(page, /GSTR\s*-?\s*(1|2B|3B)\b/)) { await sleep(1500); return; } }
+  await sendDebug(cfg, job, page, 'tiles'); throw new Error(`The returns of ${P.label} did not show after Search.`);
+}
+
+/* the DOWNLOAD (or other) button inside the tile of one return (GSTR1 / GSTR2B) */
+/* a tile is the nearest box around the button that carries exactly one return label line ("GSTR-1", "GSTR-2B" …) */
+const clickInTile = (page, ret, btnRe) => safe(page, (r, src) => {
+  const rx = new RegExp(src, 'i');
+  const labelsIn = p => [...new Set([...p.querySelectorAll('*')].filter(e => !e.children.length)
+    .map(e => ((e.textContent || '').trim().toUpperCase().match(/^GSTR\s*-?\s*([0-9]{1,2}[A-Z]{0,2})$/) || [])[1]).filter(Boolean))];
+  const tileOf = e => { for (let p = e.parentElement; p && p !== document.body; p = p.parentElement) { const ls = labelsIn(p); if (ls.length === 1) return 'GSTR' + ls[0]; if (ls.length > 1) return null; } return null; };
+  const b = [...document.querySelectorAll('button, a, input[type=button]')].filter(e => e.getClientRects().length && rx.test((e.innerText || e.value || '').trim())).find(e => tileOf(e) === r);
+  if (!b) return false; b.click(); return true;
+}, ret, btnRe.source);
+
+/* files Chrome is saving into dir */
+function newFiles(dir, seen) { try { return fs.readdirSync(dir).filter(f => !seen.has(f) && !/\.(crdownload|tmp)$/i.test(f)); } catch { return []; } }
+async function waitFiles(dir, seen, ms) {
+  const t0 = Date.now(); let got = [];
+  while (Date.now() - t0 < ms) {
+    got = newFiles(dir, seen);
+    const busy = (() => { try { return fs.readdirSync(dir).some(f => /\.crdownload$/i.test(f)); } catch { return false; } })();
+    if (got.length && !busy) { await sleep(800); return newFiles(dir, seen); }
+    await sleep(1000);
+  }
+  return got;
+}
+async function sendFiles(cfg, job, dir, seen, files, P, kind) {
+  for (const f of files) {
+    seen.add(f);
+    const buf = fs.readFileSync(path.join(dir, f));
+    await api(cfg, 'POST', `/helper/jobs/${job.id}/file`, { period: P.period, kind, name: f, data: buf.toString('base64') }, 120000);
+    log('sent', kind, P.period, f, buf.length, 'bytes');
+  }
+}
+/* the page now on top (a click may open a new tab) */
+async function topPage(browser, page) { const ps = await browser.pages().catch(() => []); return ps[ps.length - 1] || page; }
+
+async function gstReturnFlow(cfg, browser, page, job, step) {
+  const dir = path.join(HOME, 'gst-downloads', job.id);
+  fs.mkdirSync(dir, { recursive: true });
+  const seen = new Set();
+  const cdp = await browser.target().createCDPSession();
+  await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir, eventsEnabled: true }).catch(e => log('download folder not set:', e.message));
+  /* GSTR-2B: the portal may hand the JSON to the page instead of a file — keep such answers as a fallback */
+  let lastR2b = null;
+  browser.on('targetcreated', async t => { const p = await t.page().catch(() => null); if (p) p.on('response', onResp); });
+  async function onResp(r) {
+    try {
+      if (!/gst\.gov\.in/i.test(r.url()) || !/json/i.test(r.headers()['content-type'] || '')) return;
+      const txt = await r.text(); if (txt.length < 200 || !/docdata/.test(txt)) return;
+      lastR2b = txt;
+    } catch { /* not readable */ }
+  }
+  page.on('response', onResp);
+
+  const results = [];
+  const put = (P, kind, status, message) => {
+    const i = results.findIndex(x => x.period === P.period && x.kind === kind);
+    const r = { period: P.period, kind, status, message };
+    if (i >= 0) results[i] = r; else results.push(r);
+    api(cfg, 'POST', `/helper/jobs/${job.id}/progress`, { status: 'working', message: `${P.label} ${kind === 'r1' ? 'GSTR-1' : 'GSTR-2B'}: ${message}`, results }).catch(() => {});
+  };
+  await gstLogin(cfg, browser, page, job, step);
+  const months = job.periods.map(periodInfo);
+  let fatal = '';
+  for (const P of months) {
+    try {
+      await step('working', `${P.label}: opening the returns dashboard…`);
+      await openPeriod(cfg, job, page, P);
+      if (job.what.includes('r1')) {
+        try {
+          const asked = (job.r1Req || {})[P.period];   // asked for earlier
+          const r = await r1Download(cfg, job, browser, page, P, dir, seen);
+          if (r === true) put(P, 'r1', 'saved', 'downloaded');
+          else put(P, 'r1', 'requested', `${asked ? 'the portal has not finished the file yet' : 'file requested — the portal makes it in about 20 minutes'}${r.msg ? ` (portal: ${r.msg.slice(0, 160)})` : ''}`);
+        }
+        catch (e) { put(P, 'r1', 'error', e.message); }
+        if (job.what.includes('r2b')) await openPeriod(cfg, job, page, P);
+      }
+      if (job.what.includes('r2b')) {
+        try { lastR2b = null; const m = await r2bDownload(cfg, job, browser, page, P, dir, seen, () => lastR2b); put(P, 'r2b', m ? 'saved' : 'none', m || 'not available'); }
+        catch (e) { put(P, 'r2b', /not\s+(yet\s+)?generated|not available/i.test(e.message) ? 'none' : 'error', e.message); }
+      }
+    } catch (e) {
+      if (/sent the robot back|did not open the returns dashboard|Cancelled/i.test(e.message)) { fatal = e.message; break; }
+      job.what.forEach(k => put(P, k, 'error', e.message));
+    }
+  }
+  try { await cdp.detach(); } catch { /* closed */ }
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  return { results, error: fatal };
+}
+
+/* GSTR-1: tile Download → "Generate JSON file to download" → the portal's pop-up "Download of JSON file" shows either
+   the file links (ready → download each) or a message (asked for / still being made → the month stays in progress).
+   Pressing Generate again while the file is being made, or once it is made, only shows that pop-up again.
+   → true (downloaded) | { msg } (not ready) */
+async function r1Download(cfg, job, browser, page, P, dir, seen) {
+  if (!(await clickInTile(page, 'GSTR1', /^\s*download\s*$/))) {
+    if (await clickInTile(page, 'GSTR1', /prepare/)) throw new Error('GSTR-1 is not filed for this month (no download on the portal).');
+    await sendDebug(cfg, job, page, 'r1-tile'); throw new Error('The GSTR-1 Download button was not found.');
+  }
+  await page.waitForNetworkIdle({ idleTime: 1000, timeout: 20000 }).catch(() => {});
+  await sleep(1500);
+  const pg = await topPage(browser, page);
+  await dismissPopups(pg);
+  const LINK = /click\s*here\s*to\s*download|download\s*-?\s*file\s*\d|^\s*file\s*\d+\s*$/i;
+  // what the pop-up (or the page) shows now
+  const look = () => safe(pg, src => {
+    const rx = new RegExp(src, 'i'), vis = e => e && e.getClientRects().length > 0;
+    const box = document.getElementById('gstrdownload');
+    const area = vis(box) ? box : document;
+    const links = [...area.querySelectorAll('a, button')].filter(e => vis(e) && rx.test(e.innerText || ''));
+    links.forEach((e, k) => e.setAttribute('data-erp-file', String(k)));
+    const msg = vis(box) ? ((box.querySelector('.modal-body') || box).innerText || '').replace(/\s+/g, ' ').replace(/download of json file|close|×/gi, '').trim() : '';
+    return { n: links.length, msg, modal: vis(box) };
+  }, LINK.source);
+  let st = await look();
+  if (!st.n) {
+    const gen = await safe(pg, () => { const b = [...document.querySelectorAll('button, a, input[type=button]')].find(e => e.getClientRects().length && /generate\s*json/i.test(e.innerText || e.value || '') && !/e-?invoice/i.test(e.innerText || '')); if (!b) return false; b.click(); return true; });
+    if (!gen) { await sendDebug(cfg, job, pg, 'r1-page'); throw new Error('The GSTR-1 "Generate JSON file" button was not found.'); }
+    const t1 = Date.now();
+    while (Date.now() - t1 < 25000) { await sleep(1200); st = await look(); if (st.n || (st.modal && st.msg)) break; }
+    if (!st.n) await sleep(2500), st = await look();   // the links may follow the message
+  }
+  log(`GSTR-1 ${P.period}: ${st.n} file link(s); pop-up: ${st.msg || '(none)'}`);
+  if (!st.n) {
+    await sendDebug(cfg, job, pg, 'r1-not-ready');
+    await safe(pg, () => { const c = [...document.querySelectorAll('#gstrdownload button')].find(b => /close/i.test(b.innerText || '')); if (c) c.click(); });
+    return { msg: st.msg };
+  }
+  // download every file: "Click here to download - File n" is opened in a new tab, as the browser does for the user
+  // (the portal answers it with a redirect to the file, which Chrome saves into the download folder).
+  // Not clicked in this tab: the returns page's own router would take the link over and nothing is downloaded.
+  for (let i = 0; i < st.n; i++) {
+    const href = await safe(pg, k => { const a = document.querySelector(`[data-erp-file="${k}"]`); return a ? a.href || '' : ''; }, i);
+    let got = [];
+    if (href && /^https?:/i.test(href)) {
+      const tab = await browser.newPage();
+      tab.on('response', r => { try { const u = new URL(r.url()); log(`GSTR-1 file ${i + 1}: ${r.status()} ${u.host}${u.pathname.slice(0, 60)} ${(r.headers()['content-type'] || '').slice(0, 40)}`); } catch { /* ignore */ } });
+      await tab.goto(href, { waitUntil: 'load', timeout: 60000, referer: pg.url() }).catch(e => log('file tab:', e.message.slice(0, 120)));   // a download "aborts" the load — expected
+      got = await waitFiles(dir, seen, 90000);
+      if (!got.length) await sendDebug(cfg, job, tab, 'r1-file-tab');
+      await tab.close().catch(() => {});
+    }
+    if (!got.length) {   // else: click the link itself (opens its own tab / download)
+      await safe(pg, k => { const a = document.querySelector(`[data-erp-file="${k}"]`); if (a) a.click(); }, i);
+      got = await waitFiles(dir, seen, 90000);
+    }
+    if (!got.length) { await sendDebug(cfg, job, pg, 'r1-file'); throw new Error('The GSTR-1 file did not download.'); }
+    await sendFiles(cfg, job, dir, seen, got, P, 'r1');
+  }
+  await safe(pg, () => { const c = [...document.querySelectorAll('#gstrdownload button')].find(b => /close/i.test(b.innerText || '')); if (c) c.click(); });
+  if (pg !== page) await pg.close().catch(() => {});
+  return true;
+}
+
+/* GSTR-2B: tile Download → JSON button → file (or the JSON the page fetched). Returns a message, '' = none */
+async function r2bDownload(cfg, job, browser, page, P, dir, seen, fetched) {
+  if (!(await clickInTile(page, 'GSTR2B', /^\s*download\s*$/))) {
+    if (await visText(page, /GSTR-?2B.{0,80}not\s+(yet\s+)?generated|not\s+(yet\s+)?generated.{0,80}GSTR-?2B/)) throw new Error('GSTR-2B is not generated yet for this month.');
+    await sendDebug(cfg, job, page, 'r2b-tile'); throw new Error('The GSTR-2B Download button was not found.');
+  }
+  await sleep(5000);
+  const pg = await topPage(browser, page);
+  await dismissPopups(pg);
+  if (await visText(pg, /not\s+(yet\s+)?generated|no\s+record|not\s+available/)) {
+    const t = (await safe(pg, () => (document.body.innerText.split('\n').find(l => /not\s+(yet\s+)?generated|no\s+record|not\s+available/i.test(l)) || ''))) || '';
+    if (pg !== page) await pg.close().catch(() => {});
+    throw new Error(`GSTR-2B: ${t.trim().slice(0, 160) || 'not generated yet'}`);
+  }
+  const clickJson = () => safe(pg, () => { const b = [...document.querySelectorAll('button, a, input[type=button]')].find(e => e.getClientRects().length && /json/i.test(e.innerText || e.value || '')); if (!b) return false; b.click(); return true; });
+  let ok = false; const t0 = Date.now();
+  while (Date.now() - t0 < 20000 && !(ok = await clickJson())) await sleep(1000);
+  if (!ok) { await sendDebug(cfg, job, pg, 'r2b-page'); throw new Error('The GSTR-2B JSON download button was not found.'); }
+  let got = await waitFiles(dir, seen, 60000);
+  if (!got.length) {   // some pages show links after "generate"
+    await safe(pg, () => { const l = [...document.querySelectorAll('a, button')].find(e => e.getClientRects().length && /click\s*here\s*to\s*download|download\s*-?\s*file/i.test(e.innerText || '')); if (l) l.click(); });
+    got = await waitFiles(dir, seen, 45000);
+  }
+  if (got.length) await sendFiles(cfg, job, dir, seen, got, P, 'r2b');
+  else if (fetched()) { await api(cfg, 'POST', `/helper/jobs/${job.id}/file`, { period: P.period, kind: 'r2b', name: `GSTR2B_${P.period}.json`, data: Buffer.from(fetched()).toString('base64') }, 120000); }
+  else { await sendDebug(cfg, job, pg, 'r2b-file'); throw new Error('The GSTR-2B JSON did not download.'); }
+  if (pg !== page) await pg.close().catch(() => {});
+  return 'downloaded';
+}
+
 /* GST taxpayer search (public page, no login): open it, fill the GSTIN, close notices, the user types the captcha
    and clicks Search, then the details shown are read and sent to the ERP form. */
 const GST_LABELS = {
@@ -785,7 +1166,7 @@ async function loop() {
     try {
       const { job } = await api(cfg, 'GET', '/helper/next', null, 35000);
       if (!job) continue;
-      log('job', job.id, job.kind || 'generate', '—', job.kind === 'gst' ? job.gstin : job.kind && job.kind !== 'generate' ? job.ewbNo : `${job.docs.length} e-way bill(s)`);
+      log('job', job.id, job.kind || 'generate', '—', job.kind === 'gstret' ? job.periods.join(',') : job.kind === 'gst' ? job.gstin : job.kind && job.kind !== 'generate' ? job.ewbNo : `${job.docs.length} e-way bill(s)`);
       try { await module.exports.lastBrowser?.close(); } catch { /* already closed */ }
       menuLogged = false;
       let out;

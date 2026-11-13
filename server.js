@@ -57,6 +57,8 @@ app.use('/api/delivery-challans', require('./api/deliveryChallans'));
 app.use('/api/grn',               require('./api/grn'));
 app.use('/api/returns',           require('./api/returns'));
 app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
+app.use('/api/mail',              require('./api/mail'));           // e-mail a printed document (PDF) with To / CC and files
+app.use('/api/sign',              require('./api/signing'));        // my signature + who signed a document (prepared / reviewed / approved)
 app.use('/api/warranty-certs',    require('./api/warrantyCerts'));   // Warranty Certificates
 app.use('/api/completion-certs',  require('./api/completionCerts')); // Completion Certificates
 app.use('/api/insurance',         require('./api/insurance'));       // Insurance policies + claims
@@ -66,6 +68,7 @@ app.use('/api/gdn',               require('./api/gdn'));
 app.use('/api/passwords',         require('./api/passwords'));
 app.use('/api/bank-ifsc',         require('./api/bankIfsc'));   // IFSC → bank, branch, address (read from ifsc.bankifsccode.com)
 app.use('/api/eway-helper',       require('./api/ewayHelper'));   // pairs the E-Way Helper on user PCs and hands it e-way jobs
+app.use('/api/gst-portal',        require('./api/gstPortal'));    // GSTR-1 / GSTR-2B as downloaded from the GST portal
 app.use('/api/crm',               require('./api/crm'));
 app.use('/api/deposits',          require('./api/deposits'));
 app.use('/api/approvals',         require('./api/approvals'));
@@ -91,6 +94,11 @@ app.use('/api/sap/finance',           require('./api/sap/finance'));
 app.use('/api/sap/tasks',             require('./api/sap/tasks'));
 
 // Serve React app for all non-API routes
+/* the Android app: download (super-erp.apk) and update check (version.json) — files in mobile/release */
+app.use('/app/android', express.static(path.join(__dirname, 'mobile', 'release'), {
+  setHeaders: (res, fp) => { if (fp.endsWith('.apk')) res.setHeader('Content-Type', 'application/vnd.android.package-archive'); res.setHeader('Cache-Control', 'no-store'); },
+}));
+
 app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));

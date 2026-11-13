@@ -4,6 +4,7 @@
 import axios from 'axios';
 import QRCode from 'qrcode';
 import { ewayQrText } from './BetaEwayJson';
+import { previewFrame, previewPdf, withTeal, prodText, signHtml, finalPdf } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -22,7 +23,7 @@ async function logoOf(co) {
     return await new Promise(res => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(b); });
   } catch { return ''; }
 }
-function printHtml(html, id, collect) {
+function printHtml(html, id, collect, meta) {
   document.getElementById(id)?.remove();
   const fr = document.createElement('iframe');
   fr.id = id; fr.setAttribute('aria-hidden', 'true');
@@ -34,23 +35,23 @@ function printHtml(html, id, collect) {
   // collect: give back the laid-out page (for one PDF with other documents) instead of printing it
   return new Promise(res => setTimeout(() => {
     fillPage(w.document);
-    if (collect) { const page = '<!DOCTYPE html>' + w.document.documentElement.outerHTML; fr.remove(); res(page); return; }
-    w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); res();
+    if (collect) { const page = '<!DOCTYPE html>' + w.document.documentElement.outerHTML; fr.remove(); res({ page, meta: meta || {} }); return; }   // for one PDF with other documents
+    previewFrame(fr, undefined, meta); res();
   }, 400));
 }
 
 /* print several documents (each a laid-out page from collect: true) as ONE PDF — made on the server */
 export async function printMerged(pages) {
-  const r = await axios.post('/api/print-merge', { htmls: pages }, { responseType: 'blob' });
-  const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
-  document.getElementById('merge-print-frame')?.remove();
-  const fr = document.createElement('iframe');
-  fr.id = 'merge-print-frame'; fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0';
-  fr.onload = () => setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch { window.open(url, '_blank'); } }, 300);
-  fr.src = url;
-  document.body.appendChild(fr);
-  setTimeout(() => { fr.remove(); URL.revokeObjectURL(url); }, 10 * 60 * 1000);
+  // pages: laid-out pages from collect: true — { page, meta } (each document keeps its own signatures)
+  const docs = pages.map(p => (typeof p === 'string' ? { page: p, meta: {} } : p));
+  const signs = docs.map(x => x.meta?.sign && { ...x.meta.sign, label: ((String(x.page).match(/<title>([^<]*)<\/title>/) || [])[1] || '').replace(/&amp;/g, '&') }).filter(Boolean);
+  const build = async () => {
+    const htmls = await Promise.all(docs.map(x => signHtml(withTeal(x.page), x.meta?.sign)));
+    const r = await axios.post('/api/print-merge', { htmls }, { responseType: 'blob' });
+    return finalPdf(r.data, signs[0]);
+  };
+  const title = docs.map(x => ((String(x.page).match(/<title>([^<]*)<\/title>/) || [])[1] || '').replace(/&amp;/g, '&')).filter(Boolean).join(' + ') || 'Documents';
+  previewPdf(await build(), title, undefined, { html: docs.map(x => x.page).join(''), mail: docs[0]?.meta?.mail, sign: signs[0], signs, rebuild: build });
 }
 /* grow the blank row under the goods so a one-page challan reaches the bottom of the A4 page */
 /* the delivery challans of a sales bill: made against it, or made first and tied to it later */
@@ -164,7 +165,8 @@ tr.tot td { font-weight:bold; background:#F2F2F2; }
 .notes { min-height:12mm; color:#000; font-weight:bold; font-size:8.4pt; }
 .sg { vertical-align:top !important; } .sg b { font-size:9pt; } .sg .sp { height:16mm; }
 .sg .sl { font-size:8.4pt; color:#000; font-weight:bold; }
-.sg .tri { display:flex; justify-content:space-between; font-size:8.4pt; color:#000; font-weight:bold; }
+.sg .tri { display:flex; align-items:flex-end; gap:6px; font-size:8.4pt; color:#000; font-weight:bold; }
+.sg .tri span { flex:1 1 0; text-align:center; }
 .sec.c { text-align:center; }
 .foot { text-align:center; padding:4px 0 0; font-size:8.4pt; color:#000; font-weight:bold; }
 .pby { display:flex; justify-content:space-between; font-size:7.6pt; color:#000; font-weight:bold; margin-top:3px; }
@@ -247,5 +249,17 @@ ${withValue ? `<table>
 </div>
 <div class="pby"><span>Printed by Super ERP System &nbsp;|&nbsp; Created by : ${esc(createdBy)} &nbsp;|&nbsp; Printed by : ${esc(printedBy)}  &nbsp;|&nbsp; ${esc(now())}</span></div>
 </body></html>`;
-  return printHtml(html, `dc-print-frame${collect ? `-${dc.dcId}` : ''}`, collect);
+  // e-mail and e-signatures
+  const poRef = [dc.clientOrderNo, dc.clientPoDate && `dt. ${d(dc.clientPoDate)}`].filter(Boolean).join(' ');
+  const meta = {
+    sign: dc.dcId ? { type: 'deliveryChallan', id: dc.dcId, perm: 'salesBill' } : null,
+    reprint: () => printDC({ dc, company, user, withValue: wv }),
+    mail: {
+      subject: `Material Dispatched – Delivery Challan ${dc.dcNo || dc.dcId}${dc.clientOrderNo ? ` against your PO ${poRef}` : ''} – ${prodText(items.map(it => it.description || it.itemName))}`,
+      message: `Dear Sir / Madam,\n\nWe have dispatched the material${dc.clientOrderNo ? ` against your purchase order ${poRef}` : ''} under our Delivery Challan ${dc.dcNo || dc.dcId}${dc.dcDate ? ` dated ${d(dc.dcDate)}` : ''}${dc.vehicleNo ? `, vehicle no. ${dc.vehicleNo}` : ''}.\n\nThe delivery challan is attached. Kindly arrange to receive the material and share the signed copy / receipt with us.`,
+      summary: [['Delivery challan', `${dc.dcNo || dc.dcId}${dc.dcDate ? `  ·  ${d(dc.dcDate)}` : ''}`], ['Your PO', poRef], ['Our sales order', dc.orderNo || ''],
+        ['Material', items.map(it => `${it.description || it.itemName} — ${QTY.format(n(it.qty))} ${it.unit || ''}`.trim()).join('\n')], ['Vehicle', dc.vehicleNo || ''], ['E-way bill', dc.ewayBillNo || '']],
+    },
+  };
+  return printHtml(html, `dc-print-frame${collect ? `-${dc.dcId}` : ''}`, collect, meta);
 }

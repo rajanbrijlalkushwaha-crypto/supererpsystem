@@ -11,6 +11,7 @@ import Login from './pages/auth/Login';
 import BetaLogin from './pages/beta/BetaLogin';
 import BetaDashboard from './pages/beta/BetaDashboard';
 import BetaShell from './components/beta/BetaShell';
+import { AppNav } from './appBridge';
 import { useUiVersion, getUiVersion } from './utils/uiVersion';
 import ForgotPasswordCompany from './pages/auth/ForgotPasswordCompany';
 import ResetPassword from './pages/auth/ResetPassword';
@@ -426,6 +427,7 @@ function App() {
       <VendorAuthProvider>
         <CompanyProvider>
           <Router>
+            <AppNav />
             <Routes>
               {/* Public routes */}
               <Route path="/login"                    element={<Login />} />

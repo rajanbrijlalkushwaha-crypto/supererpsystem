@@ -1,5 +1,6 @@
 /* HR prints — Joining / Appointment letter with terms & conditions, Company Asset Handover Agreement, Payslip.
  * Same bordered A4 look as the Sales Order / Delivery Challan; each fills the page (data-fill) and opens in the preview. */
+import axios from 'axios';
 import { brandLine } from '../../utils/printBranding';
 import { salaryFor } from './BetaHRKit';
 import { escHtml as esc, nlHtml as nl, inrText as inr, pageHtml as page, showPage as printPage, LETTER_CSS, logoOf, longDate, nowText, dmy, inWords } from './BetaCertPrint';
@@ -294,4 +295,197 @@ ${rev.note ? `<p>${nl(rev.note)}</p>` : ''}</td></tr></tbody></table>
 ${jur(co)}
 </div>
 <div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`));
+}
+
+/* ───────── Joining form (blank to hand to a new joiner, or filled from an employee's record) ─────────
+   The employee fills / checks it by hand and signs; HR enters it in the system and uploads the signed copy. */
+const FORM_CSS = `
+.doc > table > thead > tr > td { border:1px solid #000; padding:3px 6px; }
+.fm td.k { width:20%; color:#222; white-space:nowrap; } .fm td { height:7.5mm; vertical-align:middle !important; }
+.fm td.v { font-weight:bold; } .fm .tall td { height:13mm; vertical-align:top !important; }
+.grid th { font-size:7.6pt; } .grid td { height:7mm; }
+.photo { width:30mm; height:36mm; border:1px dashed #000; display:flex; align-items:center; justify-content:center; text-align:center; font-size:7.4pt; color:#444; margin-left:auto; }
+.chk { columns:2; font-size:8.4pt; line-height:1.9; } .chk span { display:block; } .chk i { display:inline-block; width:10px; height:10px; border:1px solid #000; margin-right:6px; vertical-align:-1px; }
+.decl { font-size:8.4pt; line-height:1.5; text-align:justify; }
+.sg3 td { height:30mm; vertical-align:top !important; }
+.sg3 .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; }
+.sg3 .row3 { display:flex; align-items:flex-end; gap:6px; } .sg3 .row3 b { flex:1 1 0; text-align:center; }`;
+const fv = v => (v == null || String(v).trim() === '' ? '' : esc(v));
+const rowKV = (pairs) => `<tr>${pairs.map(([k, v, span]) => `<td class="k">${k}</td><td class="v"${span ? ` colspan="${span}"` : ''}>${v || ''}</td>`).join('')}</tr>`;
+const blankRows = (n, cols) => Array.from({ length: n }, () => `<tr>${Array.from({ length: cols }, () => '<td></td>').join('')}</tr>`).join('');
+
+export async function printJoiningForm({ emp, company, user }) {
+  const co = company || {}, e = emp || {};
+  const coName = esc(co.companyName || co.name);
+  const title = e.name ? `Joining Form ${e.empCode || ''} ${e.name}` : 'Joining Form (blank)';
+  printPage(page(title, CSS + FORM_CSS, `<div class="doc">
+${await head(co, 'EMPLOYEE JOINING FORM', 'TO BE FILLED IN BY THE EMPLOYEE IN CAPITAL LETTERS', [['Employee code', e.empCode || ' '], ['Date of joining', dmy(e.joiningDate) || ' '], ['Form date', dmy(new Date())]])}
+<table class="fm"><colgroup><col style="width:20%"><col><col style="width:34mm"></colgroup><tbody>
+  <tr><td class="sec" colspan="3">1. Personal details</td></tr>
+  <tr><td class="k">Full name</td><td class="v">${fv(e.name)}</td><td rowspan="5" style="vertical-align:middle !important"><div class="photo">Paste recent<br>passport-size<br>photograph</div></td></tr>
+  <tr><td class="k">Father's / husband's name</td><td class="v">${fv(e.fatherName)}</td></tr>
+  <tr><td class="k">Date of birth</td><td class="v">${dmy(e.dob) || ''}</td></tr>
+  <tr><td class="k">Gender / marital status</td><td class="v">${[fv(e.gender), fv(e.maritalStatus)].filter(Boolean).join(' / ')}</td></tr>
+  <tr><td class="k">Blood group / nationality</td><td class="v">${[fv(e.bloodGroup), fv(e.nationality)].filter(Boolean).join(' / ')}</td></tr>
+</tbody></table>
+<table class="fm"><colgroup><col style="width:20%"><col style="width:30%"><col style="width:20%"><col></colgroup><tbody>
+  <tr><td class="sec" colspan="4">2. Contact</td></tr>
+  ${rowKV([['Mobile', fv(e.mobile)], ['Alternate mobile', fv(e.altMobile)]])}
+  ${rowKV([['Personal e-mail', fv(e.email), 3]])}
+  <tr class="tall"><td class="k">Present address</td><td class="v" colspan="3">${nl(e.currentAddress || '')}</td></tr>
+  <tr class="tall"><td class="k">Permanent address</td><td class="v" colspan="3">${nl(e.permanentAddress || '')}</td></tr>
+  <tr><td class="sec" colspan="4">3. Job (filled by HR)</td></tr>
+  ${rowKV([['Designation', fv(e.designation)], ['Department', fv(e.department)]])}
+  ${rowKV([['Nature of employment', fv(e.employmentType)], ['Reporting to', fv(e.reportingTo)]])}
+  ${rowKV([['Work location', fv(e.workLocation)], ['Salary (gross / month)', e.salary ? inr(gross(e.salary)) : '']])}
+  <tr><td class="sec" colspan="4">4. Identity &amp; statutory</td></tr>
+  ${rowKV([['PAN', fv(e.pan)], ['Aadhaar', fv(e.aadhaar)]])}
+  ${rowKV([['UAN', fv(e.uan)], ['PF No.', fv(e.pfNo)]])}
+  ${rowKV([['ESIC No.', fv(e.esicNo)], ['Driving licence No.', fv(e.drivingLicence)]])}
+  <tr><td class="sec" colspan="4">5. Bank account (for salary)</td></tr>
+  ${rowKV([['Bank name', fv(e.bankName)], ['Branch', fv(e.bankBranch)]])}
+  ${rowKV([['Account No.', fv(e.bankAccount)], ['IFSC', fv(e.ifsc)]])}
+  ${rowKV([['Account holder', fv(e.accountHolder || e.name), 3]])}
+</tbody></table>
+<table class="grid"><colgroup><col style="width:28px"><col style="width:26%"><col><col style="width:12%"><col style="width:13%"></colgroup>
+  <thead><tr><td class="sec" colspan="5">6. Education</td></tr><tr><th>Sl</th><th>Qualification</th><th>School / college / university</th><th>Year</th><th>% / grade</th></tr></thead>
+  <tbody>${e.qualification ? `<tr><td class="c">1</td><td class="v"><b>${esc(e.qualification)}</b></td><td></td><td></td><td></td></tr>${blankRows(3, 5)}` : blankRows(4, 5)}</tbody></table>
+<table class="grid"><colgroup><col style="width:28px"><col style="width:26%"><col style="width:18%"><col style="width:11%"><col style="width:11%"><col style="width:12%"><col></colgroup>
+  <thead><tr><td class="sec" colspan="7">7. Previous employment (latest first)</td></tr><tr><th>Sl</th><th>Company</th><th>Designation</th><th>From</th><th>To</th><th>Last salary</th><th>Reason for leaving</th></tr></thead>
+  <tbody>${blankRows(3, 7)}</tbody></table>
+<table class="grid"><colgroup><col style="width:28px"><col style="width:32%"><col style="width:16%"><col style="width:16%"><col></colgroup>
+  <thead><tr><td class="sec" colspan="5">8. Family / emergency contact &amp; nominee</td></tr><tr><th>Sl</th><th>Name</th><th>Relation</th><th>Mobile</th><th>Nominee? (PF / gratuity share %)</th></tr></thead>
+  <tbody>${e.emergencyName ? `<tr><td class="c">1</td><td><b>${esc(e.emergencyName)}</b></td><td></td><td><b>${esc(e.emergencyMobile || '')}</b></td><td></td></tr>${blankRows(2, 5)}` : blankRows(3, 5)}</tbody></table>
+<table><tbody><tr><td class="sec">9. Documents attached (tick)</td></tr>
+  <tr><td><div class="chk"><span><i></i>Aadhaar card copy</span><span><i></i>PAN card copy</span><span><i></i>2 passport-size photographs</span><span><i></i>Education certificates</span>
+    <span><i></i>Experience / relieving letter</span><span><i></i>Last 3 salary slips</span><span><i></i>Cancelled cheque / bank passbook</span><span><i></i>Address proof</span></div></td></tr>
+  <tr><td class="sec">10. Declaration</td></tr>
+  <tr><td class="decl">I declare that the information given above is true and complete. I will inform ${coName} in writing of any change in it. I understand that any false information
+    may lead to the cancellation of my appointment. I agree to follow the rules, policies and code of conduct of the company.</td></tr></tbody></table>
+<table class="sg3"><colgroup><col style="width:40%"><col></colgroup><tbody><tr>
+  <td><div class="box"><b>Employee</b><div style="font-size:8pt">Place: ____________________ &nbsp; Date: ______________</div><b>Signature of the employee</b></div></td>
+  <td><div class="box"><b style="text-align:right">For office use — ${coName}</b><div style="font-size:8pt">Employee code: __________ &nbsp; Entered in the system on: ______________</div>
+    <div class="row3"><b>Prepared By</b><b>Verified By</b><b>Authorised Signatory</b></div></div></td>
+</tr></tbody></table>
+${jur(co)}
+</div>
+<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`));
+}
+
+/* ───────── Asset issue form (blank, filled by hand when assets are given; entered in the system afterwards) ───────── */
+export async function printAssetIssueForm({ emp, settings, company, user }) {
+  const co = company || {}, e = emp || {};
+  const coName = esc(co.companyName || co.name);
+  printPage(page(e.name ? `Asset Issue Form ${e.empCode || ''} ${e.name}` : 'Asset Issue Form (blank)', CSS + FORM_CSS, `<div class="doc">
+${await head(co, 'ASSET ISSUE FORM', 'COMPANY ASSETS GIVEN TO THE EMPLOYEE FOR OFFICIAL USE', [['Form No.', ' '], ['Date', e.name ? dmy(new Date()) : ' ']])}
+<table class="fm"><colgroup><col style="width:20%"><col style="width:30%"><col style="width:20%"><col></colgroup><tbody>
+  <tr><td class="sec" colspan="4">Employee</td></tr>
+  ${rowKV([['Name', fv(e.name)], ['Employee code', fv(e.empCode)]])}
+  ${rowKV([['Designation', fv(e.designation)], ['Department', fv(e.department)]])}
+  ${rowKV([['Mobile', fv(e.mobile)], ['Purpose / site', '']])}
+</tbody></table>
+<table class="grid"><colgroup><col style="width:28px"><col style="width:13%"><col style="width:21%"><col style="width:20%"><col style="width:17%"><col style="width:10%"><col></colgroup>
+  <thead><tr><td class="sec" colspan="7">Assets issued</td></tr><tr><th>Sl</th><th>Type</th><th>Asset / make &amp; model</th><th>Serial / IMEI / SIM / Reg. No.</th><th>Accessories</th><th>Condition</th><th>Value ₹</th></tr></thead>
+  <tbody>${blankRows(7, 7)}<tr class="tot"><td colspan="6" class="r">Total value</td><td></td></tr></tbody></table>
+<table><tbody><tr><td class="sec">Terms of use</td></tr><tr><td class="txt">${settings?.assetTerms ? terms(settings.assetTerms) : `<ol class="tc">
+  <li>The asset(s) are company property and are given only for official work.</li><li>I will keep them safe and in good condition and will not lend them to anyone.</li>
+  <li>Loss or damage due to negligence will be recovered from me at the value shown above.</li><li>I will return all asset(s) with accessories when asked, on transfer, or on leaving the company — before my full &amp; final settlement.</li></ol>`}</td></tr></tbody></table>
+<table class="sg3"><colgroup><col style="width:40%"><col></colgroup><tbody><tr>
+  <td><div class="box"><b>Received by the employee</b><div style="font-size:8pt">I have received the above asset(s) in the stated condition and agree to the terms of use.<br>Date: ______________</div><b>Signature of the employee</b></div></td>
+  <td><div class="box"><b style="text-align:right">Issued by, for ${coName}</b><div style="font-size:8pt">Entered in the system on: ______________</div>
+    <div class="row3"><b>Prepared By</b><b>Verified By</b><b>Authorised Signatory</b></div></div></td>
+</tr></tbody></table>
+<table class="grid"><colgroup><col style="width:28px"><col style="width:30%"><col style="width:15%"><col style="width:20%"><col></colgroup>
+  <thead><tr><td class="sec" colspan="5">Return of assets (filled when returned)</td></tr><tr><th>Sl</th><th>Asset</th><th>Returned on</th><th>Condition</th><th>Received by (name &amp; signature)</th></tr></thead>
+  <tbody>${blankRows(3, 5)}</tbody></table>
+${jur(co)}
+</div>
+<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`));
+}
+
+/* ───────── Employee ID card: 54 × 86 mm (CR80, vertical), front + back side by side, cut along the dotted lines ───────── */
+const ID_CSS = `
+body { font-family:Arial, Helvetica, sans-serif; }
+.idrow { display:flex; gap:10mm; justify-content:center; margin:0 0 8mm; break-inside:avoid; page-break-inside:avoid; }
+.idc { width:54mm; height:85.6mm; border:0.3mm dashed #888; border-radius:3mm; overflow:hidden; position:relative; display:flex; flex-direction:column; background:#fff; color:#000; }
+.idc .bar { height:2.4mm; background:#03444f; flex-shrink:0; } .idc .bar.b { margin-top:auto; }
+.idc .top { display:flex; align-items:center; gap:2mm; padding:2mm 2.5mm 1.5mm; border-bottom:0.25mm solid #000; }
+.idc .top img { width:9mm; height:9mm; object-fit:contain; flex-shrink:0; }
+.idc .top .cn { font-size:7.6pt; font-weight:bold; line-height:1.15; }
+.idc .tt { text-align:center; font-size:6.4pt; font-weight:bold; letter-spacing:1.4px; padding:1.2mm 0 0; }
+.idc .ph { width:22mm; height:26mm; margin:1.6mm auto 1.4mm; border:0.3mm solid #000; display:flex; align-items:center; justify-content:center; font-size:6pt; color:#555; text-align:center; overflow:hidden; }
+.idc .ph img { width:100%; height:100%; object-fit:cover; }
+.idc .nm { text-align:center; font-size:9.6pt; font-weight:bold; line-height:1.1; padding:0 2mm; }
+.idc .ds { text-align:center; font-size:7pt; margin-top:0.6mm; padding:0 2mm; }
+.idc table.kv2 { width:calc(100% - 5mm); margin:1.6mm 2.5mm 0; border-collapse:collapse; font-size:6.6pt; }
+.idc table.kv2 td { padding:0.35mm 0; vertical-align:top; border:0 !important; } .idc table.kv2 td:first-child { width:42%; color:#333; } .idc table.kv2 td:last-child { font-weight:bold; }
+.idc .sg { margin-top:auto; padding:0 2.5mm 1.2mm; text-align:right; font-size:6.4pt; font-weight:bold; }
+.idc .sg span { display:inline-block; text-align:center; min-width:22mm; }
+.idc .sg .esig-i { height:7mm !important; margin:0 !important; } .idc .sg .esig-i img { max-height:7mm !important; }
+.idc .sg .esig-n { font-size:5.6pt !important; min-height:0 !important; margin:0 !important; } .idc .sg .esig-d { display:none !important; }
+.idc .bk { padding:2.5mm; font-size:6.6pt; line-height:1.35; display:flex; flex-direction:column; gap:1.6mm; flex:1; }
+.idc .bk h4 { margin:0; font-size:6.4pt; letter-spacing:1px; border-bottom:0.25mm solid #000; padding-bottom:0.6mm; }
+.idc .bk .qr { display:flex; justify-content:center; } .idc .bk .qr img { width:19mm; height:19mm; }
+.idc .bk .ft { margin-top:auto; font-size:6pt; text-align:center; border-top:0.25mm solid #000; padding-top:1mm; }
+.idhint { font-size:8pt; color:#444; text-align:center; margin-bottom:5mm; }
+@media print { .idhint { display:none; } }`;
+
+async function fileDataUrl(emp, f, companyId) {
+  try {
+    const b = (await axios.get(`/api/hr/employees/${emp.id}/file/${encodeURIComponent(f.fileName)}`, { params: { companyId }, responseType: 'blob' })).data;
+    return await new Promise(res => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = () => res(''); rd.readAsDataURL(b); });
+  } catch { return ''; }
+}
+/* the employee's photo: the latest file uploaded as "Photo — …" (an image) */
+export const photoFileOf = e => [...(e?.files || [])].reverse().find(f => /^photo\b/i.test(String(f.name || '')) && /\.(jpe?g|png|webp|gif)$/i.test(String(f.fileName || f.name || '')));
+
+export async function printIdCards({ emps, company, user }) {
+  const co = company || {}, list = (Array.isArray(emps) ? emps : [emps]).filter(Boolean);
+  const companyId = co.companyId;
+  const logo = await logoOf(co);
+  const QRCode = (await import('qrcode')).default;
+  const issued = new Date(), valid = new Date(issued); valid.setFullYear(valid.getFullYear() + 1); valid.setDate(valid.getDate() - 1);
+  const coAddr = esc([co.address, co.city, [co.state, co.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '));
+  const cards = await Promise.all(list.map(async e => {
+    const pf = photoFileOf(e);
+    const photo = pf ? await fileDataUrl(e, pf, companyId) : '';
+    const qr = await QRCode.toDataURL(`${e.empCode || ''} | ${e.name || ''} | ${co.companyName || ''}`, { margin: 0, width: 220 }).catch(() => '');
+    return `<div class="idrow">
+  <div class="idc">
+    <div class="bar"></div>
+    <div class="top">${logo ? `<img src="${logo}" alt="">` : ''}<div class="cn">${esc(co.companyName || co.name || '')}</div></div>
+    <div class="tt">EMPLOYEE ID CARD</div>
+    <div class="ph">${photo ? `<img src="${photo}" alt="">` : 'Paste<br>photograph'}</div>
+    <div class="nm">${esc(e.name || '')}</div>
+    <div class="ds">${esc(e.designation || '')}</div>
+    <table class="kv2">
+      <tr><td>Employee code</td><td>${esc(e.empCode || '')}</td></tr>
+      <tr><td>Department</td><td>${esc(e.department || '')}</td></tr>
+      <tr><td>Blood group</td><td>${esc(e.bloodGroup || '')}</td></tr>
+      <tr><td>Date of joining</td><td>${dmy(e.joiningDate)}</td></tr>
+    </table>
+    <div class="sg"><span>Authorised Signatory</span></div>
+    <div class="bar b"></div>
+  </div>
+  <div class="idc">
+    <div class="bar"></div>
+    <div class="bk">
+      <h4>EMERGENCY CONTACT</h4>
+      <div><b>${esc(e.emergencyName || '________________')}</b><br>Ph: <b>${esc(e.emergencyMobile || '________________')}</b></div>
+      <div>Employee mobile: <b>${esc(e.mobile || '')}</b></div>
+      <div>Issued: <b>${dmy(issued)}</b> &nbsp; Valid till: <b>${dmy(valid)}</b></div>
+      ${qr ? `<div class="qr"><img src="${qr}" alt=""></div>` : ''}
+      <h4>IF FOUND, PLEASE RETURN TO</h4>
+      <div><b>${esc(co.companyName || co.name || '')}</b><br>${coAddr}${co.phone ? `<br>Ph: ${esc(co.phone)}` : ''}</div>
+      <div class="ft">This card is the property of the company and must be returned on leaving.</div>
+    </div>
+    <div class="bar b"></div>
+  </div>
+</div>`;
+  }));
+  const pages = [];
+  for (let i = 0; i < cards.length; i += 3) pages.push(cards.slice(i, i + 3).join(''));
+  printPage(page(list.length === 1 ? `ID Card ${list[0].empCode || ''} ${list[0].name || ''}` : `ID Cards (${list.length} employees)`, ID_CSS,
+    `<div class="idhint">Front and back of each card side by side — print on card paper (or print, laminate), cut along the dotted lines and fold / stick back to back.</div>
+${pages.join('<div class="pb"></div>')}`));
 }

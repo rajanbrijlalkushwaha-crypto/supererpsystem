@@ -157,6 +157,11 @@ function build(d, from, to) {
     const gst = r2((Number(e.grandTotal) || 0) - (Number(e.amount) || 0));
     return gst > 0 ? { src: 'Expense', gstin: '', party: e.ledgerName || e.vendorName || e.expenseCategory, no: e.invoiceNo || `EXP-${e.expenseId}`, date: e.date, taxable: r2(e.amount), igst: 0, cgst: r2(gst / 2), sgst: r2(gst / 2), value: r2(e.grandTotal), po: e.orderNo || '', guess: true } : null;
   }).filter(Boolean);
+  // reverse charge expenses: the supplier charged no GST; we pay it (3.1 d) and take it as ITC (4 A 3)
+  const rcms = d.ex.filter(e => e.rcm && /approv|posted|confirm|paid/i.test(String(e.status || '')) && inP(e.date)).map(e => {
+    const base = r2(e.amount), tax = r2(base * (Number(e.rcmRate) || 0) / 100);
+    return { src: `Expense (RCM ${e.rcmRate}%)`, gstin: '', party: e.ledgerName || e.vendorName || e.vendor || e.expenseCategory, no: e.invoiceNo || `EXP-${e.expenseId}`, date: e.date, taxable: base, igst: e.rcmInter ? tax : 0, cgst: e.rcmInter ? 0 : r2(tax / 2), sgst: e.rcmInter ? 0 : r2(tax - r2(tax / 2)), value: r2(e.grandTotal || e.amount), po: e.orderNo || '', rcm: true };
+  });
   const dns = d.dn.filter(x => /approv|posted|confirm/i.test(String(x.status || '')) && inP(x.date)).map(x => {
     const b = d.pb.find(p => p.billId === x.linkedBillId) || {}, g = Number(x.totalGST) || 0, intra = b.gstType === 'intrastate';
     return { src: 'Debit note', gstin: String(b.partyGstin || '').toUpperCase(), party: x.vendorName, no: x.dnNo || x.dnId, date: x.date, taxable: -r2(x.subTotal), igst: intra ? 0 : -r2(g), cgst: intra ? -r2(g / 2) : 0, sgst: intra ? -r2(g / 2) : 0, value: -r2(x.grandTotal), po: x.billRef || '' };
@@ -164,12 +169,13 @@ function build(d, from, to) {
   const sum = (rows, f) => r2(rows.reduce((t, x) => t + (Number(x[f]) || 0), 0));
   const itcAll = ['igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(sum(purch, f) + sum(exps, f)) }), {});
   const itcRev = ['igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(-sum(dns, f)) }), {});
-  const itcNet = ['igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(itcAll[f] - itcRev[f]) }), {});
+  const rcmIn = ['taxable', 'igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: sum(rcms, f) }), {});
+  const itcNet = ['igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(itcAll[f] + rcmIn[f] - itcRev[f]) }), {});
   const outNet = ['taxable', 'igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(out[f] - cnTot[f]) }), {});
   return {
     from, to, sales, b2b, b2cl, b2cs: Object.values(b2csMap).sort((a, b) => a.pos.localeCompare(b.pos) || a.rate - b.rate), cdnr, cdnur, docs,
     hsn: Object.values(hsn).map(h => ({ ...h, qty: r2(h.qty), taxable: r2(h.taxable), igst: r2(h.igst), cgst: r2(h.cgst), sgst: r2(h.sgst) })).sort((a, b) => a.hsn.localeCompare(b.hsn)),
-    nil: r2(nil.taxable), out, cnTot, outNet, inward: [...purch, ...exps, ...dns].sort((a, b) => String(a.date).localeCompare(String(b.date))), itcAll, itcRev, itcNet,
+    nil: r2(nil.taxable), out, cnTot, outNet, inward: [...purch, ...exps, ...rcms, ...dns].sort((a, b) => String(a.date).localeCompare(String(b.date))), itcAll, itcRev, itcNet, rcmIn,
     setoff: setOff({ igst: Math.max(0, outNet.igst), cgst: Math.max(0, outNet.cgst), sgst: Math.max(0, outNet.sgst) }, { igst: Math.max(0, itcNet.igst), cgst: Math.max(0, itcNet.cgst), sgst: Math.max(0, itcNet.sgst) }),
     noHsn: Object.values(hsn).filter(h => h.hsn === '—').length, badGstin: sales.filter(b => b.partyGstin && !GSTIN_RE.test(String(b.partyGstin).trim().toUpperCase())).length,
   };
@@ -235,17 +241,21 @@ function R1({ R, sec, setSec, slot, period, company, user }) {
 }
 
 function R3B({ R, slot, period, company, user }) {
-  const o = R.outNet, so = R.setoff;
+  const o = R.outNet, rc = R.rcmIn;
+  const so = { ...R.setoff, cash: ['igst', 'cgst', 'sgst'].reduce((x, f) => ({ ...x, [f]: r2(R.setoff.cash[f] + rc[f]) }), {}) };   // RCM tax cannot be paid from ITC
   const tx = x => (x.igst || 0) + (x.cgst || 0) + (x.sgst || 0);
   const rows = [
     { h: '3.1 (a)  Outward taxable supplies (other than zero / nil rated)', t: o.taxable, ...o, b: 1 },
     { h: '      Sales bills', t: R.out.taxable, ...R.out },
     { h: '      Less: credit notes', t: -R.cnTot.taxable, igst: -R.cnTot.igst, cgst: -R.cnTot.cgst, sgst: -R.cnTot.sgst },
     { h: '3.1 (c)  Nil-rated / exempt supplies', t: R.nil, b: 1 },
+    { h: '3.1 (d)  Inward supplies liable to reverse charge (RCM)', t: rc.taxable, ...rc, b: 1 },
+    { h: '4 (A)(3)  ITC — inward supplies liable to reverse charge', ...rc, b: 1 },
     { h: '4 (A)(5)  ITC available — all other ITC', ...R.itcAll, b: 1 },
     { h: '4 (B)(2)  ITC reversed — debit notes (purchase returns)', ...R.itcRev },
     { h: '4 (C)  Net ITC available', ...R.itcNet, b: 1 },
     { h: '6.1  Tax paid through ITC', igst: so.used.filter(u => u[1] === 'igst').reduce((t, u) => t + u[2], 0), cgst: so.used.filter(u => u[1] === 'cgst').reduce((t, u) => t + u[2], 0), sgst: so.used.filter(u => u[1] === 'sgst').reduce((t, u) => t + u[2], 0) },
+    { h: '6.1  Reverse charge tax (cash only)', ...rc },
     { h: '6.1  TAX TO PAY IN CASH', ...so.cash, b: 2 },
     { h: '      ITC carried forward to next period', ...so.carry },
   ];
@@ -259,7 +269,7 @@ function R3B({ R, slot, period, company, user }) {
         <button type="button" className="sb-tbtn" onClick={() => excel(`GSTR3B_${period.replace(/\s+/g, '_')}`, [{ name: 'GSTR-3B', widths: [62, 16, 14, 14, 14, 14], rows: [['GSTR-3B', period], [], heads.map(h => h[0]), ...rows.map(r => [r.h.trim(), r.t != null ? r2(r.t) : '', r2(r.igst), r2(r.cgst), r2(r.sgst), r2(tx(r))])] }])}><Svg name="chart" size={13} />Excel</button>
       </div>, slot)}
       <div className="bk-bar"><div className="ac-sum">
-        <div>Output tax ₹<b>{amt(tx(o))}</b></div><div>Net ITC ₹<b>{amt(tx(R.itcNet))}</b></div>
+        <div>Output tax ₹<b>{amt(tx(o))}</b></div>{tx(rc) > 0 && <div>RCM tax ₹<b>{amt(tx(rc))}</b></div>}<div>Net ITC ₹<b>{amt(tx(R.itcNet))}</b></div>
         <div>Pay in cash ₹<b style={{ color: tx(so.cash) ? '#B42318' : '#067647' }}>{amt(tx(so.cash))}</b></div><div>ITC carried forward ₹<b>{amt(tx(so.carry))}</b></div>
       </div></div>
       <div className="bk-wrap">
@@ -270,7 +280,8 @@ function R3B({ R, slot, period, company, user }) {
         </table>
         <div style={{ padding: '8px 12px', fontSize: 11.5, color: '#667085', lineHeight: 1.6 }}>
           ITC set-off order: IGST credit first (IGST → CGST → SGST), then CGST (CGST → IGST), then SGST (SGST → IGST). CGST and SGST credit cannot pay each other.<br />
-          ITC here is from purchase bills and approved expenses (expense GST is taken as CGST + SGST). Claim only what shows in your GSTR-2B — see “Purchase register (2B)”.
+          ITC here is from purchase bills and approved expenses (expense GST is taken as CGST + SGST). Claim only what shows in your GSTR-2B — see “Purchase register (2B)”.<br />
+          Reverse charge (RCM) expenses: the tax is paid in cash (it cannot be paid from ITC) and the same amount is ITC in 4(A)(3).
         </div>
       </div>
     </>

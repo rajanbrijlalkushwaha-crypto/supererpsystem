@@ -4,6 +4,7 @@
 import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
+import { previewFrame } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const PLAIN = new Intl.NumberFormat('en-IN', { useGrouping: false, maximumFractionDigits: 3 });
@@ -23,7 +24,7 @@ function printFrame(html, id, landscape) {
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(html); w.document.close();
-  setTimeout(() => { if (!landscape) fillPage(w.document); w.focus(); w.print(); window.focus(); setTimeout(() => fr.remove(), 1000); }, 400);
+  setTimeout(() => { if (!landscape) fillPage(w.document); previewFrame(fr); }, 400);
 }
 
 const GRN_CSS = ADV_CSS + `

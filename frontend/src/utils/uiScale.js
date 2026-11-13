@@ -5,6 +5,7 @@
  * innerWidth/innerHeight) in screen pixels, while styles are in page pixels — code that places
  * a popup from those numbers divides by the zoom: use px(), vw(), vh() below. */
 import { useEffect, useState } from 'react';
+import { isAppMode } from '../appBridge';
 
 const KEY = 'ui-scale';
 const EVT = 'uiscale:change';
@@ -23,7 +24,8 @@ export const vh = () => window.innerHeight / current;     // page height in page
 
 export function applyScale() {
   const pref = readScalePref();
-  const z = pref === 'auto' ? autoZoom(window.innerWidth) : parseFloat(pref) || 1;
+  // the Android app shows pages at full size (its own phone layout)
+  const z = isAppMode() ? 1 : pref === 'auto' ? autoZoom(window.innerWidth) : parseFloat(pref) || 1;
   current = z;
   const root = document.documentElement;
   root.style.zoom = z === 1 ? '' : String(z);
