@@ -35,8 +35,9 @@ const ensureUsers = () => {
 const saveUsers = users =>
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 
-const tokenFromHeader = req =>
-  (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
+const { tokenOf, setLoginCookie, clearLoginCookie } = require('./requireLogin');
+// the login token: the Authorization header, or the erp_s login cookie the browser sends by itself
+const tokenFromHeader = req => tokenOf(req);
 
 /* Derive the public frontend base URL from the request.
    Priority: APP_URL env → Referer origin → Origin header → proto://host */
@@ -74,6 +75,7 @@ router.post('/login', (req, res) => {
   const token     = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000; // 8 hours
   SESSIONS.set(token, { userId: user.id, username: user.username, name: user.name, role: user.role, expiresAt });
+  setLoginCookie(res, token);
 
   res.json({
     token,
@@ -84,6 +86,7 @@ router.post('/login', (req, res) => {
 /* ── POST /api/auth/logout ────────────────────── */
 router.post('/logout', (req, res) => {
   SESSIONS.delete(tokenFromHeader(req));
+  clearLoginCookie(res);
   res.json({ success: true });
 });
 
@@ -96,6 +99,7 @@ router.get('/me', (req, res) => {
     return res.status(401).json({ error: 'Session expired. Please log in again.' });
   }
   session.expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+  setLoginCookie(res, token);
   const users = ensureUsers();
   const u = users.find(u => u.id === session.userId);
   res.json({

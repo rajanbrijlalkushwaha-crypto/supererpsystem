@@ -4,6 +4,17 @@ import { isAppMode } from '../appBridge';
 
 const AuthContext = createContext(null);
 
+/* ── attach the login (Bearer token) to every axios request — installed once, before anything loads, so even the
+   first requests on the page carry it. A request that already has its own Authorization (vendor portal) keeps it.
+   sessionStorage (not localStorage) is deliberate: it's cleared the moment this browser tab/window closes,
+   so closing the app's window ends the session — the next launch requires logging in again. */
+axios.interceptors.request.use(cfg => {
+  let token = null;
+  try { token = sessionStorage.getItem('erp_token'); } catch { /* storage blocked */ }
+  if (token && !(cfg.headers && cfg.headers.Authorization)) cfg.headers.Authorization = `Bearer ${token}`;
+  return cfg;
+});
+
 /* Auto-logout after this long with no mouse/keyboard/touch activity. */
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 
@@ -12,17 +23,20 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);   // true while verifying token on mount
   const idleTimerRef = useRef(null);
 
-  /* ── axios interceptor: attach Bearer token to every request ──
-     sessionStorage (not localStorage) is deliberate: it's cleared the
-     moment this browser tab/window closes, so closing the app's window
-     ends the session — the next launch requires logging in again. */
+
+  /* ── the server ended the login (8 hours unused, or the server restarted): back to the login page.
+     (Inside the Android app the app signs in again by itself — see appBridge.) ── */
   useEffect(() => {
-    const id = axios.interceptors.request.use(cfg => {
-      const token = sessionStorage.getItem('erp_token');
-      if (token) cfg.headers.Authorization = `Bearer ${token}`;
-      return cfg;
+    if (isAppMode()) return undefined;
+    const id = axios.interceptors.response.use(null, err => {
+      const url = (err && err.config && err.config.url) || '';
+      if (err && err.response && err.response.status === 401 && /\/api\//.test(url) && !/\/api\/(auth|vendor-portal)\//.test(url) && sessionStorage.getItem('erp_token')) {
+        sessionStorage.removeItem('erp_token');
+        setUser(null);
+      }
+      return Promise.reject(err);
     });
-    return () => axios.interceptors.request.eject(id);
+    return () => axios.interceptors.response.eject(id);
   }, []);
 
   /* ── Verify stored token on app load ── */

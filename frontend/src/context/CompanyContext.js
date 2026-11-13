@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { useAuth } from './AuthContext';
 
 const CompanyContext = createContext(null);
 
@@ -27,7 +28,10 @@ export const CompanyProvider = ({ children }) => {
     } catch {}
   };
 
-  useEffect(() => { fetchCompanies(); }, []);
+  // the company list needs a signed-in user: load it when someone signs in (and again for a different user)
+  const { user } = useAuth() || {};
+  const uid = user ? (user.userId || user.id || user.username) : null;
+  useEffect(() => { if (uid) fetchCompanies(); else { setCompanies([]); } }, [uid]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Axios interceptor: registered once on mount, reads companyId from ref (always current)
   useEffect(() => {

@@ -34,6 +34,9 @@ const sqlite = require('./api/sqlite');
 sqlite.reindexAll();
 sqlite.startWatcher();
 
+// ── Every /api address needs a signed-in user (except login, vendor portal and the E-Way Helper) ──
+app.use('/api', require('./api/requireLogin').requireLogin);
+
 // ── Auth routes (no token required — public) ──
 app.use('/api/auth', require('./api/auth').router);
 

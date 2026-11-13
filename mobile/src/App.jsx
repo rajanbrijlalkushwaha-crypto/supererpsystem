@@ -11,7 +11,7 @@ import { htmlToPdf, shareBlob } from './share';
 import { printSalesBill } from '../../frontend/src/pages/beta/BetaSalesPrint.js';
 import { printSO } from '../../frontend/src/pages/beta/BetaSOPrint.js';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.2.1';
 const Nav = createContext(null);
 const useNav = () => useContext(Nav);
 
@@ -247,7 +247,7 @@ function Menu() {
           <div className="boxes">{hits.map(([ic, t, path, m]) => <button key={path} type="button" className="box" style={{ '--c': m.c }} onClick={() => nav.go('erp', { path, title: t })}><span className="ic">{ic}</span><b>{t}</b><small>{m.t}</small></button>)}
             {!hits.length && <Empty>Nothing matches “{q}”.</Empty>}</div>
         ) : (
-          <div className="boxes">{MODS.map(m => <button key={m.k} type="button" className="box mod" style={{ '--c': m.c }} onClick={() => nav.go('module', { k: m.k })}><span className="ic">{m.ic}</span><b>{m.t}</b><small>{m.items.length} {m.items.length === 1 ? 'page' : 'pages'}</small></button>)}</div>
+          <div className="boxes">{MODS.map(m => <button key={m.k} type="button" className="box mod" style={{ '--c': m.c }} onClick={() => (m.items.length === 1 ? nav.go('erp', { path: m.items[0][2], title: m.items[0][1] }) : nav.go('module', { k: m.k }))}><span className="ic">{m.ic}</span><b>{m.t}</b><small>{m.items.length} {m.items.length === 1 ? 'page' : 'pages'}</small></button>)}</div>
         )}
       </div>
     </div>
@@ -308,12 +308,16 @@ function ErpHost({ cur, depth }) {
       if (!fr.current || e.source !== fr.current.contentWindow) return;
       const d = e.data || {};
       if (d.type === 'erp-ready') setReady(true);
+      if (d.type === 'erp-relogin') {   // the server ended the login: sign in again (saved login) and hand it over
+        await get('/api/auth/me').catch(() => null);
+        fr.current?.contentWindow?.postMessage({ type: 'erp-token', t: S.token || '' }, '*');
+      }
       if (d.type === 'erp-back-ok') clearTimeout(waiting.current);
       if (d.type === 'erp-close') { clearTimeout(waiting.current); if (document.querySelector('.erpframe.on')) nav.back(); }
       if (d.type === 'erp-toast') { setM(d.text); setTimeout(() => setM(''), 4000); }
       if (d.type === 'erp-file') {
         setBusy(true);
-        try { await shareBlob(b64Blob(d.b64, d.mime), d.name); } catch (er) { setM(errText(er, 'Could not share the file.')); } finally { setBusy(false); }
+        try { await shareBlob(b64Blob(d.b64, d.mime), d.name); } catch (er) { setM(errText(er, 'Could not share the file.')); setTimeout(() => setM(''), 5000); } finally { setBusy(false); }
       }
     };
     const hw = () => { if (document.querySelector('.erpframe.on')) goBack(); };
@@ -794,6 +798,7 @@ export default function App() {
   }), []);
   useEffect(() => {
     const h = CapApp.addListener('backButton', () => {
+      if (document.querySelector('.lockov')) return;   // PIN lock showing: back does nothing behind it
       if (document.querySelector('.viewer')) return;
       if (document.querySelector('.erpframe.on')) { window.dispatchEvent(new Event('erp-hw-back')); return; }
       setStack(st => { if (st.length > 1) return st.slice(0, -1); CapApp.exitApp(); return st; });

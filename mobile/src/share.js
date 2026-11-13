@@ -20,5 +20,6 @@ export async function shareBlob(blob, name) {
   const path = `share/${file}`;
   await Filesystem.writeFile({ path, data: await toB64(blob), directory: Directory.Cache, recursive: true });
   const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
-  await Share.share({ title: file, url: uri, dialogTitle: 'Share PDF' });
+  try { await Share.share({ title: file, url: uri, dialogTitle: /\.pdf$/i.test(file) ? 'Share PDF' : 'Share file' }); }
+  catch (e) { if (/cancel/i.test(String((e && e.message) || e))) return; throw e; }   // closed the share sheet: not an error
 }
