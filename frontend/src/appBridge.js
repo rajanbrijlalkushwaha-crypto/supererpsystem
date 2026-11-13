@@ -64,6 +64,7 @@ html.erp-app, html.erp-app body { font-size:15px; -webkit-text-size-adjust:100%;
 .erp-app table.ph-cards > tbody, .erp-app table.ph-cards > tfoot { display:block !important; }
 .erp-app table.ph-cards > * > tr { display:block !important; margin:10px 10px; padding:8px 4px; border:1px solid #cfdfe2 !important; border-radius:14px;
   background:#fff !important; box-shadow:0 2px 6px rgba(3,68,79,.06); height:auto !important; position:relative; }
+.erp-app table.ph-cards > tbody > tr { content-visibility:auto; contain-intrinsic-size:auto 320px; }   /* cards off screen are drawn only when scrolled to */
 .erp-app table.ph-cards > * > tr.ph-sel, .erp-app table.ph-cards > * > tr[aria-selected="true"], .erp-app table.ph-cards > * > tr.sel, .erp-app table.ph-cards > * > tr.on, .erp-app table.ph-cards > * > tr.selected, .erp-app table.ph-cards > * > tr.active { border-color:#0B6E7C !important; box-shadow:0 0 0 2px #0B6E7C; }
 .erp-app table.ph-cards > * > tr > td, .erp-app table.ph-cards > * > tr > th { display:grid !important; grid-template-columns:38% minmax(0,1fr); gap:8px; align-items:center;
   width:auto !important; max-width:none !important; min-width:0 !important; height:auto !important; border:0 !important; padding:5px 10px !important;
@@ -99,48 +100,60 @@ function headLabels(table) {
   const head = table.tHead && table.tHead.rows[table.tHead.rows.length - 1];
   if (!head) return null;
   const out = [];
-  [...head.cells].forEach(c => { const t = c.innerText.replace(/\s+/g, ' ').trim(); for (let i = 0; i < (c.colSpan || 1); i++) out.push(t); });
+  // textContent, not innerText: innerText makes the browser measure the page every time (slow on phones)
+  [...head.cells].forEach(c => { const t = c.textContent.replace(/\s+/g, ' ').trim(); for (let i = 0; i < (c.colSpan || 1); i++) out.push(t); });
   return out;
 }
+const CTRL = 'input, select, textarea, button, img, svg';
 function phoneTable(t) {
   if (t.closest('.cpv, .cpv-ov') || t.dataset.ph === 'skip') return;
-  const kv = /kv|tot/.test(t.className) || (!t.tHead && [...t.rows].some(r => r.cells[0] && r.cells[0].tagName === 'TH'));
-  if (kv) { t.classList.add('ph-kv'); return; }
+  if (!t.dataset.phKind) {
+    const kv = /kv|tot/.test(t.className) || (!t.tHead && [...t.rows].some(r => r.cells[0] && r.cells[0].tagName === 'TH'));
+    const labels = kv ? null : headLabels(t);
+    const cols = labels ? labels.length : Math.max(0, ...[...t.rows].slice(0, 5).map(r => r.cells.length));
+    t.dataset.phKind = kv ? 'kv' : cols < 3 ? 'plain' : 'cards';
+    if (kv) t.classList.add('ph-kv');
+    if (t.dataset.phKind === 'cards') { t.classList.add('ph-cards'); if (t.parentElement) t.parentElement.classList.add('ph-scroll'); }
+  }
+  if (t.dataset.phKind !== 'cards') return;
   const labels = headLabels(t);
-  const cols = labels ? labels.length : Math.max(0, ...[...t.rows].map(r => r.cells.length));
-  if (cols < 3) return;
-  t.classList.add('ph-cards');
-  const par = t.parentElement; if (par) par.classList.add('ph-scroll');
   [...t.tBodies, ...(t.tFoot ? [t.tFoot] : [])].forEach(b => [...b.rows].forEach(r => {
-    if (r.dataset.phDone === String(r.cells.length)) return;
-    r.dataset.phDone = String(r.cells.length);
+    const sig = String(r.cells.length);
+    if (r.dataset.phDone === sig) return;
+    r.dataset.phDone = sig;
     let i = 0;
     [...r.cells].forEach(c => {
       const lab = (labels && labels[i]) || '';
       i += c.colSpan || 1;
-      if (lab && c.colSpan < 3) { c.dataset.label = lab; c.classList.remove('ph-nolabel'); } else c.classList.add('ph-nolabel');
-      const empty = !c.querySelector('input, select, textarea, button, img, svg') && !c.innerText.trim();
-      c.classList.toggle('ph-empty', empty);
-      c.classList.toggle('ph-stack', !!c.querySelector(FORM));   // a field: its name above it, full width
+      const named = !!lab && c.colSpan < 3;
+      if (named) c.dataset.label = lab;
+      // only DOM reads that need no layout (textContent, querySelector), then class changes
+      const field = !!c.querySelector(FORM);
+      const empty = !field && !c.querySelector(CTRL) && !c.textContent.trim();
+      c.className = [...c.classList].filter(x => !/^ph-(nolabel|empty|stack)$/.test(x)).concat(named ? [] : ['ph-nolabel'], empty ? ['ph-empty'] : [], field ? ['ph-stack'] : []).join(' ');
     });
   }));
 }
 function phoneLayout(root) {
   root.querySelectorAll('table').forEach(phoneTable);
   const W = window.innerWidth;
-  root.querySelectorAll('div, form, section, fieldset').forEach(el => {
-    if (el.closest('.cpv, .cpv-ov') || el.dataset.phSeen) return;
-    const cs = getComputedStyle(el);
+  // 1) measure everything new, 2) then change classes — mixing the two makes the phone re-measure the page each time
+  const els = [...root.querySelectorAll('div:not([data-ph-seen]), form:not([data-ph-seen]), section:not([data-ph-seen]), fieldset:not([data-ph-seen])')]
+    .filter(el => !el.closest('.cpv, .cpv-ov, table.ph-cards'));
+  const todo = els.map(el => {
+    const cs = getComputedStyle(el), add = [];
+    const bx = /(^|\s)bx/.test(el.className);
     if (cs.display === 'grid' || cs.display === 'inline-grid') {
       const n = cs.gridTemplateColumns.split(' ').filter(Boolean).length;
-      if (n > 1 && el.querySelector(FORM)) el.classList.add('ph-1');
-      else if (n > 2 && el.scrollWidth > el.clientWidth + 4 && !/(^|\s)bx/.test(el.className)) el.classList.add('ph-fit');   // a strip of totals → tiles that wrap
-    } else if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexDirection.startsWith('row') && el.offsetHeight < 160
-      && !/(^|\s)bx/.test(el.className) && el.scrollWidth > el.clientWidth + 4) el.classList.add('ph-wrap');   // a row of fields/buttons, not the page frame
-    if (el.offsetWidth > W + 2 && cs.position !== 'fixed' && !/(^|\s)bx/.test(el.className)) el.classList.add('ph-full');
-    if (cs.position === 'fixed' && el.offsetWidth > W * 0.7 && el.offsetHeight > 120 && el.querySelector('button')) el.classList.add('ph-pop');
-    el.dataset.phSeen = '1';
+      if (n > 1 && el.querySelector(FORM)) add.push('ph-1');
+      else if (n > 2 && !bx && el.scrollWidth > el.clientWidth + 4) add.push('ph-fit');
+    } else if ((cs.display === 'flex' || cs.display === 'inline-flex') && cs.flexDirection.startsWith('row') && !bx
+      && el.offsetHeight < 160 && el.scrollWidth > el.clientWidth + 4) add.push('ph-wrap');   // a row of fields/buttons, not the page frame
+    if (!bx && cs.position !== 'fixed' && el.offsetWidth > W + 2) add.push('ph-full');
+    if (cs.position === 'fixed' && el.offsetWidth > W * 0.7 && el.offsetHeight > 120 && el.querySelector('button')) add.push('ph-pop');
+    return [el, add];
   });
+  todo.forEach(([el, add]) => { if (add.length) el.classList.add(...add); el.dataset.phSeen = '1'; });
 }
 function startPhoneLayout() {
   let q = false;
@@ -148,7 +161,7 @@ function startPhoneLayout() {
   const ask = () => { if (!q) { q = true; requestAnimationFrame(run); } };
   new MutationObserver(muts => {
     // a row or field re-drawn: look at it again
-    muts.forEach(m => m.target.nodeType === 1 && m.target.closest && m.target.closest('[data-ph-seen]') && m.target.querySelectorAll && [m.target, ...m.target.querySelectorAll('[data-ph-seen]')].forEach(x => { if (x.dataset) delete x.dataset.phSeen; }));
+    muts.forEach(m => { if (m.target.nodeType === 1 && m.target.dataset && m.target.dataset.phSeen) delete m.target.dataset.phSeen; });
     ask();
   }).observe(document.body, { childList: true, subtree: true });
   window.addEventListener('resize', ask);
