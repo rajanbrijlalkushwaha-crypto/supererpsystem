@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useVendorAuth } from '../../context/VendorAuthContext';
 import AuthShell, { Field, Alert, Btn, Svg } from '../../components/auth/AuthShell';
 import { setUiVersion } from '../../utils/uiVersion';
-import { PRODUCT_NAME, PRODUCT_VERSION } from '../../utils/brand';
 
 const REMEMBER_KEY = 'login-remember';   // { mode, id } — only the user name / email, never the password
 const readRemember = () => { try { return JSON.parse(localStorage.getItem(REMEMBER_KEY)) || null; } catch { return null; } };
@@ -71,57 +70,48 @@ export function LoginScreen({ classic = false }) {
 
   return (
     <AuthShell
-      kicker={vendorMode ? 'Supplier portal' : `${PRODUCT_NAME} · v${PRODUCT_VERSION}`}
-      heading={vendorMode ? <>Work with us on <em>every order</em>, end to end.</> : <>One platform to run your <em>entire business</em>.</>}
-      text={vendorMode
-        ? 'Track purchase orders, share dispatch details and follow every payment — in one secure place.'
-        : 'Sales, purchase, inventory, projects, accounts and HR on a single connected system, with Tally reconciliation built in.'}
-      modules
       shakeKey={errN}
-      top={<>{classic ? 'Classic look' : 'New look (beta)'}<span style={{ color: '#D0D5DD' }}>|</span><button type="button" className="as-link" onClick={switchLook}>{classic ? 'Try the new look' : 'Switch to classic'}</button></>}
-      title="Sign in"
-      subtitle={vendorMode ? 'Use the email address you registered with.' : 'Welcome back. Enter your credentials to continue.'}
+      top={<>{classic ? 'Classic look' : 'New look'}<span style={{ opacity: .4 }}>|</span><button type="button" className="as-link" onClick={switchLook}>{classic ? 'Try the new look' : 'Switch to classic'}</button></>}
+      title="Welcome Back!"
+      subtitle={vendorMode ? 'Sign in to the Super ERP supplier portal' : 'Sign in to your Super ERP account'}
+      mode={vendorMode ? <><Svg name="store" size={13} /> Supplier login</> : null}
     >
-      <div className="as-tabs" role="tablist" aria-label="Account type">
-        <button type="button" role="tab" aria-selected={!vendorMode} className={!vendorMode ? 'on' : ''} onClick={() => pick('company')}>
-          <Svg name="biz" size={15} /> Employee
-        </button>
-        <button type="button" role="tab" aria-selected={vendorMode} className={vendorMode ? 'on' : ''} onClick={() => pick('vendor')}>
-          <Svg name="store" size={15} /> Supplier
-        </button>
-      </div>
-
       <form onSubmit={submit} autoComplete="off" noValidate className="as-anim" key={mode}>
         <Alert msg={msg} />
-        <Field id="bl-id" ref={idRef} label={vendorMode ? 'Email address' : 'User name'} icon={vendorMode ? 'mail' : 'user'}
-          type={vendorMode ? 'email' : 'text'} placeholder={vendorMode ? 'name@company.com' : 'Enter your user name'}
+        <Field id="bl-id" ref={idRef} icon={vendorMode ? 'mail' : 'user'} aria-label={vendorMode ? 'Email address' : 'User name'}
+          type={vendorMode ? 'email' : 'text'} placeholder={vendorMode ? 'Email Address' : 'User Name'}
           value={id} onChange={e => { setId(e.target.value); setMsg(null); }} />
-        <Field id="bl-pwd" ref={pwdRef} label="Password" icon="lock" type="password" placeholder="Enter your password"
+        <Field id="bl-pwd" ref={pwdRef} icon="lock" type="password" placeholder="Password" aria-label="Password"
           value={password} onChange={e => { setPassword(e.target.value); setMsg(null); }} />
 
         <div className="as-row">
           <label className="as-check">
             <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
-            <i /> Remember me
+            <i /> Remember Me
           </label>
-          <button type="button" className="as-link" onClick={() => navigate(vendorMode ? '/vendor-forgot-password' : '/forgot-password')}>Forgot password?</button>
+          <button type="button" className="as-link" onClick={() => navigate(vendorMode ? '/vendor-forgot-password' : '/forgot-password')}>Forgot Password?</button>
         </div>
 
         <Btn type="submit" kind={phase === 'done' ? 'ok' : 'pri'} busy={phase === 'busy'} busyText="Signing in…" disabled={phase === 'done'}>
-          {phase === 'done' ? <><Svg name="check" size={17} stroke={2.4} /> Signed in</> : <>Sign in <Svg name="arrow" size={17} /></>}
+          {phase === 'done' ? <><Svg name="check" size={20} stroke={2.4} /> Signed in</> : <><LoginIcon /> Login</>}
         </Btn>
 
-        {vendorMode ? (
-          <div className="as-foot">New supplier?<button type="button" className="as-link" onClick={() => navigate('/vendor-register')}>Register your business</button></div>
-        ) : (
-          <div className="as-foot">Supplier?<button type="button" className="as-link" onClick={() => pick('vendor')}>Sign in to the supplier portal</button></div>
-        )}
+        <div className="as-or">or</div>
+        <Btn type="button" kind="out" onClick={() => pick(vendorMode ? 'company' : 'vendor')}>
+          <Svg name={vendorMode ? 'biz' : 'store'} size={20} /> {vendorMode ? 'Continue as Employee' : 'Continue as Supplier'}
+        </Btn>
 
-        <div className="as-notice">
-          <Svg name="shield" size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>This system is for authorised users only. Keep your password private and sign out on shared computers.</span>
-        </div>
+        {vendorMode
+          ? <div className="as-foot">New supplier?<button type="button" className="as-link" onClick={() => navigate('/vendor-register')}>Sign Up</button></div>
+          : <div className="as-foot">Supplier without an account?<button type="button" className="as-link" onClick={() => navigate('/vendor-register')}>Sign Up</button></div>}
       </form>
     </AuthShell>
   );
 }
+
+/* "sign in" arrow-into-door icon (as in the design) */
+const LoginIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 17l5-5-5-5" /><path d="M15 12H4" />
+  </svg>
+);
