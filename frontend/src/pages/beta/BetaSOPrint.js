@@ -251,21 +251,33 @@ ${o.termsConditions || o.customerNotes ? `<!-- terms -->
       // the order + its files as one PDF, with the signatures on the order and the page signatures on the files;
       // made again (in the open preview) after each signing
       const base = withTeal('<!DOCTYPE html>' + w.document.documentElement.outerHTML);
+      // the order (text) opens at once; the PDF with the attached files takes longer and replaces it when ready
+      previewFrame(fr, undefined, meta);
+      const shown = document.getElementById('cpv-root');
+      const note = document.createElement('div');
+      note.style.cssText = 'position:absolute;left:50%;top:58px;transform:translateX(-50%);z-index:5;background:#fffbe6;border:1px solid #c9a227;color:#3d3000;padding:6px 14px;border-radius:4px;font:13px Inter,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+      note.textContent = `Adding the ${files.length} attached file${files.length > 1 ? 's' : ''} (drawings, PO…) — the full PDF opens here when ready.`;
+      shown?.querySelector('.cpv')?.appendChild(note);
       const pack = async () => {
         const pg = await signHtml(base, meta.sign);
         const res = await axios.post(`/api/sales-orders/${o.orderId}/print-pack`, { companyId, html: pg }, { params: { companyId }, responseType: 'blob' });
         return { r: res, page: pg, blob: await finalPdf(res.data, meta.sign) };
       };
-      const { r, page, blob } = await pack();
+      const t = (base.match(/<title>([^<]*)<\/title>/) || [])[1] || 'Sales Order';
+      let r, page, blob;
+      try { ({ r, page, blob } = await pack()); }
+      catch {
+        note.textContent = 'The attached files could not be added — only the order is shown.';
+        return { files: files.length, error: 'The attached files could not be added to the print — only the order is printed.' };
+      }
       meta.rebuild = async () => (await pack()).blob;
       let notPrinted = [];
       try { notPrinted = JSON.parse(decodeURIComponent(r.headers['x-not-printed'] || '%5B%5D')); } catch { notPrinted = []; }
-      const t = w.document.title; fr.remove();
-      printPdf(blob, t, page, meta);
+      // still open, and not busy mailing / signing in it → swap in the full PDF
+      if (shown && shown.isConnected && document.getElementById('cpv-root') === shown && !shown.querySelector('.cpm, .cps')) printPdf(blob, t, page, meta);
+      else note.remove();
       return { files: files.length, notPrinted };
     } catch {
-      // the order alone still prints
-      previewFrame(fr, undefined, meta);   // opens the preview: Sign · Email · Save PDF · Print
       return { files: files.length, error: 'The attached files could not be added to the print — only the order is printed.' };
     }
   }

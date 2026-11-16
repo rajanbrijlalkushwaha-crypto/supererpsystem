@@ -9,6 +9,10 @@ import App from './App';
 import { preloadPrintFont } from './utils/printFont';
 import { initUiScale } from './utils/uiScale';
 import { initAppBridge } from './appBridge';
+import { installPrintBusy } from './printBusy';
+
+// Print clicked → a progress window until the print preview opens.
+installPrintBusy();
 
 // Inside the Android app: keep its login, hide the desktop menus (does nothing on the desktop).
 initAppBridge();

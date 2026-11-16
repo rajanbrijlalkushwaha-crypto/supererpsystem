@@ -182,7 +182,8 @@ router.get('/logo/:fileName', (req, res) => {
     const legacy     = path.join(ROOT, 'Database', 'Companies', 'logos', fileName);
     const fp = (perCompany && fs.existsSync(perCompany)) ? perCompany
              : fs.existsSync(legacy) ? legacy : null;
-    if (fp) res.sendFile(path.resolve(fp));
+    // every print asks for the logo: keep it in the browser (10 min fresh, then shown at once and re-checked in the background)
+    if (fp) res.sendFile(path.resolve(fp), { cacheControl: false, headers: { 'Cache-Control': 'private, max-age=600, stale-while-revalidate=604800' } });
     else res.status(404).json({ error: 'Logo not found' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -12,6 +12,30 @@ catch (e) { console.error('[company data] move into company folders stopped:', e
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
+// ── Speed check: every /api answer says how long the server itself took (Server-Timing header, visible in the
+// browser's Network tab), slow ones are logged, and a stalled server (blocked event loop) is logged too —
+// so a slow page can be told apart: server slow vs. the internet path between home and the office.
+app.use('/api', (req, res, next) => {
+  const t0 = process.hrtime.bigint();
+  const writeHead = res.writeHead;
+  res.writeHead = function (...a) {
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    try { res.setHeader('Server-Timing', `app;dur=${ms.toFixed(1)}`); } catch { /* headers gone */ }
+    if (ms > 1000) console.log(`[slow] ${req.method} ${req.originalUrl.split('?')[0]} ${Math.round(ms)}ms`);
+    return writeHead.apply(this, a);
+  };
+  next();
+});
+{
+  const { monitorEventLoopDelay } = require('perf_hooks');
+  const h = monitorEventLoopDelay({ resolution: 50 }); h.enable();
+  setInterval(() => {
+    const max = h.max / 1e6;
+    if (max > 500) console.log(`[stall] server was blocked up to ${Math.round(max)}ms in the last 10s`);
+    h.reset();
+  }, 10000).unref();
+}
+
 // ── Middleware ──
 // level 4 keeps ~88% of the size win at ~25% less CPU than the default (6),
 // which matters here because the server is a single blocking Node process.

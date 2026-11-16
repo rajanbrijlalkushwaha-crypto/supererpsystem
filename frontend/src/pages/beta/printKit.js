@@ -3,6 +3,7 @@
  *  openPreview(title, { html } | { pdfUrl, fileName })   previewPdf(blob, title)   logoData(company) */
 import axios from 'axios';
 import { isAppMode } from '../../appBridge';
+import { printBusyDone } from '../../printBusy';
 
 const TEAL = '#03444f';
 
@@ -391,6 +392,7 @@ function openPlacer(box, opts, sigUrl, onSave) {
    { to } fills the e-mail address · { mail: { subject, message, summary } } the e-mail · { sign: { type, id, perm } } e-signatures
    · { rebuild } (PDF made on the server) makes it again after signing — shown in place with a progress bar */
 export function openPreview(title, opts) {
+  printBusyDone();   // the "Preparing to print" window
   document.getElementById('cpv-root')?.remove();
   if (!document.getElementById('cpv-css')) { const s = document.createElement('style'); s.id = 'cpv-css'; s.textContent = PV_CSS + MAIL_CSS + SIGN_CSS + PLACE_CSS; document.head.appendChild(s); }
   if (opts.html) opts = { ...opts, html: withTeal(opts.html) };

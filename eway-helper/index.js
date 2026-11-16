@@ -301,6 +301,25 @@ async function login(cfg, browser, page, job, step) {
 }
 
 let JOB_CFG = null;   // settings of the job running now (for steps that send files to the ERP)
+/* Close any Chrome / Edge still running on THIS helper's own profile folder (never the user's own browser), and remove
+   the lock files it leaves — else the next job fails with "The browser is already running for …browser-profile".
+   Happens when the ERP / PM2 restarts while a job's Chrome is open: on Windows the child Chrome keeps running. */
+function freeProfile(profile, hard) {
+  const cp = require('child_process');
+  try {
+    if (process.platform === 'win32') {
+      const lit = profile.replace(/'/g, "''");
+      cp.execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+        `Get-CimInstance Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains('${lit}'.ToLower()) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`],
+      { stdio: 'ignore', timeout: 20000, windowsHide: true });
+    } else {
+      cp.execFileSync('pkill', ['-f', `user-data-dir=${profile}`], { stdio: 'ignore', timeout: 10000 });
+    }
+  } catch { /* nothing was running */ }
+  ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lockfile'].forEach(f => { try { fs.rmSync(path.join(profile, f), { force: true }); } catch { /* in use / none */ } });
+  if (hard) log('helper Chrome profile freed:', profile);
+}
+
 async function runJob(cfg, job) {
   JOB_CFG = cfg;
   const step = (status, message) => api(cfg, 'POST', `/helper/jobs/${job.id}/progress`, { status, message }).then(r => { if (r.cancelled) throw new Error('Cancelled in the ERP'); }).catch(e => { if (/Cancelled/.test(e.message)) throw e; });
@@ -322,8 +341,17 @@ async function runJob(cfg, job) {
   const gstRoot = path.join(HOME, 'gst-profiles');
   if (gstJob) fs.mkdirSync(gstRoot, { recursive: true });
   const profile = gstJob ? fs.mkdtempSync(path.join(gstRoot, 'epsilon-gst-')) : path.join(HOME, 'browser-profile');
-  const browser = await puppeteer.launch({ executablePath: exe, headless: headless ? 'new' : false, defaultViewport: headless ? { width: 1366, height: 900 } : null,
+  const launch = () => puppeteer.launch({ executablePath: exe, headless: headless ? 'new' : false, defaultViewport: headless ? { width: 1366, height: 900 } : null,
     args: [...(headless ? [] : place), ...(gstJob ? ['--no-first-run', '--no-default-browser-check'] : []), ...(job.portal ? [job.portal] : [])], userDataDir: profile });
+  if (!gstJob) freeProfile(profile);   // a Chrome left over from an earlier run (e.g. the ERP restarted mid-job) still holds this profile
+  let browser;
+  try { browser = await launch(); }
+  catch (e) {
+    if (!/already running|userDataDir|SingletonLock|profile.*in use/i.test(e.message)) throw e;
+    log('Chrome profile busy — closing the old helper Chrome and trying again');
+    freeProfile(profile, true); await sleep(2000);
+    browser = await launch();
+  }
   /* Stop in the ERP (or a newer search) → close this Chrome at once instead of at the next step */
   let cancelWatch = null;
   if (gstJob) cancelWatch = setInterval(() => api(cfg, 'GET', `/helper/jobs/${job.id}/captcha?seq=-1`, null, 5000)
@@ -955,12 +983,26 @@ async function readLedger(page) {
     const m = (document.body.innerText.match(/ledger\s+balance[\s|]*([0-3]\d\/[01]\d\/\d{4})/i) || [])[1] || '';
     return rows.length ? { asOn: m, rows } : null;
   });
+  const wait = async n => { let g = null; for (let i = 0; i < n && !(g = await read()); i++) await sleep(1000); return g; };   // the page loads the balance after it opens
   let got = await read();
   if (!got) {
-    if (!/services\/auth\/dashboard/i.test(page.url())) await page.goto(DASH, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {});
-    for (let i = 0; i < 20 && !(got = await read()); i++) await sleep(1000);   // the balance is loaded by the page after it opens
+    /* open it as a person does — the portal refuses the dashboard address typed directly ("Access Denied") */
+    const back = await safe(page, () => {
+      const vis = e => e && e.getClientRects().length > 0;
+      const els = [...document.querySelectorAll('a, button')].filter(vis);
+      const a = els.find(e => /services\/auth\/dashboard/i.test(e.getAttribute('href') || ''))
+        || els.find(e => /continue\s+to\s+dashboard|go\s+to\s+dashboard/i.test(e.innerText || ''))
+        || els.find(e => /^\s*dashboard\s*$/i.test(e.innerText || ''));
+      if (!a) return false;
+      a.removeAttribute('target'); a.click(); return true;
+    });
+    if (back) { await page.waitForNetworkIdle({ idleTime: 1000, timeout: 20000 }).catch(() => {}); got = await wait(20); }
   }
-  if (!got) throw new Error('The Ledger Balance was not found on the GST dashboard.');
+  if (!got && !/accessdenied/i.test(page.url())) {   // last try: the address itself
+    await page.goto(DASH, { waitUntil: 'networkidle2', timeout: 60000, referer: page.url() }).catch(() => {});
+    got = await wait(15);
+  }
+  if (!got) throw new Error(/accessdenied/i.test(page.url()) ? 'The GST portal refused to open its dashboard (Access Denied).' : 'The Ledger Balance was not found on the GST dashboard.');
   log(`GST ledger balance ${got.asOn}: ${got.rows.map(r => `${r.name} ${r.igst}/${r.cgst}/${r.sgst}/${r.cess}`).join('; ')}`);
   return got;
 }
