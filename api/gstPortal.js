@@ -5,7 +5,10 @@
  *   Database/Companies/{cid}/GstPortal/index.json                       { MMYYYY: { r1: { at, files, by }, r2b: {…}, r1Req: { at } } }
  *   r1Req = the GSTR-1 file was asked for on the portal at that time (it takes ~20 minutes to be made); cleared when
  *   the file is downloaded.
+ *   Database/Companies/{cid}/GstPortal/ledger.json                      the dashboard's Ledger Balance (cash / credit ledger…)
+ *     { asOn, at, rows: [{ name, igst, cgst, sgst, cess }], history: [the earlier readings, newest first] }
  * GET /api/gst-portal?companyId=          → index
+ * GET /api/gst-portal/ledger              → the ledger balance last read from the GST dashboard
  * GET /api/gst-portal/:period/:kind       → the saved JSON */
 const express = require('express');
 const fs = require('fs');
@@ -80,10 +83,29 @@ function markRequested(co, period) {
   fs.writeFileSync(idxF, JSON.stringify(idx, null, 2));
 }
 
+/* the GST dashboard's Ledger Balance, read by the portal worker on each GST login */
+function saveLedger(co, l) {
+  const n = v => { const x = Number(v); return isFinite(x) ? Math.round(x * 100) / 100 : 0; };
+  const rows = (Array.isArray(l && l.rows) ? l.rows : []).slice(0, 20)
+    .map(r => ({ name: String(r.name || '').replace(/\s+/g, ' ').trim().slice(0, 120), igst: n(r.igst), cgst: n(r.cgst), sgst: n(r.sgst), cess: n(r.cess) })).filter(r => r.name);
+  if (!rows.length) return null;
+  const asOn = /^[0-3]\d\/[01]\d\/\d{4}$/.test(String(l.asOn || '')) ? String(l.asOn) : '';
+  const f = path.join(base(co), 'ledger.json'), old = readJ(f, null);
+  const cur = { asOn, at: new Date().toISOString(), rows };
+  const history = old ? [{ asOn: old.asOn, at: old.at, rows: old.rows }, ...(old.history || [])].slice(0, 30) : [];
+  fs.mkdirSync(base(co), { recursive: true });
+  fs.writeFileSync(f, JSON.stringify({ ...cur, history }, null, 2));
+  return cur;
+}
+
 const needUser = (req, res, next) => (resolveUser(req) ? next() : res.status(401).json({ error: 'Please log in again.' }));
 router.get('/', needUser, (req, res) => {
   const co = cid(req); if (!co) return res.status(400).json({ error: 'companyId required' });
   res.json(readJ(path.join(base(co), 'index.json'), {}));
+});
+router.get('/ledger', needUser, (req, res) => {
+  const co = cid(req); if (!co) return res.status(400).json({ error: 'companyId required' });
+  res.json(readJ(path.join(base(co), 'ledger.json'), null));
 });
 router.get('/:period/:kind', needUser, (req, res) => {
   const co = cid(req), { period, kind } = req.params;
@@ -97,3 +119,4 @@ module.exports = router;
 module.exports.saveDownload = saveDownload;
 module.exports.markRequested = markRequested;
 module.exports.readIndex = readIndex;
+module.exports.saveLedger = saveLedger;

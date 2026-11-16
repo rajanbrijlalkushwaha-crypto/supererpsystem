@@ -3,31 +3,19 @@
  * Used to tell an approver "this record needs your approval" the moment
  * someone submits it, instead of them having to go looking for it.
  *
- * Storage: Database/Notifications.json (single global file — notifications
- * are user-scoped like users.json, not per-company, though each entry still
- * carries its companyId so the UI can switch company context on click).
+ * Storage: each company's own Companies/<companyId>/Notifications.json, for the
+ * users of that company (Companies/<companyId>/Users/users.json).
  */
 const express = require('express');
 const path    = require('path');
 const fs      = require('fs');
-const { ROOT } = require('./helpers');
+const T = require('./tenant');
 
 const router = express.Router();
 
-const NOTIF_FILE = path.join(ROOT, 'Database', 'Notifications.json');
-const USERS_FILE = path.join(ROOT, 'Database', 'users.json');
-
-const readAll = () => {
-  if (!fs.existsSync(NOTIF_FILE)) return [];
-  try { return JSON.parse(fs.readFileSync(NOTIF_FILE, 'utf-8')); } catch { return []; }
-};
-const writeAll = (list) => {
-  fs.mkdirSync(path.dirname(NOTIF_FILE), { recursive: true });
-  fs.writeFileSync(NOTIF_FILE, JSON.stringify(list, null, 2));
-};
-const readUsers = () => {
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); } catch { return []; }
-};
+const readAll = (cid = T.cidNow()) => { try { const l = T.readJ(T.notifFile(cid), []); return Array.isArray(l) ? l : []; } catch { return []; } };
+const writeAll = (list, cid = T.cidNow()) => T.writeJ(T.notifFile(cid), list);
+const readUsers = (cid = T.cidNow()) => { try { return T.readUsers(cid); } catch { return []; } };
 
 /* Maps the approvals.js registry's module keys (lowercase, e.g. 'salesorder')
    to the permission-system's module keys (e.g. 'salesOrder') used in a
@@ -43,9 +31,9 @@ const PERMISSION_MODULE = {
 
 /* Users allowed to approve a given module — admins always qualify;
    everyone else needs permissions[<module>].approve === true. */
-function approversFor(approvalModuleKey) {
+function approversFor(approvalModuleKey, cid = T.cidNow()) {
   const permKey = PERMISSION_MODULE[approvalModuleKey] || approvalModuleKey;
-  return readUsers().filter(u =>
+  return readUsers(cid).filter(u =>
     u.active !== false &&
     (u.role === 'admin' || !!(u.permissions && u.permissions[permKey] && u.permissions[permKey].approve))
   );
@@ -55,11 +43,13 @@ function approversFor(approvalModuleKey) {
    Pass `targetUserId` to notify one specific person, or omit it to notify
    every user with approve rights on `module`. Returns how many were notified. */
 function notifyApprovers({ companyId, module, recordId, recordLabel, message, link, createdBy, targetUserId }) {
-  const list = readAll();
+  const cid = T.safeCid(companyId) || T.cidNow();
+  if (!cid) return 0;
+  const list = readAll(cid);
   const now = new Date().toISOString();
   const targets = targetUserId
-    ? readUsers().filter(u => String(u.id) === String(targetUserId) && u.active !== false)
-    : approversFor(module);
+    ? readUsers(cid).filter(u => String(u.id) === String(targetUserId) && u.active !== false)
+    : approversFor(module, cid);
 
   targets.forEach((u, i) => {
     list.push({
@@ -75,7 +65,7 @@ function notifyApprovers({ companyId, module, recordId, recordLabel, message, li
       read: false, readAt: null,
     });
   });
-  if (targets.length) writeAll(list);
+  if (targets.length) writeAll(list, cid);
   return targets.length;
 }
 

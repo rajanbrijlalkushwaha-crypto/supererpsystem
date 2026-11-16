@@ -69,7 +69,10 @@ const wake = list => list.forEach(h => { const w = waiting.get(h.id); if (w) { w
 
 const needUser = (req, res, next) => {
   const u = resolveUser(req);
-  if (!u) return res.status(401).json({ error: 'Please log in again.' });
+  if (!u || !u.companyId) return res.status(401).json({ error: 'Please log in again.' });
+  // a login works only in its own company (jobs, e-way logins, documents)
+  const asked = (req.body && req.body.companyId) || (req.query && req.query.companyId);
+  if (asked && String(asked) !== String(u.companyId)) return res.status(403).json({ error: 'This login is for another company.' });
   req.erpUser = u; next();
 };
 const needHelper = (req, res, next) => {
@@ -182,8 +185,9 @@ router.post('/jobs', needUser, (req, res) => {
   if (kind === 'gstret') {
     if (!companyId) return res.status(400).json({ error: 'companyId required' });
     const periods = [...new Set((Array.isArray(req.body?.periods) ? req.body.periods : []).map(String))].filter(x => /^(0[1-9]|1[0-2])20\d\d$/.test(x)).slice(0, 12);
-    const what = (Array.isArray(req.body?.what) ? req.body.what : []).filter(x => ['r1', 'r2b'].includes(x));
-    if (!periods.length || !what.length) return res.status(400).json({ error: 'Pick the month(s) and the return(s).' });
+    // 'ledger' = the dashboard's ledger balance (also read with every download); it needs no month
+    const what = [...new Set((Array.isArray(req.body?.what) ? req.body.what : []).filter(x => ['r1', 'r2b', 'ledger'].includes(x)))];
+    if (!what.length || (what.some(x => x !== 'ledger') && !periods.length)) return res.status(400).json({ error: 'Pick the month(s) and the return(s).' });
     const on = runnersFor(req.erpUser.id);
     if (!on.length) return res.status(409).json({ error: NOT_RUNNING() });
     if (!passwords.findLoginBy(companyId, isGstLogin)) return res.status(409).json({ error: 'No GST portal login in the Password Manager — add one with URL https://services.gst.gov.in' });
@@ -211,15 +215,21 @@ router.post('/jobs', needUser, (req, res) => {
   const ewbNo = String(req.body?.ewbNo || '').replace(/\D/g, '');
   if (!companyId) return res.status(400).json({ error: 'companyId required' });
   if (kind === 'generate' && (!json || !Array.isArray(json.billLists) || !json.billLists.length)) return res.status(400).json({ error: 'Nothing to send.' });
-  if (kind !== 'generate' && (!/^\d{12}$/.test(ewbNo) || !req.body?.dcId)) return res.status(400).json({ error: 'E-way bill no. and DC are needed.' });
+  // check / cancel: one e-way bill of a DC, or of a return note (returnId)
+  const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+  const retId = ID_RE.test(String(req.body?.returnId || '')) ? String(req.body.returnId) : '';
+  if (kind !== 'generate' && (!/^\d{12}$/.test(ewbNo) || (!retId && !ID_RE.test(String(req.body?.dcId || ''))))) return res.status(400).json({ error: 'E-way bill no. and DC are needed.' });
   const mine = runnersFor(req.erpUser.id);
   if (!mine.length) return res.status(409).json({ error: NOT_RUNNING() });
   const login = passwords.findLogin(companyId, 'ewaybillgst.gov.in');
   if (!login) return res.status(409).json({ error: 'No e-way portal login in the Password Manager (a login whose URL is ewaybillgst.gov.in).' });
   const job = {
     id: crypto.randomBytes(8).toString('hex'), userId: req.erpUser.id, userName: req.erpUser.name || req.erpUser.username, companyId,
-    kind, json: kind === 'generate' ? json : null, docs: Array.isArray(docs) ? docs : [], status: 'queued', message: 'Waiting for the helper on your PC…', results: [],
-    ...(kind !== 'generate' ? { ewbNo, dcId: req.body.dcId, reason: Math.min(4, Math.max(1, parseInt(req.body.reason, 10) || 2)), remarks: String(req.body.remarks || '').slice(0, 50), after: req.body.after === 'delete' ? 'delete' : '' } : {}),
+    kind, json: kind === 'generate' ? json : null,
+    // each e-way doc → the DC or return note it is written back to (ids are plain numbers / ids, never paths)
+    docs: (Array.isArray(docs) ? docs : []).map(d => ({ docNo: String(d?.docNo || '').slice(0, 20), dcNo: String(d?.dcNo || '').slice(0, 40),
+      ...(/^[A-Za-z0-9_-]{1,40}$/.test(String(d?.returnId || '')) ? { returnId: String(d.returnId) } : { dcId: /^[A-Za-z0-9_-]{1,40}$/.test(String(d?.dcId || '')) ? d.dcId : '' }) })), status: 'queued', message: 'Waiting for the helper on your PC…', results: [],
+    ...(kind !== 'generate' ? { ewbNo, ...(retId ? { returnId: retId } : { dcId: req.body.dcId }), reason: Math.min(4, Math.max(1, parseInt(req.body.reason, 10) || 2)), remarks: String(req.body.remarks || '').slice(0, 50), after: req.body.after === 'delete' ? 'delete' : '' } : {}),
     createdAt: now(), updatedAt: now(),
   };
   jobs.unshift(job); saveJobs();
@@ -227,12 +237,12 @@ router.post('/jobs', needUser, (req, res) => {
   res.json(publicJob(job));
 });
 router.get('/jobs/:id', needUser, (req, res) => {
-  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id);
+  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id && (!x.companyId || x.companyId === req.erpUser.companyId));
   if (!j) return res.status(404).json({ error: 'Not found' });
   res.json(publicJob(j));
 });
 router.post('/jobs/:id/cancel', needUser, (req, res) => {
-  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id);
+  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id && (!x.companyId || x.companyId === req.erpUser.companyId));
   if (j && !['done', 'failed'].includes(j.status)) { j.status = 'failed'; j.message = 'Cancelled.'; j.updatedAt = now(); saveJobs(); }
   res.json({ ok: true });
 });
@@ -293,7 +303,7 @@ router.get('/helper/jobs/:id/captcha', needHelper, (req, res) => {
 });
 /* ERP: the user typed the captcha (or wants a new picture) */
 router.post('/jobs/:id/captcha', needUser, (req, res) => {
-  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id);
+  const j = jobs.find(x => x.id === req.params.id && x.userId === req.erpUser.id && (!x.companyId || x.companyId === req.erpUser.companyId));
   if (!j) return res.status(404).json({ error: 'Not found' });
   if (['done', 'failed'].includes(j.status)) return res.status(409).json({ error: 'This search has finished.' });
   const seq = parseInt(req.body?.seq, 10);
@@ -331,6 +341,33 @@ router.post('/helper/jobs/:id/debug', needHelper, (req, res) => {
   res.json({ ok: true });
 });
 
+/* the portal's print of one e-way bill (captured by the helper) → saved as a PDF on its DC.
+   { docNo?, ewbNo, html? | pdf? (base64) } — generate jobs name the DC by its doc no.; check jobs have one DC */
+router.post('/helper/jobs/:id/ewbpdf', needHelper, async (req, res) => {
+  const j = jobs.find(x => x.id === req.params.id && x.helperId === req.helper.id);
+  if (!j) return res.status(404).json({ error: 'Not found' });
+  const ewbNo = String(req.body?.ewbNo || '').trim();
+  if (!/^\d{12}$/.test(ewbNo)) return res.status(400).json({ error: 'Bad e-way bill no.' });
+  const doc = (j.docs || []).find(d => String(d.docNo).trim() === String(req.body?.docNo || '').trim());
+  // a return note (material back from a client / to a vendor) or a DC
+  const lib = (doc ? doc.returnId : j.returnId) ? ewayPdfLib.returns : ewayPdfLib;
+  const dcId = doc ? (doc.returnId || doc.dcId) : (j.returnId || j.dcId);
+  if (!dcId) return res.status(400).json({ error: 'Which DC?' });
+  try {
+    const dc = lib.readDc(j.companyId, dcId);
+    if (!dc) return res.status(404).json({ error: 'DC not found' });
+    if (dc.ewayBillNo && String(dc.ewayBillNo) !== ewbNo) return res.status(409).json({ error: 'This DC has another e-way bill.' });
+    let buf = typeof req.body?.pdf === 'string' ? Buffer.from(req.body.pdf, 'base64') : null;
+    if (!buf || !ewayPdfLib.isPdf(buf)) {
+      const html = String(req.body?.html || '');
+      if (!html || html.length > 8 * 1024 * 1024) return res.status(400).json({ error: 'No print page' });
+      buf = await ewayPdfLib.htmlToPdf(html);
+    }
+    res.json({ ok: true, ewayPdf: lib.savePortalPdf(j.companyId, dcId, buf, { ewbNo, source: 'portal', by: j.userName || 'E-Way Helper' }) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+const ewayPdfLib = require('./ewayPdf');
+
 /* write the e-way no. into the DC it was made for */
 const dcFile = (cid, id) => path.join(ROOT, 'Database', 'Companies', cid, 'DeliveryChallan', String(id), `${id}.json`);
 router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
@@ -339,13 +376,17 @@ router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
   delete j.captchaImg; delete j.captchaAnswer; delete j.ask;   // the captcha picture is not kept once the job ends
   if (j.kind === 'gstret') {
     const r = (Array.isArray(req.body?.results) ? req.body.results : []).slice(0, 60).map(x => ({ period: String(x.period || ''), kind: String(x.kind || ''), status: String(x.status || ''), message: String(x.message || '').slice(0, 300) }));
+    // the GST dashboard's ledger balance (cash / credit ledger…), kept for the company
+    let led = null;
+    try { led = req.body?.ledger ? gstPortal.saveLedger(j.companyId, req.body.ledger) : null; } catch (e) { console.log('[gst] ledger not saved:', e.message); }
     const ok = r.filter(x => x.status === 'saved').length;
     const error = String(req.body?.error || '').slice(0, 300);
     j.results = r; noteRequests(j);
     const asked = r.filter(x => x.status === 'requested').map(x => perName(x.period));
-    j.status = ok || (!error && r.length) ? 'done' : 'failed';
-    j.message = error ? (ok ? `${ok} file(s) saved, then: ${error}` : error)
-      : `${ok} of ${r.length} return(s) downloaded from the GST portal.${asked.length ? ` GSTR-1 of ${asked.join(', ')}: the portal is making the file — it shows "Ready" here in about 20 minutes.` : ''}`;
+    j.status = ok || led || (!error && r.length) ? 'done' : 'failed';
+    const ledMsg = led ? ` Ledger balance${led.asOn ? ` as on ${led.asOn}` : ''} updated.` : '';
+    j.message = error ? (ok ? `${ok} file(s) saved, then: ${error}` : (led ? ledMsg.trim() : error))
+      : (r.length ? `${ok} of ${r.length} return(s) downloaded from the GST portal.${asked.length ? ` GSTR-1 of ${asked.join(', ')}: the portal is making the file — it shows "Ready" here in about 20 minutes.` : ''}` : '') + ledMsg;
     j.updatedAt = now(); saveJobs();
     return res.json({ ok: true });
   }
@@ -373,7 +414,7 @@ router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
     if (status === 'active' || status === 'expired') {
       // also undoes an earlier "cancelled" that was wrong
       try {
-        const f = dcFile(j.companyId, j.dcId), dc = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const f = j.returnId ? ewayPdfLib.returns.docFile(j.companyId, j.returnId) : dcFile(j.companyId, j.dcId), dc = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (String(dc.ewayBillNo) === j.ewbNo) {
           const { ewayCancelledAt, ewayCancelReason, ...rest } = dc;
           fs.writeFileSync(f, JSON.stringify({ ...rest, ...detUpd, ewayStatus: status === 'expired' ? 'expired' : 'generated', updatedAt: now() }, null, 2));
@@ -382,14 +423,14 @@ router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
     }
     if (status === 'cancelled') {
       try {
-        const f = dcFile(j.companyId, j.dcId), dc = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const f = j.returnId ? ewayPdfLib.returns.docFile(j.companyId, j.returnId) : dcFile(j.companyId, j.dcId), dc = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (String(dc.ewayBillNo) === j.ewbNo) {
           fs.writeFileSync(f, JSON.stringify({ ...dc, ...detUpd, ewayStatus: 'cancelled', ewayCancelledAt: now(), ewayCancelReason: j.kind === 'cancel' ? j.reason : dc.ewayCancelReason, ewayJobId: j.id, updatedAt: now() }, null, 2));
         }
       } catch { /* DC removed meanwhile */ }
     }
     j.outcome = status;
-    j.results = [{ ewbNo: j.ewbNo, dcId: j.dcId, status }];
+    j.results = [{ ewbNo: j.ewbNo, ...(j.returnId ? { returnId: j.returnId } : { dcId: j.dcId }), status }];
     j.status = status === 'unknown' ? 'failed' : 'done';
     j.message = status === 'cancelled' ? `E-way bill ${j.ewbNo} is cancelled on the portal.`
       : status === 'expired' ? `E-way bill ${j.ewbNo} is NOT ACTIVE on the portal — its validity is over. It is not cancelled${j.kind === 'cancel' ? ', and it can no longer be cancelled' : ''}.`
@@ -403,19 +444,19 @@ router.post('/helper/jobs/:id/result', needHelper, (req, res) => {
   results.forEach(r => {
     const doc = j.docs.find(d => String(d.docNo).trim() === String(r.docNo || '').trim());
     if (!doc || !/^\d{12}$/.test(String(r.ewbNo || ''))) return;
-    const f = dcFile(j.companyId, doc.dcId);
+    const f = doc.returnId ? ewayPdfLib.returns.docFile(j.companyId, doc.returnId) : dcFile(j.companyId, doc.dcId);
     try {
       const dc = JSON.parse(fs.readFileSync(f, 'utf8'));
       const upd = { ...dc, ewayBillNo: String(r.ewbNo), ...(r.ewbDate ? { ewayGenDate: String(r.ewbDate) } : {}), ...(r.validUpto ? { ewayValidUpto: String(r.validUpto) } : {}), ...(/^\d+$/.test(String(r.distanceKm || '')) ? { approxDistanceKm: String(r.distanceKm) } : {}),
         ewayStatus: 'generated', ewayJobId: j.id, updatedAt: now() };
       fs.writeFileSync(f, JSON.stringify(upd, null, 2));
-      saved.push({ dcId: doc.dcId, dcNo: dc.dcNo, docNo: doc.docNo, ewbNo: String(r.ewbNo) });
+      saved.push(doc.returnId ? { returnId: doc.returnId, dcNo: dc.returnNo, docNo: doc.docNo, ewbNo: String(r.ewbNo) } : { dcId: doc.dcId, dcNo: dc.dcNo, docNo: doc.docNo, ewbNo: String(r.ewbNo) });
     } catch { /* DC removed meanwhile */ }
   });
   j.results = saved;
   const error = String(req.body?.error || '').slice(0, 300);
   j.status = saved.length ? 'done' : 'failed';
-  j.message = saved.length ? `${saved.length} of ${j.docs.length} e-way bill${j.docs.length === 1 ? '' : 's'} saved in the DC${saved.length === 1 ? '' : 's'}.${error ? ' ' + error : ''}` : (error || 'No e-way bill number could be read from the portal.');
+  j.message = saved.length ? `${saved.length} of ${j.docs.length} e-way bill${j.docs.length === 1 ? '' : 's'} saved in the ${j.docs.some(d => d.returnId) ? 'return note' : 'DC'}${saved.length === 1 ? '' : 's'}.${error ? ' ' + error : ''}` : (error || 'No e-way bill number could be read from the portal.');
   j.updatedAt = now(); saveJobs();
   res.json({ ok: true, saved });
 });

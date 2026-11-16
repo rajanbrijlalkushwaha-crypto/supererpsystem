@@ -5,6 +5,9 @@ const path       = require('path');
 const http       = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
+require('./api/multerGuard');                 // uploads may not name another company than the login's
+try { require('./api/splitCompanyData').run(); }   // once: shared users / mail settings / notifications → each company's folder
+catch (e) { console.error('[company data] move into company folders stopped:', e.message); }
 
 const app  = express();
 const PORT = process.env.PORT || 5000;

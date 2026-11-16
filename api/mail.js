@@ -3,7 +3,7 @@
  * POST /api/mail/send   { companyId, to:[…], cc:[…], subject, message, docTitle,
  *                         document: { html } | { pdf (base64) }, fileName, files:[{ name, data (base64) }] }
  *   The document is made into a PDF (headless Chrome, same as Save PDF) and sent with the extra files through the
- *   mail account saved in Admin → Email settings (Database/email-config.json). The mail body is a clean teal
+ *   mail account saved in Admin → Email settings (each company its own: Companies/<c>/email-config.json). The mail body is a clean teal
  *   letter: company header (logo), the message, a card naming the attachment, company footer.
  *   Every mail is logged: Database/Companies/{cid}/MailLog/log.jsonl
  * GET  /api/mail/contacts?companyId=  → { company: { name, email }, contacts: [{ name, email, party, kind }] }
@@ -15,7 +15,7 @@ const path = require('path');
 const { ROOT, resolveUser } = require('./helpers');
 
 const router = express.Router();
-const CFG = path.join(ROOT, 'Database', 'email-config.json');
+/* the mail account: each company's own — Companies/<companyId>/email-config.json (tenant.readEmailCfg) */
 const cidOf = req => String(req.query.companyId || req.body?.companyId || '').replace(/[^\w-]/g, '');
 const coDir = cid => path.join(ROOT, 'Database', 'Companies', cid);
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
@@ -121,7 +121,7 @@ router.post('/send', async (req, res) => {
   if (!to.length) return res.status(400).json({ error: 'Enter at least one e-mail address in To.' });
   if (bad.length) return res.status(400).json({ error: `Not a valid e-mail address: ${bad.join(', ')}` });
   if (to.length + cc.length > 30) return res.status(400).json({ error: 'At most 30 addresses.' });
-  const cfg = readJ(CFG, {});
+  const cfg = require('./tenant').readEmailCfg(cid);   // the company's own mail account
   if (!cfg.email || !cfg.password) return res.status(409).json({ error: 'The mail account is not set up — Admin → Email settings.' });
   const co = readJ(path.join(coDir(cid), 'company.json'), {});
   const docTitle = String(b.docTitle || b.subject || 'Document').slice(0, 200);
@@ -139,7 +139,7 @@ router.post('/send', async (req, res) => {
     if (logoPath) { logoCid = 'company-logo'; inline.push({ filename: path.basename(logoPath), path: logoPath, cid: logoCid }); }
     const by = user.name || user.username || '';
     const sg = require('./signing'), fu = sg.fullUser(user);
-    const sigUrl = sg.sigData(user.id);
+    const sigUrl = sg.sigData(user.id, cid);
     const sender = { name: sg.nameOf(user, fu) || by, designation: fu.designation || '', phone: fu.phone || '', email: fu.email || '' };
     if (sigUrl) { sender.sigCid = 'sender-signature'; const [, mime, b64] = sigUrl.match(/^data:(image\/\w+);base64,(.*)$/) || []; if (b64) inline.push({ filename: 'signature.png', content: Buffer.from(b64, 'base64'), contentType: mime, cid: sender.sigCid }); }
     const nodemailer = require('nodemailer');

@@ -122,6 +122,32 @@ router.get('/meta/counter', (req, res) => {
   res.json({ last: Math.max(0, (Number(c.seq) || 700000) - 700000) });
 });
 
+/* ── the e-way bill PDF from the portal, kept with the DC ── */
+const ewayPdf = require('./ewayPdf');
+router.get('/:dcId/eway-pdf', (req, res) => {
+  const { companyId } = req.query;
+  const got = companyId && ewayPdf.portalPdfPath(companyId, req.params.dcId);
+  if (!got) return res.status(404).json({ error: 'No portal e-way bill PDF is saved for this DC.' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${got.dc.ewayPdf.file}"`);
+  res.sendFile(got.path);
+});
+/* upload: { companyId, data: <PDF as base64> } — the PDF saved from the e-way portal */
+router.post('/:dcId/eway-pdf', (req, res) => {
+  const { companyId, data } = req.body || {};
+  if (!companyId || typeof data !== 'string') return res.status(400).json({ error: 'companyId and the PDF are needed.' });
+  try {
+    const u = resolveUser(req);
+    const note = ewayPdf.savePortalPdf(companyId, req.params.dcId, Buffer.from(data.replace(/^data:[^,]*,/, ''), 'base64'), { source: 'upload', by: u ? (u.name || u.username) : '' });
+    res.json({ ok: true, ewayPdf: note });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+router.delete('/:dcId/eway-pdf', (req, res) => {
+  const { companyId } = req.query;
+  if (!companyId) return res.status(400).json({ error: 'companyId required' });
+  try { ewayPdf.removePortalPdf(companyId, req.params.dcId); res.json({ ok: true }); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 /* GET one */
 router.get('/:dcId', (req, res) => {
   const { companyId } = req.query;

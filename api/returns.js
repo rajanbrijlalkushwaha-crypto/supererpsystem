@@ -48,17 +48,33 @@ function nextIds(co, kind, date) {
 /* only the fields a note may carry — never trust the rest of the body */
 function clean(b, kind) {
   const items = (Array.isArray(b.items) ? b.items : [])
-    .map(it => ({ itemIdx: it.itemIdx != null && it.itemIdx !== '' ? Number(it.itemIdx) : null, itemName: s(it.itemName, 200), unit: s(it.unit, 20) || 'NOS', qty: Math.round(n(it.qty) * 1000) / 1000, remarks: s(it.remarks, 200) }))
+    .map(it => ({ itemIdx: it.itemIdx != null && it.itemIdx !== '' ? Number(it.itemIdx) : null, itemName: s(it.itemName, 200), unit: s(it.unit, 20) || 'NOS', qty: Math.round(n(it.qty) * 1000) / 1000, remarks: s(it.remarks, 200),
+      // client returns: the DC this quantity had gone on
+      ...(it.dcId ? { dcId: s(it.dcId, 30), dcNo: s(it.dcNo, 60) } : {}),
+      // for the print and the e-way bill: the order / PO line's rate, GST and HSN
+      hsnCode: s(it.hsnCode, 12), rate: Math.round(n(it.rate) * 100) / 100, gst: n(it.gst) }))
     .filter(it => it.itemName && it.qty > 0);
-  const base = { date: s(b.date, 10) || new Date().toISOString().slice(0, 10), reason: s(b.reason, 100), remarks: s(b.remarks, 500), vehicleNo: s(b.vehicleNo, 30), items };
+  const addr = a => (a && typeof a === 'object' ? { name: s(a.name, 200), gstin: s(a.gstin, 15).toUpperCase(), address: s(a.address, 400), city: s(a.city, 80), state: s(a.state, 60), pincode: s(a.pincode, 6) } : null);
+  const base = { date: s(b.date, 10) || new Date().toISOString().slice(0, 10), reason: s(b.reason, 100), reasonText: s(b.reasonText, 300), remarks: s(b.remarks, 500), vehicleNo: s(b.vehicleNo, 30), items,
+    // who sends the material and where it goes (client site → our godown, or our godown → vendor), as on the day of the note
+    fromParty: addr(b.fromParty), toParty: addr(b.toParty), clientPO: s(b.clientPO, 80),
+    // transport / e-way bill (generated through the E-Way Helper, or typed when made on the portal by hand)
+    transporterName: s(b.transporterName, 100), transporterId: s(b.transporterId, 15).toUpperCase(), approxDistanceKm: s(b.approxDistanceKm, 5).replace(/\D/g, ''),
+    transDocNo: s(b.transDocNo, 15), ewaySubSupplyType: s(b.ewaySubSupplyType, 2), ewayBillNo: s(b.ewayBillNo, 12).replace(/\D/g, ''), ewayGenDate: s(b.ewayGenDate, 40), ewayValidUpto: s(b.ewayValidUpto, 40) };
+  // the DCs the material came from (several possible), and a straight transfer to another client's order (Return Note + DC)
+  const dcList = [...new Map(items.filter(i => i.dcId).map(i => [i.dcId, { dcId: i.dcId, dcNo: i.dcNo || '' }])).values()];
+  const direct = b.direct && typeof b.direct === 'object' && b.direct.orderId
+    ? { orderId: s(b.direct.orderId, 30), orderNo: s(b.direct.orderNo, 60), customerName: s(b.direct.customerName, 200), dcId: s(b.direct.dcId, 30), dcNo: s(b.direct.dcNo, 60) } : null;
   return kind === 'client'
-    ? { ...base, orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), customerName: s(b.customerName, 200), dcId: s(b.dcId, 30), dcNo: s(b.dcNo, 60), location: s(b.location, 120) }
+    ? { ...base, orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), customerName: s(b.customerName, 200),
+        dcId: dcList.length === 1 ? dcList[0].dcId : s(b.dcId, 30), dcNo: dcList.length ? dcList.map(d => d.dcNo).join(', ') : s(b.dcNo, 60), dcs: dcList, direct, location: s(b.location, 120) }
     : { ...base, poId: s(b.poId, 30), poNo: s(b.poNo, 60), vendorId: s(b.vendorId, 30), vendorName: s(b.vendorName, 200), orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), location: s(b.location, 120) };
 }
 const check = (r, kind) => {
   if (kind === 'client' && !r.orderId) return 'Choose the sales order.';
   if (kind === 'vendor' && !r.poId) return 'Choose the purchase order.';
   if (!r.items.length) return 'Enter the quantity of at least one item.';
+  if (/^other$/i.test(r.reason) && !r.reasonText) return 'Write the reason (Other).';
   return '';
 };
 
@@ -68,6 +84,26 @@ router.get('/', (req, res) => {
   if (req.query.kind) list = list.filter(r => r.kind === req.query.kind);
   if (!req.query.withDeleted) list = list.filter(r => r.status !== 'deleted');
   res.json(list);
+});
+
+/* the e-way bill PDF from the portal, kept with the note (as on a DC) */
+const ewayPdf = require('./ewayPdf').returns;
+router.get('/:id/eway-pdf', (req, res) => {
+  const got = cid(req) && ewayPdf.portalPdfPath(cid(req), req.params.id);
+  if (!got) return res.status(404).json({ error: 'No portal e-way bill PDF is saved for this note.' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${got.dc.ewayPdf.file}"`);
+  res.sendFile(got.path);
+});
+router.post('/:id/eway-pdf', (req, res) => {
+  const co = cid(req), data = req.body?.data;
+  if (!co || typeof data !== 'string') return res.status(400).json({ error: 'companyId and the PDF are needed.' });
+  try { res.json({ ok: true, ewayPdf: ewayPdf.savePortalPdf(co, req.params.id, Buffer.from(data.replace(/^data:[^,]*,/, ''), 'base64'), { source: 'upload', by: who(req) }) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+router.delete('/:id/eway-pdf', (req, res) => {
+  if (!cid(req)) return res.status(400).json({ error: 'companyId required' });
+  try { ewayPdf.removePortalPdf(cid(req), req.params.id); res.json({ ok: true }); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 router.get('/:id', (req, res) => {

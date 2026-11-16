@@ -116,6 +116,67 @@ export function ewayJsonOf(dcs, company) {
   return { json: { version: '1.0.0621', billLists: out.map(x => x.bill) }, bad };
 }
 
+/* ── return notes ──
+ * client (Return Note): material comes back from the client's site to us — Inward, "Sales Return", from = client, to = us
+ *   (or a vendor's site we named: bill to us, ship to there).
+ * vendor (Return to Vendor): material goes back to the vendor — Outward, "Others: Purchase Return" ("Job Work" when it
+ *   goes for repair / rework), from = us (or the vendor site it lies at), to = the vendor. Doc = the note no. as a challan. */
+export const RETURN_SUB_TYPES = { client: [[7, 'Sales Return'], [6, 'Job work Returns'], [8, 'Others']], vendor: [[8, 'Others — Purchase Return'], [4, 'Job Work'], [1, 'Supply']] };
+export const returnSubOf = r => n(r.ewaySubSupplyType) || (r.kind === 'client' ? 7 : /repair|rework/i.test(`${r.reason} ${r.reasonText}`) ? 4 : 8);
+export function ewayBillOfReturn(r, company) {
+  const co = company || {};
+  const client = r.kind === 'client';
+  const ourGstin = String(co.gstin || '').toUpperCase();
+  const ourName = clip(co.companyName || co.name, 100).replace(/^M\/s\.?\s*/i, '');
+  const from = r.fromParty || {}, to = r.toParty || {};
+  const gst = g => (GSTIN_RE.test(String(g || '').toUpperCase()) ? String(g).toUpperCase() : 'URP');
+  const fromGstin = client ? gst(from.gstin) : ourGstin;
+  const toGstin = client ? ourGstin : gst(to.gstin);
+  // the GST state of each side comes from its GSTIN; the place the goods actually leave / reach from its address
+  const fromState = client ? stateCode(fromGstin === 'URP' ? from.state : '', fromGstin) : stateCode(co.state, ourGstin);
+  const toState = client ? stateCode(co.state, ourGstin) : stateCode(toGstin === 'URP' ? to.state : '', toGstin);
+  const actualFrom = stateCode(from.state, '') || fromState, actualTo = stateCode(to.state, '') || toState;
+  const [fromAddr1, fromAddr2] = twoLines(from.address);
+  const [toAddr1, toAddr2] = twoLines(to.address);
+  const sub = returnSubOf(r);
+  const intra = fromState && toState && fromState === toState;
+  let cgst = 0, sgst = 0, igst = 0, taxable = 0;
+  const itemList = (r.items || []).filter(it => n(it.qty) > 0).map((it, i) => {
+    const t = r2(n(it.qty) * n(it.rate)), g = n(it.gst);
+    taxable += t;
+    if (intra) { cgst += t * g / 200; sgst += t * g / 200; } else igst += t * g / 100;
+    return { itemNo: i + 1, productName: clip(it.itemName, 100), productDesc: '', hsnCode: String(it.hsnCode || '').replace(/\D/g, ''), quantity: n(it.qty),
+      qtyUnit: clip(it.unit || 'NOS', 3).toUpperCase() || 'NOS', taxableAmount: t, sgstRate: intra ? g / 2 : 0, cgstRate: intra ? g / 2 : 0, igstRate: intra ? 0 : g, cessRate: 0, cessNonAdvol: 0 };
+  });
+  // ship to / dispatch from a place that is not the party's own: a vendor's site
+  const elsewhere = client ? !!to.name && clip(to.name, 100).replace(/^M\/s\.?\s*/i, '') !== ourName : !!from.name && clip(from.name, 100).replace(/^M\/s\.?\s*/i, '') !== ourName;
+  const bill = {
+    userGstin: ourGstin, supplyType: client ? 'I' : 'O', subSupplyType: sub, subSupplyDesc: sub === 8 ? (client ? 'Material Return' : 'Purchase Return') : '',
+    docType: 'CHL', docNo: clip(r.returnNo, 16), docDate: dmy(r.date), transType: elsewhere ? (client ? 2 : 3) : 1,
+    fromGstin, fromTrdName: client ? clip(from.name, 100) : ourName, fromAddr1, fromAddr2, fromPlace: clip(from.city, 50), fromPincode: pin(from.pincode), fromStateCode: fromState, actualFromStateCode: actualFrom,
+    toGstin, toTrdName: client ? ourName : clip(to.name, 100), toAddr1, toAddr2, toPlace: clip(to.city, 50), toPincode: pin(to.pincode), toStateCode: toState, actualToStateCode: actualTo,
+    totalValue: r2(taxable), cgstValue: r2(cgst), sgstValue: r2(sgst), igstValue: r2(igst), cessValue: 0, TotNonAdvolVal: 0, OthValue: 0, totInvValue: r2(taxable + cgst + sgst + igst),
+    transMode: 1, transDistance: Math.round(n(r.approxDistanceKm)), transporterName: clip(r.transporterName, 100), transporterId: String(r.transporterId || '').toUpperCase(),
+    transDocNo: clip(r.transDocNo, 15), transDocDate: dmy(r.date), vehicleNo: String(r.vehicleNo || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), vehicleType: 'R',
+    mainHsnCode: parseInt(itemList[0]?.hsnCode, 10) || 0, itemList,
+  };
+  const miss = [];
+  if (!GSTIN_RE.test(ourGstin)) miss.push('company GSTIN');
+  if (!bill.docNo) miss.push('note no.');
+  if (!bill.fromPincode || String(bill.fromPincode).length !== 6) miss.push(`${client ? "client site's" : 'dispatch-from'} pincode`);
+  if (!bill.toPincode || String(bill.toPincode).length !== 6) miss.push(`${client ? 'received-at' : "vendor's"} pincode`);
+  if (!fromState || !toState) miss.push('state');
+  if (!bill.vehicleNo && !bill.transporterId) miss.push('vehicle no. (or transporter ID)');
+  if (!itemList.length) miss.push('products');
+  if (itemList.some(it => !it.hsnCode)) miss.push('HSN code of every product');
+  if (bill.totInvValue <= 0) miss.push('value (rate) of the products');
+  return { bill, miss };
+}
+export function ewayJsonOfReturns(list, company) {
+  const out = list.map(r => ({ r, ...ewayBillOfReturn(r, company) }));
+  return { json: { version: '1.0.0621', billLists: out.map(x => x.bill) }, bad: out.filter(x => x.miss.length) };
+}
+
 export function downloadJson(obj, name) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');

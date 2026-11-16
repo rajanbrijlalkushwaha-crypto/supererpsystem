@@ -50,9 +50,11 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /* ── Login ── */
-  const login = useCallback(async (username, password) => {
-    const res = await axios.post('/api/auth/login', { username, password });
+  /* each company has its own users: the server says which company this login opens (companyId), or asks to choose */
+  const login = useCallback(async (username, password, companyId) => {
+    const res = await axios.post('/api/auth/login', { username, password, ...(companyId ? { companyId } : {}) });
     sessionStorage.setItem('erp_token', res.data.token);
+    try { if (res.data.companyId) localStorage.setItem('selectedCompanyId', res.data.companyId); } catch { /* not needed */ }
     setUser(res.data.user);
     return res.data.user;
   }, []);

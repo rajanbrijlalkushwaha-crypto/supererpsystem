@@ -30,16 +30,27 @@ function sessionOf(req) {
   return s;
 }
 
+/* a login belongs to one company: a request may not name another company (query, body or /companies/:id) */
+function otherCompany(req, s) {
+  const asked = [req.query && req.query.companyId, req.body && typeof req.body === 'object' ? req.body.companyId : undefined]
+    .filter(v => v != null && v !== '').map(String);
+  return asked.find(c => c !== String(s.companyId)) || '';
+}
+
 function requireLogin(req, res, next) {
   if (OPEN.test(req.originalUrl.split('?')[0])) return next();
   const s = sessionOf(req);
   if (!s) return res.status(401).json({ error: 'Please log in again.' });
+  if (!s.companyId) return res.status(401).json({ error: 'Please log in again.' });
+  if (otherCompany(req, s)) return res.status(403).json({ error: 'This login is for another company. Sign out and sign in to that company.' });
   req.authUser = s;
-  return next();
+  // everything this request does runs inside the signed-in company
+  return tenant().runAs(s.companyId, next);
 }
+const tenant = () => require('./tenant');
 
 /* the browser keeps the login in a cookie too (HttpOnly: page scripts cannot read it) */
 const setLoginCookie = (res, token) => res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', path: '/' });
 const clearLoginCookie = res => res.clearCookie(COOKIE, { path: '/' });
 
-module.exports = { requireLogin, tokenOf, sessionOf, setLoginCookie, clearLoginCookie };
+module.exports = { requireLogin, tokenOf, sessionOf, otherCompany, setLoginCookie, clearLoginCookie };

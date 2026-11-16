@@ -334,110 +334,110 @@ function ClientPopup({ client: c, companyId, company, onClose, onEdit, onChanged
     const coAddr = [co.address, co.city, co.state, co.pincode].filter(Boolean).join(', ');
     const coLine = [co.gstin && 'GSTIN: ' + esc(co.gstin), co.phone && 'Ph: ' + esc(co.phone), co.email && 'Email: ' + esc(co.email)].filter(Boolean).join('&nbsp;&nbsp;|&nbsp;&nbsp;');
     const today = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const field = (lbl, v) => `<div class="fr"><span class="fl">${lbl}</span><span class="fc">:</span><span class="fv">${esc(v) || '&nbsp;'}</span></div>`;
+    const field = (lbl, v) => (v ? `<div class="fr"><span class="fl">${lbl}</span><span class="fc">:</span><span class="fv">${esc(v)}</span></div>` : '');
+    const addr = (a, city, state, pin, country) => [a, city, [state, pin].filter(Boolean).join(' - '), country && country !== 'India' ? country : ''].filter(Boolean).join(', ');
+    const billAddr = addr(c.billingAddr || c.address, c.city, c.state, c.pincode, c.country);
+    const shipAddr = c.shippingAddr ? addr(c.shippingAddr, c.shippingCity, c.shippingState, c.shippingPincode) : '';
+    const name = c.companyName || c.clientName || '';
+    const bankBits = [field('Bank', c.bankName), field('Account Holder', c.accountHolder), field('Account No.', c.accountNo), field('IFSC', c.ifsc), field('Branch', c.branch), field('UPI', c.upi)].join('');
+    const termBits = [field('Payment Terms', c.paymentTerms), field('Credit Limit', c.creditLimit ? money(c.creditLimit) : ''), field('Sales Person', c.salesPerson), field('Remarks', c.remarks)].join('');
 
-    const contactRows = contacts.length
-      ? contacts.map((p, i) => `<tr><td class="c">${i + 1}</td><td>${esc(p.name)}</td><td>${esc(p.designation)}</td><td>${esc(p.mobileNumber)}</td><td>${esc(p.email)}</td></tr>`).join('')
+    const real = t => /[A-Za-z0-9]/.test(String(t || ''));   // "." or "-" typed as a placeholder is not a contact
+    const pContacts = contacts.filter(p => real(p.name) || real(p.mobileNumber) || real(p.email));
+    const contactRows = pContacts.length
+      ? pContacts.map((p, i) => `<tr><td class="c">${i + 1}</td><td>${esc(p.name)}</td><td>${esc(p.designation)}</td><td>${esc(p.mobileNumber)}</td><td>${esc(p.email)}</td></tr>`).join('')
       : '<tr><td colspan="5" class="c">No contact person</td></tr>';
-    const itemRows = o => {
-      const its = soItems(o);
-      if (!its.length) return '';
-      return `<tr class="itr"><td></td><td colspan="7" style="padding:0;"><table class="sub"><thead><tr><th>Product</th><th style="width:60px">Qty</th><th style="width:50px">Unit</th><th style="width:90px">Rate</th><th style="width:100px">Amount</th></tr></thead><tbody>`
-        + its.map(it => `<tr><td>${esc(it.name)}</td><td class="r">${esc(fmtQty(it.qty))}</td><td class="c">${esc(it.unit)}</td><td class="r">${money(it.rate)}</td><td class="r">${money(it.amount)}</td></tr>`).join('')
-        + '</tbody></table></td></tr>';
-    };
+    const amt = v => MONEY_FMT.format(Number(v) || 0);
+    /* one line per product; the order's own cells span its lines */
     const orderRows = (orders || []).length
-      ? orders.map((o, i) => `<tr class="or"><td class="c">${i + 1}</td><td>${esc(o.orderNo)}</td><td class="c">${esc(fmtDate(o.orderDate))}</td><td>${esc(o.customerPO)}</td><td class="c">${o.poDate ? esc(fmtDate(o.poDate)) : ''}</td><td class="r">${money(orderValue(o))}</td><td class="r">${money(o.grandTotal)}</td><td class="c" style="text-transform:capitalize">${esc(o.status || 'draft')}</td></tr>` + itemRows(o)).join('')
-        + `<tr class="tot"><td colspan="5">Total (${orders.length} orders)</td><td class="r">${money(valueTotal)}</td><td class="r">${money(total)}</td><td></td></tr>`
-      : '<tr><td colspan="8" class="c">No sales orders for this client</td></tr>';
+      ? orders.map((o, i) => {
+        const its = soItems(o);
+        const lines = its.length ? its : [{ name: '—', qty: '', unit: '', rate: '', amount: '' }];
+        const span = lines.length > 1 ? ` rowspan="${lines.length}"` : '';
+        return lines.map((it, k) => `<tr class="${k === 0 ? 'ofirst' : ''}">${k === 0 ? `<td class="c"${span}>${i + 1}</td>
+          <td${span}><b>${esc(o.orderNo)}</b><div class="sm">${esc(fmtDate(o.orderDate))}</div></td>
+          <td class="po"${span}>${esc(o.customerPO) || '—'}${o.poDate ? `<div class="sm">${esc(fmtDate(o.poDate))}</div>` : ''}</td>` : ''}
+          <td>${esc(it.name)}</td><td class="r">${it.qty === '' ? '' : esc(fmtQty(it.qty))}</td><td class="c">${esc(it.unit)}</td>
+          <td class="r">${it.rate === '' ? '' : amt(it.rate)}</td><td class="r">${it.amount === '' ? '' : amt(it.amount)}</td>
+          ${k === 0 ? `<td class="r"${span}><b>${amt(o.grandTotal)}</b></td><td class="c"${span} style="text-transform:capitalize">${esc(o.status || 'draft')}</td>` : ''}</tr>`).join('');
+      }).join('')
+        + `<tr class="tot"><td colspan="7">Total — ${orders.length} order${orders.length === 1 ? '' : 's'}</td><td class="r">${amt(valueTotal)}</td><td class="r">${amt(total)}</td><td></td></tr>`
+      : '<tr><td colspan="10" class="c">No sales orders for this client</td></tr>';
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Client ${esc(c.clientId)} - ${esc(c.companyName || c.clientName)}</title>
+<title>Client ${esc(c.clientId)} - ${esc(name)}</title>
 <style>
-table.sig { width:100%; border-collapse:collapse; } table.sig td { border:0; padding:4px 6px; }
-.sig .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; min-height:30mm; }
-.sig .row3 { display:flex; align-items:flex-end; gap:6px; } .sig .row3 b { flex:1 1 0; text-align:center; }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Times New Roman', Times, Georgia, serif; font-size:10.5pt; color:#000; background:#fff; }
 .page { padding:12px; }
 .outer { width:100%; border:0.5pt solid #000; border-collapse:collapse; }
-.outer > tbody > tr > td { border:0.5pt solid #000; padding:3px 7px; vertical-align:top; }
-.sh { text-align:center; font-weight:bold; font-size:11.5pt; padding:4px; }
-.ch { font-weight:bold; text-decoration:underline; font-size:10.5pt; display:block; margin-bottom:2px; }
-.fr { display:flex; gap:2px; margin-bottom:1px; font-size:10pt; }
-.fl { min-width:120px; } .fc { margin:0 4px; } .fv { flex:1; }
+.outer > tbody > tr > td { border:0.5pt solid #000; padding:4px 8px; vertical-align:top; }
+.ttl { text-align:center; font-size:13pt; font-weight:bold; letter-spacing:2px; padding:5px !important; }
+.sh { text-align:center; font-weight:bold; font-size:10.5pt; padding:3px !important; }
+.ch { font-weight:bold; text-decoration:underline; display:block; margin-bottom:3px; }
+.nm { font-size:12pt; font-weight:bold; margin-bottom:3px; }
+.fr { display:flex; margin-bottom:1px; font-size:10pt; }
+.fl { min-width:108px; } .fc { margin:0 5px; } .fv { flex:1; word-break:break-word; }
 .it { width:100%; border-collapse:collapse; font-size:9.5pt; }
 .it th { border:0.5pt solid #000; padding:4px 5px; font-weight:bold; text-align:center; }
-.it td { border:0.5pt solid #000; padding:3px 5px; vertical-align:middle; }
+.it td { border:0.5pt solid #000; padding:3px 5px; vertical-align:top; }
 .it .c { text-align:center; } .it .r { text-align:right; white-space:nowrap; }
-.it .tot td { font-weight:bold; }
-.it tr.or td { font-weight:bold; }
-.sub { width:100%; border-collapse:collapse; font-size:9pt; }
-.sub th { border:0.5pt solid #000; border-top:0; padding:2px 5px; font-weight:bold; font-style:italic; text-align:center; }
-.sub td { border:0.5pt solid #000; padding:2px 5px; }
-.sub tr > :first-child { border-left:0; } .sub tr > :last-child { border-right:0; } .sub tbody tr:last-child td { border-bottom:0; }
-.sub .r { text-align:right; white-space:nowrap; } .sub .c { text-align:center; }
+.it .sm { font-size:8.5pt; } .it .po { overflow-wrap:anywhere; }
+.it tr.tot td { font-weight:bold; }
 .it thead tr:first-child th { border-top:0; }
-.it tr > :first-child { border-left:0; }
-.it tr > :last-child { border-right:0; }
+.it tr > :first-child { border-left:0; } .it tr > :last-child { border-right:0; }
 .it tbody tr:last-child td { border-bottom:0; }
-@media print { @page { margin:8mm; size:A4 portrait; } .page { padding:0; } tr { page-break-inside:avoid; break-inside:avoid; } }
+@media print { @page { margin:8mm; size:A4 portrait; } .page { padding:0; } tr { page-break-inside:avoid; break-inside:avoid; } thead { display:table-header-group; } }
 </style></head><body><div class="page">
 <table class="outer"><tbody>
   <tr><td colspan="2" style="padding:8px 10px; text-align:center;">
-    <div style="display:flex; flex-direction:column; align-items:center; gap:4px; text-align:center;">
-      ${logo ? `<img src="${logo}" style="height:48px; max-width:110px; object-fit:contain;">` : ''}
-      <div>
-        <div style="font-size:14pt; font-weight:bold;">${esc(co.companyName || co.name)}</div>
-        ${coAddr ? `<div style="font-size:9pt;">${esc(coAddr)}</div>` : ''}
-        ${coLine ? `<div style="font-size:9pt;">${coLine}</div>` : ''}
-      </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+      ${logo ? `<img src="${logo}" style="height:46px; max-width:110px; object-fit:contain;">` : ''}
+      <div style="font-size:14pt; font-weight:bold;">${esc(co.companyName || co.name)}</div>
+      ${coAddr ? `<div style="font-size:9pt;">${esc(coAddr)}</div>` : ''}
+      ${coLine ? `<div style="font-size:9pt;">${coLine}</div>` : ''}
     </div>
   </td></tr>
-  <tr><td colspan="2" style="text-align:center; font-size:14pt; font-weight:bold; padding:6px;">Client Details</td></tr>
-
-  <tr><td colspan="2" class="sh">Client Details &amp; Tax Identity</td></tr>
+  <tr><td colspan="2" class="ttl">CLIENT DETAILS</td></tr>
   <tr>
-    <td style="width:50%"><span class="ch">Client Details</span>
-      ${field('Client ID', c.clientId)}
-      ${field('Client Name', c.companyName || c.clientName)}
+    <td style="width:55%"><div class="nm">${esc(name)}</div>
+      ${field('Client ID', String(c.clientId))}
+      ${c.mailingName && c.mailingName !== name ? field('Mailing Name', c.mailingName) : ''}
+      ${field('Alias', c.alias)}
       ${field('Status', st.label)}
-      ${field('Created On', c.createdAt ? fmtDate(c.createdAt) : '')}
+      ${field('Category', c.category)}
+      ${field('Client Since', c.createdAt ? fmtDate(c.createdAt) : '')}
     </td>
-    <td style="width:50%"><span class="ch">Tax Identity</span>
-      ${field('GSTIN No', c.gstin)}
+    <td><span class="ch">Tax &amp; Registration</span>
+      ${field('GSTIN', c.gstin || 'Unregistered')}
       ${field('GST Type', c.gstType)}
-      ${field('Epsilon Vendor Code', c.epsilonVendorCode)}
+      ${field('PAN', c.pan)}
+      ${field('CIN', c.cin)}
+      ${field('MSME / Udyam', c.msme)}
+      ${field('Our Vendor Code', c.epsilonVendorCode)}
     </td>
   </tr>
+  <tr>
+    <td><span class="ch">Billing Address</span>${esc(billAddr) || '—'}</td>
+    <td><span class="ch">Shipping Address</span>${shipAddr ? esc(shipAddr) : 'Same as billing address'}</td>
+  </tr>
+  ${bankBits && termBits ? `<tr><td><span class="ch">Bank Details</span>${bankBits}</td><td><span class="ch">Terms</span>${termBits}</td></tr>`
+    : bankBits || termBits ? `<tr><td colspan="2"><span class="ch">${bankBits ? 'Bank Details' : 'Terms'}</span>${bankBits || termBits}</td></tr>` : ''}
 
-  <tr><td colspan="2" class="sh">Address</td></tr>
-  <tr><td colspan="2">
-    ${field('Address', c.address)}
-    ${field('City', c.city)}
-    ${field('State', c.state)}
-    ${field('Pincode', c.pincode)}
-  </td></tr>
-
-  <tr><td colspan="2" class="sh">Contact Persons (${contacts.length})</td></tr>
+  <tr><td colspan="2" class="sh">Contact Persons (${pContacts.length})</td></tr>
   <tr><td colspan="2" style="padding:0;">
-    <table class="it"><thead><tr><th style="width:34px">Sr No</th><th>Name</th><th>Designation</th><th>Number</th><th>Email</th></tr></thead>
+    <table class="it"><colgroup><col style="width:30px"><col><col style="width:22%"><col style="width:16%"><col style="width:28%"></colgroup>
+    <thead><tr><th>Sl</th><th>Name</th><th>Designation</th><th>Mobile</th><th>Email</th></tr></thead>
     <tbody>${contactRows}</tbody></table>
   </td></tr>
 
   <tr><td colspan="2" class="sh">Sales Orders (${(orders || []).length})</td></tr>
   <tr><td colspan="2" style="padding:0;">
-    <table class="it"><thead><tr><th style="width:34px">Sr No</th><th>Order No</th><th>Order Date</th><th>Customer PO</th><th>PO Date</th><th>Order Value</th><th>Grand Total</th><th>Status</th></tr></thead>
+    <table class="it"><colgroup><col style="width:24px"><col style="width:92px"><col style="width:132px"><col><col style="width:32px"><col style="width:34px"><col style="width:68px"><col style="width:72px"><col style="width:76px"><col style="width:62px"></colgroup>
+    <thead><tr><th>Sl</th><th>Order No. / Date</th><th>Client PO / Date</th><th>Product</th><th>Qty</th><th>Unit</th><th>Rate (₹)</th><th>Value (₹)</th><th>Grand Total (₹)</th><th>Status</th></tr></thead>
     <tbody>${orderRows}</tbody></table>
   </td></tr>
-
-  <tr><td colspan="2" style="padding:0;">
-    <table class="sig"><tr>
-      <td style="width:40%; height:32mm; vertical-align:top; border-right:1px solid #000;"><div class="box"><b>For ${esc(c.companyName || c.clientName || '')}</b><b>Signature &amp; Seal</b></div></td>
-      <td style="height:32mm; vertical-align:top;"><div class="box"><b style="text-align:right">For ${esc(co.companyName || '')}</b><div class="row3"><b>Prepared By</b><b>Verified By</b><b>Authorised Signatory</b></div></div></td>
-    </tr></table>
-  </td></tr>
-  <tr><td colspan="2" style="font-size:8.5pt; color:#444;">
+  <tr><td colspan="2" style="font-size:8.5pt;">
     <div style="display:flex; justify-content:space-between;"><span>${brandLine(user)}</span><span>Printed: ${esc(today)}</span></div>
   </td></tr>
 </tbody></table>

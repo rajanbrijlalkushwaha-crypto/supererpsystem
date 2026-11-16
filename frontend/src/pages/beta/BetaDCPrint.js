@@ -16,14 +16,14 @@ const d = v => { const x = v ? new Date(v) : null; return x && !isNaN(x) ? `${St
 const tidy = t => String(t || '').replace(/\r?\n/g, ', ').replace(/\s+,/g, ',').replace(/,(\s*,)+/g, ',').replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').trim();
 const now = () => new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-async function logoOf(co) {
+export async function logoOf(co) {
   if (!co?.logoFileName) return '';
   try {
     const b = (await axios.get(`/api/companies/logo/${encodeURIComponent(co.logoFileName)}`, { params: { companyId: co.companyId }, responseType: 'blob' })).data;
     return await new Promise(res => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.readAsDataURL(b); });
   } catch { return ''; }
 }
-function printHtml(html, id, collect, meta) {
+export function printHtml(html, id, collect, meta) {
   document.getElementById(id)?.remove();
   const fr = document.createElement('iframe');
   fr.id = id; fr.setAttribute('aria-hidden', 'true');
@@ -41,16 +41,16 @@ function printHtml(html, id, collect, meta) {
 }
 
 /* print several documents (each a laid-out page from collect: true) as ONE PDF — made on the server */
-export async function printMerged(pages) {
+export async function printMerged(pages, pdfs = []) {   // pdfs: ready PDFs (base64) added after the pages — e.g. the portal e-way bill
   // pages: laid-out pages from collect: true — { page, meta } (each document keeps its own signatures)
   const docs = pages.map(p => (typeof p === 'string' ? { page: p, meta: {} } : p));
   const signs = docs.map(x => x.meta?.sign && { ...x.meta.sign, label: ((String(x.page).match(/<title>([^<]*)<\/title>/) || [])[1] || '').replace(/&amp;/g, '&') }).filter(Boolean);
   const build = async () => {
     const htmls = await Promise.all(docs.map(x => signHtml(withTeal(x.page), x.meta?.sign)));
-    const r = await axios.post('/api/print-merge', { htmls }, { responseType: 'blob' });
+    const r = await axios.post('/api/print-merge', { htmls, ...(pdfs.length ? { pdfs } : {}) }, { responseType: 'blob' });
     return finalPdf(r.data, signs[0]);
   };
-  const title = docs.map(x => ((String(x.page).match(/<title>([^<]*)<\/title>/) || [])[1] || '').replace(/&amp;/g, '&')).filter(Boolean).join(' + ') || 'Documents';
+  const title = [...docs.map(x => ((String(x.page).match(/<title>([^<]*)<\/title>/) || [])[1] || '').replace(/&amp;/g, '&')), ...(pdfs.length ? ['Portal E-Way Bill'] : [])].filter(Boolean).join(' + ') || 'Documents';
   previewPdf(await build(), title, undefined, { html: docs.map(x => x.page).join(''), mail: docs[0]?.meta?.mail, sign: signs[0], signs, rebuild: build });
 }
 /* grow the blank row under the goods so a one-page challan reaches the bottom of the A4 page */
@@ -107,7 +107,8 @@ export function fitPage(doc, pageMm = 281) {
 }
 
 /* withValue (chosen at print time): true → rate, taxable, GST and amount; false → quantities only */
-export async function printDC({ dc, company, user, withValue: wv, collect }) {
+/* ewayBlock: false → the DC leaves out its e-way bill section (printed with the portal's e-way bill after it) */
+export async function printDC({ dc, company, user, withValue: wv, collect, ewayBlock = true }) {
   const co = company || {};
   const logo = await logoOf(co);
   const items = (dc.items || []).filter(it => n(it.qty) > 0);
@@ -165,14 +166,20 @@ tr.tot td { font-weight:bold; background:#F2F2F2; }
 .notes { min-height:12mm; color:#000; font-weight:bold; font-size:8.4pt; }
 .sg { vertical-align:top !important; } .sg b { font-size:9pt; } .sg .sp { height:16mm; }
 .sg .sl { font-size:8.4pt; color:#000; font-weight:bold; }
+/* signature box: names on top, a fixed signing space, then every label on one line at the bottom.
+   The space already fits a digital signature + name + date, so signing does not make the challan taller. */
+.sgt td.top { border-bottom:0 !important; padding-bottom:0 !important; }
+.sgt td.bot { border-top:0 !important; height:36mm; vertical-align:bottom !important; padding-top:2px !important; }
 .sg .tri { display:flex; align-items:flex-end; gap:6px; font-size:8.4pt; color:#000; font-weight:bold; }
-.sg .tri span { flex:1 1 0; text-align:center; }
+.sg .tri span { flex:1 1 0; text-align:center; white-space:nowrap; }
+.sg .tri span.auth { flex:1.35 1 0; }
+tr:has(.esig-n) .rcv { padding-bottom:calc(11pt + 9pt + 4px); }   /* in line with the signed labels (name and date lines under them) */
 .sec.c { text-align:center; }
 .foot { text-align:center; padding:4px 0 0; font-size:8.4pt; color:#000; font-weight:bold; }
 .pby { display:flex; justify-content:space-between; font-size:7.6pt; color:#000; font-weight:bold; margin-top:3px; }
 .inc { font-style:italic; color:#333; } .ao { font-size:7.6pt; color:#444; font-weight:normal; }
 @media print { @page { margin:8mm; size:A4 portrait; } tr { break-inside:avoid; } }
-</style></head><body>
+</style></head><body data-sign-room="1">
 <div class="doc">
 <table><tbody><tr><td class="ttl">DELIVERY CHALLAN</td></tr></tbody></table>
 <table>
@@ -186,7 +193,7 @@ tr.tot td { font-weight:bold; background:#F2F2F2; }
     </div></div></td>
     <td><table class="kv">
       ${kv('DC No.', esc(dc.dcNo || dc.dcId))}${kv('DC Date', d(dc.dcDate))}${kv('Sales Order', esc(dc.orderNo || ''))}
-      ${kv("Buyer's Order No.", esc(dc.clientOrderNo || '') + (dc.clientPoDate ? ` <span class="mut">dt. ${d(dc.clientPoDate)}</span>` : ''))}${!dc.ewayBillNo ? kv('Vehicle No.', esc(dc.vehicleNo || '')) : ''}
+      ${kv("Buyer's Order No.", esc(dc.clientOrderNo || '') + (dc.clientPoDate ? ` <span class="mut">dt. ${d(dc.clientPoDate)}</span>` : ''))}${!dc.ewayBillNo || !ewayBlock ? kv('Vehicle No.', esc(dc.vehicleNo || '')) : ''}
       ${billFirst ? kv('Tax Invoice No.', esc(dc.invoiceNo)) + kv('Invoice Date', d(dc.invoiceDate)) : ''}
 
     </table></td>
@@ -204,7 +211,7 @@ tr.tot td { font-weight:bold; background:#F2F2F2; }
   ${dispatchFrom ? `<tr><td colspan="2"><span class="lbl">Dispatch From:</span> ${esc(dispatchFrom)}</td></tr>` : ''}</tbody>
 </table>
 ${!dc.ewayBillNo && transportLine ? `<table><tbody><tr><td><span class="lbl">Transport Details:</span> ${transportLine}</td></tr></tbody></table>` : ''}
-${dc.ewayBillNo ? `<table>
+${dc.ewayBillNo && ewayBlock ? `<table>
   <colgroup><col><col><col>${qr ? '<col style="width:30mm">' : ''}</colgroup>
   <tbody><tr><td colspan="3" class="sec c">E-Way Bill &amp; Transport${cancelled ? ` <span class="cx">— E-WAY BILL CANCELLED${dc.ewayCancelledAt ? ' on ' + esc(new Date(dc.ewayCancelledAt).toLocaleString('en-IN')) : ''}</span>` : ''}</td>${qr ? `<td rowspan="2" class="qr"><img src="${qr}" alt=""><div>E-Way Bill QR</div></td>` : ''}</tr>
   <tr>
@@ -213,7 +220,6 @@ ${dc.ewayBillNo ? `<table>
     <td><table class="kv">${kv('Vehicle No.', esc(dc.vehicleNo || '') || '—')}${kv('Distance', dc.approxDistanceKm ? esc(dc.approxDistanceKm) + ' KM' : '—')}${kv('Dispatched By', esc(dc.dispatchThrough || '') || '—')}</table></td>
   </tr></tbody>
 </table>` : ''}
-<table>
 ${withValue ? `<table>
   <colgroup><col style="width:24px"><col><col style="width:58px"><col style="width:44px"><col style="width:34px"><col style="width:72px"><col style="width:78px"><col style="width:36px">${intra ? '<col style="width:62px"><col style="width:62px">' : '<col style="width:70px">'}<col style="width:82px"></colgroup>
   <thead><tr class="hd"><th>Sl</th><th>Description of Goods</th><th>HSN/SAC</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Taxable</th><th>GST</th>${intra ? '<th>CGST</th><th>SGST</th>' : '<th>IGST</th>'}<th>Amount (₹)</th></tr></thead>
@@ -238,12 +244,13 @@ ${withValue ? `<table>
   </tbody>
 </table>`}
 <table><tbody><tr><td class="notes"><b>Notes:</b> ${dc.remarks ? `${esc(dc.remarks)}<br>` : ''}Goods are sent for delivery as per the sales order above. Please check the material and sign this challan on receipt.</td></tr></tbody></table>
-<table>
+<table class="sgt">
   <colgroup><col style="width:50%"><col></colgroup>
-  <tbody><tr>
-    <td class="sg"><b>For, ${esc(dc.customerName || '')}</b><div class="sp"></div><div class="sl">Receiver's Signature</div></td>
-    <td class="sg"><b style="display:block; text-align:right">For ${esc(co.companyName || co.name || '')}</b><div class="sp"></div><div class="tri"><span>Prepared By</span><span>Verified By</span><span>Authorised Signatory</span></div></td>
-  </tr></tbody>
+  <tbody>
+  <tr><td class="sg top"><b>For, ${esc(dc.customerName || '')}</b></td><td class="sg top"><b style="display:block; text-align:right">For ${esc(co.companyName || co.name || '')}</b></td></tr>
+  <tr><td class="sg bot"><div class="sl rcv">Receiver's Signature</div></td>
+    <td class="sg bot"><div class="tri"><span>Prepared By</span><span>Verified By</span><span class="auth">Authorised Signatory</span></div></td></tr>
+  </tbody>
 </table>
 <div class="foot">${[co.city ? `SUBJECT TO ${esc(String(co.city).toUpperCase())} JURISDICTION` : '', 'This is a Computer Generated Delivery Challan'].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>
 </div>
@@ -262,4 +269,33 @@ ${withValue ? `<table>
     },
   };
   return printHtml(html, `dc-print-frame${collect ? `-${dc.dcId}` : ''}`, collect, meta);
+}
+
+/* ── the e-way bill PDF from the portal (kept with the DC) ── */
+export const blobB64 = b => new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(String(rd.result).split(',')[1] || ''); rd.onerror = rej; rd.readAsDataURL(b); });
+async function portalPdf(dc) {
+  return (await axios.get(`/api/delivery-challans/${dc.dcId}/eway-pdf`, { params: { companyId: dc.companyId }, responseType: 'blob' })).data;
+}
+const ewbMail = (dc, co) => ({
+  subject: `E-Way Bill ${dc.ewayBillNo || ''} – Delivery Challan ${dc.dcNo || dc.dcId}${dc.clientOrderNo ? ` against your PO ${dc.clientOrderNo}` : ''}`,
+  message: `Dear Sir / Madam,\n\nPlease find attached the e-way bill ${dc.ewayBillNo || ''} for the material dispatched under our Delivery Challan ${dc.dcNo || dc.dcId}${dc.vehicleNo ? `, vehicle no. ${dc.vehicleNo}` : ''}.`,
+  summary: [['E-way bill', dc.ewayBillNo || ''], ['Delivery challan', dc.dcNo || String(dc.dcId)], ['Vehicle', dc.vehicleNo || ''], ['From', (co && (co.companyName || co.name)) || '']],
+});
+/* only the portal's e-way bill */
+export async function printPortalEwb({ dc, company }) {
+  const blob = await portalPdf(dc);
+  previewPdf(blob, `E-Way Bill ${dc.ewayBillNo || ''}`.trim(), `EwayBill-${dc.ewayBillNo || dc.dcNo || dc.dcId}`, { mail: ewbMail(dc, company) });
+}
+/* the DC (with or without value) and then the portal's e-way bill — one PDF */
+export async function printDcWithPortal({ dc, company, user, withValue }) {
+  // the portal page carries the e-way bill, so the DC leaves out its own e-way bill section
+  const [page, blob] = await Promise.all([printDC({ dc, company, user, withValue, collect: true, ewayBlock: false }), portalPdf(dc)]);
+  await printMerged([page], [await blobB64(blob)]);
+}
+/* upload the PDF saved from the e-way portal */
+export async function uploadPortalPdf(dc, file) {
+  if (!file) return null;
+  if (!/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) throw new Error('Choose the PDF saved from the e-way portal.');
+  const r = await axios.post(`/api/delivery-challans/${dc.dcId}/eway-pdf`, { companyId: dc.companyId, data: await blobB64(file) });
+  return r.data.ewayPdf;
 }

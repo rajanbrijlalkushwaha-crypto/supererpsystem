@@ -210,7 +210,7 @@ router.delete('/payments/:id', (req, res) => {
     if (rec.status === 'confirmed' && who?.role !== 'admin') return res.status(403).json({ error: 'Only an Admin can delete an approved payment.' });
     /* keep a copy of every deleted payment (outside the company data, so it is never counted) to recover a mistake */
     try {
-      const bin = path.join(ROOT, 'Database', 'DeletedRecords', String(cid(req)), 'Payments');
+      const bin = path.join(require('./tenant').deletedDir(cid(req)), 'Payments');   // in the company's own folder
       fs.mkdirSync(bin, { recursive: true });
       fs.writeFileSync(path.join(bin, `${req.params.id}-${Date.now()}.json`),
         JSON.stringify({ ...rec, deletedAt: new Date().toISOString(), deletedBy: who || { name: 'Unknown' } }, null, 2));
@@ -354,8 +354,7 @@ router.post('/send-payment-advice', async (req, res) => {
     const companyId = cidBody || cid(req);
     if (!toEmail) return res.status(400).json({ error: 'toEmail is required' });
 
-    const EMAIL_CFG_FILE = path.join(ROOT, 'Database', 'email-config.json');
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = require('./tenant').readEmailCfg(companyId);   // the company's own mail account
     if (!cfg.email || !cfg.password)
       return res.status(500).json({ error: 'Email is not configured. Set up email in Admin → Settings.' });
 

@@ -14,7 +14,7 @@ import { Svg } from '../../components/ui/Icon';
 import { CSS as SALES_CSS, BIG, fyOf, FyFilter, fyCounts, useClearSel } from './BetaSales';
 import { n, num, amt, fdate, dash, lineOwner, isIntra } from './BetaSalesBill';
 import { dispatchOf, billMode } from './BetaDispatch';
-import { printDC, billOfDc, printMerged } from './BetaDCPrint';
+import { printDC, billOfDc, printMerged, printPortalEwb, printDcWithPortal, uploadPortalPdf } from './BetaDCPrint';
 import { printSalesBill } from './BetaSalesPrint';
 import { DOC_TYPES, SUB_TYPES, STATE_NAMES, CANCEL_REASONS, ewayDocOf, ewayJsonOf, downloadJson, ewayActive, cancelHoursLeft } from './BetaEwayJson';
 import { SKIP_PO, poLines, poStatusOf, loadGrns, dropDcGrns, sameItem } from './BetaPurchaseLib';
@@ -48,7 +48,7 @@ export const HB_CSS = `
 .hb-bd ol { margin:6px 0 0 18px; padding:0; line-height:1.7; } .hb-bd code { background:#F2F4F7; padding:1px 5px; border-radius:3px; }
 .hb .sb-abtn { height:26px; padding:0 10px; border:1px solid #C9D7DA; border-radius:2px; background:#fff; color:#344054; cursor:pointer; font:600 12px 'Inter', sans-serif; }
 `;
-const DC_CSS = `
+export const DC_CSS = `
 .dc-type { display:flex; gap:8px; flex-wrap:wrap; }
 .dc-type label { display:flex; align-items:flex-start; gap:8px; padding:7px 10px; border:1px solid #C9D7DA; border-radius:4px; cursor:pointer; background:#fff; flex:1; min-width:240px; }
 .dc-type label.on { border-color:#03444f; background:#F0F7F7; }
@@ -73,6 +73,8 @@ const DC_CSS = `
 .pm-menu { position:absolute; right:0; top:41px; z-index:40; min-width:190px; display:flex; flex-direction:column; background:#fff; border:1px solid #B9D0D3; box-shadow:0 10px 28px rgba(16,24,40,.16); }
 .pm-menu button { display:block; text-align:left; padding:8px 12px; border:0; border-bottom:1px solid #EDF2F3; background:#fff; cursor:pointer; font-family:inherit; }
 .pm-menu button:hover:not(:disabled) { background:#F0F7F7; } .pm-menu button:disabled { opacity:.45; cursor:default; }
+.pm-menu .pm-h { display:block; padding:7px 12px 4px; font-size:10.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:#5E7A80; background:#F5F9F9; border-bottom:1px solid #EDF2F3; white-space:nowrap; }
+.pm-menu { min-width:250px; }
 .pm-menu button.danger b { color:#B42318; } .pm-menu b { display:block; font-size:12.5px; color:#03444f; } .pm-menu small { font-size:11px; color:#667085; }
 .sb-tbtn.gen { background:#03444f; color:#fff; } .sb-tbtn.gen:hover:not(:disabled) { background:#022f37; }
 .ew-job { display:flex; align-items:center; gap:10px; padding:8px 14px; font-size:12.5px; border-bottom:1px solid #FEDF89; background:#FFFAEB; color:#93370D; flex-shrink:0; }
@@ -221,6 +223,22 @@ export default function BetaDC() {
       setNote(null);
     } catch { setNote({ err: true, text: 'Could not prepare the print (DC + invoice). Restart the backend if this is the first time.' }); }
   };
+  /* the e-way bill PDF from the portal: print / share it alone or after the DC; upload or remove it */
+  const doPortal = async (what, dc, arg) => {
+    try {
+      if (what === 'only') { setNote({ text: 'Opening the portal e-way bill…' }); await printPortalEwb({ dc, company: selectedCompany }); setNote(null); return; }
+      if (what === 'with-dc') { setNote({ text: 'Preparing one PDF — delivery challan + portal e-way bill…' }); await printDcWithPortal({ dc, company: selectedCompany, user, withValue: arg }); setNote(null); return; }
+      if (what === 'upload') {
+        setNote({ text: 'Saving the portal e-way bill PDF…' });
+        await uploadPortalPdf(dc, arg);
+        setReload(x => x + 1); setNote({ text: `Portal e-way bill PDF saved with DC ${dc.dcNo || dc.dcId}. Print it from Print ▾.` }); return;
+      }
+      if (what === 'remove') {
+        await axios.delete(`/api/delivery-challans/${dc.dcId}/eway-pdf`, { params: { companyId } });
+        setReload(x => x + 1); setNote({ text: `Portal e-way bill PDF removed from DC ${dc.dcNo || dc.dcId}.` });
+      }
+    } catch (e) { setNote({ err: true, text: e.response?.data?.error || e.message || 'Could not do that. Try again.' }); }
+  };
   const doGenerate = async list => {
     const one = Object.assign([...list], { __viaHelper: true });
     const json = doJson(one);
@@ -332,7 +350,7 @@ export default function BetaDC() {
               onSaved={(dc, text) => { setReload(x => x + 1); setNote({ text, dc }); if (editing) { setEditing(null); navigate('/beta/delivery-challan?tab=list'); } }} />}
         </div>
       )}
-      {tab === 'list' && <DCList dcs={dcs && [...dcs, ...gaps]} soMap={soMap} companyId={companyId} slot={slot} q={listQ} setQ={setListQ} onPrint={doPrint} onJson={doJson} onGenerate={doGenerate} onEwb={doEwb} onHelper={() => setHelperBox(true)} busyJob={!!job && !['done', 'failed'].includes(job.status)}
+      {tab === 'list' && <DCList dcs={dcs && [...dcs, ...gaps]} soMap={soMap} companyId={companyId} slot={slot} q={listQ} setQ={setListQ} onPrint={doPrint} onPortal={doPortal} onJson={doJson} onGenerate={doGenerate} onEwb={doEwb} onHelper={() => setHelperBox(true)} busyJob={!!job && !['done', 'failed'].includes(job.status)}
         onEdit={dc => { setNote(null); setEditing(dc); }}
         onDeleted={dc => { dropDcGrns(companyId, dc.dcId).finally(() => setReload(x => x + 1)); setNote({ text: `Deleted DC ${dc.dcNo || dc.dcId} — it stays at the end of the list (struck through) and its quantities are back to "to send".` }); }} setNote={t => setNote(t ? { text: t } : null)} />}
       {tab === 'status' && <DispatchStatus rows={rows} loading={loading} bills={bills || []} dcs={liveDcs} slot={slot}
@@ -844,9 +862,10 @@ function OrderPicker({ rows, onPick, onClose }) {
 const DCOLS = [['', '2.4%', 'c'], ['DC Date', '6.2%'], ['DC No.', '9%'], ['Client', '11.6%'], ['Order No.', '8.6%'], ['Client PO', '10%'], ['Products', '20%'], ['Add-ons', '9%'],
   ['Qty', '4.4%', 'r'], ['E-Way Bill', '8%'], ['Vehicle', '7%'], ['Type', '7%', 'c'], ['Bill', '6.8%']];
 
-function DCList({ dcs, soMap, companyId, slot, q, setQ, onPrint, onJson, onGenerate, onEwb, onHelper, busyJob, onEdit, onDeleted, setNote }) {
+function DCList({ dcs, soMap, companyId, slot, q, setQ, onPrint, onPortal, onJson, onGenerate, onEwb, onHelper, busyJob, onEdit, onDeleted, setNote }) {
   const [printMenu, setPrintMenu] = useState(false);
   const [ewMenu, setEwMenu] = useState(false);
+  const pdfIn = useRef(null);   // "upload portal e-way bill PDF" picks the file here
   useEffect(() => {
     if (!printMenu && !ewMenu) return undefined;
     const down = e => { if (!e.target.closest?.('.pm-wrap')) { setPrintMenu(false); setEwMenu(false); } };
@@ -882,6 +901,7 @@ function DCList({ dcs, soMap, companyId, slot, q, setQ, onPrint, onJson, onGener
 
   return (
     <>
+      <input ref={pdfIn} type="file" accept="application/pdf,.pdf" hidden onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f && sel) onPortal('upload', sel, f); }} />
       {slot && createPortal(<>
         <FyFilter list={fyList} total={all.length} sel={fySel} setSel={setFySel} />
         <input className="sb-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search DC, client, order, e-way…" aria-label="Search DCs" />
@@ -908,6 +928,9 @@ function DCList({ dcs, soMap, companyId, slot, q, setQ, onPrint, onJson, onGener
                     <b>Cancel E-Way</b><small>{sel && ewayActive(sel) && (cancelHoursLeft(sel) ?? 1) <= 0 ? 'Not possible — 24 hours are over' : 'Cancel the e-way bill on the portal'}</small></button>
                   <button type="button" role="menuitem" disabled={!sel?.ewayBillNo || busyJob} onClick={() => { close(); onEwb('check', sel); }}>
                     <b>Check on portal</b><small>Active, validity over, or cancelled — read again from the portal</small></button>
+                  <button type="button" role="menuitem" disabled={!sel?.ewayBillNo} onClick={() => { close(); pdfIn.current?.click(); }}>
+                    <b>{sel?.ewayPdf ? 'Replace portal e-way bill PDF' : 'Upload portal e-way bill PDF'}</b><small>{sel?.ewayPdf ? `Saved ${fdate(sel.ewayPdf.at)}${sel.ewayPdf.source === 'portal' ? ' by the E-Way Helper' : ''}` : 'The PDF saved from the e-way portal'}</small></button>
+                  {sel?.ewayPdf && <button type="button" role="menuitem" className="danger" onClick={() => { close(); onPortal('remove', sel); }}><b>Remove portal PDF</b><small>The e-way bill itself stays</small></button>}
                   <button type="button" role="menuitem" onClick={() => { close(); onHelper(); }}><b>E-Way Helper</b><small>Start it / set up this PC</small></button>
                 </span>
               );
@@ -917,8 +940,18 @@ function DCList({ dcs, soMap, companyId, slot, q, setQ, onPrint, onJson, onGener
             <button type="button" className="sb-tbtn" disabled={!sel} aria-haspopup="menu" aria-expanded={printMenu} onClick={() => setPrintMenu(m => !m)}><Svg name="file" size={13} />Print ▾</button>
             {printMenu && sel && (
               <span className="pm-menu" role="menu">
+                <span className="pm-h">{sel.ewayBillNo ? 'Only DC — e-way bill details printed in the DC' : 'Delivery challan'}</span>
                 <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); onPrint(sel, true); }}><b>With value</b><small>Rate, GST and amount</small></button>
                 <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); onPrint(sel, false); }}><b>Without value</b><small>Quantities only</small></button>
+                {sel.ewayBillNo && <>
+                  <span className="pm-h">DC + portal e-way bill{sel.ewayPdf ? ' — one PDF' : ' — portal PDF not saved yet'}</span>
+                  {sel.ewayPdf ? <>
+                    <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); onPortal('with-dc', sel, true); }}><b>With value</b><small>DC (no e-way section), then the portal e-way bill</small></button>
+                    <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); onPortal('with-dc', sel, false); }}><b>Without value</b><small>DC quantities only, then the portal e-way bill</small></button>
+                    <span className="pm-h">Only e-way bill</span>
+                    <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); onPortal('only', sel); }}><b>Portal e-way bill</b><small>Exactly as the e-way portal prints it</small></button>
+                  </> : <button type="button" role="menuitem" onClick={() => { setPrintMenu(false); pdfIn.current?.click(); }}><b>Upload portal e-way bill PDF…</b><small>Saved by the E-Way Helper when it generates / checks — or upload the PDF here</small></button>}
+                </>}
               </span>
             )}
           </span>
@@ -1120,7 +1153,7 @@ const EW_STEPS = kind => [
   ]),
 ];
 
-function EwayProgress({ job, onCancel }) {
+export function EwayProgress({ job, onCancel }) {
   const steps = EW_STEPS(job.kind);
   const known = steps.findIndex(x => x.st && x.st.includes(job.status));
   const last = useRef(0);
@@ -1158,7 +1191,7 @@ function EwayProgress({ job, onCancel }) {
 }
 
 /* the e-way portal login captcha, typed here: the helper on this PC sends its picture, fills what is typed and logs in */
-function EwayCaptcha({ job, onStop, inline }) {
+export function EwayCaptcha({ job, onStop, inline }) {
   const [val, setVal] = useState('');
   const [sent, setSent] = useState(null);   // the captcha no. already answered
   const [err, setErr] = useState('');

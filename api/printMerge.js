@@ -1,6 +1,7 @@
 /**
  * printMerge.js — several printed documents (e.g. Tax Invoice + Delivery Challan) as ONE PDF.
- * POST /api/print-merge { htmls: [html, html, …] } → application/pdf (A4, in the order given)
+ * POST /api/print-merge { htmls: [html, html, …], pdfs?: [base64 PDF, …] } → application/pdf (A4, in the order given;
+ * ready PDFs — e.g. the e-way bill from the portal — come after the pages)
  * Each html is a complete page already laid out in the browser; it is rendered with headless Chrome
  * and the pages are joined with pdf-lib.
  */
@@ -12,7 +13,8 @@ const router = express.Router();
 router.post('/', async (req, res) => {
   if (!resolveUser(req)) return res.status(401).json({ error: 'Please sign in again.' });
   const htmls = (Array.isArray(req.body?.htmls) ? req.body.htmls : []).map(String).filter(Boolean);
-  if (!htmls.length || htmls.length > 20) return res.status(400).json({ error: 'Send 1 to 20 documents.' });
+  const pdfs = (Array.isArray(req.body?.pdfs) ? req.body.pdfs : []).map(x => Buffer.from(String(x).replace(/^data:[^,]*,/, ''), 'base64')).filter(b => b.slice(0, 5).toString('latin1') === '%PDF-');
+  if ((!htmls.length && !pdfs.length) || htmls.length + pdfs.length > 20) return res.status(400).json({ error: 'Send 1 to 20 documents.' });
   let browser;
   try {
     const { PDFDocument } = require('pdf-lib');
@@ -24,6 +26,10 @@ router.post('/', async (req, res) => {
       await page.setContent(html, { waitUntil: 'load' });
       const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
       const src = await PDFDocument.load(pdf);
+      (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+    }
+    for (const buf of pdfs) {
+      const src = await PDFDocument.load(buf, { ignoreEncryption: true });
       (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
     }
     await browser.close(); browser = null;

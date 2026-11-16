@@ -73,11 +73,10 @@ const write = (cid, data) => {
    ACCESS — a logged-in user with the Password Manager permission
    (same rule as the screens: admin = all; no permissions set = all but approve).
 ───────────────────────────────────────────────────────── */
-const USERS_FILE = path.join(ROOT, 'Database', 'users.json');
 function allowed(sess, action) {
   if (sess.role === 'admin') return true;
   let u = null;
-  try { u = (JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) || []).find(x => x.id === sess.id); } catch { /* no users file */ }
+  try { u = require('./tenant').readUsers(sess.companyId).find(x => x.id === sess.id); } catch { /* no users file */ }
   const perms = u ? u.permissions : undefined;
   if (perms == null) return true;
   return !!(perms.passwords && perms.passwords[action]);

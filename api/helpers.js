@@ -88,11 +88,13 @@ const deleteJson = (filePath) => {
 const SESSIONS = require('./sessions');
 
 const resolveUser = (req) => {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
+  // header first, then the login cookie the browser sends by itself
+  const m = (req.headers.cookie || '').match(/(?:^|;\s*)erp_s=([^;]+)/);
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim() || (m ? decodeURIComponent(m[1]) : '');
   if (!token) return null;
   const sess = SESSIONS.get(token);
   if (!sess || sess.expiresAt < Date.now()) return null;
-  return { id: sess.userId, username: sess.username, name: sess.name, role: sess.role };
+  return { id: sess.userId, username: sess.username, name: sess.name, role: sess.role, companyId: sess.companyId };
 };
 
 const auditEntry = (req, action, extra = {}) => ({

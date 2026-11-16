@@ -17,8 +17,8 @@ import { BK_CSS, fyName, fyStartYear, today, dmy, amt, amtZ, r2, excel } from '.
 const TEAL = '#03444f';
 const MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
 /* month index in the FY (0 = Apr) → 'MMYYYY' */
-const perOf = (fy, i) => { const mm = ((i + 3) % 12) + 1; return `${String(mm).padStart(2, '0')}${i >= 9 ? fy + 1 : fy}`; };
-const perLabel = p => `${MONTHS[(+p.slice(0, 2) + 8) % 12]} ${p.slice(2)}`;
+export const perOf = (fy, i) => { const mm = ((i + 3) % 12) + 1; return `${String(mm).padStart(2, '0')}${i >= 9 ? fy + 1 : fy}`; };
+export const perLabel = p => `${MONTHS[(+p.slice(0, 2) + 8) % 12]} ${p.slice(2)}`;
 const isoOf = d => { const m = String(d || '').match(/^(\d{2})-(\d{2})-(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(d || '').slice(0, 10); };
 const key = (g, no) => `${String(g || '').trim().toUpperCase()}|${String(no || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '')}`;
 const nkey = no => String(no || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^0+/, '');
@@ -35,7 +35,7 @@ const hm = d => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digi
 const tax = x => r2((Number(x.igst) || 0) + (Number(x.cgst) || 0) + (Number(x.sgst) || 0));
 
 /* ── the portal JSON → rows ── */
-function rows2b(j) {
+export function rows2b(j) {
   const dd = ((j && (j.data || j)) || {}).docdata || {};
   const out = [];
   const add = (list, type, notes, sign = () => 1) => (list || []).forEach(s => (s[notes] || []).forEach(i => {
@@ -50,7 +50,7 @@ function rows2b(j) {
   (dd.impg || []).forEach(i => out.push({ type: 'Import (BoE)', gstin: '', party: `Port ${i.portcode || ''}`, no: i.boenum, date: isoOf(i.boedt), value: Number(i.txval) + Number(i.igst || 0), taxable: Number(i.txval) || 0, igst: Number(i.igst) || 0, cgst: 0, sgst: 0, itc: true }));
   return out;
 }
-function rows1(j, names) {
+export function rows1(j, names) {
   const out = [];
   const lines = i => (i.itms || []).map(x => x.itm_det || x);
   const push = (type, gstin, i, extra = {}, k = 1) => {
@@ -67,6 +67,42 @@ function rows1(j, names) {
   (j.b2cs || []).forEach(x => out.push({ type: 'B2C small', gstin: '', party: `${x.sply_ty === 'INTER' ? 'Inter' : 'Intra'}-state · ${x.rt}%`, no: '', date: '', value: (Number(x.txval) || 0) + (Number(x.iamt) || 0) + (Number(x.camt) || 0) + (Number(x.samt) || 0), pos: x.pos || '',
     taxable: Number(x.txval) || 0, igst: Number(x.iamt) || 0, cgst: Number(x.camt) || 0, sgst: Number(x.samt) || 0, summary: true }));
   return out;
+}
+
+/* ── portal vs books, bill by bill (used here and in GSTR-3B) ──
+   state: match (in books, same tax) · diff (amount differs) · portal (on the portal, not in books) · books (our bill, not on the portal) · info (summary line) */
+const inMonthOf = period => d => String(d || '').slice(0, 7) === `${period.slice(2)}-${period.slice(0, 2)}`;
+const bTax = b => ({ taxable: r2(b.subTotal), igst: r2(b.totalIGST), cgst: r2(b.totalCGST), sgst: r2(b.totalSGST) });
+export function compareR2B(json, pbAll, period) {
+  const inMonth = inMonthOf(period);
+  const portal = json ? rows2b(json) : null;
+  const pb = (pbAll || []).filter(b => b.type !== 'sales' && !dead(b.status));
+  const byKey = {}; pb.forEach(b => { byKey[key(b.partyGstin, b.vendorBillNo || b.billNo)] = b; if (b.vendorBillNo && b.billNo) byKey[key(b.partyGstin, b.billNo)] = byKey[key(b.partyGstin, b.billNo)] || b; });
+  const used = new Set();
+  const rows = (portal || []).map(r => {
+    const b = r.gstin ? byKey[key(r.gstin, r.no)] : null;
+    if (b) used.add(b.billId);
+    const bt = b ? bTax(b) : null;
+    return { ...r, ours: b ? String(b.billNo || b.billId) : '', oursDate: b ? b.billDate : '', state: b ? (Math.abs(tax(bt) - tax(r)) > 1 ? 'diff' : 'match') : 'portal', bookTax: bt ? tax(bt) : null, book: bt };
+  });
+  const extra = portal ? pb.filter(b => inMonth(b.billDate || b.createdAt) && !used.has(b.billId) && String(b.partyGstin || '').trim()).map(b => ({ type: 'Purchase bill', gstin: String(b.partyGstin).toUpperCase(), party: b.partyName, no: b.vendorBillNo || b.billNo, date: b.billDate, value: r2(b.grandTotal), ...bTax(b), ours: b.billNo || b.billId, state: 'books' })) : [];
+  return { portal, rows: [...rows, ...extra] };
+}
+export function compareR1(json, sbAll, names, period) {
+  const inMonth = inMonthOf(period);
+  const portal = json ? rows1(json, names || {}) : null;
+  const sb = (sbAll || []).filter(b => b.type !== 'purchase' && !dead(b.status));
+  const byNo = {}; sb.forEach(b => { byNo[nkey(b.billNo || b.billId)] = b; });
+  const used = new Set();
+  const rows = (portal || []).map(r => {
+    if (r.summary || !r.no || /note/i.test(r.type)) return { ...r, state: 'info' };
+    const b = byNo[nkey(r.no)];
+    if (b) used.add(b.billId);
+    const bt = b ? bTax(b) : null;
+    return { ...r, party: r.party || b?.partyName || '', ours: b ? String(b.billNo || b.billId) : '', oursDate: b ? b.billDate : '', state: b ? (Math.abs(r2(bt.taxable) - r2(r.taxable)) > 1 || Math.abs(tax(bt) - tax(r)) > 1 ? 'diff' : 'match') : 'portal', bookTax: bt ? tax(bt) : null, book: bt };
+  });
+  const extra = portal ? sb.filter(b => inMonth(b.billDate || b.createdAt) && !used.has(b.billId) && String(b.partyGstin || '').trim()).map(b => ({ type: 'Sales bill', gstin: String(b.partyGstin).toUpperCase(), party: b.partyName, no: b.billNo, date: b.billDate, value: r2(b.grandTotal), ...bTax(b), ours: b.billNo, state: 'books' })) : [];
+  return { portal, rows: [...rows, ...extra] };
 }
 
 export default function BetaGstPortal() {
@@ -114,35 +150,7 @@ export default function BetaGstPortal() {
   }, [bills]);
   const view = useMemo(() => {
     if (!bills) return null;
-    const inMonth = d => { const s = String(d || '').slice(0, 7); return s === `${period.slice(2)}-${period.slice(0, 2)}`; };
-    const bTax = b => ({ taxable: r2(b.subTotal), igst: r2(b.totalIGST), cgst: r2(b.totalCGST), sgst: r2(b.totalSGST) });
-    if (tab === 'r2b') {
-      const portal = data.r2b ? rows2b(data.r2b) : null;
-      const pb = bills.pb.filter(b => b.type !== 'sales' && !dead(b.status));
-      const byKey = {}; pb.forEach(b => { byKey[key(b.partyGstin, b.vendorBillNo || b.billNo)] = b; if (b.vendorBillNo && b.billNo) byKey[key(b.partyGstin, b.billNo)] = byKey[key(b.partyGstin, b.billNo)] || b; });
-      const used = new Set();
-      const rows = (portal || []).map(r => {
-        const b = r.gstin ? byKey[key(r.gstin, r.no)] : null;
-        if (b) used.add(b.billId);
-        const bt = b ? bTax(b) : null;
-        return { ...r, ours: b ? String(b.billNo || b.billId) : '', oursDate: b ? b.billDate : '', state: b ? (Math.abs(tax(bt) - tax(r)) > 1 ? 'diff' : 'match') : 'portal', bookTax: bt ? tax(bt) : null };
-      });
-      const extra = portal ? pb.filter(b => inMonth(b.billDate || b.createdAt) && !used.has(b.billId) && String(b.partyGstin || '').trim()).map(b => ({ type: 'Purchase bill', gstin: String(b.partyGstin).toUpperCase(), party: b.partyName, no: b.vendorBillNo || b.billNo, date: b.billDate, value: r2(b.grandTotal), ...bTax(b), ours: b.billNo || b.billId, state: 'books' })) : [];
-      return { portal, rows: [...rows, ...extra] };
-    }
-    const portal = data.r1 ? rows1(data.r1, names) : null;
-    const sb = bills.sb.filter(b => b.type !== 'purchase' && !dead(b.status));
-    const byNo = {}; sb.forEach(b => { byNo[nkey(b.billNo || b.billId)] = b; });
-    const used = new Set();
-    const rows = (portal || []).map(r => {
-      if (r.summary || !r.no || /note/i.test(r.type)) return { ...r, state: 'info' };
-      const b = byNo[nkey(r.no)];
-      if (b) used.add(b.billId);
-      const bt = b ? bTax(b) : null;
-      return { ...r, party: r.party || b?.partyName || '', ours: b ? String(b.billNo || b.billId) : '', oursDate: b ? b.billDate : '', state: b ? (Math.abs(r2(bt.taxable) - r2(r.taxable)) > 1 || Math.abs(tax(bt) - tax(r)) > 1 ? 'diff' : 'match') : 'portal', bookTax: bt ? tax(bt) : null };
-    });
-    const extra = portal ? sb.filter(b => inMonth(b.billDate || b.createdAt) && !used.has(b.billId) && String(b.partyGstin || '').trim()).map(b => ({ type: 'Sales bill', gstin: String(b.partyGstin).toUpperCase(), party: b.partyName, no: b.billNo, date: b.billDate, value: r2(b.grandTotal), ...bTax(b), ours: b.billNo, state: 'books' })) : [];
-    return { portal, rows: [...rows, ...extra] };
+    return tab === 'r2b' ? compareR2B(data.r2b, bills.pb, period) : compareR1(data.r1, bills.sb, names, period);
   }, [bills, data, tab, period, names]);
 
   const w = q.trim().toLowerCase();
@@ -242,10 +250,10 @@ function R1Wait({ rs, label, onDownload }) {
 
 /* ── the download panel: months, returns, progress, captcha / OTP ── */
 const JOB_KEY = co => `gst-portal-job-${co}`;
-function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
+export function Downloader({ companyId, fy, idx, cur, onDone, startRef, title }) {
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState(() => new Set([cur]));
-  const [what, setWhat] = useState({ r1: true, r2b: true });
+  const [what, setWhat] = useState({ r1: true, r2b: true, ledger: true });
   const [job, setJob] = useState(null);
   const [err, setErr] = useState('');
   const [ans, setAns] = useState('');
@@ -269,10 +277,11 @@ function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
   const start = async (only, onlyWhat) => {
     setErr(''); setAns(''); setSent(0);
-    const periods = only || [...pick].sort((a, b) => a - b).map(i => perOf(fy, i));
     const w = onlyWhat || Object.keys(what).filter(k => what[k]);
-    if (only) setOpen(true);
-    if (!periods.length || !w.length) return setErr('Tick at least one month and one return.');
+    const ledgerOnly = w.length === 1 && w[0] === 'ledger';
+    const periods = ledgerOnly ? [] : only || [...pick].sort((a, b) => a - b).map(i => perOf(fy, i));
+    if (only || onlyWhat) setOpen(true);
+    if (!w.length || (!ledgerOnly && !periods.length)) return setErr('Tick at least one month and one return.');
     try {
       const j = (await axios.post('/api/eway-helper/jobs', { companyId, kind: 'gstret', periods, what: w })).data;
       try { sessionStorage.setItem(JOB_KEY(companyId), j.id); } catch { /* ignore */ }
@@ -293,7 +302,7 @@ function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
     <div className="gp-dl">
       <div className="gp-dl-h">
         <span className="ic"><Svg name="sync" size={14} /></span>
-        <div><b>Download from the GST portal</b><span>Logs in with the GST login saved in Password Manager — you type only the captcha (and OTP, if asked) here.</span></div>
+        <div><b>{title || 'Download from the GST portal'}</b><span>Logs in with the GST login saved in Password Manager — you type only the captcha (and OTP, if asked) here.</span></div>
         <span className="grow" />
         {!running && <button type="button" className="sf-b pri" onClick={() => setOpen(o => !o)}>{open ? 'Close' : 'Download from portal'}</button>}
         {running && <button type="button" className="sf-b ghost" onClick={stop}>Stop</button>}
@@ -308,7 +317,9 @@ function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
           <div className="gp-row">
             <label><input type="checkbox" checked={what.r1} onChange={e => setWhat(o => ({ ...o, r1: e.target.checked }))} />GSTR-1</label>
             <label><input type="checkbox" checked={what.r2b} onChange={e => setWhat(o => ({ ...o, r2b: e.target.checked }))} />GSTR-2B</label>
+            <label title="The cash / credit ledger balance shown on the GST dashboard"><input type="checkbox" checked={what.ledger} onChange={e => setWhat(o => ({ ...o, ledger: e.target.checked }))} />Ledger balance</label>
             <span className="grow" />
+            <button type="button" className="sf-b ghost" onClick={() => start(null, ['ledger'])}>Only ledger balance</button>
             <button type="button" className="sf-b pri" onClick={() => start()}>Start download ({pick.size} month{pick.size === 1 ? '' : 's'})</button>
           </div>
           <div className="gp-hint">GSTR-1: the portal makes the file on request in about 20 minutes — the month shows “In progress”, then “Ready” with a Download button. GSTR-2B is ready after the 14th of the next month.</div>
@@ -328,7 +339,7 @@ function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
           )}
           {(job.results || []).length > 0 && (
             <div className="gp-res">{job.results.map(r => { const s = RES[r.status] || RES.none; return (
-              <span key={r.period + r.kind} title={r.message}><b style={{ color: s[1] }}>{s[0]}</b>{perLabel(r.period)} {r.kind === 'r1' ? 'GSTR-1' : 'GSTR-2B'}<i>{r.message}</i></span>); })}</div>
+              <span key={r.period + r.kind} title={r.message}><b style={{ color: s[1] }}>{s[0]}</b>{r.period ? perLabel(r.period) : ''} {r.kind === 'r1' ? 'GSTR-1' : r.kind === 'ledger' ? 'Ledger balance' : 'GSTR-2B'}<i>{r.message}</i></span>); })}</div>
           )}
         </div>
       )}
@@ -336,7 +347,7 @@ function Downloader({ companyId, fy, idx, cur, onDone, startRef }) {
   );
 }
 
-const GP_CSS = `
+export const GP_CSS = `
 .gp-dl { margin:10px 12px 0; border:1px solid #CFE0E3; border-radius:6px; background:#fff; }
 .gp-dl-h { display:flex; align-items:center; gap:10px; padding:9px 12px; }
 .gp-dl-h .ic { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; background:#E1EFF0; color:${TEAL}; flex-shrink:0; }

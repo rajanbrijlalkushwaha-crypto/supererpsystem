@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthShell, { Field, Alert, Btn, loginPath, StateIcon } from '../../components/auth/AuthShell';
+import useCompanies from '../../components/auth/useCompanies';
 
 /* Vendor — ask for a password reset link by email. */
 export default function ForgotPassword() {
@@ -10,13 +11,15 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg]         = useState(null);
   const [sent, setSent]       = useState(false);
+  const { companies, cid, setCid } = useCompanies();   // each company has its own suppliers
 
   const sendLink = async (e) => {
     e?.preventDefault();
+    if (!cid) { setMsg({ text: 'Choose the company you are registered with.' }); return; }
     if (!email.trim()) { setMsg({ text: 'Enter your registered email address.' }); return; }
     setLoading(true); setMsg(null);
     try {
-      const res = await axios.post('/api/vendor-portal/forgot-password/request', { email: email.trim() });
+      const res = await axios.post('/api/vendor-portal/forgot-password/request', { email: email.trim(), companyId: cid });
       setSent(true);
       if (res.data.devLink) setMsg({ type: 'success', text: `Dev mode — link: ${res.data.devLink}` });
     } catch (err) {
@@ -47,6 +50,10 @@ export default function ForgotPassword() {
       ) : (
         <form onSubmit={sendLink} autoComplete="off" noValidate className="as-anim">
           <Alert msg={msg} />
+          <Field id="vfp-co" icon="biz" type="select" aria-label="Company" value={cid} onChange={e => { setCid(e.target.value); setMsg(null); }}>
+            <option value="">Choose company…</option>
+            {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.companyName}</option>)}
+          </Field>
           <Field id="vfp-email" icon="mail" type="email" autoFocus placeholder="vendor@company.com" aria-label="Registered email"
             value={email} onChange={e => { setEmail(e.target.value); setMsg(null); }} />
           <Btn type="submit" busy={loading} busyText="Sending…">Send reset link</Btn>

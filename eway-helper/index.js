@@ -300,7 +300,9 @@ async function login(cfg, browser, page, job, step) {
   await dismissPopups(page); await sleep(1200); await dismissPopups(page);
 }
 
+let JOB_CFG = null;   // settings of the job running now (for steps that send files to the ERP)
 async function runJob(cfg, job) {
+  JOB_CFG = cfg;
   const step = (status, message) => api(cfg, 'POST', `/helper/jobs/${job.id}/progress`, { status, message }).then(r => { if (r.cancelled) throw new Error('Cancelled in the ERP'); }).catch(e => { if (/Cancelled/.test(e.message)) throw e; });
   const exe = findBrowser();
   if (!exe) throw new Error('Chrome or Edge was not found on this PC');
@@ -382,6 +384,7 @@ async function runJob(cfg, job) {
         try {
           const d = await readEwbDetails(browser, page, mainUrl, r.ewbNo);
           if (d) { if (d.ewbDate) r.ewbDate = d.ewbDate; if (d.validUpto) r.validUpto = d.validUpto; if (d.distanceKm) r.distanceKm = d.distanceKm; }
+          if (d) { await step('details', `Saving the portal e-way bill ${r.ewbNo} as PDF…`); await sendPrint(cfg, job, browser, r.ewbNo, r.docNo); }
         } catch { /* keep what the result table gave */ }
       }
     }
@@ -423,6 +426,61 @@ async function readEwbDetails(browser, page, mainUrl, ewbNo) {
     await sleep(1500);
   }
   return null;
+}
+
+/* The portal's print of the e-way bill now open (after readEwbDetails).
+   1) As the portal's own Print button makes it: the page printed to PDF with the portal's print style (possible
+      when Chrome runs without a window — the server helper).
+   2) Otherwise the whole page as one self-contained copy — the portal's styles (with its print rules) and its
+      pictures (QR, barcode) put inside, scripts removed — which the ERP prints the same way. */
+async function printPagePdf(browser, ewbNo) {
+  for (const pg of await browser.pages()) {
+    const has = await pg.evaluate(no => !!document.body && document.body.innerText.includes(no), ewbNo).catch(() => false);
+    if (!has) continue;
+    try {
+      await pg.emulateMediaType('print');
+      const pdf = await pg.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } });
+      await pg.emulateMediaType(null).catch(() => {});
+      return Buffer.from(pdf);
+    } catch { await pg.emulateMediaType(null).catch(() => {}); return null; }   // Chrome with a window cannot print to PDF
+  }
+  return null;
+}
+async function printPageHtml(browser, ewbNo) {
+  for (const f of await allFrames(browser)) {
+    const html = await safe(f, no => {
+      if (!document.body || !(document.body.innerText || '').includes(no)) return '';
+      const root = document.documentElement;
+      // pictures and drawings → data inside the page (same site, so they can be copied)
+      const imgs = [...root.querySelectorAll('img')], cans = [...root.querySelectorAll('canvas')];
+      const imgData = imgs.map(img => { try { if (!img.complete || !img.naturalWidth) return ''; const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); return c.toDataURL('image/png'); } catch { return ''; } });
+      const canData = cans.map(cv => { try { return cv.toDataURL('image/png'); } catch { return ''; } });
+      // the values typed in boxes are kept as they show
+      [...root.querySelectorAll('input')].forEach(i => i.setAttribute('value', i.value));
+      const clone = root.cloneNode(true);
+      [...clone.querySelectorAll('img')].forEach((im, i) => { if (imgData[i]) im.setAttribute('src', imgData[i]); else if (im.getAttribute('src')) im.setAttribute('src', new URL(im.getAttribute('src'), location.href).href); });
+      [...clone.querySelectorAll('canvas')].forEach((cv, i) => { if (!canData[i]) return; const im = document.createElement('img'); im.src = canData[i]; im.style.width = cans[i].offsetWidth + 'px'; im.style.height = cans[i].offsetHeight + 'px'; cv.replaceWith(im); });
+      clone.querySelectorAll('script, noscript, iframe, object, embed, link[rel="stylesheet"], style, button, input[type=button], input[type=submit], input[type=image]').forEach(e => e.remove());
+      // the portal's styles, print rules included (same site → readable)
+      const css = [...document.styleSheets].map(sh => { try { return [...sh.cssRules].map(r => r.cssText).join('\n'); } catch { return sh.href ? `@import url("${sh.href}");` : ''; } }).join('\n');
+      const head = clone.querySelector('head') || clone.insertBefore(document.createElement('head'), clone.firstChild);
+      head.insertAdjacentHTML('afterbegin', `<meta charset="utf-8"><base href="${location.href}">`);
+      head.insertAdjacentHTML('beforeend', `<style>${css}</style>`);
+      return '<!DOCTYPE html>' + clone.outerHTML;
+    }, ewbNo);
+    if (html) return html;
+  }
+  return '';
+}
+/* send the portal's print of this e-way bill to the ERP (kept as a PDF on the DC); never stops the job */
+async function sendPrint(cfg, job, browser, ewbNo, docNo) {
+  try {
+    const pdf = await printPagePdf(browser, ewbNo);
+    const html = pdf ? '' : await printPageHtml(browser, ewbNo);
+    if (!pdf && !html) { log('print page of', ewbNo, 'not found — no PDF'); return; }
+    await api(cfg, 'POST', `/helper/jobs/${job.id}/ewbpdf`, { ewbNo, docNo, ...(pdf ? { pdf: pdf.toString('base64') } : { html }) }, 120000);
+    log('e-way bill PDF of', ewbNo, 'sent to the ERP');
+  } catch (e) { log('could not send the e-way bill PDF of', ewbNo, ':', e.message); }
 }
 
 /* After the e-way bill no. is entered on the Cancel page, the portal shows one of:
@@ -546,7 +604,7 @@ async function ewbStatusFlow(browser, page, job, step, mainUrl) {
   if (!cancel) {
     await step('check', 'Active — reading its details (valid upto, distance)…');
     let details = {};
-    try { const d = await readEwbDetails(browser, page, mainUrl, job.ewbNo); if (d) { const { text, ...rest } = d; details = rest; } } catch { /* status is what matters */ }
+    try { const d = await readEwbDetails(browser, page, mainUrl, job.ewbNo); if (d) { const { text, ...rest } = d; details = rest; await sendPrint(JOB_CFG, job, browser, job.ewbNo, ''); } } catch { /* status is what matters */ }
     await banner(page, `E-way bill ${job.ewbNo} is ACTIVE on the portal — sent to the ERP. You can close this window.`);
     return { results: [{ ewbNo: job.ewbNo, status: 'active', details }], error: '' };
   }
@@ -844,7 +902,7 @@ async function gstReturnFlow(cfg, browser, page, job, step) {
     api(cfg, 'POST', `/helper/jobs/${job.id}/progress`, { status: 'working', message: `${P.label} ${kind === 'r1' ? 'GSTR-1' : 'GSTR-2B'}: ${message}`, results }).catch(() => {});
   };
   await gstLogin(cfg, browser, page, job, step);
-  const months = job.periods.map(periodInfo);
+  const months = (job.periods || []).map(periodInfo);
   let fatal = '';
   for (const P of months) {
     try {
@@ -866,12 +924,45 @@ async function gstReturnFlow(cfg, browser, page, job, step) {
       }
     } catch (e) {
       if (/sent the robot back|did not open the returns dashboard|Cancelled/i.test(e.message)) { fatal = e.message; break; }
-      job.what.forEach(k => put(P, k, 'error', e.message));
+      job.what.filter(k => k !== 'ledger').forEach(k => put(P, k, 'error', e.message));
     }
+  }
+  // the dashboard's Ledger Balance (cash / credit ledger…) — read on every GST login, after the returns
+  let ledger = null;
+  if (!fatal) {
+    try { await step('working', 'Reading the ledger balance from the GST dashboard…'); ledger = await readLedger(page); }
+    catch (e) { log('ledger balance not read:', e.message); if ((job.what || []).includes('ledger')) await sendDebug(cfg, job, page, 'ledger'); }
   }
   try { await cdp.detach(); } catch { /* closed */ }
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
-  return { results, error: fatal };
+  return { results, error: fatal || ((job.what || []).includes('ledger') && !ledger && !results.length ? 'The ledger balance could not be read from the GST dashboard.' : ''), ledger };
+}
+
+/* the GST dashboard (services.gst.gov.in/services/auth/dashboard) shows "Ledger Balance <date>": a table with
+   IGST / CGST / SGST / CESS for the Electronic Liability Register, Cash Ledger, Credit Ledger, … → { asOn, rows } */
+async function readLedger(page) {
+  const DASH = 'https://services.gst.gov.in/services/auth/dashboard';
+  const read = () => safe(page, () => {
+    const num = t => { const v = parseFloat(String(t || '').replace(/[,₹\s]/g, '')); return isNaN(v) ? 0 : v; };
+    const tbl = [...document.querySelectorAll('table')].find(t => /electronic\s+credit\s+ledger/i.test(t.innerText || '') && /igst/i.test(t.innerText || ''));
+    if (!tbl) return null;
+    const head = [...(tbl.querySelector('thead tr') || tbl.rows[0]).cells].map(c => (c.innerText || '').toUpperCase());
+    const col = k => head.findIndex(h => h.includes(k));
+    const ci = { igst: col('IGST'), cgst: col('CGST'), sgst: col('SGST'), cess: col('CESS') };
+    const rows = [...tbl.querySelectorAll('tbody tr, tr')].filter(r => r.cells.length >= 4 && !/IGST/i.test(r.innerText || ''))
+      .map(r => { const c = [...r.cells].map(x => (x.innerText || '').replace(/\s+/g, ' ').trim()); return { name: c[0], igst: num(c[ci.igst]), cgst: num(c[ci.cgst]), sgst: num(c[ci.sgst]), cess: num(c[ci.cess]) }; })
+      .filter(r => r.name);
+    const m = (document.body.innerText.match(/ledger\s+balance[\s|]*([0-3]\d\/[01]\d\/\d{4})/i) || [])[1] || '';
+    return rows.length ? { asOn: m, rows } : null;
+  });
+  let got = await read();
+  if (!got) {
+    if (!/services\/auth\/dashboard/i.test(page.url())) await page.goto(DASH, { waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {});
+    for (let i = 0; i < 20 && !(got = await read()); i++) await sleep(1000);   // the balance is loaded by the page after it opens
+  }
+  if (!got) throw new Error('The Ledger Balance was not found on the GST dashboard.');
+  log(`GST ledger balance ${got.asOn}: ${got.rows.map(r => `${r.name} ${r.igst}/${r.cgst}/${r.sgst}/${r.cess}`).join('; ')}`);
+  return got;
 }
 
 /* GSTR-1: tile Download → "Generate JSON file to download" → the portal's pop-up "Download of JSON file" shows either
@@ -1201,3 +1292,5 @@ if (require.main === module) {
   const a = process.argv.slice(2);
   (a[0] === '--pair' ? pair(a[1], a[2]) : loop()).catch(e => { log('error:', e.message); process.exit(1); });
 }
+
+module.exports.printPageHtml = printPageHtml; module.exports.printPagePdf = printPagePdf;   // used by the tests

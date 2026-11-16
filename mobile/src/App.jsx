@@ -5,13 +5,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import axios from 'axios';
 import { App as CapApp } from '@capacitor/app';
 import logoImg from './assets/logo.png';
-import { S, loadState, setP, cleanServer, testServer, login, logout, loadCompanies, pickCompany, onLoggedOut, list, get, errText,
+import { S, loadState, setP, cleanServer, testServer, login, logout, loadCompanies, pickCompany, switchCompany, onLoggedOut, list, get, errText,
   num, inr, inr2, short, dmy, today, daysSince, dead, can } from './api';
 import { htmlToPdf, shareBlob } from './share';
 import { printSalesBill } from '../../frontend/src/pages/beta/BetaSalesPrint.js';
 import { printSO } from '../../frontend/src/pages/beta/BetaSOPrint.js';
 
-export const VERSION = '1.2.1';
+export const VERSION = '1.2.5';
 const Nav = createContext(null);
 const useNav = () => useContext(Nav);
 
@@ -51,11 +51,11 @@ function useData(loader, deps) {
 }
 
 /* ── Setup: the ERP address ── */
-function Setup({ onDone }) {
-  const MAC = '192.168.31.133';   // the office Mac that runs the ERP
+function Setup({ onDone, note }) {
+  const MAC = '192.168.31.134';   // the office Mac that runs the ERP
   const [url, setUrl] = useState(S.server || MAC);
   const [busy, setBusy] = useState(false);
-  const [m, setM] = useState(null);
+  const [m, setM] = useState(note ? { t: note } : null);
   const go = async () => {
     const u = cleanServer(url);
     if (!u) return setM({ t: 'Enter your ERP address.' });
@@ -87,10 +87,20 @@ function Login({ onDone, onChangeServer }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [m, setM] = useState(null);
+  // each company has its own users: the company is chosen on every sign-in
+  const [cos, setCos] = useState([]);
+  const [cid, setCid] = useState(S.remember?.companyId || '');
+  useEffect(() => {
+    axios.get('/api/auth/companies', { _noRetry: true }).then(r => {
+      const l = Array.isArray(r.data) ? r.data : [];
+      setCos(l); setCid(c => (l.some(x => x.companyId === c) ? c : ''));
+    }).catch(() => setCos([]));
+  }, []);
   const go = async () => {
+    if (!cid) return setM({ t: 'Choose the company to sign in to.' });
     if (!u.trim() || !p) return setM({ t: 'Enter your username and password.' });
     setBusy(true); setM(null);
-    try { await login(u.trim(), p, keep); onDone(); }
+    try { await login(u.trim(), p, keep, cid); onDone(); }
     catch (e) { setM({ t: errText(e, 'Could not sign in.') }); }
     finally { setBusy(false); }
   };
@@ -98,6 +108,11 @@ function Login({ onDone, onChangeServer }) {
     <div className="center">
       <div className="hero"><img className="logo big" src={logoImg} alt="Super ERP" /><h1>Sign in</h1><p>{S.server.replace(/^https?:\/\//, '')}</p></div>
       <div className="card">
+        <label className="lbl">Company</label>
+        <select className="in" value={cid} onChange={e => { setCid(e.target.value); setM(null); }}>
+          <option value="">Choose company…</option>
+          {cos.map(c => <option key={c.companyId} value={c.companyId}>{c.companyName}</option>)}
+        </select>
         <label className="lbl">Username or e-mail</label>
         <input className="in" value={u} onChange={e => setU(e.target.value)} autoCapitalize="none" autoCorrect="off" autoComplete="username" />
         <label className="lbl">Password</label>
@@ -115,13 +130,32 @@ function Login({ onDone, onChangeServer }) {
 /* ── Company pick ── */
 function Companies({ onDone, back }) {
   const [cs, , err] = useData(() => loadCompanies(), []);
+  const [ask, setAsk] = useState(null);     // the company whose password is needed
+  const [pw, setPw] = useState('');
+  const [m, setM] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (c, password) => {
+    if (c.companyId === S.companyId) return onDone();
+    setBusy(true); setM(null);
+    try { await switchCompany(c, password); onDone(); }
+    catch (e) {
+      if (e.response?.data?.needPassword) { setAsk(c); setPw(''); if (password) setM({ t: e.response.data.error }); }
+      else setM({ t: errText(e, 'Could not switch the company.') });
+    } finally { setBusy(false); }
+  };
   return (
     <div className="page">
       <Top title="Choose company" back={!!back} />
       {err && <Msg m={{ t: err }} />}
+      {ask && <div className="card">
+        <label className="lbl">Your password in {ask.companyName}</label>
+        <input className="in" type="password" value={pw} onChange={e => setPw(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && pw && pick(ask, pw)} />
+        <button type="button" className="btn pri" disabled={busy || !pw} onClick={() => pick(ask, pw)}>{busy ? 'Switching…' : `Open ${ask.companyName}`}</button>
+      </div>}
+      <Msg m={m} />
       {!cs ? <Loading /> : !cs.length ? <Empty>No company is open for your login.</Empty> : (
         <div className="list">{cs.map(c => (
-          <button key={c.companyId} type="button" className={`row${c.companyId === S.companyId ? ' on' : ''}`} onClick={async () => { await pickCompany(c); onDone(); }}>
+          <button key={c.companyId} type="button" className={`row${c.companyId === S.companyId ? ' on' : ''}`} disabled={busy} onClick={() => pick(c)}>
             <span className="av">{String(c.companyName || '?').replace(/^m\/s\.?\s*/i, '').slice(0, 1)}</span>
             <div className="tx"><b>{c.companyName}</b><small>{[c.city, c.gstin].filter(Boolean).join(' · ')}</small></div>
             {c.companyId === S.companyId && <span className="tick">✓</span>}
@@ -329,6 +363,7 @@ function ErpHost({ cur, depth }) {
       <header className="top">
         <button type="button" className="ib" onClick={goBack} aria-label="Back">‹</button>
         <div className="tt"><b>{title}</b></div>
+        <button type="button" className="ib" onClick={() => fr.current?.contentWindow?.postMessage({ type: 'erp-printlist' }, '*')} aria-label="Print list" title="Print the list on this page">🖨</button>
         <button type="button" className="ib" onClick={() => nav.go('menu')} aria-label="Menu">☰</button>
         <button type="button" className="ib" onClick={() => nav.home()} aria-label="Home">⌂</button>
       </header>
@@ -776,13 +811,18 @@ export default function App() {
   const [stage, setStage] = useState('');   // setup | login | company | app
   const [stack, setStack] = useState([{ s: 'home' }]);
   const [locked, setLocked] = useState(false);
+  const [startNote, setStartNote] = useState('');
   useEffect(() => {
     loadState().then(async st => {
       if (!st.server) setStage('setup');
       else if (!st.token && !st.remember) setStage('login');
       else {
         try { if (!st.token && st.remember) await login(st.remember.username, st.remember.password, true); await loadCompanies(); setStage(S.company ? 'app' : 'company'); }
-        catch { setStage('login'); }
+        catch (e) {
+          // no answer at all: the ERP's address is wrong (or the PC is off) — show the address screen with the reason
+          if (!e.response) { setStartNote(`Cannot reach the ERP at ${String(st.server).replace(/^https?:\/\//, '')}. Check the address (the office PC's Wi-Fi address may have changed) or that the ERP is running.`); setStage('setup'); }
+          else setStage('login');
+        }
       }
       setLocked(!!st.pin); setReady(true);
     });
@@ -806,7 +846,7 @@ export default function App() {
     return () => { h.then(x => x.remove()); };
   }, []);
   if (!ready) return <div className="center"><span className="spin" /></div>;
-  if (stage === 'setup') return <Setup onDone={() => setStage('login')} />;
+  if (stage === 'setup') return <Setup note={startNote} onDone={() => { setStartNote(''); setStage('login'); }} />;
   if (stage === 'login') return <Login onDone={async () => { try { await loadCompanies(); } catch { /* shown on the next screen */ } setStage(S.company ? 'app' : 'company'); setStack([{ s: 'home' }]); }} onChangeServer={() => setStage('setup')} />;
   if (stage === 'company') return <Nav.Provider value={nav}><Companies onDone={() => { setStage('app'); setStack([{ s: 'home' }]); }} /></Nav.Provider>;
   const cur = stack[stack.length - 1];

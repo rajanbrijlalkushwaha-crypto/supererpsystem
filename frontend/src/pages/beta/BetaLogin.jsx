@@ -8,8 +8,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useVendorAuth } from '../../context/VendorAuthContext';
 import AuthShell, { Field, Alert, Btn, Svg } from '../../components/auth/AuthShell';
 import { setUiVersion } from '../../utils/uiVersion';
+import axios from 'axios';
 
-const REMEMBER_KEY = 'login-remember';   // { mode, id } — only the user name / email, never the password
+const REMEMBER_KEY = 'login-remember';   // { mode, id, cid } — the user name / email and company, never the password
 const readRemember = () => { try { return JSON.parse(localStorage.getItem(REMEMBER_KEY)) || null; } catch { return null; } };
 
 export default function BetaLogin() { return <LoginScreen />; }
@@ -28,6 +29,16 @@ export function LoginScreen({ classic = false }) {
   const [msg, setMsg]           = useState(null);
   const [phase, setPhase]       = useState(null);   // null | 'busy' | 'done'
   const [errN, setErrN]         = useState(0);      // counts errors — shakes the form
+  // every company has its own users: the company is chosen on every sign-in (kept selected only with Remember Me)
+  const [companies, setCompanies] = useState([]);
+  const [cid, setCid]           = useState(saved?.cid || '');
+  useEffect(() => {
+    axios.get('/api/auth/companies').then(r => {
+      const l = Array.isArray(r.data) ? r.data : [];
+      setCompanies(l);
+      setCid(c => (l.some(x => x.companyId === c) ? c : ''));
+    }).catch(() => setCompanies([]));
+  }, []);
 
   // this person chose the new UI — the forgot / reset pages bring them back here
   useEffect(() => { if (!classic) setUiVersion('beta'); }, [classic]);
@@ -43,8 +54,14 @@ export function LoginScreen({ classic = false }) {
   };
 
   const submit = async e => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const v = id.trim();
+    if (!cid) {
+      setErrN(n => n + 1);
+      setMsg({ text: 'Choose the company to sign in to.' });
+      return;
+    }
+    const companyId = cid;
     if (!v || !password) {
       setErrN(n => n + 1);
       setMsg({ text: vendorMode ? 'Enter your registered email and password.' : 'Enter your user name and password.' });
@@ -52,16 +69,17 @@ export function LoginScreen({ classic = false }) {
     }
     setMsg(null); setPhase('busy');
     try {
-      if (vendorMode) await vendorLogin(v, password);
-      else { await login(v, password); if (classic) setUiVersion('classic'); }
+      if (vendorMode) await vendorLogin(v, password, companyId);
+      else { await login(v, password, companyId); if (classic) setUiVersion('classic'); }
       try {
-        if (remember) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ mode, id: v }));
+        if (remember) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ mode, id: v, cid }));
         else localStorage.removeItem(REMEMBER_KEY);
       } catch { /* storage blocked — not needed to sign in */ }
       setPhase('done');
       setTimeout(() => navigate(vendorMode ? '/vendor-portal' : '/dashboard', { replace: true }), 400);
     } catch (err) {
-      setPhase(null); setErrN(n => n + 1);
+      setPhase(null);
+      setErrN(n => n + 1);
       setMsg({ text: err.response?.data?.error || 'Sign-in failed. Check your details and try again.' });
     }
   };
@@ -78,6 +96,11 @@ export function LoginScreen({ classic = false }) {
     >
       <form onSubmit={submit} autoComplete="off" noValidate className="as-anim" key={mode}>
         <Alert msg={msg} />
+        <Field id="bl-co" icon="biz" type="select" aria-label="Company" value={cid} bad={!cid && !!msg && /company/i.test(msg.text)}
+          onChange={e => { setCid(e.target.value); setMsg(null); }}>
+          <option value="">Choose company…</option>
+          {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.companyName}</option>)}
+        </Field>
         <Field id="bl-id" ref={idRef} icon={vendorMode ? 'mail' : 'user'} aria-label={vendorMode ? 'Email address' : 'User name'}
           type={vendorMode ? 'email' : 'text'} placeholder={vendorMode ? 'Email Address' : 'User Name'}
           value={id} onChange={e => { setId(e.target.value); setMsg(null); }} />

@@ -10,6 +10,7 @@ import { useChat } from '../../context/ChatContext';
 import { can } from '../../utils/permissions';
 import { PRODUCT_NAME } from '../../utils/brand';
 import { Svg } from '../ui/Icon';
+import { printList } from '../../pages/beta/printList';
 import { VOUCHERS, isTransactionPath } from '../VoucherBar';
 import BetaDashboard from '../../pages/beta/BetaDashboard';
 import BetaClients from '../../pages/beta/BetaClients';
@@ -161,27 +162,38 @@ const CSS = `
 .bx-side { width:188px; flex-shrink:0; display:flex; flex-direction:column; background:#03444f; border-right:1px solid #023840; }
 .bx-brand { height:40px; flex-shrink:0; display:flex; align-items:center; gap:7px; padding:0 12px; background:#023a43; border-bottom:1px solid rgba(255,255,255,.08); text-decoration:none; }
 .bx-mark { width:20px; height:20px; flex-shrink:0; border-radius:4px; display:grid; place-items:center; color:#fff; font-weight:800; font-size:11px; background:#fff; color:#03444f; }
-.bx-nav { flex:1; overflow-y:auto; padding:10px 8px; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
-.bx-g { text-decoration:none; display:flex; align-items:center; gap:9px; width:100%; height:36px; padding:0 9px; border:1px solid rgba(255,255,255,.1); border-radius:7px; cursor:pointer;
-  background:rgba(255,255,255,.06); color:#E8F3F4; font:600 12.5px ${F}; text-align:left; transition:background .15s, border-color .15s; }
-.bx-g:hover { background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.18); }
-.bx-g.on { background:#fff; color:#03444f; border-color:#fff; box-shadow:0 2px 8px rgba(0,0,0,.18); }
+.bx-nav { flex:1; overflow-y:auto; padding:0; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
+.bx-g { text-decoration:none; display:flex; align-items:center; gap:9px; width:100%; height:38px; padding:0 10px; border-radius:0; cursor:pointer;
+  /* a raised button: lighter top, darker bottom edge, soft shadow — lifts on hover, presses down on click */
+  border:1px solid rgba(255,255,255,.16); border-bottom-color:rgba(0,0,0,.35);
+  background:linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.05));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 2px 0 rgba(0,0,0,.22), 0 3px 6px rgba(0,0,0,.18);
+  color:#F1F8F9; font:600 12.5px ${F}; text-align:left; transition:background .15s, border-color .15s, box-shadow .12s, transform .12s; }
+.bx-g:hover { background:linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.09)); border-color:rgba(255,255,255,.28); border-bottom-color:rgba(0,0,0,.35); transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 0 rgba(0,0,0,.22), 0 5px 10px rgba(0,0,0,.22); }
+.bx-g:active { transform:translateY(1px); box-shadow:inset 0 2px 4px rgba(0,0,0,.25), 0 0 0 rgba(0,0,0,0); }
+.bx-g.on { background:linear-gradient(180deg, #fff, #E8F3F4); color:#03444f; border-color:#fff; border-bottom-color:#B9D0D3; box-shadow:0 2px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.22); }
+.bx-g:focus-visible, .bx-i:focus-visible { outline:2px solid #9FE3EA; outline-offset:1px; }
 .bx-g .ico { width:24px; height:24px; flex-shrink:0; border-radius:7px; display:grid; place-items:center; color:#fff;
   background:var(--c, rgba(255,255,255,.12)); background-image:linear-gradient(145deg, rgba(255,255,255,.28), rgba(255,255,255,0) 55%, rgba(0,0,0,.12));
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.18), 0 1px 3px rgba(0,0,0,.25); }
 .bx-g:hover .ico { filter:brightness(1.08) saturate(1.1); }
 .bx-g.on .ico { box-shadow:0 2px 6px rgba(0,0,0,.18); }
 .bx-g .lbl { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.bx-nav > div + div { margin-top:6px; }
+.bx-nav > div + div { margin-top:0; }   /* buttons touch: no gaps, they fill the menu edge to edge */
 .bx-g .chev { display:grid; opacity:.7; transition:transform .15s; }
 .bx-g.open .chev { transform:rotate(90deg); }
-.bx-sub { margin:5px 0 8px 12px; display:flex; flex-direction:column; gap:4px; }
-.bx-i { display:block; width:100%; height:28px; padding:0 10px; border:1px solid rgba(255,255,255,.12); border-radius:6px; background:rgba(255,255,255,.07);
-  cursor:pointer; text-align:left; font:500 12px ${F}; color:#E0EEEF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  box-shadow:0 1px 2px rgba(0,0,0,.15); transition:background .15s, border-color .15s; }
-.bx-i:hover { background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.24); color:#fff; }
-.bx-i.cur { background:#fff; border-color:#fff; color:#03444f; font-weight:600; }
-.bx-i:active { background:rgba(255,255,255,.2); box-shadow:none; }
+.bx-sub { margin:0; display:flex; flex-direction:column; gap:0; }
+.bx-i { display:block; width:100%; height:31px; padding:0 10px 0 22px; border-radius:0; cursor:pointer; text-align:left;
+  font:600 12px ${F}; color:#E8F3F4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  border:1px solid rgba(255,255,255,.14); border-bottom-color:rgba(0,0,0,.32);
+  background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.04));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 1px 0 rgba(0,0,0,.22), 0 2px 4px rgba(0,0,0,.15);
+  transition:background .15s, border-color .15s, box-shadow .12s, transform .12s; }
+.bx-i:hover { background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08)); border-color:rgba(255,255,255,.26); border-bottom-color:rgba(0,0,0,.32); color:#fff; transform:translateY(-1px); box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 2px 0 rgba(0,0,0,.22), 0 4px 7px rgba(0,0,0,.2); }
+.bx-i:active { transform:translateY(1px); box-shadow:inset 0 2px 3px rgba(0,0,0,.25); }
+.bx-i.cur { background:linear-gradient(180deg, #fff, #E8F3F4); border-color:#fff; border-bottom-color:#B9D0D3; color:#03444f; font-weight:700; box-shadow:0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.2); }
+@media (prefers-reduced-motion: reduce) { .bx-g, .bx-i { transition:none; } .bx-g:hover, .bx-i:hover, .bx-g:active, .bx-i:active { transform:none; } }
 .bx-brand b { font-size:12px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* top bar — brand teal #03444f, 40px, one-line controls */
@@ -234,6 +246,9 @@ const CSS = `
 .bx-res .none { padding:10px 9px; font-size:12.5px; color:#667085; }
 
 .bx-dd { position:relative; flex-shrink:0; }
+.bx-pl { display:flex; align-items:center; gap:6px; height:28px; padding:0 10px; margin-right:6px; border:1px solid rgba(255,255,255,.35); border-radius:4px; background:rgba(255,255,255,.08); color:#fff; font:600 12px inherit; cursor:pointer; white-space:nowrap; }
+.bx-pl:hover { background:rgba(255,255,255,.18); }
+.bx-plm { font-size:12px; color:#FFE8A3; margin-right:8px; white-space:nowrap; }
 .bx-btn { display:flex; align-items:center; gap:6px; height:30px; padding:0 6px 0 4px; border:1px solid transparent; border-radius:4px; background:none; cursor:pointer;
   font:inherit; color:#fff; text-align:left; }
 .bx-btn:hover, .bx-btn[aria-expanded="true"] { background:rgba(255,255,255,.12); }
@@ -290,10 +305,17 @@ function useOutside(open, close, ref) {
 
 export default function BetaShell() {
   const { user, logout } = useAuth();
+  const [plMsg, setPlMsg] = useState('');
+  const doPrintList = () => { if (!printList({ company: selectedCompanyRef.current, user })) { setPlMsg('No list on this page to print.'); setTimeout(() => setPlMsg(''), 3000); } };
+  const selectedCompanyRef = useRef(null);
   const { companies = [], selectedCompany, selectCompany } = useCompany() || {};
+  selectedCompanyRef.current = selectedCompany;
+  // the Android app's print button calls this (appBridge)
+  useEffect(() => { window.__erpPrintList = () => printList({ company: selectedCompanyRef.current, user }); return () => { delete window.__erpPrintList; }; }, [user]);
   const chat = useChat();
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
+  const isDash = pathname === '/dashboard' || pathname === '/beta' || pathname === '/beta/';
 
   const [menu, setMenu] = useState(null);   // 'co' | 'me'
   const sideNav = useMemo(() => SIDE_NAV.filter(n => (n.perms ? n.perms.some(p => allowed(user, p)) : allowed(user, n.perm)))
@@ -419,6 +441,10 @@ export default function BetaShell() {
           </div>
 
           <div className="bx-grow" />
+
+          {/* print the list on screen (any list page) */}
+          {!isDash && <button type="button" className="bx-pl" title="Print the list shown on this page (as filtered)" onClick={doPrintList}><Svg name="file" size={14} />Print list</button>}
+          {plMsg && <span className="bx-plm" role="status">{plMsg}</span>}
 
           {/* active company */}
           <div className="bx-dd" ref={coRef}>

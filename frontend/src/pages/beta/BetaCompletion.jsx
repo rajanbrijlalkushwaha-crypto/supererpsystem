@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import { Svg } from '../../components/ui/Icon';
 import { CSS as SALES_CSS, useClearSel } from './BetaSales';
-import { PX_CSS } from './BetaPurchaseParts';
+import { PX_CSS, ListPicker } from './BetaPurchaseParts';
 import { soItems } from './BetaClients';
 import { printCompletion, printCompletionList, dmy, PERFORMANCE } from './BetaCertPrint';
 
@@ -161,6 +161,7 @@ function CertForm({ companyId, edit, orders, bills, dcs, onSaved, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const so = orders.find(o => String(o.orderId) === v.orderId) || null;
+  const [orderPick, setOrderPick] = useState(false);   // search-and-select pop-up for the sales order
   const soBills = bills.filter(b => so && String(b.orderId) === String(so.orderId));
   const soDcs = dcs.filter(d => so && String(d.linkedSalesOrderId) === String(so.orderId));
   const set = k => e => { const x = e.target.value; setV(o => ({ ...o, [k]: x })); setMsg(null); };
@@ -225,10 +226,19 @@ function CertForm({ companyId, edit, orders, bills, dcs, onSaved, onCancel }) {
           <table className="sf-kv"><tbody>
             <tr><th>Certificate No.</th><td><input value={edit ? edit.certNo : (nextNo || 'Given on save')} readOnly className="mono" /></td></tr>
             <tr><th>Date <i>*</i></th><td><input type="date" value={v.certDate} onChange={set('certDate')} /></td></tr>
-            <tr><th>Sales Order <i>*</i></th><td><select value={v.orderId} onChange={e => pickOrder(e.target.value)} autoFocus={!edit}>
-              <option value="">{edit && !so ? `${e0.orderNo || ''} · ${e0.clientName}` : 'Choose the order…'}</option>
-              {openOrders.map(o => <option key={o.orderId} value={String(o.orderId)}>{String(o.orderNo || '').trim()} · {o.customerName || o.party}{o.customerPO ? ` · PO ${o.customerPO}` : ''}</option>)}
-            </select></td></tr>
+            <tr><th>Sales Order <i>*</i></th><td>
+              <div className="sf-srch">
+                <input readOnly value={so ? `${String(so.orderNo || '').trim()} · ${so.customerName || so.party || ''}${so.customerPO ? ` · PO ${so.customerPO}` : ''}` : edit ? `${e0.orderNo || ''} · ${e0.clientName || ''}` : ''}
+                  placeholder="Search order no., client, client PO…" onClick={() => setOrderPick(true)} autoFocus={!edit} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOrderPick(true); } }} />
+                <button type="button" className="sf-sbtn" onClick={() => setOrderPick(true)} aria-label="Search sales order"><Svg name="search" size={14} /></button>
+              </div>
+              {orderPick && <ListPicker title="Pick the sales order" placeholder="Search order no., client, client PO, product…"
+                cols={[['Order No.'], ['Date'], ['Client'], ['Client PO'], ['Products']]}
+                rows={openOrders.map(o => { const prods = (o.items || []).map(i => i.description || i.itemName || '').filter(Boolean);
+                  return { key: String(o.orderId), search: `${o.orderNo} ${o.customerName || o.party || ''} ${o.customerPO || ''} ${prods.join(' ')}`,
+                    cells: [String(o.orderNo || o.orderId).trim(), dmy(o.orderDate) || '—', o.customerName || o.party || '—', o.customerPO || '—', prods.slice(0, 2).join(', ') + (prods.length > 2 ? ` +${prods.length - 2}` : '') || '—'] }; })}
+                onClose={() => setOrderPick(false)} onPick={k => { setOrderPick(false); pickOrder(k); }} />}
+            </td></tr>
             <tr><th>Client</th><td>{so ? <b>{so.customerName || so.party}</b> : edit ? <b>{e0.clientName}</b> : '—'}</td></tr>
             <tr><th>Client PO</th><td>{so ? (so.customerPO || '—') : (e0.clientPO || '—')}</td></tr>
             <tr><th>Site / address</th><td><input value={v.clientAddress} onChange={set('clientAddress')} placeholder="Where the work was done / material delivered" /></td></tr>

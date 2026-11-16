@@ -206,11 +206,31 @@ export async function loadSigns(sign) {
   if (!sign?.type || !sign?.id) return {};
   try { return (await axios.get('/api/sign/doc', { params: { type: sign.type, id: sign.id } })).data || {}; } catch { return {}; }
 }
+/* A page stretched to exactly one A4 (its blank #fillrow under the goods) gets taller when signatures go in: the
+   signature, name and date add about 33 mm to the signature boxes — which pushed the signature and footer on to
+   a second page. So with signatures the blank row gives that space back (and gets it back when they are removed). */
+const SIGN_ADD_PX = 135;   // 22 mm signature + name + date lines (+ a little room)
+function refitFill(doc, signed) {
+  try {
+    if (doc.body && doc.body.dataset.signRoom) return;   // the page keeps a fixed space for signatures (Delivery Challan)
+    const fill = doc.getElementById('fillrow'); if (!fill) return;
+    const tds = [...fill.querySelectorAll('td')]; if (!tds.length) return;
+    if (!tds[0].dataset.fillH) {
+      const h = parseFloat(tds[0].style.height);
+      if (!h) return;   // not stretched to the page — nothing to give back
+      tds.forEach(td => { td.dataset.fillH = String(h); });
+    }
+    const orig = parseFloat(tds[0].dataset.fillH);
+    const h = signed ? Math.max(30, orig - SIGN_ADD_PX) : orig;
+    tds.forEach(td => { td.style.height = `${h}px`; });
+  } catch { /* the page as it is */ }
+}
 export function applySigns(doc, signs) {
   try {
     doc.querySelectorAll('.esig, .esig-i, .esig-n, .esig-d').forEach(e => e.remove());
     doc.querySelectorAll('[data-esig-wrap]').forEach(e => e.removeAttribute('data-esig-wrap'));
     const any = SIGN_ROLES.some(([role]) => signs?.[role]?.img);
+    refitFill(doc, any);
     if (!any) return;
     if (!doc.getElementById('esig-css')) { const st = doc.createElement('style'); st.id = 'esig-css'; st.textContent = SIG_CSS; doc.head.appendChild(st); }
     const labels = [...doc.body.querySelectorAll('b, span, div, td, p, strong, th')].filter(e => !e.children.length);

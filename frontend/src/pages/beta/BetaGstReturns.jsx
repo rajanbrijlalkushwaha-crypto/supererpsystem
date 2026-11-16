@@ -11,6 +11,7 @@ import { CSS as SALES_CSS } from './BetaSales';
 import { PX_CSS } from './BetaPurchaseParts';
 import { ACC_CSS } from './BetaAccKit';
 import { BK_CSS, fyName, fyRange, fyStartYear, today, dmy, amt, amtZ, r2, printReport, excel } from './BetaBooksLib';
+import Gst3BCompare from './Gst3BCompare';
 
 const STATES = { '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
   10: 'Bihar', 11: 'Sikkim', 12: 'Arunachal Pradesh', 13: 'Nagaland', 14: 'Manipur', 15: 'Mizoram', 16: 'Tripura', 17: 'Meghalaya', 18: 'Assam', 19: 'West Bengal', 20: 'Jharkhand',
@@ -83,7 +84,7 @@ export default function BetaGstReturns() {
     <div className="sb">
       <style>{SALES_CSS + PX_CSS + ACC_CSS + BK_CSS}</style>
       <div className="sb-tabs" role="tablist">
-        {[['r1', 'GSTR-1'], ['r3b', 'GSTR-3B'], ['pr', 'Purchase register (2B)']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sb-tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>{l}</button>)}
+        {[['r1', 'GSTR-1'], ['r3b', 'GSTR-3B · books vs portal'], ['r3bd', 'GSTR-3B details (books)'], ['pr', 'Purchase register (2B)']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={`sb-tab${tab === k ? ' on' : ''}`} onClick={() => setTab(k)}>{l}</button>)}
         <div className="sb-slot" ref={setSlot} />
       </div>
       {slot && createPortal(<>
@@ -95,7 +96,8 @@ export default function BetaGstReturns() {
       </>, slot)}
       {!R ? <div className="sb-empty" style={{ padding: 30 }}>Loading bills…</div>
         : tab === 'r1' ? <R1 R={R} sec={sec} setSec={setSec} slot={slot} period={period} company={selectedCompany} user={user} />
-          : tab === 'r3b' ? <R3B R={R} slot={slot} period={period} company={selectedCompany} user={user} />
+          : tab === 'r3b' ? <Gst3BCompare R={R} d={d} fy={fy} mon={mon} period={period} company={selectedCompany} companyId={companyId} user={user} slot={slot} />
+          : tab === 'r3bd' ? <R3B R={R} slot={slot} period={period} company={selectedCompany} user={user} />
             : <PurchaseReg R={R} slot={slot} period={period} company={selectedCompany} user={user} />}
     </div>
   );

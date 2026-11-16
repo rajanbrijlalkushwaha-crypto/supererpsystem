@@ -6,7 +6,7 @@ const multer   = require('multer');
 const { ROOT } = require('./helpers');
 
 const router     = express.Router();
-const USERS_FILE = path.join(ROOT, 'Database', 'users.json');
+const T          = require('./tenant');
 
 // Shared in-memory session store (also read by helpers.js for audit trail)
 const SESSIONS = require('./sessions');
@@ -14,28 +14,30 @@ const SESSIONS = require('./sessions');
 /* ── helpers ──────────────────────────────────── */
 const hashPwd = pwd => crypto.createHash('sha256').update(pwd + 'epsilon-erp-salt-2024').digest('hex');
 
-const ensureUsers = () => {
-  if (!fs.existsSync(USERS_FILE)) {
-    fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
-    const defaults = [
-      {
-        id: 1, username: 'admin', password: hashPwd('admin123'),
-        name: 'Administrator', role: 'admin',
-        email: 'admin@epsilon.com', active: true,
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    fs.writeFileSync(USERS_FILE, JSON.stringify(defaults, null, 2));
-    return defaults;
-  }
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); }
-  catch { return []; }
+/* users live in each company's own folder: Companies/<companyId>/Users/users.json */
+const ensureUsers = cid => T.readUsers(cid);
+const saveUsers = (cid, users) => T.writeUsers(cid, users);
+
+const { tokenOf, sessionOf, otherCompany, setLoginCookie, clearLoginCookie } = require('./requireLogin');
+/* routes that change users / settings need a login, and work only inside the login's company */
+const needLogin = (req, res, next) => {
+  const s = sessionOf(req);
+  if (!s || !s.companyId) return res.status(401).json({ error: 'Please log in again.' });
+  if (otherCompany(req, s)) return res.status(403).json({ error: 'This login is for another company.' });
+  req.authUser = s; req.cid = s.companyId;
+  return T.runAs(s.companyId, next);
 };
-
-const saveUsers = users =>
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-
-const { tokenOf, setLoginCookie, clearLoginCookie } = require('./requireLogin');
+/* invite / reset links: kept in the company of their user (Companies/<c>/auth-tokens.json) */
+const readTokens = (cid, kind) => T.readJ(T.tokensFile(cid), []).filter(t => t.kind === kind);
+const saveTokens = (cid, kind, list) => T.writeJ(T.tokensFile(cid), [...T.readJ(T.tokensFile(cid), []).filter(t => t.kind !== kind), ...list.map(t => ({ ...t, kind }))]);
+const findToken = (kind, token) => {
+  for (const cid of T.companyIds()) {
+    const t = readTokens(cid, kind).find(x => x.token === token && x.expiresAt > Date.now());
+    if (t) return { cid, t };
+  }
+  return null;
+};
+const mailCfg = cid => T.readEmailCfg(cid);
 // the login token: the Authorization header, or the erp_s login cookie the browser sends by itself
 const tokenFromHeader = req => tokenOf(req);
 
@@ -52,19 +54,24 @@ const frontendUrl = req => {
   return `${proto}://${host}`.replace(/\/$/, '');
 };
 
+/* ── GET /api/auth/companies — names only, for the sign-in page (choose the company first) ── */
+router.get('/companies', (_req, res) => res.json(T.companyIds().map(c => ({ companyId: c, companyName: T.companyName(c) }))));
+
 /* ── POST /api/auth/login ─────────────────────── */
 router.post('/login', (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, companyId } = req.body || {};
   if (!username || !password)
     return res.status(400).json({ error: 'Username and password are required.' });
 
-  const users = ensureUsers();
-  const user  = users.find(
-    u => (u.username === username.trim() || u.email === username.trim()) && u.active !== false
-  );
-
-  if (!user || user.password !== hashPwd(password))
-    return res.status(401).json({ error: 'Invalid username or password.' });
+  // each company has its own users: this username + password in the company asked for, else in every company
+  const name = String(username).trim();
+  const cids = companyId ? [T.safeCid(companyId)].filter(c => T.companyIds().includes(c)) : T.companyIds();
+  const hits = cids.map(cid => ({ cid, user: ensureUsers(cid).find(u => (u.username === name || u.email === name) && u.active !== false) }))
+    .filter(x => x.user && x.user.password === hashPwd(password));
+  if (!hits.length) return res.status(401).json({ error: 'Invalid username or password.' });
+  // the same login in two companies: ask which one
+  if (hits.length > 1) return res.status(409).json({ chooseCompany: hits.map(x => ({ companyId: x.cid, companyName: T.companyName(x.cid) })), error: 'Choose the company to sign in to.' });
+  const { cid, user } = hits[0];
 
   if (user.suspended)
     return res.status(403).json({ error: 'Your account has been suspended. Please contact the administrator.' });
@@ -74,13 +81,46 @@ router.post('/login', (req, res) => {
 
   const token     = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000; // 8 hours
-  SESSIONS.set(token, { userId: user.id, username: user.username, name: user.name, role: user.role, expiresAt });
+  SESSIONS.set(token, { userId: user.id, companyId: cid, username: user.username, name: user.name, role: user.role, expiresAt });
   setLoginCookie(res, token);
 
   res.json({
-    token,
-    user: { id: user.id, username: user.username, name: user.name, role: user.role, email: user.email, permissions: user.permissions ?? null },
+    token, companyId: cid, companyName: T.companyName(cid),
+    user: { id: user.id, username: user.username, name: user.name, role: user.role, email: user.email, permissions: user.permissions ?? null, companyId: cid },
   });
+});
+
+/* ── switching company after sign-in ─────────────
+   Allowed only into a company where this same username has its own account that is active (not suspended / expired).
+   Same password there → switches at once; a different password → that company's password is asked. */
+const okUser = u => u && u.active !== false && !u.suspended && !(u.validUntil && new Date(u.validUntil) < new Date());
+const accountIn = (cid, username) => ensureUsers(cid).find(u => u.username === username);
+router.get('/my-companies', needLogin, (req, res) => {
+  const me = accountIn(req.cid, req.authUser.username);
+  res.json(T.companyIds().map(cid => ({ cid, u: accountIn(cid, req.authUser.username) })).filter(x => okUser(x.u))
+    .map(x => ({ companyId: x.cid, companyName: T.companyName(x.cid), current: x.cid === req.cid, needPassword: !me || x.u.password !== me.password })));
+});
+router.post('/switch-company', needLogin, (req, res) => {
+  const to = T.safeCid(req.body && req.body.to);
+  if (!to || !T.companyIds().includes(to)) return res.status(404).json({ error: 'Company not found.' });
+  if (to === req.cid) return res.status(400).json({ error: 'You are already in this company.' });
+  const target = accountIn(to, req.authUser.username);
+  if (!target) return res.status(403).json({ error: `You do not have a login in ${T.companyName(to)}. Ask its admin to add you.` });
+  if (!okUser(target)) return res.status(403).json({ error: `Your login in ${T.companyName(to)} is not active (suspended or expired). Ask its admin.` });
+  const me = accountIn(req.cid, req.authUser.username);
+  if (!me || target.password !== me.password) {
+    const pwd = String((req.body && req.body.password) || '');
+    if (!pwd) return res.status(401).json({ needPassword: true, error: `Enter your password for ${T.companyName(to)}.` });
+    if (hashPwd(pwd) !== target.password) return res.status(401).json({ needPassword: true, error: 'Wrong password for this company.' });
+  }
+  // a new login for that company; the old one ends
+  const old = tokenFromHeader(req);
+  const token = crypto.randomBytes(32).toString('hex');
+  SESSIONS.set(token, { userId: target.id, companyId: to, username: target.username, name: target.name, role: target.role, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+  SESSIONS.delete(old);
+  setLoginCookie(res, token);
+  res.json({ token, companyId: to, companyName: T.companyName(to),
+    user: { id: target.id, username: target.username, name: target.name, role: target.role, email: target.email, permissions: target.permissions ?? null, companyId: to } });
 });
 
 /* ── POST /api/auth/logout ────────────────────── */
@@ -100,9 +140,11 @@ router.get('/me', (req, res) => {
   }
   session.expiresAt = Date.now() + 8 * 60 * 60 * 1000;
   setLoginCookie(res, token);
-  const users = ensureUsers();
-  const u = users.find(u => u.id === session.userId);
+  if (!session.companyId) { SESSIONS.delete(token); return res.status(401).json({ error: 'Please log in again.' }); }
+  const u = ensureUsers(session.companyId).find(x => x.id === session.userId);
+  if (!u || u.active === false || u.suspended) { SESSIONS.delete(token); return res.status(401).json({ error: 'Please log in again.' }); }
   res.json({
+    companyId: session.companyId, companyName: T.companyName(session.companyId),
     userId: session.userId, username: session.username,
     name: session.name, role: session.role,
     email: u?.email || '',
@@ -113,18 +155,18 @@ router.get('/me', (req, res) => {
 /* ── GET /api/auth/users ─────────────────────────────────────────────────
    Also update login to include permissions in response
 ─────────────────────────────────────────────────────────────────────── */
-router.get('/users', (req, res) => {
-  const users = ensureUsers().map(({ password, ...rest }) => rest);
+router.get('/users', needLogin, (req, res) => {
+  const users = ensureUsers(req.cid).map(({ password, ...rest }) => rest);
   res.json(users);
 });
 
 /* ── POST /api/auth/users ─────────────────────── */
-router.post('/users', (req, res) => {
+router.post('/users', needLogin, (req, res) => {
   const { username, password, name, role, email } = req.body || {};
   if (!username || !password || !name)
     return res.status(400).json({ error: 'username, password and name are required.' });
 
-  const users = ensureUsers();
+  const users = ensureUsers(req.cid);
   if (users.find(u => u.username === username))
     return res.status(409).json({ error: 'Username already exists.' });
 
@@ -134,74 +176,68 @@ router.post('/users', (req, res) => {
     createdAt: new Date().toISOString(),
   };
   users.push(newUser);
-  saveUsers(users);
+  saveUsers(req.cid, users);
 
   const { password: _, ...safe } = newUser;
   res.json({ success: true, user: safe });
 });
 
 /* ── PUT /api/auth/users/:id/password ────────── */
-router.put('/users/:id/password', (req, res) => {
+router.put('/users/:id/password', needLogin, (req, res) => {
   const { password } = req.body || {};
   if (!password) return res.status(400).json({ error: 'password is required.' });
 
-  const users = ensureUsers();
+  const users = ensureUsers(req.cid);
   const idx   = users.findIndex(u => u.id == req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
   users[idx].password = hashPwd(password);
-  saveUsers(users);
+  saveUsers(req.cid, users);
   res.json({ success: true });
 });
 
 /* ── DELETE /api/auth/users/:id ──────────────── */
-router.delete('/users/:id', (req, res) => {
-  const users  = ensureUsers();
+router.delete('/users/:id', needLogin, (req, res) => {
+  const users  = ensureUsers(req.cid);
   const idx    = users.findIndex(u => u.id == req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
   if (users[idx].role === 'admin' && users.filter(u => u.role === 'admin').length === 1)
     return res.status(400).json({ error: 'Cannot delete the last admin.' });
 
   users.splice(idx, 1);
-  saveUsers(users);
+  saveUsers(req.cid, users);
   res.json({ success: true });
 });
 
 /* ── Password Reset Tokens ─────────────────────── */
-const RESET_FILE = path.join(ROOT, 'Database', 'reset-tokens.json');
-
-const readResetTokens = () => {
-  try {
-    if (!fs.existsSync(RESET_FILE)) return [];
-    return JSON.parse(fs.readFileSync(RESET_FILE, 'utf8')) || [];
-  } catch { return []; }
-};
-const saveResetTokens = tokens => {
-  fs.mkdirSync(path.dirname(RESET_FILE), { recursive: true });
-  fs.writeFileSync(RESET_FILE, JSON.stringify(tokens, null, 2));
-};
+/* (kept in each company's auth-tokens.json — readTokens / findToken above) */
 
 /* POST /api/auth/forgot-password */
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
-  const users = ensureUsers();
-  const user  = users.find(u => u.email && u.email.toLowerCase() === email.trim().toLowerCase() && u.active !== false);
+  // each company has its own users: the password is reset only in the company chosen on the page
+  const want = T.safeCid(req.body?.companyId);
+  if (!want || !T.companyIds().includes(want)) return res.status(400).json({ error: 'Choose the company whose password you want to reset.' });
+  const hit = T.companyIds().filter(c => c === want)
+    .map(cid => ({ cid, user: ensureUsers(cid).find(u => u.email && u.email.toLowerCase() === email.trim().toLowerCase() && u.active !== false) }))
+    .find(x => x.user);
 
   // Always return success — prevents email enumeration
-  if (!user) return res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
+  if (!hit) return res.json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
+  const { cid, user } = hit;
 
   const token     = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour
 
   // Replace any existing token for this user
-  const tokens = readResetTokens().filter(t => t.userId !== user.id);
+  const tokens = readTokens(cid, 'reset').filter(t => t.userId !== user.id);
   tokens.push({ token, userId: user.id, email: user.email, expiresAt });
-  saveResetTokens(tokens);
+  saveTokens(cid, 'reset', tokens);
 
   try {
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = mailCfg(cid);   // the company's own mail account
     if (!cfg.email || !cfg.password)
       return res.status(500).json({ error: 'Email is not configured on this server. Ask your admin to set up email in Admin → Settings.' });
 
@@ -218,7 +254,7 @@ router.post('/forgot-password', async (req, res) => {
     await transport.sendMail({
       from:    `"Universal Core ERP Solutions" <${cfg.email}>`,
       to:      user.email,
-      subject: 'Password Reset Request — Universal Core ERP Solutions',
+      subject: `Password Reset Request — ${T.companyName(cid)}`,
       html: `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f0ede8;font-family:Arial,Helvetica,sans-serif">
@@ -313,14 +349,14 @@ router.post('/forgot-password', async (req, res) => {
     res.json({ success: true, message: 'Password reset link sent to your email.' });
   } catch (e) {
     // Clean up token if email failed
-    saveResetTokens(readResetTokens().filter(t => t.token !== token));
+    saveTokens(cid, 'reset', readTokens(cid, 'reset').filter(t => t.token !== token));
     res.status(500).json({ error: 'Failed to send email: ' + e.message });
   }
 });
 
 /* GET /api/auth/verify-reset-token/:token */
 router.get('/verify-reset-token/:token', (req, res) => {
-  const rt = readResetTokens().find(t => t.token === req.params.token && t.expiresAt > Date.now());
+  const rt = (findToken('reset', req.params.token) || {}).t;
   if (!rt) return res.status(400).json({ valid: false, error: 'Reset link is invalid or has expired.' });
   res.json({ valid: true, email: rt.email });
 });
@@ -331,49 +367,49 @@ router.post('/reset-password', (req, res) => {
   if (!token || !password) return res.status(400).json({ error: 'Token and new password are required.' });
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
-  const tokens = readResetTokens();
-  const rt     = tokens.find(t => t.token === token && t.expiresAt > Date.now());
-  if (!rt) return res.status(400).json({ error: 'Reset link is invalid or has expired. Please request a new one.' });
+  const found = findToken('reset', token);
+  if (!found) return res.status(400).json({ error: 'Reset link is invalid or has expired. Please request a new one.' });
+  const { cid, t: rt } = found;
+  const tokens = readTokens(cid, 'reset');
 
-  const users = ensureUsers();
+  const users = ensureUsers(cid);
   const idx   = users.findIndex(u => u.id === rt.userId);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
   users[idx].password = hashPwd(password);
-  saveUsers(users);
-  saveResetTokens(tokens.filter(t => t.token !== token)); // consume token
+  saveUsers(cid, users);
+  saveTokens(cid, 'reset', tokens.filter(t => t.token !== token)); // consume token
 
   res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
 });
 
 /* ── Email Config ──────────────────────────────── */
-const EMAIL_CFG_FILE = path.join(ROOT, 'Database', 'email-config.json');
+/* each company's own mail account: Companies/<companyId>/email-config.json */
 
-router.get('/email-config', (_req, res) => {
+router.get('/email-config', needLogin, (req, res) => {
   try {
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = mailCfg(req.cid);
     // Never return the password to the client
     const { password: _, ...safe } = cfg;
     res.json({ ...safe, hasPassword: !!cfg.password });
   } catch { res.json({}); }
 });
 
-router.post('/email-config', (req, res) => {
+router.post('/email-config', needLogin, (req, res) => {
   try {
-    const existing = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
-    const { password, ...rest } = req.body;
+    const existing = mailCfg(req.cid);
+    const { password, companyId: _c, ...rest } = req.body || {};
     const cfg = { ...existing, ...rest };
     if (password) cfg.password = password; // only update password if provided
-    fs.mkdirSync(path.dirname(EMAIL_CFG_FILE), { recursive: true });
-    fs.writeFileSync(EMAIL_CFG_FILE, JSON.stringify(cfg, null, 2));
+    T.writeJ(T.emailCfgFile(req.cid), { ...cfg, companyId: req.cid });
     const { password: _, ...safe } = cfg;
     res.json({ success: true, config: { ...safe, hasPassword: !!cfg.password } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/email-config/test', async (req, res) => {
+router.post('/email-config/test', needLogin, async (req, res) => {
   try {
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = mailCfg(req.cid);
     if (!cfg.email || !cfg.password) return res.status(400).json({ error: 'Email config not saved yet.' });
     const nodemailer = require('nodemailer');
     const transport = nodemailer.createTransport({
@@ -388,8 +424,8 @@ router.post('/email-config/test', async (req, res) => {
 });
 
 /* ── PUT /api/auth/users/:id ─────────────────── */
-router.put('/users/:id', (req, res) => {
-  const users = ensureUsers();
+router.put('/users/:id', needLogin, (req, res) => {
+  const users = ensureUsers(req.cid);
   const idx   = users.findIndex(u => u.id == req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
@@ -415,28 +451,21 @@ router.put('/users/:id', (req, res) => {
     ...(validUntil  !== undefined && { validUntil: validUntil || null }),
     updatedAt: new Date().toISOString(),
   };
-  saveUsers(users);
+  saveUsers(req.cid, users);
   const { password: _, ...safe } = users[idx];
   res.json({ success: true, user: safe });
 });
 
 /* ── Invite Token helpers ──────────────────────── */
-const INVITE_FILE = path.join(ROOT, 'Database', 'invite-tokens.json');
-const readInviteTokens = () => {
-  try { return JSON.parse(fs.readFileSync(INVITE_FILE, 'utf8')) || []; } catch { return []; }
-};
-const saveInviteTokens = tokens => {
-  fs.mkdirSync(path.dirname(INVITE_FILE), { recursive: true });
-  fs.writeFileSync(INVITE_FILE, JSON.stringify(tokens, null, 2));
-};
+/* (kept in each company's auth-tokens.json) */
 
 /* ── POST /api/auth/users/invite ─────────────── */
-router.post('/users/invite', async (req, res) => {
+router.post('/users/invite', needLogin, async (req, res) => {
   const { firstName, middleName, lastName, email, phone, role, permissions, designation, department } = req.body || {};
   if (!firstName || !lastName || !email)
     return res.status(400).json({ error: 'First name, last name and email are required.' });
 
-  const users = ensureUsers();
+  const users = ensureUsers(req.cid);
   if (users.find(u => u.email && u.email.toLowerCase() === email.trim().toLowerCase()))
     return res.status(409).json({ error: 'A user with this email already exists.' });
 
@@ -457,21 +486,21 @@ router.post('/users/invite', async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   users.push(newUser);
-  saveUsers(users);
+  saveUsers(req.cid, users);
 
   // Generate invite token (7 days)
   const token    = crypto.randomBytes(32).toString('hex');
   const expAt    = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  const invites  = readInviteTokens().filter(t => t.userId !== newUser.id);
+  const invites  = readTokens(req.cid, 'invite').filter(t => t.userId !== newUser.id);
   invites.push({ token, userId: newUser.id, email: newUser.email, expiresAt: expAt });
-  saveInviteTokens(invites);
+  saveTokens(req.cid, 'invite', invites);
 
   const inviteUrl = `${frontendUrl(req)}/set-password?token=${token}`;
 
   // Send invite email if configured
   let emailSent = false; let emailError = null;
   try {
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = mailCfg(req.cid);
     if (cfg.email && cfg.password) {
       const nodemailer = require('nodemailer');
       const transport  = nodemailer.createTransport({
@@ -510,8 +539,8 @@ router.post('/users/invite', async (req, res) => {
 });
 
 /* ── POST /api/auth/users/:id/resend-invite ─── */
-router.post('/users/:id/resend-invite', async (req, res) => {
-  const users = ensureUsers();
+router.post('/users/:id/resend-invite', needLogin, async (req, res) => {
+  const users = ensureUsers(req.cid);
   const user  = users.find(u => u.id == req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found.' });
   if (user.active && user.status === 'active')
@@ -520,15 +549,15 @@ router.post('/users/:id/resend-invite', async (req, res) => {
   // Regenerate invite token
   const token   = crypto.randomBytes(32).toString('hex');
   const expAt   = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  const invites = readInviteTokens().filter(t => t.userId !== user.id);
+  const invites = readTokens(req.cid, 'invite').filter(t => t.userId !== user.id);
   invites.push({ token, userId: user.id, email: user.email, expiresAt: expAt });
-  saveInviteTokens(invites);
+  saveTokens(req.cid, 'invite', invites);
 
   const inviteUrl = `${frontendUrl(req)}/set-password?token=${token}`;
 
   let emailSent = false; let emailError = null;
   try {
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = mailCfg(req.cid);
     if (cfg.email && cfg.password) {
       const nodemailer = require('nodemailer');
       const transport  = nodemailer.createTransport({
@@ -564,9 +593,10 @@ router.post('/users/:id/resend-invite', async (req, res) => {
 
 /* ── GET /api/auth/verify-invite/:token ──────── */
 router.get('/verify-invite/:token', (req, res) => {
-  const inv = readInviteTokens().find(t => t.token === req.params.token && t.expiresAt > Date.now());
-  if (!inv) return res.status(400).json({ valid: false, error: 'Invite link is invalid or has expired.' });
-  const u = ensureUsers().find(u => u.id === inv.userId);
+  const found = findToken('invite', req.params.token);
+  if (!found) return res.status(400).json({ valid: false, error: 'Invite link is invalid or has expired.' });
+  const inv = found.t;
+  const u = ensureUsers(found.cid).find(x => x.id === inv.userId);
   if (!u) return res.status(404).json({ valid: false, error: 'User not found.' });
   res.json({ valid: true, email: inv.email, username: u.username, name: u.name });
 });
@@ -577,11 +607,12 @@ router.post('/accept-invite', (req, res) => {
   if (!token || !password) return res.status(400).json({ error: 'Token and password are required.' });
   if (password.length < 6)  return res.status(400).json({ error: 'Password must be at least 6 characters.' });
 
-  const invites = readInviteTokens();
-  const inv     = invites.find(t => t.token === token && t.expiresAt > Date.now());
-  if (!inv) return res.status(400).json({ error: 'Invite link is invalid or has expired.' });
+  const found = findToken('invite', token);
+  if (!found) return res.status(400).json({ error: 'Invite link is invalid or has expired.' });
+  const { cid, t: inv } = found;
+  const invites = readTokens(cid, 'invite');
 
-  const users = ensureUsers();
+  const users = ensureUsers(cid);
   const idx   = users.findIndex(u => u.id === inv.userId);
   if (idx === -1) return res.status(404).json({ error: 'User not found.' });
 
@@ -589,22 +620,21 @@ router.post('/accept-invite', (req, res) => {
   users[idx].active      = true;
   users[idx].status      = 'active';
   users[idx].activatedAt = new Date().toISOString();
-  saveUsers(users);
-  saveInviteTokens(invites.filter(t => t.token !== token));
+  saveUsers(cid, users);
+  saveTokens(cid, 'invite', invites.filter(t => t.token !== token));
 
   res.json({ success: true, message: 'Account activated! You can now log in.' });
 });
 
 /* ── Profile Photo storage ──────────────────── */
-const userPhotoDir = (userId) => path.join(ROOT, 'Database', 'Users', String(userId));
+const userPhotoDir = (cid, userId) => T.userDir(cid, userId);
 
 const photoUpload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => {
-      const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
-      const session = SESSIONS.get(token);
-      if (!session) return cb(new Error('Unauthorized'));
-      const dir = userPhotoDir(session.userId);
+      const session = sessionOf(req);
+      if (!session || !session.companyId) return cb(new Error('Unauthorized'));
+      const dir = userPhotoDir(session.companyId, session.userId);
       fs.mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
@@ -622,7 +652,9 @@ const photoUpload = multer({
 
 /* ── GET /api/auth/profile/photo/:userId ─────── */
 router.get('/profile/photo/:userId', (req, res) => {
-  const dir = userPhotoDir(req.params.userId);
+  const session = sessionOf(req);   // a photo of a user of the login's company
+  if (!session || !session.companyId) return res.status(401).end();
+  const dir = userPhotoDir(session.companyId, req.params.userId);
   for (const ext of ['jpg','jpeg','png','webp']) {
     const fp = path.join(dir, `photo.${ext}`);
     if (fs.existsSync(fp)) return res.sendFile(fp);
@@ -632,29 +664,29 @@ router.get('/profile/photo/:userId', (req, res) => {
 
 /* ── POST /api/auth/profile/photo ────────────── */
 router.post('/profile/photo', photoUpload.single('photo'), (req, res) => {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
-  const session = SESSIONS.get(token);
-  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  const session = sessionOf(req);
+  if (!session || !session.companyId) return res.status(401).json({ error: 'Unauthorized' });
+  const cid = session.companyId;
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const users = ensureUsers();
+  const users = ensureUsers(cid);
   const idx = users.findIndex(u => u.id === session.userId);
   if (idx === -1) return res.status(404).json({ error: 'User not found' });
 
   const ext = path.extname(req.file.filename).toLowerCase().slice(1) || 'jpg';
   users[idx].photoExt = ext;
-  saveUsers(users);
+  saveUsers(cid, users);
 
   res.json({ success: true, photoUrl: `/api/auth/profile/photo/${session.userId}?t=${Date.now()}` });
 });
 
 /* ── PUT /api/auth/profile ───────────────────── */
 router.put('/profile', (req, res) => {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
-  const session = SESSIONS.get(token);
-  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  const session = sessionOf(req);
+  if (!session || !session.companyId) return res.status(401).json({ error: 'Unauthorized' });
+  const cid = session.companyId;
 
-  const users = ensureUsers();
+  const users = ensureUsers(cid);
   const idx = users.findIndex(u => u.id === session.userId);
   if (idx === -1) return res.status(404).json({ error: 'User not found' });
 
@@ -670,7 +702,7 @@ router.put('/profile', (req, res) => {
   if (department     !== undefined) users[idx].department  = department;
   if (dashboardPrefs !== undefined) users[idx].dashboardPrefs = dashboardPrefs;
   users[idx].updatedAt = new Date().toISOString();
-  saveUsers(users);
+  saveUsers(cid, users);
 
   const { password: _, ...safe } = users[idx];
   res.json({ success: true, user: safe });
@@ -678,9 +710,9 @@ router.put('/profile', (req, res) => {
 
 /* ── PUT /api/auth/profile/password ──────────── */
 router.put('/profile/password', (req, res) => {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/, '').trim();
-  const session = SESSIONS.get(token);
-  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  const session = sessionOf(req);
+  if (!session || !session.companyId) return res.status(401).json({ error: 'Unauthorized' });
+  const cid = session.companyId;
 
   const { currentPassword, newPassword } = req.body || {};
   if (!currentPassword || !newPassword)
@@ -688,7 +720,7 @@ router.put('/profile/password', (req, res) => {
   if (newPassword.length < 6)
     return res.status(400).json({ error: 'New password must be at least 6 characters' });
 
-  const users = ensureUsers();
+  const users = ensureUsers(cid);
   const idx = users.findIndex(u => u.id === session.userId);
   if (idx === -1) return res.status(404).json({ error: 'User not found' });
 
@@ -696,7 +728,7 @@ router.put('/profile/password', (req, res) => {
     return res.status(401).json({ error: 'Current password is incorrect' });
 
   users[idx].password = hashPwd(newPassword);
-  saveUsers(users);
+  saveUsers(cid, users);
   res.json({ success: true });
 });
 

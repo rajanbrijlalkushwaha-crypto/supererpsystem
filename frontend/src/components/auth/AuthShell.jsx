@@ -3,7 +3,7 @@
  * the dashboard) and a white rounded card on the right holding the page's form. Line icons only, no emoji.
  * Pages put their form inside; title / subtitle go over the form. */
 import React, { useEffect, useRef, useState } from 'react';
-import { PRODUCT_NAME, PRODUCT_VERSION, CLIENT_LOGO } from '../../utils/brand';
+import { PRODUCT_NAME, PRODUCT_VERSION } from '../../utils/brand';
 import { Svg } from '../ui/Icon';
 
 export { Svg };
@@ -116,7 +116,6 @@ const CSS = `
 .as.wide .as-form { max-width:720px; }
 .as-form.shake { animation:as-shake .4s ease; }
 .as-logo { display:block; width:120px; height:auto; margin:0 auto 14px; }
-.as-client { display:block; height:26px; max-width:160px; object-fit:contain; margin:0 auto 10px; opacity:.9; }
 .as-title { margin:0; text-align:center; font-family:${HEAD}; font-size:32px; font-weight:700; letter-spacing:-.3px; color:#0E2E33; }
 .as-sub { margin:6px 0 26px; text-align:center; font-size:15.5px; color:#3D555A; line-height:1.5; }
 .as-mode { display:flex; justify-content:center; margin:-14px 0 20px; }
@@ -191,6 +190,11 @@ select.as-in { cursor:pointer; appearance:none; -webkit-appearance:none; padding
 .as-alert.error { background:#FEF3F2; color:#B42318; border:1px solid #FECDCA; }
 .as-alert.success { background:#ECFDF3; color:#067647; border:1px solid #ABEFC6; }
 .as-alert.info { background:#F0F7F8; color:#022F37; border:1px solid #D4EBEE; }
+/* the same login in several companies: one button per company */
+.as-co { margin-bottom:18px; padding:12px; border:1px solid #D4EBEE; border-radius:12px; background:#F0F7F8; }
+.as-co-h { font-size:13.5px; color:#022F37; font-weight:600; margin-bottom:8px; }
+.as-co-b { display:flex; align-items:center; gap:10px; width:100%; padding:11px 12px; margin-top:6px; border:1px solid #B9D0D3; border-radius:10px; background:#fff; color:#03444F; font:600 14.5px inherit; cursor:pointer; text-align:left; }
+.as-co-b span { flex:1; } .as-co-b:hover:not(:disabled) { border-color:#03444F; background:#F7FBFB; } .as-co-b:disabled { opacity:.6; cursor:default; }
 
 .as-title + .as-state, .as-sub + .as-state { margin-top:24px; }
 .as-state { text-align:center; padding:4px 0; animation:as-in .3s ease both; }
@@ -413,7 +417,6 @@ export default function AuthShell({ title, subtitle, mode, top, wide, shakeKey, 
             {subtitle && <p className="as-sub">{subtitle}</p>}
             {mode && <div className="as-mode"><span>{mode}</span></div>}
             {children}
-            <img className="as-client" src={CLIENT_LOGO} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ marginTop: 22 }} />
           </div>
         </div>
         <div className="as-bottom">

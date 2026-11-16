@@ -696,8 +696,7 @@ router.post('/:orderId/send-email', async (req, res) => {
     const { orderId } = req.params;
     const { companyId, to, cc, bcc, subject, message, attachFileNames = [], poHtml = '' } = req.body;
 
-    const EMAIL_CFG_FILE = path.join(ROOT, 'Database', 'email-config.json');
-    const cfg = fs.existsSync(EMAIL_CFG_FILE) ? JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')) : {};
+    const cfg = require('./tenant').readEmailCfg(companyId);   // the company's own mail account
     if (!cfg.email || !cfg.password)
       return res.status(400).json({ error: 'Email not configured. Go to Admin → Email Config.' });
 

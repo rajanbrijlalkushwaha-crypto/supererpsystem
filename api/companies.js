@@ -10,6 +10,10 @@ const companyLogoDir  = (companyId) => path.join(companyDir(companyId), 'logo');
 const db = require('../db');
 
 const router = express.Router();
+const T = require('./tenant');
+/* a login belongs to one company: it may change only that company */
+const ownOnly = (req, res, next) => (String(req.params.companyId) === String(req.authUser && req.authUser.companyId)
+  ? next() : res.status(403).json({ error: 'This login is for another company.' }));
 
 const toApiRow = r => ({
   companyId:    r.id || r.companyId,
@@ -36,13 +40,14 @@ const toApiRow = r => ({
 });
 
 // GET - List all companies
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
+    const mine = r => String(r.companyId) === String(req.authUser && req.authUser.companyId);   // only the login's own company
     if (!db.connected) {
-      return res.json(jstore.readAllCompanies().map(toApiRow));
+      return res.json(jstore.readAllCompanies().map(toApiRow).filter(mine));
     }
     const [rows] = await db.query('SELECT * FROM companies ORDER BY id');
-    res.json(rows.map(toApiRow));
+    res.json(rows.map(toApiRow).filter(mine));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -92,12 +97,17 @@ router.post('/', upload.single('logo'), async (req, res) => {
       'ManufacturingJobSheets', 'Stock', 'Items', 'Projects', 'Client', 'Vendor', 'logo',
     ].forEach(sub => fs.mkdirSync(path.join(companyDir(companyId), sub), { recursive: true }));
 
-    res.json({ success: true, companyId, message: 'Company created successfully' });
+    /* the new company has its own users: the person who made it is its first admin (same username and password).
+       Sign out and sign in to the new company to use it. */
+    const me = T.readUsers(req.authUser.companyId).find(u => u.id === req.authUser.userId);
+    if (me && !T.readUsers(companyId).length) T.writeUsers(companyId, [{ ...me, role: 'admin', permissions: null, createdAt: now, updatedAt: now }]);
+
+    res.json({ success: true, companyId, message: `Company created. Sign out and sign in to ${companyName || companyId} with your same username and password to use it.` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // PUT - Update company
-router.put('/:companyId', upload.single('logo'), async (req, res) => {
+router.put('/:companyId', ownOnly, upload.single('logo'), async (req, res) => {
   try {
     const { companyId } = req.params;
     const { companyName, address, city, state, pincode, gstin, pan, email, phone, website, bankName, bankAccount, bankIfsc, bankBranch, isDefault, jurisdiction } = req.body;
@@ -149,7 +159,7 @@ router.put('/:companyId', upload.single('logo'), async (req, res) => {
 });
 
 // DELETE - Delete company
-router.delete('/:companyId', async (req, res) => {
+router.delete('/:companyId', ownOnly, async (req, res) => {
   try {
     if (db.connected) {
       const [result] = await db.query('DELETE FROM companies WHERE id = ?', [req.params.companyId]);
@@ -162,7 +172,7 @@ router.delete('/:companyId', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/companies/logo/:fileName — serve logo (searches per-company then legacy shared folder)
+// GET /api/companies/logo/:fileName — serve the logo from the company's own folder (old shared folder as a fallback)
 router.get('/logo/:fileName', (req, res) => {
   try {
     const fileName   = req.params.fileName;

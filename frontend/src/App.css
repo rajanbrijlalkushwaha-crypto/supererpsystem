@@ -4,31 +4,13 @@
    Author: Senior UI/UX × Frontend Architecture
    ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Brand typeface: Adani ─────────────────────────────────────────────
-   The file ships a single Regular (400) master, so bold weights are
-   synthesised by the browser. Declaring only 400 here is deliberate: if we
-   claimed the face covered 100-900, browsers would stop synthesising and
-   every heading would flatten to regular weight.
-
-   The second block registers the same file under the name "Inter" on
-   purpose. ~1,800 inline fontFamily declarations across 124 files hardcode
-   an 'Inter' stack; aliasing means they all render in Adani without
-   touching those files. Remove it only if those inline stacks are migrated
-   to var(--font). */
-@font-face {
-  font-family: 'Adani';
-  src: url('./fonts/adani.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Inter';
-  src: url('./fonts/adani.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
+/* ── Screen typeface: Inter ────────────────────────────────────────────
+   Inter (free, SIL Open Font License) is made for software screens: clear at
+   small sizes, 0/O and 1/l/I easy to tell apart, and every digit the same
+   width so amounts line up in columns. Regular 400, Medium 500, SemiBold 600
+   and Bold 700 ship with the ERP itself (@fontsource/inter, loaded in
+   index.js) — no internet needed. The many inline 'Inter' stacks in the pages
+   now get the real font. Printed documents keep their own fonts (printFont.js). */
 
 /* SubNav scrollable tab strip — hide scrollbar on all browsers */
 .subnav-tabs::-webkit-scrollbar { display: none; }
@@ -123,7 +105,7 @@
   /* ── Typography ──────────────────────────────────────────────────── */
   /* Adani has no ₹, ✓, ✕ or arrow glyphs — Segoe UI sits next in the stack so
      the browser falls back per character for those. */
-  --font:        'Adani', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font:        'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --font-mono:   'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 
   /* ── 8-px Spacing Grid ───────────────────────────────────────────── */
@@ -210,6 +192,7 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;   /* every digit the same width: amounts and quantities line up */
 }
 
 /* ── Custom Scrollbar ── */

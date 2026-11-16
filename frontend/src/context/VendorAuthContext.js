@@ -24,8 +24,8 @@ export function VendorAuthProvider({ children }) {
     }
   }, []);
 
-  const vendorLogin = async (email, password) => {
-    const res = await axios.post('/api/vendor-portal/login', { email, password });
+  const vendorLogin = async (email, password, companyId) => {
+    const res = await axios.post('/api/vendor-portal/login', { email, password, ...(companyId ? { companyId } : {}) });
     if (res.data.pending) {
       // Vendor is pending approval — store in sessionStorage (not localStorage)
       const pendingVendor = { pending: true, trackingNo: res.data.trackingNo, name: res.data.name, email: res.data.email };

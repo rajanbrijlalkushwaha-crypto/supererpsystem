@@ -383,6 +383,11 @@ export function initAppBridge() {
       go();
       return;
     }
+    if (d.type === 'erp-printlist') {   // the app's print button: print the list on screen
+      const ok = typeof window.__erpPrintList === 'function' && window.__erpPrintList();
+      if (!ok) toParent({ type: 'erp-toast', text: 'No list on this page to print.' });
+      return;
+    }
     if (d.type === 'erp-back') {
       const open = topLayer();
       if (open) { toParent({ type: 'erp-back-ok' }); closeLayer(open); return; }

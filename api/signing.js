@@ -25,40 +25,42 @@ const { ROOT, resolveUser } = require('./helpers');
 
 const router = express.Router();
 const ROLES = ['prepared', 'reviewed', 'approved'];
-const userDir = id => path.join(ROOT, 'Database', 'Users', String(id).replace(/[^\w-]/g, ''));
-const sigFile = id => path.join(userDir(id), 'signature.png');
+const T = require('./tenant');
+/* signatures live with the user, in the user's company: Companies/<c>/Users/<id>/signature.png */
+const userDir = (id, cid = T.cidNow()) => T.userDir(cid, id);
+const sigFile = (id, cid) => path.join(userDir(id, cid), 'signature.png');
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
-const usersAll = () => readJ(path.join(ROOT, 'Database', 'users.json'), []);
-const fullUser = u => usersAll().find(x => String(x.id) === String(u.id)) || {};
+const usersAll = cid => T.readUsers(cid || T.cidNow());
+const fullUser = u => usersAll(u && u.companyId).find(x => String(x.id) === String(u.id)) || {};
 const nameOf = (u, f) => [f.firstName, f.middleName, f.lastName].filter(Boolean).join(' ') || f.name || u.name || u.username || '';
-const sigData = id => { try { const b = fs.readFileSync(sigFile(id)); return `data:${b[0] === 0xFF ? 'image/jpeg' : 'image/png'};base64,${b.toString('base64')}`; } catch { return ''; } };
+const sigData = (id, cid = T.cidNow()) => { try { const b = fs.readFileSync(sigFile(id, cid)); return `data:${b[0] === 0xFF ? 'image/jpeg' : 'image/png'};base64,${b.toString('base64')}`; } catch { return ''; } };
 const clean = v => String(v || '').replace(/[^\w.-]/g, '').slice(0, 80);
 const docFile = (cid, type, id) => path.join(ROOT, 'Database', 'Companies', clean(cid), 'DocSigns', clean(type), `${clean(id)}.json`);
 const need = (req, res) => { const u = resolveUser(req); if (!u) { res.status(401).json({ error: 'Please sign in again.' }); return null; } return u; };
 
-router.get('/my', (req, res) => { const u = need(req, res); if (!u) return; const d = sigData(u.id); res.json({ has: !!d, dataUrl: d, name: nameOf(u, fullUser(u)) }); });
+router.get('/my', (req, res) => { const u = need(req, res); if (!u) return; const d = sigData(u.id, u.companyId); res.json({ has: !!d, dataUrl: d, name: nameOf(u, fullUser(u)) }); });
 router.post('/my', (req, res) => {
   const u = need(req, res); if (!u) return;
   const m = String(req.body?.dataUrl || '').match(/^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=]+)$/);
   if (!m) return res.status(400).json({ error: 'Send a PNG or JPG image.' });
   const buf = Buffer.from(m[2], 'base64');
   if (buf.length > 600 * 1024) return res.status(400).json({ error: 'The signature image is too big (max 600 KB) — crop it to the signature.' });
-  fs.mkdirSync(userDir(u.id), { recursive: true });
+  fs.mkdirSync(userDir(u.id, u.companyId), { recursive: true });
   // the old signature is kept (last 3) so a replaced one can be brought back
-  if (fs.existsSync(sigFile(u.id))) {
-    fs.copyFileSync(sigFile(u.id), path.join(userDir(u.id), `signature-old-${Date.now()}.png`));
-    fs.readdirSync(userDir(u.id)).filter(f => /^signature-old-\d+\.png$/.test(f)).sort().slice(0, -3).forEach(f => fs.rmSync(path.join(userDir(u.id), f), { force: true }));
+  if (fs.existsSync(sigFile(u.id, u.companyId))) {
+    fs.copyFileSync(sigFile(u.id, u.companyId), path.join(userDir(u.id, u.companyId), `signature-old-${Date.now()}.png`));
+    fs.readdirSync(userDir(u.id, u.companyId)).filter(f => /^signature-old-\d+\.png$/.test(f)).sort().slice(0, -3).forEach(f => fs.rmSync(path.join(userDir(u.id, u.companyId), f), { force: true }));
   }
-  fs.writeFileSync(sigFile(u.id), buf);
-  res.json({ ok: true, dataUrl: sigData(u.id) });
+  fs.writeFileSync(sigFile(u.id, u.companyId), buf);
+  res.json({ ok: true, dataUrl: sigData(u.id, u.companyId) });
 });
-router.delete('/my', (req, res) => { const u = need(req, res); if (!u) return; try { fs.unlinkSync(sigFile(u.id)); } catch { /* none */ } res.json({ ok: true }); });
+router.delete('/my', (req, res) => { const u = need(req, res); if (!u) return; try { fs.unlinkSync(sigFile(u.id, u.companyId)); } catch { /* none */ } res.json({ ok: true }); });
 
 /* the signatures of one document, with each signer's current signature image */
 function signsOf(cid, type, id) {
   const rec = readJ(docFile(cid, type, id), {});
   const out = { stamps: (rec.stamps || []).map(({ userId, ...x }) => ({ ...x, mine: false, userId })) };
-  ROLES.forEach(r => { if (rec[r]) out[r] = { ...rec[r], img: sigData(rec[r].userId) }; });
+  ROLES.forEach(r => { if (rec[r]) out[r] = { ...rec[r], img: sigData(rec[r].userId, cid) }; });
   return out;
 }
 router.get('/doc', (req, res) => {
@@ -155,7 +157,7 @@ router.post('/apply', async (req, res) => {
     const imgs = {};
     const pages = doc.getPages();
     for (const st of stamps) {
-      const raw = sigData(st.userId); if (!raw) continue;
+      const raw = sigData(st.userId, companyId); if (!raw) continue;
       if (!imgs[st.userId]) { const b = Buffer.from(raw.split(',')[1], 'base64'); imgs[st.userId] = raw.startsWith('data:image/jpeg') ? await doc.embedJpg(b) : await doc.embedPng(b); }
       const img = imgs[st.userId];
       const at = new Date(st.at), date = `${String(at.getDate()).padStart(2, '0')}-${String(at.getMonth() + 1).padStart(2, '0')}-${at.getFullYear()}`;

@@ -14,12 +14,24 @@ const VENDOR_SESSIONS = new Map();
 // In-memory password reset tokens: token → { email, expires }
 const VENDOR_RESET_TOKENS = new Map();
 
-const REG_FILE        = path.join(ROOT, 'Database', 'vendor-registrations.json');
-const EMAIL_CFG_FILE  = path.join(ROOT, 'Database', 'email-config.json');
-
-const readRegs  = () => { try { return JSON.parse(fs.readFileSync(REG_FILE, 'utf8')); } catch { return []; } };
-const writeRegs = d   => { fs.mkdirSync(path.dirname(REG_FILE), { recursive: true }); fs.writeFileSync(REG_FILE, JSON.stringify(d, null, 2)); };
-const readEmailCfg = () => { try { return JSON.parse(fs.readFileSync(EMAIL_CFG_FILE, 'utf8')); } catch { return {}; } };
+/* each company keeps its own supplier sign-ups (Companies/<c>/vendor-registrations.json) and mail account */
+const T = require('./tenant');
+const readRegs  = cid => { try { const l = T.readJ(T.regsFile(cid), []); return Array.isArray(l) ? l : []; } catch { return []; } };
+const writeRegs = (cid, d) => T.writeJ(T.regsFile(cid), d);
+const readEmailCfg = cid => (cid ? T.readEmailCfg(cid) : {});
+/* the sign-ups with this e-mail, in every company (or only the one asked for) */
+const regsByEmail = (email, onlyCid) => T.companyIds().filter(c => !onlyCid || c === onlyCid)
+  .map(cid => ({ cid, regs: readRegs(cid) }))
+  .map(x => ({ ...x, idx: x.regs.findIndex(r => String(r.email || '').toLowerCase() === String(email || '').toLowerCase().trim()) }))
+  .filter(x => x.idx !== -1);
+/* ERP staff screens (sign-up list, approve, reject…): need an ERP login, and work on its company only */
+const { sessionOf } = require('./requireLogin');
+const staff = (req, res, next) => {
+  const s = sessionOf(req);
+  if (!s || !s.companyId) return res.status(401).json({ error: 'Please log in again.' });
+  if (req.body && req.body.companyId && String(req.body.companyId) !== String(s.companyId)) return res.status(403).json({ error: 'This login is for another company.' });
+  req.cid = s.companyId; next();
+};
 
 const hashPwd = (pwd, salt) => crypto.createHash('sha256').update(pwd + salt).digest('hex');
 
@@ -119,8 +131,8 @@ const queryEmailHtml = (vendorName, message, trackingNo) => `<!DOCTYPE html>
 </html>`;
 
 /* ── Send email helper ── */
-const sendEmail = async (toEmail, subject, html) => {
-  const cfg = readEmailCfg();
+const sendEmail = async (toEmail, subject, html, cid) => {
+  const cfg = readEmailCfg(cid);   // the company's own mail account
   if (!cfg.email || !cfg.password) throw new Error('Email not configured. Please set up SMTP in Admin → Email Config.');
 
   const nodemailer = require('nodemailer');
@@ -140,18 +152,23 @@ const sendEmail = async (toEmail, subject, html) => {
   });
 };
 
+/* ── GET /api/vendor-portal/companies — names only, for the supplier sign-up / login ── */
+router.get('/companies', (_req, res) => res.json(T.companyIds().map(c => ({ companyId: c, companyName: T.companyName(c) }))));
+
 /* ── POST /api/vendor-portal/send-otp ── */
 router.post('/send-otp', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
+    const cid = T.companyIds().includes(String(req.body.companyId || '')) ? String(req.body.companyId) : '';
+    if (!cid) return res.status(400).json({ error: 'Choose the company you are registering with.' });
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     OTP_STORE.set(email.toLowerCase(), { otp, expires: Date.now() + 10 * 60 * 1000 });
     console.log(`[OTP] Registration OTP for ${email}: ${otp}`);
 
     try {
-      await sendEmail(email, 'Vendor Registration OTP — Epsilon Enterprise', otpEmailHtml(otp, 'register'));
+      await sendEmail(email, `Vendor Registration OTP — ${T.companyName(cid)}`, otpEmailHtml(otp, 'register'), cid);
       res.json({ success: true, message: `OTP sent to ${email}. Check your inbox.` });
     } catch (mailErr) {
       console.error('[OTP EMAIL ERROR]', mailErr.message);
@@ -166,8 +183,10 @@ router.post('/send-otp', async (req, res) => {
 /* ── POST /api/vendor-portal/register ── */
 router.post('/register', (req, res) => {
   try {
-    const { email, otp, password, ...data } = req.body;
+    const { email, otp, password, companyId: wantCid, ...data } = req.body;
     if (!email || !otp || !password) return res.status(400).json({ error: 'Email, OTP and password are required.' });
+    const cid = T.companyIds().includes(String(wantCid || '')) ? String(wantCid) : '';
+    if (!cid) return res.status(400).json({ error: 'Choose the company you are registering with.' });
 
     const stored = OTP_STORE.get(email.toLowerCase());
     if (!stored) return res.status(400).json({ error: 'OTP not found. Please request a new OTP.' });
@@ -175,9 +194,9 @@ router.post('/register', (req, res) => {
     if (stored.otp !== String(otp).trim()) return res.status(400).json({ error: 'Invalid OTP.' });
     OTP_STORE.delete(email.toLowerCase());
 
-    const regs = readRegs();
+    const regs = readRegs(cid);
     if (regs.find(r => r.email.toLowerCase() === email.toLowerCase())) {
-      return res.status(409).json({ error: 'This email is already registered.' });
+      return res.status(409).json({ error: 'This email is already registered with this company.' });
     }
 
     const salt         = crypto.randomBytes(16).toString('hex');
@@ -190,11 +209,12 @@ router.post('/register', (req, res) => {
       email: email.toLowerCase(),
       passwordHash, salt,
       trackingNo,
+      companyId: cid,
       status: 'self-registered',
       createdAt: new Date().toISOString(),
     };
     regs.push(reg);
-    writeRegs(regs);
+    writeRegs(cid, regs);
 
     res.json({ success: true, trackingNo, message: 'Registration submitted! You will be notified once approved.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -203,15 +223,15 @@ router.post('/register', (req, res) => {
 /* ── POST /api/vendor-portal/login ── */
 router.post('/login', (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, companyId: wantCid } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
-    const regs = readRegs();
-    const reg  = regs.find(r => r.email.toLowerCase() === email.toLowerCase().trim());
-    if (!reg) return res.status(401).json({ error: 'No account found with this email.' });
-
-    const hash = hashPwd(password, reg.salt);
-    if (hash !== reg.passwordHash) return res.status(401).json({ error: 'Incorrect password.' });
+    const found = regsByEmail(email, wantCid ? String(wantCid) : '');
+    if (!found.length) return res.status(401).json({ error: 'No account found with this email.' });
+    const ok = found.filter(x => hashPwd(password, x.regs[x.idx].salt) === x.regs[x.idx].passwordHash);
+    if (!ok.length) return res.status(401).json({ error: 'Incorrect password.' });
+    if (ok.length > 1) return res.status(409).json({ chooseCompany: ok.map(x => ({ companyId: x.cid, companyName: T.companyName(x.cid) })), error: 'Choose the company to sign in to.' });
+    const reg = { ...ok[0].regs[ok[0].idx], companyId: ok[0].regs[ok[0].idx].companyId || ok[0].cid };
 
     if (reg.status === 'self-registered') {
       return res.json({ pending: true, trackingNo: reg.trackingNo, name: reg.vendorName || reg.companyName || reg.email, email: reg.email });
@@ -242,16 +262,16 @@ router.post('/forgot-password/send-otp', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
-    const regs = readRegs();
-    const reg  = regs.find(r => r.email.toLowerCase() === email.toLowerCase().trim());
-    if (!reg) return res.status(404).json({ error: 'No account found with this email.' });
+    const found = regsByEmail(email, req.body.companyId ? String(req.body.companyId) : '')[0];
+    if (!found) return res.status(404).json({ error: 'No account found with this email.' });
+    const reg = found.regs[found.idx];
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    OTP_STORE.set('reset:' + email.toLowerCase(), { otp, expires: Date.now() + 10 * 60 * 1000 });
+    OTP_STORE.set('reset:' + email.toLowerCase(), { otp, cid: found.cid, expires: Date.now() + 10 * 60 * 1000 });
     console.log(`[RESET OTP] Password reset OTP for ${email}: ${otp}`);
 
     try {
-      await sendEmail(email, 'Password Reset OTP — Epsilon Enterprise', otpEmailHtml(otp, 'reset', reg.vendorName || reg.companyName));
+      await sendEmail(email, `Password Reset OTP — ${T.companyName(found.cid)}`, otpEmailHtml(otp, 'reset', reg.vendorName || reg.companyName), found.cid);
       res.json({ success: true, message: `OTP sent to ${email}. Check your inbox.` });
     } catch (mailErr) {
       console.error('[RESET EMAIL ERROR]', mailErr.message);
@@ -274,7 +294,8 @@ router.post('/forgot-password/reset', (req, res) => {
     if (stored.otp !== String(otp).trim()) return res.status(400).json({ error: 'Invalid OTP.' });
     OTP_STORE.delete(key);
 
-    const regs = readRegs();
+    const cid  = stored.cid;
+    const regs = readRegs(cid);
     const idx  = regs.findIndex(r => r.email.toLowerCase() === email.toLowerCase().trim());
     if (idx === -1) return res.status(404).json({ error: 'Account not found.' });
 
@@ -282,7 +303,7 @@ router.post('/forgot-password/reset', (req, res) => {
     regs[idx].passwordHash    = hashPwd(newPassword, salt);
     regs[idx].salt            = salt;
     regs[idx].passwordResetAt = new Date().toISOString();
-    writeRegs(regs);
+    writeRegs(cid, regs);
 
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -364,14 +385,14 @@ const vendorResetEmailHtml = (vendorName, resetUrl) => `<!DOCTYPE html>
 </body></html>`;
 
 /* ── Helper: search vendor JSON files across all companies by email ── */
-const findVendorInFiles = (email) => {
+const findVendorInFiles = (email, onlyCid) => {
   const companiesDir = path.join(ROOT, 'Database', 'Companies');
   if (!fs.existsSync(companiesDir)) return null;
   try {
     const companies = fs.readdirSync(companiesDir).filter(d => {
       try { return fs.statSync(path.join(companiesDir, d)).isDirectory(); } catch { return false; }
     });
-    for (const companyId of companies) {
+    for (const companyId of companies.filter(c => !onlyCid || c === onlyCid)) {
       const vendors = jstore.readAll('Vendor', companyId);
       const found = vendors.find(v => v && (v.email || '').toLowerCase() === email.toLowerCase().trim());
       if (found) return { ...found, companyId };
@@ -387,11 +408,15 @@ router.post('/forgot-password/request', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required.' });
 
     const normalEmail = email.toLowerCase().trim();
+    // each company keeps its own suppliers: reset only in the company chosen on the page
+    const onlyCid = T.companyIds().includes(String(req.body.companyId || '')) ? String(req.body.companyId) : '';
+    if (!onlyCid) return res.status(400).json({ error: 'Choose the company you are registered with.' });
     let vendorName, resolvedEmail, source;
 
-    // 1. Check vendor-registrations.json first
-    const regs = readRegs();
-    const reg  = regs.find(r => r.email.toLowerCase() === normalEmail);
+    // 1. Check the companies' supplier sign-ups first
+    const hit = regsByEmail(normalEmail, onlyCid)[0];
+    const reg = hit ? hit.regs[hit.idx] : null;
+    var regCid = hit ? hit.cid : '';
     if (reg) {
       if (reg.status === 'rejected') return res.status(400).json({ error: 'This account has been rejected. Contact admin.' });
       vendorName    = reg.vendorName || reg.companyName || reg.email;
@@ -399,7 +424,7 @@ router.post('/forgot-password/request', async (req, res) => {
       source        = 'registration';
     } else {
       // 2. Search vendor JSON files (admin-created vendors)
-      const vf = findVendorInFiles(normalEmail);
+      const vf = findVendorInFiles(normalEmail, onlyCid);
       if (!vf) return res.status(404).json({ error: 'No vendor account found with this email address.' });
       vendorName    = vf.vendorName || vf.companyName || vf.email;
       resolvedEmail = vf.email;
@@ -411,7 +436,7 @@ router.post('/forgot-password/request', async (req, res) => {
     const token   = crypto.randomBytes(32).toString('hex');
     const expires = Date.now() + 60 * 60 * 1000; // 1 hour
     VENDOR_RESET_TOKENS.set(token, {
-      email: resolvedEmail, vendorName, source, expires,
+      email: resolvedEmail, vendorName, source, expires, companyId: regCid,
       ...(vendorFileInfo || {}),
     });
 
@@ -422,7 +447,8 @@ router.post('/forgot-password/request', async (req, res) => {
       await sendEmail(
         resolvedEmail,
         'Password Reset Request — Vendor Portal',
-        vendorResetEmailHtml(vendorName, resetUrl)
+        vendorResetEmailHtml(vendorName, resetUrl),
+        (VENDOR_RESET_TOKENS.get(token) || {}).companyId
       );
       res.json({ success: true, message: `Password reset link sent to ${resolvedEmail}. Please check your inbox.` });
     } catch (mailErr) {
@@ -471,7 +497,9 @@ router.post('/forgot-password/reset-with-name', (req, res) => {
     const passwordHash = hashPwd(newPassword, salt);
     const now          = new Date().toISOString();
 
-    const regs = readRegs();
+    const cid  = entry.companyId;
+    if (!cid) return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+    const regs = readRegs(cid);
     const idx  = regs.findIndex(r => r.email.toLowerCase() === entry.email.toLowerCase());
 
     if (idx !== -1) {
@@ -497,7 +525,7 @@ router.post('/forgot-password/reset-with-name', (req, res) => {
       });
     }
 
-    writeRegs(regs);
+    writeRegs(cid, regs);
     VENDOR_RESET_TOKENS.delete(token);
 
     res.json({ success: true, message: 'Password set successfully. You can now log in to the Vendor Portal.' });
@@ -518,50 +546,49 @@ const requireVendorAuth = (req, res, next) => {
 router.get('/me', requireVendorAuth, (req, res) => res.json(req.vendor));
 
 /* ── GET /api/vendor-portal/registrations — admin list ── */
-router.get('/registrations', (_req, res) => {
-  try { res.json(readRegs()); } catch (e) { res.status(500).json({ error: e.message }); }
+router.get('/registrations', staff, (req, res) => {
+  try { res.json(readRegs(req.cid).map(({ passwordHash, salt, ...r }) => r)); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ── PUT /api/vendor-portal/registrations/:id — admin edit registration ── */
-router.put('/registrations/:id', (req, res) => {
+router.put('/registrations/:id', staff, (req, res) => {
   try {
     const regId = Number(req.params.id);
-    const regs  = readRegs();
+    const regs  = readRegs(req.cid);
     const idx   = regs.findIndex(r => r.id === regId);
     if (idx === -1) return res.status(404).json({ error: 'Registration not found.' });
     // Preserve sensitive/identity fields, allow editing of vendor data fields
     const { passwordHash, salt, id, status, createdAt, approvedAt, rejectedAt, vendorId, companyId, ...updates } = req.body;
     regs[idx] = { ...regs[idx], ...updates, updatedAt: new Date().toISOString() };
-    writeRegs(regs);
+    writeRegs(req.cid, regs);
     res.json({ success: true, reg: regs[idx] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ── POST /api/vendor-portal/send-query/:id — admin sends email to vendor ── */
-router.post('/send-query/:id', async (req, res) => {
+router.post('/send-query/:id', staff, async (req, res) => {
   try {
     const regId = Number(req.params.id);
     const { subject, message } = req.body;
     if (!message) return res.status(400).json({ error: 'Message is required.' });
 
-    const regs = readRegs();
+    const regs = readRegs(req.cid);
     const reg  = regs.find(r => r.id === regId);
     if (!reg)  return res.status(404).json({ error: 'Registration not found.' });
 
     const emailSubject = subject || 'Query regarding your Vendor Registration — Epsilon Enterprise';
-    await sendEmail(reg.email, emailSubject, queryEmailHtml(reg.vendorName || reg.companyName || reg.email, message, reg.trackingNo || reg.id));
+    await sendEmail(reg.email, emailSubject, queryEmailHtml(reg.vendorName || reg.companyName || reg.email, message, reg.trackingNo || reg.id), req.cid);
     res.json({ success: true, message: `Email sent to ${reg.email}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ── POST /api/vendor-portal/approve/:id ── */
-router.post('/approve/:id', (req, res) => {
+router.post('/approve/:id', staff, (req, res) => {
   try {
     const regId    = Number(req.params.id);
-    const companyId = req.body.companyId;
-    if (!companyId) return res.status(400).json({ error: 'companyId is required.' });
+    const companyId = req.cid;   // the sign-up is approved in the login's company
 
-    const regs = readRegs();
+    const regs = readRegs(companyId);
     const idx  = regs.findIndex(r => r.id === regId);
     if (idx === -1) return res.status(404).json({ error: 'Registration not found.' });
 
@@ -603,23 +630,23 @@ router.post('/approve/:id', (req, res) => {
     saveJson(vendorJsonPath(companyId, vendorId, vendorData.vendorName), vendorData);
 
     regs[idx] = { ...reg, vendorId, companyId, status: 'approved', approvedAt: now };
-    writeRegs(regs);
+    writeRegs(companyId, regs);
 
     res.json({ success: true, vendorId, message: 'Vendor approved and account activated.' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ── POST /api/vendor-portal/reject/:id ── */
-router.post('/reject/:id', (req, res) => {
+router.post('/reject/:id', staff, (req, res) => {
   try {
     const regId = Number(req.params.id);
-    const regs  = readRegs();
+    const regs  = readRegs(req.cid);
     const idx   = regs.findIndex(r => r.id === regId);
     if (idx === -1) return res.status(404).json({ error: 'Registration not found.' });
     regs[idx].status          = 'rejected';
     regs[idx].rejectionReason = req.body.reason || '';
     regs[idx].rejectedAt      = new Date().toISOString();
-    writeRegs(regs);
+    writeRegs(req.cid, regs);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

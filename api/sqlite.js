@@ -53,6 +53,8 @@ function classify(absPath) {
   if (parts.length < 2) return null;
   const companyId = parts[0];
   if (!/^C\d+$/.test(companyId)) return null;
+  // not records: the company's users (password hashes) and copies of deleted entries
+  if (PRIVATE.has(parts[1])) return null;
 
   // Banks live one level deeper (Accounts/Banks) and are read as their own module.
   const isBanks = parts[1] === 'Accounts' && parts[2] === 'Banks';
@@ -62,6 +64,8 @@ function classify(absPath) {
   return { companyId, module, relPath: tail.join('/'), tail };
 }
 
+const PRIVATE = new Set(['Users', 'DeletedRecords']);
+
 /** Split a module DIRECTORY path into {companyId, module}. */
 function classifyDir(absPath) {
   const rel = path.relative(COMPANIES, absPath);
@@ -69,6 +73,7 @@ function classifyDir(absPath) {
   const parts = rel.split(path.sep).filter(Boolean);
   if (parts.length < 2) return null;
   if (!/^C\d+$/.test(parts[0])) return null;
+  if (PRIVATE.has(parts[1])) return null;
   return { companyId: parts[0], module: parts.slice(1).join('/') };
 }
 

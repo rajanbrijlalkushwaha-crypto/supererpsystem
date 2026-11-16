@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthShell, { Field, Alert, Btn, PwdHint, loginPath, StateIcon } from '../../components/auth/AuthShell';
@@ -18,6 +18,7 @@ const STEPS = ['Business', 'Contact & Address', 'Bank & Password', 'Verify Email
 /* fields that must be filled before moving on from each step */
 const checkStep = (step, f) => {
   if (step === 0) {
+    if (!f.companyId) return 'Please choose the company you are registering with.';
     if (!f.vendorName.trim()) return 'Please enter the vendor name.';
     if (!f.businessType) return 'Please select the business type.';
   }
@@ -43,7 +44,7 @@ export default function VendorRegister() {
   const [msg, setMsg]               = useState(null);
   const [submitted, setSubmitted]   = useState(null);
   const [form, setForm] = useState({
-    vendorName:'', businessType:'', industryType:'', gst:'', pan:'', cin:'', msme:'',
+    companyId:'', vendorName:'', businessType:'', industryType:'', gst:'', pan:'', cin:'', msme:'',
     contactPerson:'', mobile:'', email:'', website:'',
     address:'', city:'', state:'', pincode:'', country:'India',
     bankName:'', accountHolder:'', accountNo:'', ifsc:'', branch:'',
@@ -51,6 +52,15 @@ export default function VendorRegister() {
   });
 
   const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setMsg(null); };
+  // each company keeps its own suppliers: register with one of them
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => {
+    axios.get('/api/vendor-portal/companies').then(r => {
+      const l = Array.isArray(r.data) ? r.data : [];
+      setCompanies(l);
+      if (l.length === 1) setForm(f => ({ ...f, companyId: l[0].companyId }));
+    }).catch(() => setCompanies([]));
+  }, []);
   const bind = (k, fx = v => v) => ({ value: form[k], onChange: e => set(k, fx(e.target.value)) });
   const upper = v => v.toUpperCase();
   const digits = v => v.replace(/\D/g, '');
@@ -68,7 +78,7 @@ export default function VendorRegister() {
     if (form.password !== form.confirmPassword) { setMsg({ text: 'Passwords do not match.' }); return; }
     setSending(true); setMsg(null);
     try {
-      const res = await axios.post('/api/vendor-portal/send-otp', { email: form.email });
+      const res = await axios.post('/api/vendor-portal/send-otp', { email: form.email, companyId: form.companyId });
       setOtpSent(true);
       const txt = res.data.message || `OTP sent to ${form.email}. Check your inbox.`;
       setMsg({ type: 'success', text: res.data.devOtp ? `OTP: ${res.data.devOtp} (use this OTP)` : txt });
@@ -119,6 +129,10 @@ export default function VendorRegister() {
 
         <div className="as-grid as-anim" key={step}>
           {step === 0 && <>
+            <Field full id="vr-co" label="Registering with company" req type="select" {...bind('companyId')}>
+              <option value="">Choose the company…</option>
+              {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.companyName}</option>)}
+            </Field>
             <Field full id="vr-name" label="Vendor name" req autoFocus placeholder="Full legal name" {...bind('vendorName')} />
             <Field id="vr-btype" label="Business type" req type="select" {...bind('businessType')}>
               <option value="">— Select —</option>{BUSINESS_TYPES.map(o => <option key={o}>{o}</option>)}

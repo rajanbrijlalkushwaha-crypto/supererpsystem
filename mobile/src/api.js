@@ -31,11 +31,14 @@ export async function testServer(url) {
   } finally { clearTimeout(t); }
 }
 
-export async function login(username, password, keep) {
-  const r = await axios.post('/api/auth/login', { username, password }, { _noRetry: true });
+/* each company has its own users: the login opens one company (companyId). A user name in two companies → the
+   server answers 409 with chooseCompany, and the sign-in screen asks which one. */
+export async function login(username, password, keep, companyId) {
+  const r = await axios.post('/api/auth/login', { username, password, ...(companyId ? { companyId } : {}) }, { _noRetry: true });
   S.token = r.data.token; S.user = r.data.user;
   await setP('token', S.token); await setP('user', S.user);
-  S.remember = keep ? { username, password } : null; await setP('remember', S.remember);
+  if (r.data.companyId) { S.companyId = r.data.companyId; await setP('companyId', S.companyId); }
+  S.remember = keep ? { username, password, companyId: r.data.companyId || companyId || '' } : null; await setP('remember', S.remember);
   return r.data;
 }
 export async function logout() {
@@ -43,17 +46,32 @@ export async function logout() {
   S.token = ''; S.user = null; S.remember = null; S.companyId = ''; S.company = null;
   await Promise.all(['token', 'user', 'remember', 'companyId'].map(k => setP(k, null)));
 }
+/* the signed-in company (full details) + the companies this login may switch to (where the same username has an active account) */
 export async function loadCompanies() {
   const r = await axios.get('/api/companies', { params: {} });
-  S.companies = Array.isArray(r.data) ? r.data : [];
-  S.company = S.companies.find(c => c.companyId === S.companyId) || null;
+  const own = Array.isArray(r.data) ? r.data : [];
+  S.company = own.find(c => c.companyId === S.companyId) || own[0] || null;
+  if (S.company && S.company.companyId !== S.companyId) { S.companyId = S.company.companyId; await setP('companyId', S.companyId); }
+  let mine = [];
+  try { const m = await axios.get('/api/auth/my-companies'); mine = Array.isArray(m.data) ? m.data : []; } catch { /* older server */ }
+  S.companies = mine.length ? mine.map(c => (c.companyId === S.companyId && S.company ? { ...S.company, ...c } : c)) : own;
   return S.companies;
 }
 export async function pickCompany(c) { S.companyId = c.companyId; S.company = c; await setP('companyId', c.companyId); }
+/* switch company: the server checks this user may open it (and asks for that company's password when it differs) */
+export async function switchCompany(c, password) {
+  const r = await axios.post('/api/auth/switch-company', { to: c.companyId, ...(password ? { password } : {}) }, { _noRetry: true });
+  S.token = r.data.token; S.user = r.data.user; S.companyId = r.data.companyId;
+  await setP('token', S.token); await setP('user', S.user); await setP('companyId', S.companyId);
+  if (S.remember) { S.remember = { ...S.remember, companyId: S.companyId, ...(password ? { password } : {}) }; await setP('remember', S.remember); }
+  await loadCompanies();
+}
 
 /* every request: the server, the token and the company */
 axios.interceptors.request.use(cfg => {
   if (cfg.url && cfg.url.startsWith('/')) cfg.url = S.server + cfg.url;
+  // never wait for ever on a server that does not answer (e.g. its Wi-Fi address changed); PDFs get longer
+  if (!cfg.timeout) cfg.timeout = /print-merge|\/pdf|download/.test(cfg.url || '') ? 120000 : 20000;
   if (S.token) cfg.headers.Authorization = `Bearer ${S.token}`;
   if (S.companyId && !/\/api\/(auth|companies)\b/.test(cfg.url || '')) cfg.params = { companyId: S.companyId, ...(cfg.params || {}) };
   return cfg;
