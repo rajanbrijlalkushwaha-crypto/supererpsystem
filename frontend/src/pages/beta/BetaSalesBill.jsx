@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Svg } from '../../components/ui/Icon';
 import { useAuth } from '../../context/AuthContext';
+import { addonsOf, addonFill } from './BetaDispatch';
 
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -330,6 +331,10 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
   const [pdf, setPdf] = useState(null);        // { file, busy, data, got:[], via, err }
   const [filled, setFilled] = useState({});    // field → true when it came from the PDF
   const [qtyFromPdf, setQtyFromPdf] = useState({});
+  // add-on items (e.g. the AC with a cabin): shown on the bill with no value — the price is in the product
+  const [aq, setAq] = useState({});
+  const aqTyped = useRef(new Set());
+  const qtyLoaded = useRef(null);
   const [over, setOver] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -385,10 +390,23 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
       bl.charges.forEach(c => (c.mode !== 'pct' && c.pending <= 0 ? gone : rowsNow).push(chargeRow(c)));
       setChg(rowsNow); setRemoved(gone);
     }
-    setQty(q);
+    qtyLoaded.current = q; setQty(q);
     setQtyFromPdf({});
+    aqTyped.current = new Set();
+    if (editBill) {
+      const a = {}; (editBill.addons || []).forEach(da => { const x = ads.find(y => (da.addonIdx != null ? y.i === Number(da.addonIdx) : low(y.a.description) === low(da.description))); if (x) a[x.i] = String(n(da.qty)); });
+      setAq(a);
+    } else { const sug = addonFill(ads, bl.lines.map(l => ({ idx: l.idx, ordered: l.ordered, left: l.pending })), idx => n(q[idx])); setAq(Object.fromEntries(Object.entries(sug).map(([k, v]) => [k, v ? String(v) : '']))); }
     if (pendingPdfQty.current) { applyPdfQty(pendingPdfQty.current, bl); pendingPdfQty.current = null; }
   }, [bl, editBill]);   // eslint-disable-line react-hooks/exhaustive-deps
+  /* the add-ons of the order, less those on its other bills; their qty follows the bill qty (until typed by hand) */
+  const ads = useMemo(() => (order ? addonsOf(order, (billsByOrder[String(order.orderId)] || []).filter(b => !editBill || b.billId !== editBill.billId)) : []), [order, billsByOrder, editBill]);
+  useEffect(() => {
+    if (!bl || !ads.length || qty === qtyLoaded.current) return;
+    const sug = addonFill(ads, bl.lines.map(l => ({ idx: l.idx, ordered: l.ordered, left: l.pending })), idx => n(qty[idx]));
+    setAq(a => { const nx = { ...a }; ads.forEach(x => { if (!aqTyped.current.has(x.i)) nx[x.i] = sug[x.i] ? String(sug[x.i]) : ''; }); return nx; });
+  }, [qty]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const billAddons = ads.filter(x => n(aq[x.i]) > 0).map(x => ({ addonIdx: x.i, description: x.a.description, category: x.a.category || '', remarks: x.a.remarks || '', unit: x.a.unit || 'NOS', qty: n(aq[x.i]) }));
 
   /* PDF product lines → bill qty for order products with the same rate (other products set to 0) */
   const applyPdfQty = (items, b) => {
@@ -536,7 +554,7 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
         orderId: String(o.orderId), orderNo: o.orderNo || `SO-${o.orderId}`,
         partyName: o.customerName || o.clientName || o.party || '—', partyGstin: o.customerGstin || o.partyGstin || '',
         partyState: o.customerState || o.shipToState || '', companyState: company?.state || '', gstType: intra ? 'intrastate' : 'interstate',
-        items: calc.lines, subTotal: calc.sub, totalCGST: calc.cgst, totalSGST: calc.sgst, totalIGST: calc.igst, totalGST: calc.gst, grandTotal: calc.total,
+        items: calc.lines, addons: billAddons, subTotal: calc.sub, totalCGST: calc.cgst, totalSGST: calc.sgst, totalIGST: calc.igst, totalGST: calc.gst, grandTotal: calc.total,
         companyId,
         billToName: o.customerName || o.contactPerson || '', billToAddress: o.address || o.customerAddress || '',
         billToCity: o.customerCity || '', billToState: o.customerState || '', billToPincode: o.customerPincode || '',
@@ -563,9 +581,12 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
           const lastLot = bl && bl.lines.every(l => l.pending - n(qty[l.idx]) <= 1e-9);
           const sentA = {};
           orderDcs.forEach(d => (d.addons || []).forEach(a => { if (a.addonIdx != null) sentA[a.addonIdx] = (sentA[a.addonIdx] || 0) + n(a.qty); }));
-          const addons = lastLot ? (Array.isArray(o.addons) ? o.addons : []).map((a, i) => ({ a, i, left: Math.max(0, (n(a.qty) || 1) - (sentA[i] || 0)) }))
-            .filter(x => x.a && x.a.description && x.left > 0)
-            .map(x => ({ addonIdx: x.i, description: x.a.description, category: x.a.category || '', remarks: x.a.remarks || '', unit: x.a.unit || 'NOS', qty: x.left })) : [];
+          // the add-ons on this bill go on its DC (never more than is left to send); an older bill without them: all with the last lot
+          const addons = billAddons.length
+            ? billAddons.map(x => ({ ...x, qty: Math.min(x.qty, Math.max(0, (n((o.addons || [])[x.addonIdx]?.qty) || 1) - (sentA[x.addonIdx] || 0))) })).filter(x => x.qty > 0)
+            : lastLot ? (Array.isArray(o.addons) ? o.addons : []).map((a, i) => ({ a, i, left: Math.max(0, (n(a.qty) || 1) - (sentA[i] || 0)) }))
+              .filter(x => x.a && x.a.description && x.left > 0)
+              .map(x => ({ addonIdx: x.i, description: x.a.description, category: x.a.category || '', remarks: x.a.remarks || '', unit: x.a.unit || 'NOS', qty: x.left })) : [];
           const dcR = await axios.post('/api/delivery-challans', {
             companyId, dcDate: payload.billDate, dcType: 'with-bill', linkedBillId: billId, invoiceNo: payload.billNo, invoiceDate: payload.billDate,
             createdBy: { id: me?.id, name: me?.name || me?.username || '', username: me?.username || '' },
@@ -762,6 +783,25 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
           </table>
         )}
       </div>
+
+      {bl && ads.length > 0 && (
+        <div className="sf-card">
+          <div className="sf-ch"><span className="ico"><Svg name="plus" size={13} /></span><b>Add-on items</b><span className="grow" /><small>printed on the bill with no value — price included in the products · qty follows the bill qty</small></div>
+          <table className="sf-t">
+            <thead><tr><th>Sl</th><th>Item</th><th>For</th><th className="r">Ordered</th><th className="r">On bills</th><th className="r">Left</th><th className="r now first">On this bill</th></tr></thead>
+            <tbody>{ads.map((x, k) => (
+              <tr key={x.i} className={x.left <= 0 && !n(aq[x.i]) ? 'off' : ''}>
+                <td>{k + 1}</td><td><b>{x.a.description}</b>{x.a.remarks ? <div className="ps">{x.a.remarks}</div> : null}</td>
+                <td>{x.a.forItemName ? `${x.a.forItemName}${x.a.perUnit ? ` · ${num(x.a.perUnit)} each` : ''}` : <span className="mut">Whole order</span>}</td>
+                <td className="r">{num(x.ordered)} <span className="mut">{x.a.unit || ''}</span></td><td className="r">{x.done ? num(x.done) : <span className="mut">0</span>}</td>
+                <td className={`r ${x.left > 0 ? 'pend' : 'done'}`}>{x.left > 0 ? num(x.left) : '✓'}</td>
+                <td className="r now first"><input className="sf-q" inputMode="decimal" value={aq[x.i] ?? ''} placeholder="0" disabled={x.left <= 0 && !n(aq[x.i])}
+                  onChange={e => { const v = e.target.value.replace(/[^\d.]/g, ''); aqTyped.current.add(x.i); setAq(y => ({ ...y, [x.i]: v })); }} aria-label={`Bill qty for add-on ${x.a.description}`} /></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
 
       {bl && (
         <div className="sf-card">

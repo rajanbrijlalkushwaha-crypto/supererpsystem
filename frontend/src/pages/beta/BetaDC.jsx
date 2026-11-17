@@ -13,7 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
 import { CSS as SALES_CSS, BIG, fyOf, FyFilter, fyCounts, useClearSel } from './BetaSales';
 import { n, num, amt, fdate, dash, lineOwner, isIntra, cnsByOrderOf } from './BetaSalesBill';
-import { dispatchOf, billMode } from './BetaDispatch';
+import { dispatchOf, billMode, addonFill } from './BetaDispatch';
 import { printDC, billOfDc, printMerged, printPortalEwb, printDcWithPortal, uploadPortalPdf } from './BetaDCPrint';
 import { printSalesBill } from './BetaSalesPrint';
 import { DOC_TYPES, SUB_TYPES, STATE_NAMES, CANCEL_REASONS, ewayDocOf, ewayJsonOf, downloadJson, ewayActive, cancelHoursLeft } from './BetaEwayJson';
@@ -383,6 +383,8 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
   });
   const [qty, setQty] = useState({});
   const [aq, setAq] = useState({});
+  const aqTyped = useRef(new Set());   // add-ons whose qty was typed by hand — no longer follow the products
+  const qtyLoaded = useRef(null);      // the qty just loaded (new order / DC being edited): not a change by the user
   const [pq, setPq] = useState({});     // '<idx>|<source>' → qty, when one product comes from more than one vendor / PO
   const [src, setSrc] = useState({});   // 'p<idx>' / 'a<i>' → PO id when that product goes straight from the vendor to the client
   const [picker, setPicker] = useState(false);
@@ -433,12 +435,13 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
   useEffect(() => {
     if (!dp || initFor.current === String(dp.o.orderId)) return;
     initFor.current = String(dp.o.orderId);
-    if (!editDc) { setQty({}); setAq({}); setSrc({}); return; }
+    aqTyped.current = new Set();
+    if (!editDc) { const z = {}; qtyLoaded.current = z; setQty(z); setAq({}); setSrc({}); return; }
     const items = dp.lines.map(l => ({ it: l.it, idx: l.idx })), q = {}, a = {}, f = {}, pp = {};
     (editDc.items || []).forEach(li => { const x = lineOwner(li, items); if (x) {
       const pk = `${x.idx}|${li.fromGrnId ? `grn:${li.fromGrnId}` : li.fromPoId ? `po:${li.fromPoId}` : ''}`; pp[pk] = String(r3(n(pp[pk]) + n(li.qty))); q[x.idx] = String(r3(n(q[x.idx]) + n(li.qty))); if (li.fromGrnId) f[`p${x.idx}`] = `grn:${li.fromGrnId}`; else if (li.fromPoId) f[`p${x.idx}`] = `po:${li.fromPoId}`; } });
     (editDc.addons || []).forEach(da => { const x = dp.addons.find(y => (da.addonIdx != null ? y.i === Number(da.addonIdx) : y.a.description === da.description)); if (x) { a[x.i] = String(n(da.qty)); if (da.fromGrnId) f[`a${x.i}`] = `grn:${da.fromGrnId}`; else if (da.fromPoId) f[`a${x.i}`] = `po:${da.fromPoId}`; } });
-    setQty(q); setAq(a); setSrc(f); setPq(pp);
+    qtyLoaded.current = q; setQty(q); setAq(a); setSrc(f); setPq(pp);
   }, [dp, editDc]);
 
   const set = k => e => { const v = e.target.value; setHead(h => ({ ...h, [k]: v })); };
@@ -603,6 +606,12 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
   const gstAmt = sendItems.reduce((s, l) => s + n(qty[l.idx]) * l.rate * l.gstPct / 100, 0);
   const r2 = v => Math.round(v * 100) / 100;
 
+  /* the add-ons go with the products: qty follows what is entered for the products */
+  useEffect(() => {
+    if (!dp || !dp.addons.length || qty === qtyLoaded.current) return;
+    const sug = addonFill(dp.addons.map(x => ({ ...x, left: x.toSend })), dp.lines.map(l => ({ idx: l.idx, ordered: l.ordered, left: l.toSend })), idx => n(qty[idx]));
+    setAq(a => { const nx = { ...a }; dp.addons.forEach(x => { if (!aqTyped.current.has(x.i)) nx[x.i] = sug[x.i] ? String(sug[x.i]) : ''; }); return nx; });
+  }, [qty]);   // eslint-disable-line react-hooks/exhaustive-deps
   const fillAll = () => {
     const q = {}, pp = {};
     (dp?.lines || []).forEach(l => {
@@ -778,7 +787,7 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
 
       {dp && dp.addons.length > 0 && (
         <div className="sf-card">
-          <div className="sf-ch"><span className="ico"><Svg name="plus" size={13} /></span><b>Add-on items to send</b><small>price included in the products</small></div>
+          <div className="sf-ch"><span className="ico"><Svg name="plus" size={13} /></span><b>Add-on items to send</b><small>price included in the products · qty follows the products above (change it if needed)</small></div>
           <table className="sf-t">
             <thead><tr><th>Sl</th><th>Item</th><th>Specification</th><th className="r">Ordered</th><th className="r">Sent</th><th className="r">Left</th><th className="r">Send now</th></tr></thead>
             <tbody>{dp.addons.map((x, k) => (
@@ -787,7 +796,7 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
                 <td className="r">{num(x.ordered)} <span className="mut">{x.a.unit || ''}</span></td><td className="r">{x.sent ? num(x.sent) : <span className="mut">0</span>}</td>
                 <td className={`r ${x.toSend > 0 ? 'pend' : 'done'}`}>{x.toSend > 0 ? num(x.toSend) : '✓'}</td>
                 <td className="r"><input className={`sf-q${errs[`a${x.i}`] ? ' bad' : ''}`} inputMode="decimal" value={aq[x.i] ?? ''} placeholder="0" disabled={x.toSend <= 0 && !n(aq[x.i])}
-                  onChange={e => { const v = e.target.value.replace(/[^\d.]/g, ''); setAq(y => ({ ...y, [x.i]: v })); }} aria-label={`Send qty for ${x.a.description}`} />
+                  onChange={e => { const v = e.target.value.replace(/[^\d.]/g, ''); aqTyped.current.add(x.i); setAq(y => ({ ...y, [x.i]: v })); }} aria-label={`Send qty for ${x.a.description}`} />
                   {errs[`a${x.i}`] && <span className="sf-err">{errs[`a${x.i}`]}</span>}</td>
               </tr>
             ))}</tbody>

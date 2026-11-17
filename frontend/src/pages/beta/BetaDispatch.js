@@ -14,6 +14,39 @@ export { MODES, billMode };
 const r3 = v => Math.round((Number(v) || 0) * 1000) / 1000;
 const low = s => String(s == null ? '' : s).toLowerCase().trim();
 
+/* the add-on items of an order (e.g. the AC with a cabin, price included in the product) and how many already went
+   on earlier documents (DCs, or bills) — matched by their index, else by name */
+export function addonsOf(o, docs = []) {
+  return (Array.isArray(o?.addons) ? o.addons : []).map((a, i) => ({ a, i })).filter(x => x.a && String(x.a.description || '').trim()).map(({ a, i }) => {
+    let s = 0;
+    (docs || []).forEach(d => (d.addons || []).forEach(da => {
+      if ((da.addonIdx != null && Number(da.addonIdx) === i) || (da.addonIdx == null && low(da.description) === low(a.description))) s += n(da.qty);
+    }));
+    const ordered = n(a.qty) || 1;
+    return { i, a, ordered, done: r3(s), left: Math.max(0, r3(ordered - s)) };
+  });
+}
+/* the add-ons that go with the products now: an add-on of one product goes per unit of it (all that is left with its
+   last unit); an add-on of the whole order goes in proportion, and all that is left with the last lot.
+   ads: [{ i, a, ordered, left }]   lines: [{ idx, ordered, left }]   qtyOf(idx) → qty now */
+export function addonFill(ads, lines, qtyOf) {
+  const out = {};
+  const T = lines.reduce((s, l) => s + n(l.ordered), 0), now = lines.reduce((s, l) => s + n(qtyOf(l.idx)), 0);
+  const lastLot = now > 0 && lines.every(l => n(l.left) - n(qtyOf(l.idx)) <= 1e-9);
+  ads.forEach(x => {
+    const fi = x.a.forItemIdx, ln = fi != null && fi !== '' ? lines.find(l => l.idx === Number(fi)) : null;
+    let q;
+    if (ln) {
+      const qn = n(qtyOf(ln.idx)), per = n(x.a.perUnit) || (n(ln.ordered) ? x.ordered / n(ln.ordered) : 0);
+      q = qn <= 0 ? 0 : n(ln.left) - qn <= 1e-9 ? x.left : per * qn;
+    } else q = now <= 0 ? 0 : lastLot ? x.left : (T ? x.ordered * now / T : 0);
+    q = Math.max(0, Math.min(x.left, q));
+    q = /^(nos|no|pcs|pc|set|sets|unit|units)$/i.test(String(x.a.unit || 'NOS').trim()) ? Math.round(q) : r3(q);
+    out[x.i] = q;
+  });
+  return out;
+}
+
 /* one order + its DCs + its bills → per product sent / billed / to send, add-ons sent, and state */
 export function dispatchOf(o, dcs = [], bills = [], skipDcId = null, rets = [], cns = []) {
   const bl = billingOf(o, bills, null, cns);

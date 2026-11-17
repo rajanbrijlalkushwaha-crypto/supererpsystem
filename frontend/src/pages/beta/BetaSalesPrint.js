@@ -78,7 +78,11 @@ export async function printSalesBill({ b: bill, order, company, user, collect })
       <td class="r">${charge ? '' : amt(li.rate)}</td><td class="r">${amt(li.taxable)}</td><td class="c">${QTY.format(n(li.gstPct))}%</td>
       ${intra ? `<td class="r">${amt(li.cgst ?? g / 2)}</td><td class="r">${amt(li.sgst ?? g / 2)}</td>` : `<td class="r">${amt(li.igst ?? g)}</td>`}
       <td class="r">${amt(n(li.taxable) + g)}</td></tr>`;
-  }).join('');
+  }).join('') + (b.addons || []).filter(a => n(a.qty) > 0).map((a, k) => `<tr class="it">
+      <td class="c">${items.length + k + 1}</td>
+      <td><b>${esc(a.description)}</b> <span class="mut">(add-on — price included)</span>${a.remarks ? `<div class="mut">${esc(a.remarks)}</div>` : ''}</td>
+      <td class="c"></td><td class="r">${QTY.format(n(a.qty))}</td><td class="c">${esc(a.unit || '')}</td>
+      <td class="r">—</td><td class="r">—</td><td class="c"></td>${intra ? '<td class="r"></td><td class="r"></td>' : '<td class="r"></td>'}<td class="r">—</td></tr>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tax Invoice ${esc(b.billNo || b.billId)}</title>
 <style>
