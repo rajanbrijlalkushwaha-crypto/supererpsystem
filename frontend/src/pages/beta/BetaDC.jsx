@@ -134,6 +134,7 @@ export default function BetaDC() {
   const [orders, setOrders] = useState(null);
   const [bills, setBills] = useState(null);
   const [dcs, setDcs] = useState(null);
+  const [rets, setRets] = useState([]);   // client Return Notes — what came back is free to send again
   const [lastNo, setLastNo] = useState(0);      // last DC no. ever given — the numbers missing below it were deleted
   const [pos, setPos] = useState([]);           // purchase orders — a product can go straight from the vendor to the client
   const [grns, setGrns] = useState([]);
@@ -173,6 +174,7 @@ export default function BetaDC() {
     axios.get('/api/sales-orders', p).then(r => setOrders(Array.isArray(r.data) ? r.data : [])).catch(() => setOrders([]));
     axios.get('/api/bills', { params: { companyId, type: 'sales' } }).then(r => setBills(Array.isArray(r.data) ? r.data.filter(b => b && b.type !== 'purchase') : [])).catch(() => setBills([]));
     axios.get('/api/delivery-challans/meta/counter', p).then(r => setLastNo(Number(r.data?.last) || 0)).catch(() => setLastNo(0));
+    axios.get('/api/returns', { params: { companyId, kind: 'client' } }).then(r => setRets(Array.isArray(r.data) ? r.data : [])).catch(() => setRets([]));
     axios.get('/api/delivery-challans', { params: { companyId, withDeleted: 1 } }).then(r => setDcs(Array.isArray(r.data) ? r.data : [])).catch(() => setDcs([]));   // deleted ones too — the list shows them
     axios.get('/api/purchase-orders', p).then(r => setPos(Array.isArray(r.data) ? r.data.filter(x => x && !SKIP_PO.includes(x.status)) : [])).catch(() => setPos([]));
     axios.get('/api/vendors', p).then(r => setVendors(Array.isArray(r.data) ? r.data : [])).catch(() => setVendors([]));
@@ -181,6 +183,7 @@ export default function BetaDC() {
 
   const group = (arr, key) => { const m = {}; (arr || []).forEach(x => { if (x[key] != null && x[key] !== '') (m[String(x[key])] = m[String(x[key])] || []).push(x); }); return m; };
   const billsByOrder = useMemo(() => group(bills, 'orderId'), [bills]);
+  const retsByOrder = useMemo(() => group(rets, 'orderId'), [rets]);
   const liveDcs = useMemo(() => (dcs || []).filter(d => d.status !== 'deleted'), [dcs]);
   /* DC numbers that are on no file — deleted before deleted DCs were kept: shown in the list as "deleted earlier" */
   const gaps = useMemo(() => {
@@ -203,8 +206,8 @@ export default function BetaDC() {
   const dcsByOrder = useMemo(() => group(liveDcs, 'linkedSalesOrderId'), [liveDcs]);
   const soMap = useMemo(() => { const m = {}; (orders || []).forEach(o => { m[String(o.orderId)] = o; }); return m; }, [orders]);
   const rows = useMemo(() => (orders || []).filter(o => !SKIP.includes(o.status))
-    .map(o => dispatchOf(o, dcsByOrder[String(o.orderId)] || [], billsByOrder[String(o.orderId)] || []))
-    .sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, dcsByOrder, billsByOrder]);
+    .map(o => dispatchOf(o, dcsByOrder[String(o.orderId)] || [], billsByOrder[String(o.orderId)] || [], null, retsByOrder[String(o.orderId)] || []))
+    .sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, dcsByOrder, billsByOrder, retsByOrder]);
   const loading = orders === null || bills === null || dcs === null;
   const tab = editing ? 'create' : urlTab;
   const go = k => { setEditing(null); navigate(`/beta/delivery-challan?tab=${k}`); };
@@ -344,7 +347,7 @@ export default function BetaDC() {
         <div className="sb-body">
           {loading ? <div className="sb-empty">Loading orders, bills and challans…</div>
             : <DCForm key={editing ? `edit-${editing.dcId}` : createFor ? `for-${createFor.orderId}-${createFor.k}` : 'new'}
-              companyId={companyId} company={selectedCompany} rows={rows} dcsByOrder={dcsByOrder} billsByOrder={billsByOrder} pos={pos} grns={grns} vendors={vendors}
+              companyId={companyId} company={selectedCompany} rows={rows} dcsByOrder={dcsByOrder} billsByOrder={billsByOrder} retsByOrder={retsByOrder} pos={pos} grns={grns} vendors={vendors}
               presetOrderId={createFor?.orderId} editDc={editing}
               onCancel={() => { setEditing(null); navigate('/beta/delivery-challan?tab=list'); }}
               onSaved={(dc, text) => { setReload(x => x + 1); setNote({ text, dc }); if (editing) { setEditing(null); navigate('/beta/delivery-challan?tab=list'); } }} />}
@@ -365,7 +368,7 @@ const blankHead = () => ({ dcDate: today(), dcType: 'before-bill', billId: '', e
   transDocNo: '', transDocDate: '', approxDistanceKm: '', dispatchFrom: '', dispatchThrough: '', remarks: '',
   /* e-way JSON */ ewayDocType: '', ewaySubSupplyType: '1', ewayDocNo: '', dispatchPlace: '', dispatchPincode: '', dispatchState: '', shippingCity: '', shippingPincode: '', shippingState: '' });
 
-function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, pos = [], grns = [], vendors = [], presetOrderId, editDc, onSaved, onCancel }) {
+function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrder = {}, pos = [], grns = [], vendors = [], presetOrderId, editDc, onSaved, onCancel }) {
   const { user: me } = useAuth() || {};
   const [orderId, setOrderId] = useState(editDc ? String(editDc.linkedSalesOrderId || '') : presetOrderId ? String(presetOrderId) : '');
   const [order, setOrder] = useState(null);
@@ -408,7 +411,7 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, pos = [], 
     }));
   }, [order, company]);
 
-  const dp = useMemo(() => (order ? dispatchOf(order, dcsByOrder[String(order.orderId)] || [], billsByOrder[String(order.orderId)] || [], editDc?.dcId) : null), [order, dcsByOrder, billsByOrder, editDc]);
+  const dp = useMemo(() => (order ? dispatchOf(order, dcsByOrder[String(order.orderId)] || [], billsByOrder[String(order.orderId)] || [], editDc?.dcId, retsByOrder[String(order.orderId)] || []) : null), [order, dcsByOrder, billsByOrder, retsByOrder, editDc]);
   const orderBills = useMemo(() => (order ? (billsByOrder[String(order.orderId)] || []) : []), [order, billsByOrder]);
   /* only bills that have no DC yet — once a DC is made against a bill (or tied to it), that bill is not offered again.
      When editing, the DC's own bill stays in the list. */
@@ -681,7 +684,7 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, pos = [], 
             </td></tr>
             <tr><th>Client PO</th><td>{order ? <>{dash(order.customerPO)}{order.poDate ? <span style={{ color: '#667085' }}> · {fdate(order.poDate)}</span> : ''}</> : '—'}</td></tr>
             <tr><th>Ship to</th><td>{order ? dash([order.shipToName, order.shipToCity || order.customerCity].filter(Boolean).join(', ')) : '—'}</td></tr>
-            <tr><th>Sent so far</th><td>{dp ? `${num(dp.sentQty)} of ${num(dp.orderQty)} · billed ${num(dp.billedQty)}` : '—'}</td></tr>
+            <tr><th>Sent so far</th><td>{dp ? `${num(dp.sentQty)} of ${num(dp.orderQty)} · billed ${num(dp.billedQty)}${dp.returnedQty ? ` · ${num(dp.returnedQty)} came back (Return Note) — free to send again` : ''}` : '—'}</td></tr>
           </tbody></table>
         </div>
         <div className="sf-card">

@@ -77,20 +77,28 @@ export default function BetaStock() {
       (g.items || []).filter(i => i && grnQtyOf(i) > 0).forEach(i => ev.push({ date: g.receiptDate, in: true, place, type: toVendor ? 'vendor' : 'store', orderId, name: i.itemName, unit: i.unit, qty: grnQtyOf(i),
         from: g.vendorName || poMap[String(g.poId)]?.vendorName || '', po: g.poNo || poMap[String(g.poId)]?.poNo || '', bills: billsFor(String(g.poId), i.itemName, grnQtyOf(i)), grnDate: g.receiptDate, doc: `GRN ${g.grnNo || ''} · ${fdate(g.receiptDate)}` }));
     });
-    data.rets.forEach(r => {
+    /* a client return can only come back after the DC it went on: counted on the later of its own date and its DCs' dates
+       (a note dated before its DC would otherwise be taken out again by that DC) */
+    const dcDate = {}; data.dcs.forEach(d => { dcDate[String(d.dcId)] = { date: d.dcDate, at: d.createdAt }; });
+    data.rets.filter(r => r.status !== 'deleted').forEach(r => {
       const orderId = String(r.orderId || '');
       if (r.kind === 'client') {
         const isVendor = String(r.location || '').startsWith(VENDOR_PREFIX);
         const place = isVendor ? r.location.slice(VENDOR_PREFIX.length) : (r.location || myPlaces[0] || STORE);
-        (r.items || []).forEach(i => ev.push({ date: r.date, in: true, place, type: isVendor ? 'vendor' : 'store', orderId, name: i.itemName, unit: i.unit, qty: n(i.qty),
+        const mine = [...new Set([r.dcId, ...(r.dcs || []).map(x => x.dcId), ...(r.items || []).map(i => i.dcId)].filter(Boolean).map(String))].map(id => dcDate[id]).filter(Boolean);
+        const date = [r.date, ...mine.map(x => x.date)].filter(Boolean).sort().pop();
+        const at = [r.createdAt, ...mine.map(x => x.at)].filter(Boolean).sort().pop();
+        (r.items || []).forEach(i => ev.push({ date, at, ret: true, in: true, place, type: isVendor ? 'vendor' : 'store', orderId, name: i.itemName, unit: i.unit, qty: n(i.qty),
           from: `${r.customerName || 'Client'} (returned)`, po: '', bills: [], doc: `Return Note ${r.returnNo} · ${fdate(r.date)}` }));
       } else (r.items || []).forEach(i => ev.push({ date: r.date, in: false, from: r.location, orderId, name: i.itemName, qty: n(i.qty), doc: `Return to Vendor ${r.returnNo} · ${fdate(r.date)}` }));
     });
     /* a DC takes out its products and its add-ons (e.g. the AC sent with a cabin) — from the vendor / place it went from */
     data.dcs.filter(d => d.status !== 'deleted').forEach(d => [...(d.items || []), ...(d.addons || [])].filter(i => i && n(i.qty) > 0).forEach(i => ev.push({ date: d.dcDate, in: false,
-      from: i.fromVendorName || d.dispatchFrom, orderId: String(d.linkedSalesOrderId || ''), name: i.description || i.itemName, qty: n(i.qty), doc: `DC ${d.dcNo} · ${fdate(d.dcDate)}` })));
+      from: i.fromVendorName || d.dispatchFrom, orderId: String(d.linkedSalesOrderId || ''), at: d.createdAt, name: i.description || i.itemName, qty: n(i.qty), doc: `DC ${d.dcNo} · ${fdate(d.dcDate)}` })));
 
-    ev.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (b.in - a.in))   // same day: receipts before dispatches
+    // same day: GRN receipts first, then dispatches and returns in the order they were made
+    const rank = e => (e.in && !e.ret ? 0 : 1);
+    ev.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || rank(a) - rank(b) || String(a.at || '').localeCompare(String(b.at || '')))
       .forEach(e => {
         if (e.in) {
           const s = slotOf(e.place, e.type, e.orderId, e.name, e.unit); s.qty = r3(s.qty + e.qty);

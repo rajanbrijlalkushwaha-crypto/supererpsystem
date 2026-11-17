@@ -70,8 +70,22 @@ function clean(b, kind) {
         dcId: dcList.length === 1 ? dcList[0].dcId : s(b.dcId, 30), dcNo: dcList.length ? dcList.map(d => d.dcNo).join(', ') : s(b.dcNo, 60), dcs: dcList, direct, location: s(b.location, 120) }
     : { ...base, poId: s(b.poId, 30), poNo: s(b.poNo, 60), vendorId: s(b.vendorId, 30), vendorName: s(b.vendorName, 200), orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), location: s(b.location, 120) };
 }
-const check = (r, kind) => {
+/* a client return comes back after the DC it went on — its date cannot be before that DC's date */
+const fdmy = v => (/^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10).split('-').reverse().join('-') : String(v || ''));
+const dcDateCheck = (co, r) => {
+  if (!co || !r.date) return '';
+  const jstore = require('./json-store');
+  const ids = [...new Set([r.dcId, ...(r.dcs || []).map(d => d.dcId)].filter(Boolean).map(String))];
+  for (const id of ids) {
+    let dc = null; try { dc = jstore.readOne('DeliveryChallan', co, id); } catch { dc = null; }
+    const d = dc && String(dc.dcDate || '').slice(0, 10);
+    if (d && r.date < d) return `The return date (${fdmy(r.date)}) is before DC ${dc.dcNo || id} (${fdmy(d)}) — material comes back only after it was sent. Correct the date.`;
+  }
+  return '';
+};
+const check = (r, kind, co) => {
   if (kind === 'client' && !r.orderId) return 'Choose the sales order.';
+  if (kind === 'client') { const e = dcDateCheck(co, r); if (e) return e; }
   if (kind === 'vendor' && !r.poId) return 'Choose the purchase order.';
   if (!r.items.length) return 'Enter the quantity of at least one item.';
   if (/^other$/i.test(r.reason) && !r.reasonText) return 'Write the reason (Other).';
@@ -118,7 +132,7 @@ router.post('/', (req, res) => {
     const kind = req.body?.kind === 'vendor' ? 'vendor' : req.body?.kind === 'client' ? 'client' : '';
     if (!kind) return res.status(400).json({ error: "kind must be 'client' or 'vendor'" });
     const body = clean(req.body || {}, kind);
-    const err = check(body, kind); if (err) return res.status(400).json({ error: err });
+    const err = check(body, kind, co); if (err) return res.status(400).json({ error: err });
     const ids = nextIds(co, kind, body.date);
     const now = new Date().toISOString();
     const rec = { ...ids, kind, status: 'active', ...body, createdBy: who(req), createdAt: now, updatedAt: now, audit: [auditEntry(req, 'created')] };
@@ -133,7 +147,7 @@ router.put('/:id', (req, res) => {
     if (!old) return res.status(404).json({ error: 'Not found' });
     if (old.status === 'deleted') return res.status(400).json({ error: 'A deleted note cannot be edited.' });
     const body = clean({ ...old, ...req.body }, old.kind);
-    const err = check(body, old.kind); if (err) return res.status(400).json({ error: err });
+    const err = check(body, old.kind, co); if (err) return res.status(400).json({ error: err });
     const upd = { ...old, ...body, updatedBy: who(req), updatedAt: new Date().toISOString() };
     upd.audit = pushAudit(old, req, 'edited', { from: { items: old.items.map(i => `${i.itemName} × ${i.qty}`).join(', ') }, to: { items: body.items.map(i => `${i.itemName} × ${i.qty}`).join(', ') } });
     writeJSON(f, upd);
