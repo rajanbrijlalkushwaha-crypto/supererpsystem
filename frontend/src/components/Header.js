@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import { useLock } from '../context/LockContext';
 import { useNavTheme, NEU } from '../utils/navTheme';
+import { toggleUiVersion } from '../utils/uiVersion';
 import { useUiScale, SCALE_OPTIONS } from '../utils/uiScale';
 import axios from 'axios';
 import {
@@ -168,6 +169,19 @@ function UiScaleSelect() {
         {SCALE_OPTIONS.map(([k, l]) => <option key={k} value={k} style={{ color:'#101828' }}>{k === 'auto' ? `Auto ${Math.round(zoom * 100)}%` : l}</option>)}
       </select>
     </label>
+  );
+}
+
+/* Classic (this one) ↔ Beta view */
+function UiVersionButton() {
+  const neu = useHdrTokens().neu;
+  return (
+    <button type="button" onClick={toggleUiVersion} title="You are on the Classic view — click for the Beta view"
+      style={{ display:'flex', alignItems:'center', height:28, padding:0, flexShrink:0, cursor:'pointer', overflow:'hidden', borderRadius:6, fontFamily:FONT,
+        border: neu ? 'none' : '1px solid rgba(255,255,255,0.35)', background: neu ? NEU.base : 'transparent', boxShadow: neu ? NEU.raisedSm : 'none' }}>
+      <span style={{ padding:'0 9px', lineHeight:'26px', fontSize:11, fontWeight:800, letterSpacing:'0.6px', background: neu ? NEU.accent : '#fff', color: neu ? '#fff' : '#101828' }}>CLASSIC</span>
+      <span style={{ padding:'0 9px', lineHeight:'26px', fontSize:11, fontWeight:700, color: neu ? NEU.text : 'rgba(255,255,255,0.85)' }}>Beta</span>
+    </button>
   );
 }
 
@@ -1333,6 +1347,7 @@ const Header = ({ username: usernameProp, onLogout }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: tk.neu ? 8 : 2, paddingLeft: 10, height: 34,
             borderLeft: `1px solid ${tk.line}`, flexShrink: 0 }}>
             <UiScaleSelect />
+            <UiVersionButton />
             <NavThemeToggle />
 
             <button onClick={() => window.location.reload()} title="Refresh"

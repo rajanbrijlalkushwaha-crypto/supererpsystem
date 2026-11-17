@@ -2,6 +2,7 @@
  * Used instead of the classic Header / SidebarNav / SubNav when the person signed in from the
  * new sign-in page (utils/uiVersion).
  * Top bar: search (middle) · active company · profile menu (Profile settings, Chat, Logout). */
+import { toggleUiVersion } from '../../utils/uiVersion';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -248,6 +249,8 @@ const CSS = `
 .bx-dd { position:relative; flex-shrink:0; }
 .bx-pl { display:flex; align-items:center; gap:6px; height:28px; padding:0 10px; margin-right:6px; border:1px solid rgba(255,255,255,.35); border-radius:4px; background:rgba(255,255,255,.08); color:#fff; font:600 12px inherit; cursor:pointer; white-space:nowrap; }
 .bx-pl:hover { background:rgba(255,255,255,.18); }
+.bx-ver { gap:0; padding:0; overflow:hidden; } .bx-ver span { padding:0 9px; line-height:26px; }
+.bx-ver-on { background:#fff; color:#03444f; letter-spacing:.6px; } .bx-ver-off { opacity:.85; }
 .bx-plm { font-size:12px; color:#FFE8A3; margin-right:8px; white-space:nowrap; }
 .bx-btn { display:flex; align-items:center; gap:6px; height:30px; padding:0 6px 0 4px; border:1px solid transparent; border-radius:4px; background:none; cursor:pointer;
   font:inherit; color:#fff; text-align:left; }
@@ -441,6 +444,10 @@ export default function BetaShell() {
           </div>
 
           <div className="bx-grow" />
+
+          {/* the look: Beta (this one) ↔ Classic */}
+          <button type="button" className="bx-pl bx-ver" onClick={toggleUiVersion} title="You are on the Beta view — click for the Classic view">
+            <span className="bx-ver-on">BETA</span><span className="bx-ver-off">Classic</span></button>
 
           {/* print the list on screen (any list page) */}
           {!isDash && <button type="button" className="bx-pl" title="Print the list shown on this page (as filtered)" onClick={doPrintList}><Svg name="file" size={14} />Print list</button>}

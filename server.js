@@ -129,9 +129,29 @@ app.use('/app/android', express.static(path.join(__dirname, 'mobile', 'release')
   setHeaders: (res, fp) => { if (fp.endsWith('.apk')) res.setHeader('Content-Type', 'application/vnd.android.package-archive'); res.setHeader('Cache-Control', 'no-store'); },
 }));
 
+/* the website is (re)built while the server runs (server update): until build/index.html is back, a short
+   "being updated" page that checks again by itself — never a raw file error */
+const UPDATING_PAGE = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super ERP System — updating</title><meta http-equiv="refresh" content="10">
+<style>
+:root{--bg:#EEF4F5;--card:#fff;--ink:#101828;--mut:#475467;--teal:#03444f;--line:#D5E2E4}
+@media (prefers-color-scheme:dark){:root{--bg:#0B1B1E;--card:#12272B;--ink:#E6F0F1;--mut:#9DB3B7;--teal:#5FB7C2;--line:#21414A}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,Segoe UI,Arial,sans-serif}
+.c{width:min(440px,100%);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:28px 26px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.m{width:52px;height:52px;margin:0 auto 14px;border-radius:12px;background:var(--teal);color:#fff;font:800 28px/52px Inter,Arial,sans-serif}
+h1{font-size:19px;margin:0 0 6px}p{margin:0 0 6px;color:var(--mut)}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:18px 0 10px}.bar i{display:block;height:100%;width:35%;background:var(--teal);border-radius:3px;animation:g 1.4s ease-in-out infinite}
+@keyframes g{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}@media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%}}
+small{color:var(--mut)}button{margin-top:12px;padding:8px 18px;border:0;border-radius:6px;background:var(--teal);color:#fff;font:600 14px inherit;cursor:pointer}
+</style></head><body><div class="c" role="status"><div class="m">S</div><h1>Super ERP System is being updated</h1>
+<p>A new version is being installed on the server. It is back in a minute or two.</p><div class="bar"><i></i></div>
+<small>This page checks again by itself every 10 seconds.</small><br><button type="button" onclick="location.reload()">Try now</button></div></body></html>`;
 app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'), err => {
+    if (!err || res.headersSent) return;
+    res.status(503).set('Retry-After', '10').type('html').send(UPDATING_PAGE);
+  });
 });
 
 // Global error handler

@@ -22,3 +22,9 @@ export function useUiVersion() {
   }, []);
   return v;
 }
+
+/* switch the look from the top bar: the other version opens on its dashboard */
+export const toggleUiVersion = () => {
+  setUiVersion(getUiVersion() === 'beta' ? 'classic' : 'beta');
+  window.location.assign('/dashboard');
+};
