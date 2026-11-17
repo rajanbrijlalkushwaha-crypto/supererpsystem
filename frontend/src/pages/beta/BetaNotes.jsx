@@ -24,6 +24,13 @@ const KIND = {
     returns: ['Goods Returned by Customer', 'Damaged Goods Returned', 'Quality Rejection', 'Short Delivery Billed', 'Sales Return'],
     discounts: ['Discount Allowed', 'Price Correction', 'Promotional Discount', 'Loyalty Discount', 'Other'], discountItem: 'Discount Allowed' },
 };
+const NT_CSS = `
+.nt-mode { display:flex; gap:8px; flex-wrap:wrap; }
+.nt-mode label { display:flex; align-items:flex-start; gap:8px; padding:7px 10px; border:1px solid #C9D7DA; border-radius:4px; cursor:pointer; background:#fff; flex:1; min-width:240px; }
+.nt-mode label.on { border-color:#03444f; background:#F0F7F7; }
+.sf .nt-mode input { width:auto; height:auto; margin-top:2px; flex-shrink:0; accent-color:#03444f; box-shadow:none; }
+.nt-mode label > span { text-align:left; display:flex; flex-direction:column; }
+.nt-mode small { color:#667085; font-size:11px; }`;
 const typeLabel = t => (t === 'discount' ? 'Discount / price' : 'Goods return');
 
 export default function BetaNotes({ kind }) {
@@ -53,7 +60,7 @@ export default function BetaNotes({ kind }) {
   const go = k => { setEditing(null); navigate(`${K.path}?tab=${k}`); };
   return (
     <div className="sb">
-      <style>{SALES_CSS + PX_CSS + ACC_CSS}</style>
+      <style>{SALES_CSS + PX_CSS + ACC_CSS + NT_CSS}</style>
       <div className="sb-tabs" role="tablist">
         {[['list', `${K.title}s`], ...(canAdd || editing ? [['create', editing ? `Edit ${editing[K.no]}` : `Add ${K.title}`]] : [])].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={cur === k} className={`sb-tab${cur === k ? ' on' : ''}`} onClick={() => go(k)}>{l}{k === 'list' && rows && <span className="n">{rows.length}</span>}</button>
@@ -70,7 +77,7 @@ export default function BetaNotes({ kind }) {
 
 const printNote = (K, n, company, user) => printVoucher({
   title: K.title.toUpperCase(), sub: `${typeLabel(n.noteType)} — ${n.reason || ''}`, company, user,
-  kv: [[`${K.title} No.`, n[K.no]], ['Date', dmy(n.date)], ['Against Bill', n.billRef], ['Status', String(n.status || 'draft').toUpperCase()]],
+  kv: [[`${K.title} No.`, n[K.no]], ['Date', dmy(n.date)], ['Against Bill', n.billRef], ...(n.orderNo ? [['Order No.', n.orderNo]] : []), ...(n.returnNo ? [['Return Note', n.returnNo]] : []), ['Status', String(n.status || 'draft').toUpperCase()]],
   party: { label: K.partyLabel, name: n[K.party] },
   heads: [['Sl', '30px', 'c'], ['Description'], ['Qty', '60px', 'c'], ['Unit', '50px', 'c'], ['Rate ₹', '90px', 'r'], ['GST %', '55px', 'c'], ['Taxable ₹', '95px', 'r'], ['Amount ₹', '100px', 'r']],
   rows: (n.items || []).map((it, i) => [String(i + 1), it.productName, String(it.qty), it.unit, amt(it.rate), `${it.gstPercent || 0}%`, amt(it.taxableAmt), amt(it.totalAmt)]),
@@ -86,7 +93,7 @@ function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }
   const [busy, setBusy] = useState(false);
   useClearSel(ask ? null : selId, setSelId, '.sb-t tbody tr, .sb-tools, .sb-ask, .cpv-ov');
   const w = words(q);
-  const list = useMemo(() => (rows || []).filter(n => (!st || (n.status || 'draft') === st) && hit(`${n[K.no]} ${n[K.party]} ${n.billRef} ${n.reason} ${n.narration} ${(n.items || []).map(i => i.productName).join(' ')}`, w))
+  const list = useMemo(() => (rows || []).filter(n => (!st || (n.status || 'draft') === st) && hit(`${n[K.no]} ${n[K.party]} ${n.billRef} ${n.returnNo || ''} ${n.orderNo || ''} ${n.reason} ${n.narration} ${(n.items || []).map(i => i.productName).join(' ')}`, w))
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b[K.id] - a[K.id]), [rows, st, w.join(' '), K]);   // eslint-disable-line react-hooks/exhaustive-deps
   const sel = list.find(n => n[K.id] === selId) || null;
   const canEdit = can(user, K.perm, 'edit'), canDel = can(user, K.perm, 'delete');
@@ -133,7 +140,7 @@ function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }
                 : list.map((n, i) => (
                   <tr key={n[K.id]} className={selId === n[K.id] ? 'sel' : ''} onClick={() => setSelId(n[K.id])} onDoubleClick={() => canEdit && n.status !== 'approved' && onEdit(n)} style={{ cursor: 'pointer' }}>
                     <td className="r">{i + 1}</td><td><b className="mono">{n[K.no]}</b></td><td className="d">{dmy(n.date)}</td>
-                    <td className="b">{n[K.party]}</td><td className="mono">{n.billRef || '—'}</td><td>{typeLabel(n.noteType)}</td>
+                    <td className="b">{n[K.party]}</td><td className="mono">{n.billRef || '—'}{K.bills === 'sales' && n.noteType !== 'discount' ? <span className="sm">{n.returnNo ? `Return Note ${n.returnNo}` : 'Material: Return Note pending'}</span> : null}</td><td>{typeLabel(n.noteType)}</td>
                     <td>{n.reason}{n.narration && <span className="sm">{n.narration}</span>}</td>
                     <td className="r d">{amt(n.totalGST)}</td><td className="r b d">{amt(n.grandTotal)}</td><td><Pill s={n.status || 'draft'} /></td>
                   </tr>
@@ -146,14 +153,23 @@ function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }
 }
 
 let lid = 1;
-const blank = () => ({ k: lid++, productName: '', qty: '1', unit: 'Nos', rate: '', gstPercent: '18', max: null });
+const blank = () => ({ k: lid++, productName: '', qty: '1', unit: 'Nos', rate: '', gstPercent: '18', max: null, itemIdx: null });
 function NoteForm({ K, companyId, edit, bills, onSaved, onCancel }) {
   const e0 = edit || {};
   const disc0 = e0.noteType === 'discount' ? (e0.items || [])[0] || {} : {};
   const [v, setV] = useState(() => ({ noteType: e0.noteType || 'goods-return', party: e0[K.party] || '', billId: e0.linkedBillId ? String(e0.linkedBillId) : '', billRef: e0.billRef || '',
     date: e0.date || today(), reason: e0.reason || '', narration: e0.narration || '', discAmt: disc0.rate ? String(disc0.rate) : '', discGst: disc0.gstPercent != null ? String(disc0.gstPercent) : '0' }));
-  const [lines, setLines] = useState(() => (e0.noteType !== 'discount' && (e0.items || []).length ? e0.items.map(it => ({ k: lid++, productName: it.productName, qty: String(it.qty), unit: it.unit || 'Nos', rate: String(it.rate), gstPercent: String(it.gstPercent ?? '18'), max: null })) : [blank()]));
+  const [lines, setLines] = useState(() => (e0.noteType !== 'discount' && (e0.items || []).length ? e0.items.map(it => ({ k: lid++, productName: it.productName, qty: String(it.qty), unit: it.unit || 'Nos', rate: String(it.rate), gstPercent: String(it.gstPercent ?? '18'), max: null, itemIdx: it.itemIdx ?? null })) : [blank()]));
   const [parties, setParties] = useState([]);
+  /* credit note ↔ Return Note (client) — like bill ↔ DC: material comes back later, or already came back on a Return Note */
+  const isCredit = K.bills === 'sales';
+  const [retMode, setRetMode] = useState(e0.returnId ? 'against' : 'later');
+  const [retId, setRetId] = useState(e0.returnId ? String(e0.returnId) : '');
+  const [rns, setRns] = useState([]);
+  useEffect(() => {
+    if (!companyId || !isCredit) return;
+    axios.get('/api/returns', { params: { companyId, kind: 'client' } }).then(r => setRns(Array.isArray(r.data) ? r.data : [])).catch(() => setRns([]));
+  }, [companyId, isCredit]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const set = k => e => { const x = e.target.value; setV(o => ({ ...o, [k]: x })); setMsg(null); };
@@ -171,10 +187,24 @@ function NoteForm({ K, companyId, edit, bills, onSaved, onCancel }) {
   }, [bills, parties, K.partyLabel]);
   const partyBills = useMemo(() => bills.filter(b => (b.partyName || b.vendorName) === v.party).sort((a, b) => String(b.billDate || '').localeCompare(String(a.billDate || ''))), [bills, v.party]);
   const bill = partyBills.find(b => String(b.billId) === v.billId) || null;
+  // Return Notes of this client still without a credit note (or the one tied to this note)
+  const freeRns = useMemo(() => rns.filter(r => r.status !== 'deleted' && (!v.party || String(r.customerName || '').trim().toLowerCase() === v.party.trim().toLowerCase())
+    && (!r.creditNoteId || (edit && String(r.creditNoteId) === String(edit[K.id])))), [rns, v.party, edit, K.id]);
+  const rn = rns.find(r => String(r.returnId) === retId) || null;
+  /* a Return Note picked: its products, qty and rates fill the note; the order's latest bill is chosen */
+  const pickRn = id => {
+    setRetId(id);
+    const r = rns.find(x => String(x.returnId) === id); if (!r) return;
+    const ob = bills.filter(b => String(b.orderId) === String(r.orderId)).sort((a, b) => String(b.billDate || '').localeCompare(String(a.billDate || '')))[0];
+    setV(o => ({ ...o, noteType: 'goods-return', party: o.party || r.customerName || '', reason: o.reason || 'Goods Returned by Customer', date: o.date < r.date ? r.date : o.date,
+      ...(ob ? { billId: String(ob.billId), billRef: ob.billNo || String(ob.billId) } : {}) }));
+    setLines((r.items || []).map(it => ({ k: lid++, productName: it.itemName, qty: String(it.qty), unit: it.unit || 'Nos', rate: String(it.rate || ''), gstPercent: String(it.gst ?? '18'), max: null, itemIdx: it.itemIdx ?? null })));
+    setMsg(null);
+  };
   const pickBill = id => {
     const b = partyBills.find(x => String(x.billId) === id);
     setV(o => ({ ...o, billId: id, billRef: b ? (b.billNo || b.vendorBillNo || String(b.billId)) : '' }));
-    if (b && v.noteType === 'goods-return') setLines((b.items || []).map(it => ({ k: lid++, productName: it.description || it.productName || '', qty: '', unit: it.unit || 'Nos', rate: String(it.rate || ''), gstPercent: String(it.gstPct ?? it.gstPercent ?? '18'), max: Number(it.qty) || null })));
+    if (b && v.noteType === 'goods-return' && !(isCredit && retMode === 'against' && rn)) setLines((b.items || []).map(it => ({ k: lid++, productName: it.description || it.productName || '', qty: '', unit: it.unit || 'Nos', rate: String(it.rate || ''), gstPercent: String(it.gstPct ?? it.gstPercent ?? '18'), max: Number(it.qty) || null, itemIdx: it.itemIdx ?? null })));
     setMsg(null);
   };
   const switchType = t => { setV(o => ({ ...o, noteType: t, reason: '' })); if (t === 'goods-return' && !lines.length) setLines([blank()]); setMsg(null); };
@@ -193,13 +223,19 @@ function NoteForm({ K, companyId, edit, bills, onSaved, onCancel }) {
     if (v.noteType === 'goods-return') {
       const ok = lines.filter(l => l.productName.trim() && Number(l.qty) > 0 && Number(l.rate) > 0);
       if (!ok.length) return setMsg({ k: 'err', t: 'Enter the qty (and rate) of at least one item returned.' });
-      items = ok.map(l => ({ productName: l.productName.trim(), qty: l.qty, unit: l.unit, rate: l.rate, gstPercent: l.gstPercent }));
+      items = ok.map(l => ({ productName: l.productName.trim(), qty: l.qty, unit: l.unit, rate: l.rate, gstPercent: l.gstPercent, ...(l.itemIdx != null ? { itemIdx: l.itemIdx } : {}) }));
     } else {
       if (!(Number(v.discAmt) > 0)) return setMsg({ k: 'err', t: 'Enter the discount amount.' });
       items = [{ productName: K.discountItem, qty: '1', unit: 'Nos', rate: v.discAmt, gstPercent: v.discGst }];
     }
+    if (isCredit && v.noteType === 'goods-return' && retMode === 'against' && !rn) return setMsg({ k: 'err', t: 'Pick the Return Note the material came back on.' });
     setBusy(true);
-    const payload = { companyId, date: v.date, [K.party]: v.party.trim(), party: v.party.trim(), billRef: v.billRef, noteType: v.noteType, reason: v.reason, narration: v.narration.trim(), status, items,
+    // the order: from the Return Note, else from the bill
+    const link = isCredit && v.noteType === 'goods-return'
+      ? (retMode === 'against' && rn ? { returnId: String(rn.returnId), returnNo: rn.returnNo, orderId: String(rn.orderId || ''), orderNo: rn.orderNo || '' }
+        : { returnId: '', returnNo: '', ...(bill?.orderId ? { orderId: String(bill.orderId), orderNo: bill.orderNo || '' } : {}) })
+      : {};
+    const payload = { ...link, companyId, date: v.date, [K.party]: v.party.trim(), party: v.party.trim(), billRef: v.billRef, noteType: v.noteType, reason: v.reason, narration: v.narration.trim(), status, items,
       linkedBillId: bill ? bill.billId : (v.billId || ''), subTotal: sub, totalGST: gst, grandTotal: total };
     try {
       if (edit) { await axios.put(`/api/accounts/${K.api}/${edit[K.id]}`, payload, { params: { companyId } }); onSaved(`Updated ${K.title.toLowerCase()} ${edit[K.no]}.`); }
@@ -214,6 +250,22 @@ function NoteForm({ K, companyId, edit, bills, onSaved, onCancel }) {
         {[['goods-return', `Goods return — ${K.bills === 'purchase' ? 'returned to the vendor' : 'returned by the client'}`], ['discount', 'Discount / price correction']].map(([k, l]) => (
           <button key={k} type="button" className={v.noteType === k ? 'on' : ''} aria-pressed={v.noteType === k} onClick={() => switchType(k)}>{l}</button>))}
       </div>
+      {isCredit && v.noteType === 'goods-return' && (
+        <div className="sf-card" style={{ marginTop: 10 }}><div className="sf-ch"><span className="ico"><Svg name="box" size={13} /></span><b>The material</b><span className="grow" /><small style={{ color: 'rgba(255,255,255,.85)' }}>Money back on the Credit Note, material back on the Return Note — like bill and DC</small></div>
+          <div className="nt-mode" role="radiogroup" aria-label="Material">
+            <label className={retMode === 'later' ? 'on' : ''}><input type="radio" checked={retMode === 'later'} onChange={() => { setRetMode('later'); setRetId(''); }} />
+              <span><b>Credit Note first</b><small>Material comes back later — make the Return Note against this Credit Note</small></span></label>
+            <label className={retMode === 'against' ? 'on' : ''}><input type="radio" checked={retMode === 'against'} onChange={() => setRetMode('against')} />
+              <span><b>Against a Return Note</b><small>Material already came back — products, qty and rates are filled from it</small></span></label>
+          </div>
+          {retMode === 'against' && <table className="sf-kv" style={{ marginTop: 8 }}><tbody>
+            <tr><th>Return Note <i>*</i></th><td><select value={retId} onChange={e => pickRn(e.target.value)}>
+              <option value="">{freeRns.length ? '— choose the Return Note —' : v.party ? 'No Return Note of this client without a credit note' : 'No Return Note without a credit note'}</option>
+              {freeRns.map(r => <option key={r.returnId} value={String(r.returnId)}>{r.returnNo} · {dmy(r.date)} · {r.customerName} · {r.orderNo} · {(r.items || []).map(i => `${i.itemName} × ${i.qty}`).join(', ')}</option>)}</select></td></tr>
+          </tbody></table>}
+          <div style={{ fontSize: 11, color: '#667085', margin: '6px 10px 8px' }}>Both together: make it from Sales → Return Note, choose “Both together”. The qty on a credit note can be billed again on its order.</div>
+        </div>
+      )}
       <div className="sf-2" style={{ marginTop: 10 }}>
         <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="user" size={13} /></span><b>{K.partyLabel} &amp; bill</b></div>
           <table className="sf-kv"><tbody>

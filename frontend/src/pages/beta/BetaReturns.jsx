@@ -57,6 +57,7 @@ export default function BetaReturns({ kind }) {
   const [bills, setBills] = useState([]);
   const [allRets, setAllRets] = useState(null);
   const [vendors, setVendors] = useState([]);
+  const [cns, setCns] = useState([]);   // credit notes — a Return Note's money side (made before, with, or after it)
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
   const [note, setNote] = useState(null);
@@ -74,6 +75,7 @@ export default function BetaReturns({ kind }) {
     loadGrns(companyId).then(setGrns);
     axios.get('/api/vendors', p).then(r => setVendors(arr(r).filter(v => v.status !== 'rejected'))).catch(() => setVendors([]));
     axios.get('/api/returns', { params: { companyId, withDeleted: 1 } }).then(r => setAllRets(arr(r))).catch(() => setAllRets([]));
+    axios.get('/api/accounts/credit-notes', p).then(r => setCns(arr(r))).catch(() => setCns([]));
   }, [companyId, reload]);
 
   const rets = useMemo(() => (allRets === null ? null : allRets.filter(r => r.kind === kind)), [allRets, kind]);
@@ -183,7 +185,7 @@ export default function BetaReturns({ kind }) {
         <div className="sb-body">
           {allRets === null ? <div className="sb-empty">Loading…</div>
             : <ReturnForm key={editing ? `e-${editing.returnId}` : 'new'} pageKind={kind} companyId={companyId} company={selectedCompany} me={me}
-              orders={orders} pos={pos} dcs={dcs} grns={grns} bills={bills} rets={liveAll} vendors={vendors} edit={editing}
+              orders={orders} pos={pos} dcs={dcs} grns={grns} bills={bills} rets={liveAll} vendors={vendors} cns={cns} edit={editing}
               onCancel={() => { setEditing(null); navigate(`${C.path}?tab=list`); }}
               onSaved={(text, savedKind, rn) => { setReload(x => x + 1); say(text, rn); setEditing(null); navigate(`${CFG[savedKind || kind].path}?tab=list`); }} />}
         </div>
@@ -325,7 +327,7 @@ function PartyPicker({ start, orders, pos, dcs, bills, grns, onPick, onClose }) 
   );
 }
 
-function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, bills, rets, vendors, edit, onSaved, onCancel }) {
+function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, bills, rets, vendors, cns = [], edit, onSaved, onCancel }) {
   const [kind, setKind] = useState(edit?.kind || pageKind);   // client → Return Note, vendor → Return to Vendor
   const C = CFG[kind];
   const docs = kind === 'client' ? orders.filter(o => o.status !== 'cancelled') : pos.filter(p => !['draft', 'rejected', 'cancelled'].includes(p.status));
@@ -358,6 +360,33 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
   const [toPick, setToPick] = useState(false);
   const [toMap, setToMap] = useState({});   // returning line key → product index of the new order
   const toOrder = orders.find(o => String(o.orderId) === toId) || null;
+  /* the money side — like DC and bill: Credit Note later · Return Note + Credit Note together · against a Credit Note made first */
+  const [cnMode, setCnMode] = useState(edit?.creditNoteId ? 'against' : 'later');
+  const [cnId, setCnId] = useState(edit?.creditNoteId ? String(edit.creditNoteId) : '');
+  const [cnBill, setCnBill] = useState('');
+  const orderBills = useMemo(() => (doc && kind === 'client' ? bills.filter(b => String(b.orderId) === String(doc.orderId)) : []), [bills, doc, kind]);
+  // credit notes of this order (by order, or against one of its bills) still without a Return Note — or the one already tied to this note
+  const freeCns = useMemo(() => {
+    if (!doc || kind !== 'client') return [];
+    const billIds = new Set(orderBills.map(b => String(b.billId)));
+    return cns.filter(c => c && c.noteType !== 'discount' && c.status !== 'cancelled'
+      && (String(c.orderId || '') === String(doc.orderId) || billIds.has(String(c.linkedBillId || '')))
+      && (!c.returnId || (edit && String(c.returnId) === String(edit.returnId))));
+  }, [cns, doc, kind, orderBills, edit]);
+  /* picking a credit note made first: its items' qty fill the return, DC by DC (oldest DC first) */
+  const fillFromCn = id => {
+    setCnId(id);
+    const c = freeCns.find(x => String(x.cnId) === String(id)); if (!c) return;
+    const lines = groups.flatMap(g => g.lines.map(l => ({ ...l, dc: g.dc })));
+    const q = {};
+    (c.items || []).forEach(it => {
+      const nm = key(it.productName || it.description);
+      let need = n(it.qty);
+      lines.filter(l => (it.itemIdx != null && it.itemIdx !== '' ? l.idx === Number(it.itemIdx) : key(l.name) === nm))
+        .forEach(l => { const t = Math.min(need, l.max); if (t > 0) { q[l.key] = String(r3(n(q[l.key]) + t)); need = r3(need - t); } });
+    });
+    setQty(q); setMsg(null);
+  };
   const set = k => e => { const v = e.target.value; setHead(h => ({ ...h, [k]: v })); };
   const locLabel = v => (!v ? '' : v.startsWith(VENDOR_PREFIX) ? `${v.slice(VENDOR_PREFIX.length)} (vendor's site)` : (() => { const l = locations.find(x => x.name === v); return l ? `${l.name}${l.type ? ` (${l.type})` : ''}` : v; })());
 
@@ -418,6 +447,7 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
     if (head.reason === 'Other' && !head.reasonText.trim()) return setMsg({ k: 'err', t: 'Write the reason (you chose Other).' });
     if (Object.keys(errs).length) return setMsg({ k: 'err', t: 'Some quantities are more than what can come back — see the red boxes.' });
     if (!send.length) return setMsg({ k: 'err', t: 'Enter the return qty for at least one product.' });
+    if (kind === 'client' && cnMode === 'against' && !cnId) return setMsg({ k: 'err', t: 'Pick the credit note this material comes back against.' });
     if (direct) {
       if (!toOrder) return setMsg({ k: 'err', t: 'Pick the order of the client the material goes to.' });
       if (send.some(l => mapOf(l) == null)) return setMsg({ k: 'err', t: "Choose, for every product, which product of the new client's order it goes as." });
@@ -431,6 +461,7 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
       ewaySubSupplyType: head.ewaySubSupplyType, ewayBillNo: head.ewayBillNo.trim(), ewayGenDate: head.ewayGenDate.trim(), ewayValidUpto: head.ewayValidUpto.trim(),
       ...(kind === 'client'
         ? { orderId: String(doc.orderId), orderNo: doc.orderNo || '', customerName: doc.customerName || doc.party || '',
+            creditNoteId: cnMode === 'against' ? cnId : (edit?.creditNoteId && cnMode !== 'later' ? String(edit.creditNoteId) : ''),
             ...(direct ? { direct: { orderId: String(toOrder.orderId), orderNo: toOrder.orderNo || '', customerName: toOrder.customerName || toOrder.party || '' } } : {}) }
         : { poId: String(doc.orderId), poNo: doc.poNo || doc.poNumber || '', vendorId: String(doc.vendorId || ''), vendorName: doc.vendorName || '',
             orderId: String(doc.linkedSalesOrderId || ''), orderNo: orders.find(o => String(o.orderId) === String(doc.linkedSalesOrderId))?.orderNo || '' }),
@@ -451,6 +482,25 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
       } catch (e) {
         setBusy(false);
         return setMsg({ k: 'err', t: `Return Note ${rn.returnNo} is saved, but the DC to ${toOrder.customerName || 'the new client'} could not be made: ${e.response?.data?.error || e.message}. Make that DC from the Delivery Challan page.` });
+      }
+    }
+    // Return Note + Credit Note together: the credit note for the same products, qty and rates (as on the order)
+    if (kind === 'client' && cnMode === 'with' && rn && rn.returnId && !rn.creditNoteId) {
+      const b = orderBills.find(x => String(x.billId) === String(cnBill)) || null;
+      const cnReason = /damag/i.test(head.reason) ? 'Damaged Goods Returned' : /quality|reject/i.test(head.reason) ? 'Quality Rejection' : 'Goods Returned by Customer';
+      try {
+        const r = await axios.post('/api/accounts/credit-notes', {
+          companyId, date: head.date, clientName: rn.customerName, party: rn.customerName, noteType: 'goods-return', reason: cnReason, status: 'approved',
+          narration: `Material returned on Return Note ${rn.returnNo}${head.reason ? ` — ${head.reason === 'Other' ? head.reasonText : head.reason}` : ''}.`,
+          billRef: b ? (b.billNo || String(b.billId)) : '', linkedBillId: b ? b.billId : '',
+          orderId: rn.orderId, orderNo: rn.orderNo, returnId: String(rn.returnId), returnNo: rn.returnNo,
+          approvedBy: me?.name || me?.username || '', approvedAt: new Date().toISOString(),
+          items: (rn.items || []).map(i => ({ itemIdx: i.itemIdx, productName: i.itemName, qty: String(i.qty), unit: i.unit || 'NOS', rate: String(i.rate || 0), gstPercent: String(i.gst || 0) })),
+        }, { params: { companyId } });
+        extra += ` Credit Note ${r.data?.cnNo || ''} made with it.`;
+      } catch (e) {
+        setBusy(false);
+        return setMsg({ k: 'err', t: `Return Note ${rn.returnNo} is saved, but the credit note could not be made: ${e.response?.data?.error || e.message}. Make it from Account → Credit Note (choose "Against a Return Note").` });
       }
     }
     setBusy(false);
@@ -555,6 +605,33 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
         </div>
       )}
 
+      {kind === 'client' && doc && (
+        <div className="sf-card">
+          <div className="sf-ch"><span className="ico"><Svg name="wallet" size={13} /></span><b>Credit Note</b><span className="grow" /><small style={{ color: 'rgba(255,255,255,.85)' }}>Material comes back on the Return Note, the money on the Credit Note — like DC and bill</small></div>
+          {edit?.creditNoteId ? <div className="sf-empty" style={{ textAlign: 'left' }}>Tied to Credit Note <b>{edit.creditNoteNo || edit.creditNoteId}</b>.</div> : <>
+          <div className="dc-type" role="radiogroup" aria-label="Credit note">
+            <label className={cnMode === 'later' ? 'on' : ''}><input type="radio" checked={cnMode === 'later'} onChange={() => { setCnMode('later'); setCnId(''); }} />
+              <span><b>Return Note first</b><small>Credit Note will be made later (Account → Credit Note)</small></span></label>
+            <label className={cnMode === 'with' ? 'on' : ''}><input type="radio" checked={cnMode === 'with'} onChange={() => { setCnMode('with'); setCnId(''); setCnBill(c => c || String(orderBills[orderBills.length - 1]?.billId || '')); }} />
+              <span><b>Both together</b><small>Saves this Return Note and its Credit Note (same products, qty and rates)</small></span></label>
+            <label className={cnMode === 'against' ? 'on' : ''}><input type="radio" checked={cnMode === 'against'} onChange={() => setCnMode('against')} />
+              <span><b>Against a Credit Note</b><small>Credit Note already made — material comes back now</small></span></label>
+          </div>
+          {cnMode === 'with' && <table className="sf-kv" style={{ marginTop: 8 }}><tbody>
+            <tr><th>Against bill</th><td><select value={cnBill} onChange={e => setCnBill(e.target.value)}>
+              <option value="">{orderBills.length ? '— no bill —' : 'No bill on this order yet'}</option>
+              {orderBills.map(b => <option key={b.billId} value={String(b.billId)}>{b.billNo || b.billId} · {fdate(b.billDate)}</option>)}</select></td></tr>
+          </tbody></table>}
+          {cnMode === 'against' && <table className="sf-kv" style={{ marginTop: 8 }}><tbody>
+            <tr><th>Credit Note <i>*</i></th><td><select value={cnId} onChange={e => fillFromCn(e.target.value)}>
+              <option value="">{freeCns.length ? '— choose the credit note —' : 'No credit note of this order without a Return Note'}</option>
+              {freeCns.map(c => <option key={c.cnId} value={String(c.cnId)}>{c.cnNo} · {fdate(c.date)} · {(c.items || []).map(i => `${i.productName} × ${i.qty}`).join(', ')}</option>)}</select>
+              {cnId && <div className="mut" style={{ fontSize: 11, marginTop: 3 }}>Its qty is filled in above — change it if less came back.</div>}</td></tr>
+          </tbody></table>}
+          </>}
+        </div>
+      )}
+
       {kind === 'client' && doc && !edit && (
         <div className="sf-card">
           <label className="rt-direct"><input type="checkbox" checked={direct} onChange={e => setDirect(e.target.checked)} />
@@ -585,7 +662,7 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
       <div className="sf-bar">
         <div className="info">{doc ? <>Returning <b>{num(qtyTot)}</b> qty of {nProd} product{nProd === 1 ? '' : 's'}{kind === 'client' && send.length > nProd ? ` from ${send.length} DC lines` : ''}{direct && toOrder ? <> → DC to <b>{toOrder.customerName || toOrder.party}</b></> : null}</> : 'Search a client or vendor to start.'}</div>
         {edit && <button type="button" className="sf-b ghost" onClick={onCancel} disabled={busy}>Cancel</button>}
-        <button type="button" className="sf-b pri" onClick={save} disabled={busy}>{busy ? 'Saving…' : edit ? 'Update' : direct ? 'Save Return Note + DC' : 'Save'}</button>
+        <button type="button" className="sf-b pri" onClick={save} disabled={busy}>{busy ? 'Saving…' : edit ? 'Update' : `Save Return Note${cnMode === 'with' && kind === 'client' ? ' + Credit Note' : ''}${direct ? ' + DC' : ''}`}</button>
       </div>
 
       {picker && <PartyPicker start={kind} orders={orders} pos={pos} dcs={dcs} bills={bills} grns={grns} onClose={() => setPicker(false)} onPick={pickDoc} />}
@@ -629,7 +706,7 @@ function ReturnList({ kind, C, rets, companyId, slot, setNote, ew, onEdit, onCha
   const list = useMemo(() => {
     const w = q.toLowerCase().split(/\s+/).filter(Boolean);
     return all.filter(r => (!fySel.length || fySel.includes(fyOf(r.date)))
-      && (!w.length || w.every(x => `${r.returnNo} ${r.orderNo} ${r.poNo || ''} ${r.customerName || ''} ${r.vendorName || ''} ${r.dcNo || ''} ${r.reason} ${r.reasonText || ''} ${r.direct?.customerName || ''} ${(r.items || []).map(i => i.itemName).join(' ')}`.toLowerCase().includes(x))));
+      && (!w.length || w.every(x => `${r.returnNo} ${r.orderNo} ${r.poNo || ''} ${r.customerName || ''} ${r.vendorName || ''} ${r.dcNo || ''} ${r.creditNoteNo || ''} ${r.reason} ${r.reasonText || ''} ${r.direct?.customerName || ''} ${(r.items || []).map(i => i.itemName).join(' ')}`.toLowerCase().includes(x))));
   }, [all, fySel, q]);
   const sel = list.find(r => r.returnId === selId) || null;
   const doDelete = async r => {
@@ -714,7 +791,7 @@ function ReturnList({ kind, C, rets, companyId, slot, setNote, ew, onEdit, onCha
             <tbody key={r.returnId} className={`og${selId === r.returnId ? ' sel' : ''}${gone(r) ? ' gone' : ''}`} onClick={() => setSelId(r.returnId)} onDoubleClick={() => { setSelId(r.returnId); if (!gone(r)) onEdit(r); }}
               title={gone(r) ? `Deleted by ${r.deletedBy || '—'} on ${fdate(r.deletedAt)}${r.deleteReason ? ` — ${r.deleteReason}` : ''}` : 'Click to select · double-click to edit'}>
               <tr>
-                <td className="nw">{fdate(r.date)}</td><td className="bno">{r.returnNo}</td>
+                <td className="nw">{fdate(r.date)}</td><td className="bno">{r.returnNo}{kind === 'client' && !gone(r) ? <div className="rt-who">{r.creditNoteNo ? `CN ${r.creditNoteNo}` : 'Credit Note pending'}</div> : null}</td>
                 <td className="no">{kind === 'client' ? dash(r.orderNo) : dash(r.poNo)}</td><td className="cl">{kind === 'client' ? dash(r.customerName) : dash(r.vendorName)}</td>
                 <td className="no">{kind === 'client' ? <>{dash(r.dcNo)}{r.direct?.orderNo ? <div className="rt-who">→ {r.direct.dcNo ? `DC ${r.direct.dcNo}` : 'DC'} to {r.direct.customerName} ({r.direct.orderNo})</div> : null}</> : dash(r.orderNo)}</td>
                 <td>{(r.items || []).map((i, k) => <div key={k} className="gl">{i.itemName}</div>)}</td>

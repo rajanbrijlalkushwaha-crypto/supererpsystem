@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
 import { printSalesBill } from './BetaSalesPrint';
 import { printDC, dcsOfBill, printMerged } from './BetaDCPrint';
-import SalesBillForm, { SB_FORM_CSS, billingOf, n, num, money, fdate, dash, attachUrl } from './BetaSalesBill';
+import SalesBillForm, { SB_FORM_CSS, billingOf, cnsByOrderOf, n, num, money, fdate, dash, attachUrl } from './BetaSalesBill';
 
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -173,6 +173,7 @@ export default function BetaSales() {
 
   const [orders, setOrders] = useState(null);
   const [bills, setBills] = useState(null);
+  const [cns, setCns] = useState([]);   // credit notes — goods returned free that qty to be billed again
   const [dcs, setDcs] = useState([]);   // delivery challans — the bill form ties "DC first" material to its bill
   const dcsByOrder = useMemo(() => { const m = {}; dcs.forEach(d => { if (d.linkedSalesOrderId != null) (m[String(d.linkedSalesOrderId)] = m[String(d.linkedSalesOrderId)] || []).push(d); }); return m; }, [dcs]);
   const [reload, setReload] = useState(0);
@@ -194,6 +195,7 @@ export default function BetaSales() {
     if (!companyId) return;
     axios.get('/api/bills', { params: { companyId, type: 'sales' } }).then(r => setBills(Array.isArray(r.data) ? r.data.filter(b => b && b.type !== 'purchase') : [])).catch(() => setBills([]));
     axios.get('/api/delivery-challans', { params: { companyId } }).then(r => setDcs(Array.isArray(r.data) ? r.data : [])).catch(() => setDcs([]));
+    axios.get('/api/accounts/credit-notes', { params: { companyId } }).then(r => setCns(Array.isArray(r.data) ? r.data : [])).catch(() => setCns([]));
   }, [companyId, reload]);
 
   const billsByOrder = useMemo(() => {
@@ -201,11 +203,12 @@ export default function BetaSales() {
     (bills || []).forEach(b => { if (b.orderId != null) (m[String(b.orderId)] = m[String(b.orderId)] || []).push(b); });
     return m;
   }, [bills]);
+  const cnsByOrder = useMemo(() => cnsByOrderOf(cns, bills), [cns, bills]);
   const soMap = useMemo(() => { const m = {}; (orders || []).forEach(o => { m[String(o.orderId)] = o; }); return m; }, [orders]);
   /* billing of every order that can be billed, newest first */
   const rows = useMemo(() => (orders || []).filter(o => !SKIP.includes(o.status))
-    .map(o => billingOf(o, billsByOrder[String(o.orderId)] || []))
-    .sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, billsByOrder]);
+    .map(o => billingOf(o, billsByOrder[String(o.orderId)] || [], null, cnsByOrder[String(o.orderId)] || []))
+    .sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, billsByOrder, cnsByOrder]);
   const pendingCount = rows.filter(r => r.state !== 'full').length;
 
   const tab = editing ? 'create' : urlTab;
@@ -255,10 +258,10 @@ export default function BetaSales() {
         <div className="sb-body">
           {loading ? <div className="sb-empty">Loading orders and bills…</div>
             : editing
-              ? <SalesBillForm key={`edit-${editing.billId}`} companyId={companyId} company={selectedCompany} rows={rows} billsByOrder={billsByOrder} allBills={bills} dcsByOrder={dcsByOrder} editBill={editing}
+              ? <SalesBillForm key={`edit-${editing.billId}`} companyId={companyId} company={selectedCompany} rows={rows} billsByOrder={billsByOrder} cnsByOrder={cnsByOrder} allBills={bills} dcsByOrder={dcsByOrder} editBill={editing}
                 onCancel={() => { setEditing(null); navigate('/beta/sales?tab=list'); }}
                 onSaved={(b, text) => { setEditing(null); setReload(x => x + 1); setNote(text); navigate('/beta/sales?tab=list'); }} />
-              : <SalesBillForm key={createFor ? `for-${createFor.orderId}-${createFor.k}` : 'new'} companyId={companyId} company={selectedCompany} rows={rows} billsByOrder={billsByOrder} allBills={bills} dcsByOrder={dcsByOrder}
+              : <SalesBillForm key={createFor ? `for-${createFor.orderId}-${createFor.k}` : 'new'} companyId={companyId} company={selectedCompany} rows={rows} billsByOrder={billsByOrder} cnsByOrder={cnsByOrder} allBills={bills} dcsByOrder={dcsByOrder}
                 presetOrderId={createFor?.orderId} onSaved={() => { setReload(x => x + 1); setNote(null); }} />}
         </div>
       )}

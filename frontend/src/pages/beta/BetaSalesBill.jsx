@@ -85,20 +85,38 @@ export const lineOwner = (li, items) => {
 
 /* One order + its bills → per-product billed / pending qty, charges billed, amounts and state.
    skipId leaves one bill out (the bill being edited). */
-export function billingOf(o, orderBills = [], skipId = null) {
+/* goods-return credit notes count against the order they belong to (by order id, else by the bill they are against) */
+export const creditCounts = cn => cn && cn.noteType !== 'discount' && !['cancelled', 'deleted', 'rejected'].includes(String(cn.status || '').toLowerCase());
+export function cnsByOrderOf(cns, bills) {
+  const billOrder = {}; (bills || []).forEach(b => { if (b && b.billId != null) billOrder[String(b.billId)] = String(b.orderId || ''); });
+  const m = {};
+  (cns || []).filter(creditCounts).forEach(cn => {
+    const oid = String(cn.orderId || billOrder[String(cn.linkedBillId || '')] || '');
+    if (oid) (m[oid] = m[oid] || []).push(cn);
+  });
+  return m;
+}
+
+export function billingOf(o, orderBills = [], skipId = null, cns = []) {
   const items = (o.items || []).map((it, idx) => ({ it, idx })).filter(x => isLine(x.it));
   const bills = orderBills.filter(b => b.billId !== skipId);
-  const billedQty = {}, chBilled = {};
+  const billedQty = {}, chBilled = {}, creditQty = {};
   bills.forEach(b => (b.items || []).forEach(li => {
     const x = lineOwner(li, items);
     if (x) billedQty[x.idx] = (billedQty[x.idx] || 0) + n(li.qty);
     else { const k = low(li.description); chBilled[k] = (chBilled[k] || 0) + n(li.taxable ?? li.rate); }
   }));
+  // a credit note for goods returned takes that qty off the bill — it can be billed again
+  const myCns = (cns || []).filter(creditCounts);
+  myCns.forEach(cn => (cn.items || []).forEach(li => {
+    const x = lineOwner({ itemIdx: li.itemIdx, itemCode: li.itemCode, description: li.productName || li.description }, items);
+    if (x) creditQty[x.idx] = (creditQty[x.idx] || 0) + n(li.qty);
+  }));
   const lines = items.map(({ it, idx }) => {
-    const ordered = n(it.qty), billed = r3(billedQty[idx] || 0);
+    const ordered = n(it.qty), raw = r3(billedQty[idx] || 0), credited = r3(Math.min(creditQty[idx] || 0, raw)), billed = r3(raw - credited);
     return {
       idx, it, name: itemLabel(it), code: it.itemCode ?? it.code ?? '', hsn: String(it.hsnCode || it.hsn || '').trim(), unit: it.unit || it.uom || 'NOS',
-      rate: n(it.rate), gstPct: n(it.gstPercent ?? it.gst ?? it.taxRate), ordered, billed, pending: Math.max(0, r3(ordered - billed)),
+      rate: n(it.rate), gstPct: n(it.gstPercent ?? it.gst ?? it.taxRate), ordered, billed, credited, pending: Math.max(0, r3(ordered - billed)),
     };
   });
   const left = { ...chBilled };
@@ -109,14 +127,15 @@ export function billingOf(o, orderBills = [], skipId = null) {
   });
   const computed = lines.reduce((s, l) => s + l.ordered * l.rate * (1 + l.gstPct / 100), 0) + charges.reduce((s, c) => s + c.amount * (1 + c.gst / 100), 0);
   const value = r2(n(o.grandTotal) > 0 ? n(o.grandTotal) : computed);
-  const billedAmt = r2(bills.reduce((s, b) => s + n(b.grandTotal), 0));
+  const creditedAmt = r2(myCns.reduce((s, c) => s + n(c.grandTotal), 0));
+  const billedAmt = r2(Math.max(0, bills.reduce((s, b) => s + n(b.grandTotal), 0) - creditedAmt));
   const orderQty = r3(lines.reduce((s, l) => s + l.ordered, 0));
   const doneQty = r3(lines.reduce((s, l) => s + l.billed, 0));
   const pendingQty = r3(lines.reduce((s, l) => s + l.pending, 0));
   const pendingCh = charges.filter(c => c.mode !== 'pct').reduce((s, c) => s + c.pending, 0);   // a % charge follows the products
   const full = lines.length ? pendingQty <= 0 && pendingCh <= 0.5 : value - billedAmt <= 1;
   return {
-    o, lines, charges, bills, value, billedAmt, toBill: Math.max(0, r2(value - billedAmt)),
+    o, lines, charges, bills, cns: myCns, value, billedAmt, creditedAmt, creditedQty: r3(lines.reduce((s, l) => s + l.credited, 0)), toBill: Math.max(0, r2(value - billedAmt)),
     orderQty, doneQty, pendingQty, state: full ? 'full' : bills.length ? 'part' : 'none',
   };
 }
@@ -293,7 +312,7 @@ export const SB_FORM_CSS = `
 `;
 
 /* editBill set → the same form edits that bill (order stays fixed). presetOrderId → order picked on open. */
-export default function SalesBillForm({ companyId, company, rows, billsByOrder, allBills, dcsByOrder = {}, presetOrderId, editBill, onSaved, onCancel }) {
+export default function SalesBillForm({ companyId, company, rows, billsByOrder, cnsByOrder = {}, allBills, dcsByOrder = {}, presetOrderId, editBill, onSaved, onCancel }) {
   const { user: me } = useAuth() || {};
   const [mm, setMm] = useState(editBill ? billMode(editBill) : null);   // how the material moves; null = pick automatically
   const [orderId, setOrderId] = useState(editBill ? String(editBill.orderId) : presetOrderId ? String(presetOrderId) : '');
@@ -329,7 +348,7 @@ export default function SalesBillForm({ companyId, company, rows, billsByOrder, 
     return () => { live = false; };
   }, [orderId, companyId]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const bl = useMemo(() => (order ? billingOf(order, billsByOrder[String(order.orderId)] || [], editBill?.billId) : null), [order, billsByOrder, editBill]);
+  const bl = useMemo(() => (order ? billingOf(order, billsByOrder[String(order.orderId)] || [], editBill?.billId, cnsByOrder[String(order.orderId)] || []) : null), [order, billsByOrder, cnsByOrder, editBill]);
   const intra = order ? isIntra(company, order) : false;
 
   /* starting quantities / charges whenever the order (or its billing) is ready */

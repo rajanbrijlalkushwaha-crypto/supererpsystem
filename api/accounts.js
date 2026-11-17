@@ -1319,6 +1319,7 @@ router.put('/debit-notes/:id', (req, res) => {
     const { items: computed, subTotal, totalGST, grandTotal } = calcNoteItems(req.body.items || existing.items);
     const updated = { ...existing, ...req.body, items: computed, subTotal, totalGST, grandTotal, updatedAt: new Date().toISOString() };
     saveJson(fp, updated);
+    if (String(existing.returnId || '') !== String(updated.returnId || '')) require('./returnCredit').linkFromCredit(companyId, updated, existing.returnId);
 
     if (updated.status === 'pending' && existing.status !== 'pending') {
       const submitter = resolveUser(req);
@@ -1362,6 +1363,7 @@ router.post('/credit-notes', (req, res) => {
     const now = new Date().toISOString();
     const rec = { cnId, cnNo, ...req.body, items: computed, subTotal, totalGST, grandTotal, companyId, createdAt: now, updatedAt: now };
     saveJson(coFile(companyId, 'CreditNotes', cnId), rec);
+    require('./returnCredit').linkFromCredit(companyId, rec, '');   // goods back on a Return Note: tie the two
 
     if (rec.status === 'pending') {
       const submitter = resolveUser(req);
@@ -1414,7 +1416,10 @@ router.delete('/credit-notes/:id', (req, res) => {
   try {
     const fp = coFile(cid(req), 'CreditNotes', req.params.id);
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Not found' });
-    fs.unlinkSync(fp); res.json({ success: true });
+    let old = null; try { old = JSON.parse(fs.readFileSync(fp, 'utf-8')); } catch { old = null; }
+    fs.unlinkSync(fp);
+    if (old && old.returnId) require('./returnCredit').linkFromCredit(cid(req), { ...old, returnId: '' }, old.returnId);   // its Return Note: credit note pending again
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

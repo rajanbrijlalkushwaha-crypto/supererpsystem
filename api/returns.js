@@ -14,6 +14,7 @@ const path = require('path');
 const { ROOT, auditEntry, pushAudit, resolveUser } = require('./helpers');
 
 const router = express.Router();
+const RC = require('./returnCredit');
 const dir = co => path.join(ROOT, 'Database', 'Companies', co, 'Returns');
 const file = (co, id) => path.join(dir(co), String(id), `${id}.json`);
 const readJSON = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
@@ -67,7 +68,9 @@ function clean(b, kind) {
     ? { orderId: s(b.direct.orderId, 30), orderNo: s(b.direct.orderNo, 60), customerName: s(b.direct.customerName, 200), dcId: s(b.direct.dcId, 30), dcNo: s(b.direct.dcNo, 60) } : null;
   return kind === 'client'
     ? { ...base, orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), customerName: s(b.customerName, 200),
-        dcId: dcList.length === 1 ? dcList[0].dcId : s(b.dcId, 30), dcNo: dcList.length ? dcList.map(d => d.dcNo).join(', ') : s(b.dcNo, 60), dcs: dcList, direct, location: s(b.location, 120) }
+        dcId: dcList.length === 1 ? dcList[0].dcId : s(b.dcId, 30), dcNo: dcList.length ? dcList.map(d => d.dcNo).join(', ') : s(b.dcNo, 60), dcs: dcList, direct, location: s(b.location, 120),
+        // its credit note (made before, with it, or after) — like a DC's bill
+        creditNoteId: s(b.creditNoteId, 20).replace(/\D/g, '') }
     : { ...base, poId: s(b.poId, 30), poNo: s(b.poNo, 60), vendorId: s(b.vendorId, 30), vendorName: s(b.vendorName, 200), orderId: s(b.orderId, 30), orderNo: s(b.orderNo, 60), location: s(b.location, 120) };
 }
 /* a client return comes back after the DC it went on — its date cannot be before that DC's date */
@@ -136,7 +139,9 @@ router.post('/', (req, res) => {
     const ids = nextIds(co, kind, body.date);
     const now = new Date().toISOString();
     const rec = { ...ids, kind, status: 'active', ...body, createdBy: who(req), createdAt: now, updatedAt: now, audit: [auditEntry(req, 'created')] };
+    if (rec.creditNoteId) rec.creditNoteNo = RC.cnNoOf(co, rec.creditNoteId); else delete rec.creditNoteId;
     writeJSON(file(co, ids.returnId), rec);
+    if (kind === 'client') RC.linkFromReturn(co, rec, '');
     res.json(rec);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -149,8 +154,10 @@ router.put('/:id', (req, res) => {
     const body = clean({ ...old, ...req.body }, old.kind);
     const err = check(body, old.kind, co); if (err) return res.status(400).json({ error: err });
     const upd = { ...old, ...body, updatedBy: who(req), updatedAt: new Date().toISOString() };
+    if (upd.creditNoteId) upd.creditNoteNo = RC.cnNoOf(co, upd.creditNoteId); else { delete upd.creditNoteId; delete upd.creditNoteNo; }
     upd.audit = pushAudit(old, req, 'edited', { from: { items: old.items.map(i => `${i.itemName} × ${i.qty}`).join(', ') }, to: { items: body.items.map(i => `${i.itemName} × ${i.qty}`).join(', ') } });
     writeJSON(f, upd);
+    if (old.kind === 'client') RC.linkFromReturn(co, upd, old.creditNoteId);
     res.json(upd);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -164,6 +171,7 @@ router.delete('/:id', (req, res) => {
     const upd = { ...old, status: 'deleted', deletedBy: who(req), deletedAt: now, deleteReason: s(req.query.reason, 200), updatedAt: now };
     upd.audit = pushAudit(old, req, 'deleted', { reason: upd.deleteReason });
     writeJSON(f, upd);
+    if (old.creditNoteId) RC.linkFromReturn(co, { ...upd, creditNoteId: '' }, old.creditNoteId);   // its credit note no longer points here
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

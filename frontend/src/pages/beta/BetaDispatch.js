@@ -15,8 +15,8 @@ const r3 = v => Math.round((Number(v) || 0) * 1000) / 1000;
 const low = s => String(s == null ? '' : s).toLowerCase().trim();
 
 /* one order + its DCs + its bills → per product sent / billed / to send, add-ons sent, and state */
-export function dispatchOf(o, dcs = [], bills = [], skipDcId = null, rets = []) {
-  const bl = billingOf(o, bills);
+export function dispatchOf(o, dcs = [], bills = [], skipDcId = null, rets = [], cns = []) {
+  const bl = billingOf(o, bills, null, cns);
   const items = bl.lines.map(l => ({ it: l.it, idx: l.idx }));
   const viaDc = {}, viaBill = {};
   const myDcs = dcs.filter(d => String(d.dcId) !== String(skipDcId));
