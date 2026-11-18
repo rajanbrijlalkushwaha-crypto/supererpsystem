@@ -21,6 +21,7 @@ const money = n => PLAIN_FMT.format(Number(n) || 0);
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
+const PEND = ['draft', 'pending'];   // orders not yet approved
 const TABS = [
   { key: 'create',  label: 'Create SO' },
   { key: 'list',    label: 'Order' },
@@ -75,7 +76,7 @@ const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g,
 
 /* Order list print — A4 landscape, same look as the Beta documents (Arial, thin black lines, grey heads).
    One block per order: order no + date, client with its PO, then one line per product. */
-async function printOrderList({ rows, company, user, totValue, totGrand, filter }) {
+async function printOrderList({ rows, company, user, totValue, totGrand, filter, title = 'Sales Order List' }) {
   const co = company || {};
   let logo = '';
   if (co.logoFileName) {
@@ -113,7 +114,7 @@ async function printOrderList({ rows, company, user, totValue, totGrand, filter 
       + '</tr>').join('');
   }).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sales Order List</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.4pt; color:#000; background:#fff; line-height:1.3; }
@@ -146,7 +147,7 @@ table { width:100%; border-collapse:collapse; }
 <table class="hdr"><tr>
   <td class="lg">${logo ? `<img src="${logo}">` : ''}</td>
   <td class="co"><div class="nm">${esc(co.companyName || co.name)}</div>${coAddr ? `<div class="ad">${esc(coAddr)}</div>` : ''}${coLine ? `<div class="ad">${coLine}</div>` : ''}</td>
-  <td class="ttl"><div class="t">SALES ORDER LIST</div>
+  <td class="ttl"><div class="t">${title.toUpperCase()}</div>
     <div class="k"><span>Period</span><b>${esc(filter || 'All')}</b></div>
     <div class="k"><span>Orders</span><b>${rows.length}</b></div>
     <div class="k"><span>Printed</span><b>${esc(today)}</b></div></td>
@@ -280,6 +281,8 @@ export default function BetaOrders() {
   const { search } = useLocation();
   const asked = new URLSearchParams(search).get('tab');
   const tab = TABS.some(t => t.key === asked) ? asked : 'list';
+  const isPend = tab === 'pending';                 // Pending tab = the same list, only draft / pending-approval orders (every FY)
+  const listy = tab === 'list' || isPend;
 
   const [orders, setOrders] = useState(null);
   const [err, setErr] = useState('');
@@ -329,11 +332,11 @@ export default function BetaOrders() {
   const rows = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     return (orders || [])
-      .filter(o => !fySel.length || fySel.includes(fyOf(o.orderDate)))
+      .filter(o => (isPend ? PEND.includes(o.status || 'draft') : !fySel.length || fySel.includes(fyOf(o.orderDate))))
       .filter(o => !words.length || words.every(w => searchText(o).includes(w)))
       .sort((a, b) =>
         String(b.orderDate || '').localeCompare(String(a.orderDate || '')) || String(b.orderNo || '').localeCompare(String(a.orderNo || '')));
-  }, [orders, fySel, q]);
+  }, [orders, fySel, q, isPend]);
   /* Missing numbers: gaps inside each real series (5+ orders, so a mistyped one-off does not create dozens). Each gap is shown
      just below the next higher order of its series; double-click creates the order with that number. */
   const gaps = useMemo(() => {
@@ -357,17 +360,18 @@ export default function BetaOrders() {
   const gapCount = useMemo(() => Object.values(gaps.under).flat().filter(g => !fySel.length || fySel.includes(g.fy)).length, [gaps, fySel]);
   const display = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const gapOk = g => showGaps && (!fySel.length || fySel.includes(g.fy)) && (!words.length || words.every(w => (g.no + ' missing not entered').toLowerCase().includes(w)));
+    const gapOk = g => !isPend && showGaps && (!fySel.length || fySel.includes(g.fy)) && (!words.length || words.every(w => (g.no + ' missing not entered').toLowerCase().includes(w)));
     const out = [];
     const seen = new Set();
     rows.forEach(o => { out.push({ o }); (gaps.under[String(o.orderNo || '').trim()] || []).filter(gapOk).forEach(g => { seen.add(g.no); out.push({ gap: g }); }); });
     // searching for a missing number: show it even when its neighbouring order is filtered out
     if (words.length) Object.values(gaps.under).flat().filter(g => !seen.has(g.no) && gapOk(g)).sort((a, b) => b.no.localeCompare(a.no)).forEach(g => out.push({ gap: g }));
     return out;
-  }, [rows, gaps, showGaps, fySel, q]);
+  }, [rows, gaps, showGaps, fySel, q, isPend]);
   const totValue = useMemo(() => rows.reduce((s, o) => s + orderValue(o), 0), [rows]);
   const totGrand = useMemo(() => rows.reduce((s, o) => s + (Number(o.grandTotal) || 0), 0), [rows]);
-  const filtered = fySel.length > 0 || q.trim() !== '';
+  const filtered = isPend || fySel.length > 0 || q.trim() !== '';
+  const pendCount = useMemo(() => (orders || []).filter(o => PEND.includes(o.status || 'draft')).length, [orders]);
 
   /* Esc or a click outside the rows / toolbar clears the selection */
   useEffect(() => {
@@ -419,19 +423,20 @@ export default function BetaOrders() {
   /* Print the list (as filtered) in the Sales Order print format — from a hidden frame, so only the list prints */
   const print = () => printOrderList({
     rows, company: selectedCompany, user, totValue, totGrand,
-    filter: [fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All FY', q.trim() && `Search: “${q.trim()}”`].filter(Boolean).join('   |   '),
+    title: isPend ? 'Pending Sales Orders' : undefined,
+    filter: [isPend ? 'Draft / pending approval — all FY' : fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All FY', q.trim() && `Search: “${q.trim()}”`].filter(Boolean).join('   |   '),
   });
   const printRef = useRef(print);
   printRef.current = print;
   /* Ctrl+P on this list prints the list, not the whole ERP screen */
   useEffect(() => {
-    if (tab !== 'list') return undefined;
+    if (!listy) return undefined;
     const k = e => {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'p') { e.preventDefault(); printRef.current(); }
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
-  }, [tab]);
+  }, [listy]);
 
   return (
     <div className="bo">
@@ -442,7 +447,7 @@ export default function BetaOrders() {
             {i === 1 && <span className="bo-sep" />}
             <button type="button" role="tab" aria-selected={tab === t.key} className={`bo-tab${tab === t.key ? ' on' : ''}`}
               onClick={() => { setEditing(null); setNewNo(''); navigate(`/beta/order?tab=${t.key}`); }}>
-              {t.label}{t.key === 'list' && orders && <span className="n">{orders.length}</span>}
+              {t.label}{t.key === 'list' && orders && <span className="n">{orders.length}</span>}{t.key === 'pending' && orders && <span className="n">{pendCount}</span>}
             </button>
           </React.Fragment>
         ))}
@@ -468,13 +473,13 @@ export default function BetaOrders() {
             )}
           </div>
         )}
-        {tab === 'list' && (
+        {listy && (
           <div className="bo-search">
             <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search order, client, PO, product…" title="Search order no, ID, client, client PO, due date, product" aria-label="Search orders" />
             {q && <button type="button" onClick={() => setQ('')} aria-label="Clear search">×</button>}
           </div>
         )}
-        {tab === 'list' && (
+        {listy && (
           <button type="button" className="bo-print" onClick={print} disabled={!orders || !rows.length} title="Print this list (Ctrl+P)">Print List</button>
         )}
         {tab === 'list' && gaps.count > 0 && (
@@ -482,8 +487,8 @@ export default function BetaOrders() {
             <input type="checkbox" checked={showGaps} onChange={e => setShowGaps(e.target.checked)} />Missing nos. <b>{gapCount}</b>
           </label>
         )}
-        {tab === 'list' && orders && filtered && <span className="bo-shown">{rows.length} of {orders.length} orders</span>}
-        {tab === 'list' && !editing && (() => {
+        {listy && orders && filtered && <span className="bo-shown">{rows.length} of {orders.length} orders</span>}
+        {listy && !editing && (() => {
           const so = (orders || []).find(o => String(o.orderId) === selId);
           return (
             <div className="bo-tools">
@@ -496,14 +501,14 @@ export default function BetaOrders() {
           );
         })()}
       </div>
-      {tab === 'list' && askDel && (
+      {listy && askDel && (
         <div className="bo-ask" role="alertdialog" aria-label="Confirm delete">
           <span><b>Delete order {askDel.orderNo || askDel.orderId}</b> ({askDel.customerName || askDel.party || '—'}) permanently? Its files are removed too and this cannot be undone. Orders with a sales bill, PI or receipt cannot be deleted — cancel those instead.</span>
           <button type="button" className="bo-abtn" onClick={() => setAskDel(null)} disabled={delBusy}>Keep</button>
           <button type="button" className="bo-abtn danger" onClick={() => doDelete(askDel)} disabled={delBusy}>{delBusy ? 'Checking…' : 'Yes, delete'}</button>
         </div>
       )}
-      {tab === 'list' && note && <div className={`bo-note ${note.ok ? 'ok' : 'err'}`} role="status">{note.text}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
+      {listy && note && <div className={`bo-note ${note.ok ? 'ok' : 'err'}`} role="status">{note.text}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
 
       {err && <div className="bo-err">{err}</div>}
 
@@ -513,7 +518,7 @@ export default function BetaOrders() {
       ) : tab === 'create' && <BetaCreateSO key={newNo ? `new-${newNo}` : 'new'} presetNo={newNo || undefined} companyId={companyId} company={selectedCompany} orders={orders || []} onSaved={() => { setNewNo(''); setReload(x => x + 1); }} />}
 
       <div className="bo-body" style={tab === 'create' || editing ? { display: 'none' } : undefined}>
-        {tab === 'list' && (
+        {listy && (
           <table className="bo-t">
             <colgroup>{COLS.map(([label, w]) => <col key={label} style={{ width: w }} />)}</colgroup>
             <thead>
@@ -524,7 +529,7 @@ export default function BetaOrders() {
             {orders === null ? (
               <tbody><tr><td colSpan={COLS.length} className="bo-msg">Loading…</td></tr></tbody>
             ) : display.length === 0 ? (
-              <tbody><tr><td colSpan={COLS.length} className="bo-msg">{orders.length ? (q.trim() ? `No order matches “${q.trim()}”.` : "No orders in the chosen FY.") : "No sales orders."}</td></tr></tbody>
+              <tbody><tr><td colSpan={COLS.length} className="bo-msg">{orders.length ? (q.trim() ? `No order matches “${q.trim()}”.` : isPend ? 'No draft or pending orders — every order is approved.' : "No orders in the chosen FY.") : "No sales orders."}</td></tr></tbody>
             ) : display.map((d, i) => {
               if (d.gap) return (
                 <tbody key={`gap-${d.gap.no}`} className="gap" onClick={() => setSelId(null)} onDoubleClick={() => { setNewNo(d.gap.no); navigate('/beta/order?tab=create'); }} title="Not entered — double-click to create this order">

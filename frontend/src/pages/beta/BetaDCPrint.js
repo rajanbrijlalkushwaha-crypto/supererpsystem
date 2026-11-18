@@ -4,7 +4,7 @@
 import axios from 'axios';
 import QRCode from 'qrcode';
 import { ewayQrText } from './BetaEwayJson';
-import { previewFrame, previewPdf, withTeal, prodText, signHtml, finalPdf } from './printKit';
+import { previewFrame, previewPdf, withTeal, prodText, signHtml, finalPdf, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -70,7 +70,7 @@ export function fillPage(doc) {
   doc.body.appendChild(probe);
   const page = probe.getBoundingClientRect().height; probe.remove();
   const used = body.getBoundingClientRect().height + (foot ? foot.getBoundingClientRect().height + 4 : 0);
-  const spare = Math.floor(page - used - 6);
+  const spare = Math.floor(page - used - 14);
   if (spare <= 0 || used >= page) return;
   const h = fill.getBoundingClientRect().height + spare;   // measured once — growing one cell grows the whole row
   fill.querySelectorAll('td').forEach(td => { td.style.height = h + 'px'; });
@@ -87,7 +87,7 @@ export function fillBody(doc, pageMm = 281) {
     if (!kids.length) return;
     const last = kids[kids.length - 1];
     const used = last.getBoundingClientRect().bottom + (parseFloat(doc.defaultView.getComputedStyle(last).marginBottom) || 0) - kids[0].getBoundingClientRect().top;
-    const spare = Math.floor(page - used - 6);
+    const spare = Math.floor(page - used - 14);
     if (spare <= 0) return;
     const h = fill.getBoundingClientRect().height + spare;
     fill.querySelectorAll('td').forEach(td => { td.style.height = `${h}px`; });
@@ -138,7 +138,7 @@ export async function printDC({ dc, company, user, withValue: wv, collect, ewayB
     dc.transporterId && `Transporter ID: <b>${esc(dc.transporterId)}</b>`, (dc.transDocNo || dc.transDocDate) && `LR / Doc No.: <b>${esc([dc.transDocNo, dc.transDocDate].filter(Boolean).join(' / '))}</b>`,
     dc.dispatchThrough && `Dispatched By: <b>${esc(dc.dispatchThrough)}</b>`,
   ].filter(Boolean).join(' &nbsp;|&nbsp; ');
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Delivery Challan ${esc(dc.dcNo || dc.dcId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(dc.customerName)}<title>Delivery Challan ${esc(dc.dcNo || dc.dcId)}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; background:#fff; line-height:1.35; }

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
-import { previewFrame, prodText } from './printKit';
+import { previewFrame, prodText, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -84,7 +84,7 @@ export async function printSalesBill({ b: bill, order, company, user, collect })
       <td class="c"></td><td class="r">${QTY.format(n(a.qty))}</td><td class="c">${esc(a.unit || '')}</td>
       <td class="r">—</td><td class="r">—</td><td class="c"></td>${intra ? '<td class="r"></td><td class="r"></td>' : '<td class="r"></td>'}<td class="r">—</td></tr>`).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tax Invoice ${esc(b.billNo || b.billId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(b.billToName || b.partyName)}<title>Tax Invoice ${esc(b.billNo || b.billId)}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; background:#fff; line-height:1.35; }

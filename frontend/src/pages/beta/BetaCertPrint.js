@@ -1,7 +1,7 @@
 /* Prints for Bank Guarantees and Warranty Certificates — same look as the other Beta documents
  * (Arial, thin black lines, grey heads, company letterhead). Each prints from a hidden frame. */
 import axios from 'axios';
-import { openPreview, logoData } from './printKit';
+import { openPreview, logoData, partyMeta } from './printKit';
 import { legalNoteHtml } from '../../utils/printFont';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
@@ -73,7 +73,7 @@ function printPage(html) {
   const t = (html.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || 'Print';
   openPreview(t.replace(/&amp;/g, '&'), { html });
 }
-const page = (title, css, body, landscape) => `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${BASE_CSS}${css || ''}
+const page = (title, css, body, landscape, party) => `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(party)}<title>${esc(title)}</title><style>${BASE_CSS}${css || ''}
 @media screen { html { background:#E4E7EC; } body { width:${landscape ? '297mm' : '210mm'}; min-height:${landscape ? '210mm' : '297mm'}; margin:14px auto; padding:8mm; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.25); }
   .pb { margin:8mm -8mm; border-top:10px solid #E4E7EC; padding-top:8mm; } }
 .pb { break-before:page; page-break-before:always; }
@@ -127,6 +127,16 @@ export const BG_TYPES = [
 export const bgTypeOf = b => BG_TYPES.find(t => t[0] === b?.bgType) || BG_TYPES[0];
 
 /* ───────── BG letters: the same bordered format as the Sales Order / Delivery Challan ───────── */
+/* the warranty and completion certificates: bordered, black and white (no grey fills) */
+const CERT_CSS = `
+.doc > table > thead > tr > th { border:1px solid #000; background:none; font-weight:bold; font-size:7.8pt; text-align:center; padding:4px 3px; }
+.sec { background:none !important; }
+.c { text-align:center !important; } tr.it td { border-top:0 !important; border-bottom:0 !important; } tr.end td { height:4mm; border-top:0 !important; }
+.cert { font-size:9.6pt; line-height:1.55; }
+.per td { text-align:center !important; padding:5px 4px !important; } .per b { font-size:10.5pt; }
+.trm { font-size:8.4pt; line-height:1.5; } .trm > b { display:block; font-size:8.4pt; text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
+.sg .pl { font-size:8.8pt; line-height:1.7; }
+.foot { display:block !important; text-align:center; padding:4px 0 0; font-size:8.4pt; font-weight:bold; color:#000; }`;
 const LETTER_CSS = `
 body { font-size:8.8pt; line-height:1.4; }
 .doc > table { margin-top:-1px; } .doc > table:first-child { margin-top:0; }
@@ -274,46 +284,57 @@ export async function openBgSoftCopy(b, companyId) {
 }
 
 /* ───────── Warranty Certificate (one, A4 portrait) ───────── */
+/* the place printed under the signature: the company's district (from its pincode, India Post), else its jurisdiction / city */
+const districts = {};
+export async function placeOf(co) {
+  const pin = String(co?.pincode || '').replace(/\D/g, '');
+  if (/^\d{6}$/.test(pin)) {
+    if (!(pin in districts)) districts[pin] = await axios.get(`/api/companies/district/${pin}`).then(r => r.data?.district || '').catch(() => '');
+    if (districts[pin]) return districts[pin];
+  }
+  return String(co?.jurisdiction || co?.city || '').trim();
+}
+
 export async function printWarranty({ cert: c, company, user }) {
-  const co = company || {}, logo = await logoOf(co);
+  const co = company || {}, logo = await logoOf(co), place = await placeOf(co);
   const period = c.months ? (c.months % 12 === 0 ? `${c.months / 12} Year${c.months / 12 === 1 ? '' : 's'}` : `${c.months} Month${c.months === 1 ? '' : 's'}`) : '';
-  const css = `
-.cert { border:1.6pt double #000; padding:10px 14px 12px; margin-top:8px; }
-.cert h2 { text-align:center; font-size:19pt; letter-spacing:3px; margin:4px 0 2px; font-family:Georgia, 'Times New Roman', serif; }
-.cert .sub { text-align:center; font-size:8.6pt; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
-.cert p.lead { font-size:9.6pt; line-height:1.55; margin:6px 0 8px; text-align:justify; }
-.per { display:flex; border:0.8pt solid #000; margin:8px 0; } .per div { flex:1; text-align:center; padding:6px 4px; border-left:0.6pt solid #000; }
-.per div:first-child { border-left:0; } .per .l { font-size:7.6pt; text-transform:uppercase; letter-spacing:.4px; } .per b { font-size:11pt; }
-.terms { border:0.6pt solid #000; border-top:0; padding:6px 8px; font-size:8.4pt; line-height:1.5; }
-.sig { display:flex; justify-content:space-between; align-items:flex-end; margin-top:22px; font-size:8.6pt; }
-.sig .b { text-align:center; min-width:220px; border-top:0.6pt solid #000; padding-top:3px; }`;
-  const items = (c.items || []).map((it, i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(it.description)}</b></td><td class="r">${esc(it.qty)} ${esc(it.unit)}</td><td>${esc(it.serialNo) || '—'}</td></tr>`).join('');
-  printPage(page(`Warranty ${c.certNo || ''}`, css, `
-${header(co, logo, 'WARRANTY', [['Certificate No.', esc(c.certNo || '')], ['Date', dmy(c.certDate)], ['Order No.', esc(c.orderNo || '—')]])}
-<div class="cert">
-  <h2>WARRANTY CERTIFICATE</h2>
-  <div class="sub">${esc(co.companyName || co.name)}</div>
-  <p class="lead">This is to certify that the product(s) listed below, supplied by <b>${esc(co.companyName || co.name)}</b> to
-    <b>${esc(c.clientName)}</b>${c.clientPO ? ` against your Purchase Order <b>${esc(c.clientPO)}</b>${c.clientPoDate ? ` dated ${dmy(c.clientPoDate)}` : ''}` : ''},
-    are guaranteed against defects in material and workmanship for a period of <b>${esc(period || '—')}</b>,
-    from <b>${longDate(c.startDate)}</b> to <b>${longDate(c.endDate)}</b>, on the terms given below.</p>
-  <table class="kv"><tbody>
-    <tr><th>Customer</th><td><b>${esc(c.clientName)}</b>${c.clientAddress ? `<div class="sm">${nl(c.clientAddress)}</div>` : ''}</td></tr>
-    <tr><th>Sales Order</th><td>${esc(c.orderNo || '—')}${c.orderDate ? ' · ' + dmy(c.orderDate) : ''}</td></tr>
-    ${c.invoiceNo ? `<tr><th>Tax Invoice</th><td>${esc(c.invoiceNo)}${c.invoiceDate ? ' · ' + dmy(c.invoiceDate) : ''}</td></tr>` : ''}
-    ${c.dcNo ? `<tr><th>Delivery Challan</th><td>${esc(c.dcNo)}${c.dcDate ? ' · ' + dmy(c.dcDate) : ''}</td></tr>` : ''}
-    ${c.installDate ? `<tr><th>Installed / handed over</th><td>${longDate(c.installDate)}</td></tr>` : ''}
-  </tbody></table>
-  <table class="lst"><thead><tr><th style="width:26px">Sr</th><th>Product</th><th style="width:80px">Qty</th><th style="width:30%">Serial / Identification No.</th></tr></thead><tbody>${items}</tbody></table>
-  <div class="per"><div><div class="l">Warranty period</div><b>${esc(period || '—')}</b></div><div><div class="l">From</div><b>${dmy(c.startDate)}</b></div><div><div class="l">Valid up to</div><b>${dmy(c.endDate)}</b></div></div>
-  ${c.coverage ? `<div class="sec">Warranty covers</div><div class="terms">${nl(c.coverage)}</div>` : ''}
-  ${c.exclusions ? `<div class="sec">Not covered</div><div class="terms">${nl(c.exclusions)}</div>` : ''}
-  ${c.remarks ? `<div class="sec">Remarks</div><div class="terms">${nl(c.remarks)}</div>` : ''}
-  <div data-fill></div>
-  <div class="sig"><div>Place: ${esc(co.city || '')}<br>Date: ${dmy(c.certDate)}</div><div class="b">For <b>${esc(co.companyName || co.name)}</b><br><br><br>Authorised Signatory</div></div>
+  const coName = esc(co.companyName || co.name);
+  const coAddr = esc([co.address, co.city, [co.state, co.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '));
+  const kv = (k, v) => (v ? `<tr><td>${k}</td><td>:</td><td><b>${v}</b></td></tr>` : '');
+  const items = (c.items || []).map((it, i) => `<tr class="it"><td class="c">${i + 1}</td><td><b>${esc(it.description)}</b></td><td class="c">${esc(it.qty)}</td><td class="c">${esc(it.unit)}</td><td>${esc(it.serialNo) || '—'}</td></tr>`).join('');
+  const css = LETTER_CSS + CERT_CSS;
+  printPage(page(`Warranty Certificate ${c.certNo || ''}`, css, `<div class="doc">
+<table><tbody><tr><td class="ttl">WARRANTY CERTIFICATE<small>${esc(c.certNo || '')}</small></td></tr></tbody></table>
+<table><colgroup><col style="width:56%"><col></colgroup><tbody><tr>
+  <td><div class="co">${logo ? `<img src="${logo}" alt="">` : ''}<div>
+    <div class="nm">${coName}</div>${coAddr ? `<div>${coAddr}</div>` : ''}
+    <div>${[co.gstin && `GSTIN: <b>${esc(co.gstin)}</b>`, co.pan && `PAN: ${esc(co.pan)}`].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>
+    <div>${[co.phone && `Ph: ${esc(co.phone)}`, co.email && `Email: ${esc(co.email)}`].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div></div></div></td>
+  <td><table class="kv">${kv('Certificate No.', esc(c.certNo))}${kv('Date', dmy(c.certDate))}${kv('Sales Order', esc(c.orderNo))}${kv('Client PO No.', esc(c.clientPO))}${kv('PO Date', dmy(c.clientPoDate))}</table></td>
+</tr></tbody></table>
+<table><colgroup><col style="width:56%"><col></colgroup><tbody><tr>
+  <td><div class="lbl">Customer</div><div class="pn">${esc(c.clientName)}</div>${c.clientAddress ? `<div>${nl(c.clientAddress)}</div>` : ''}</td>
+  <td><table class="kv">${kv('Tax Invoice', c.invoiceNo ? `${esc(c.invoiceNo)}${c.invoiceDate ? ` dt. ${dmy(c.invoiceDate)}` : ''}` : '')}${kv('Delivery Challan', c.dcNo ? `${esc(c.dcNo)}${c.dcDate ? ` dt. ${dmy(c.dcDate)}` : ''}` : '')}${kv('Installed on', dmy(c.installDate))}</table></td>
+</tr></tbody></table>
+<table><tbody><tr><td class="txt cert"><p>This is to certify that the product(s) listed below, supplied by <b>${coName}</b> to <b>${esc(c.clientName)}</b>${c.clientPO ? ` against Purchase Order <b>${esc(c.clientPO)}</b>${c.clientPoDate ? ` dated <b>${dmy(c.clientPoDate)}</b>` : ''}` : ''}, are guaranteed against defects in material and workmanship for a period of <b>${esc(period || '—')}</b>, from <b>${longDate(c.startDate)}</b> to <b>${longDate(c.endDate)}</b>, on the terms given below.</p></td></tr></tbody></table>
+<table><colgroup><col style="width:30px"><col><col style="width:62px"><col style="width:58px"><col style="width:30%"></colgroup>
+<thead><tr><th>Sl</th><th>Product</th><th>Qty</th><th>Unit</th><th>Serial / Identification No.</th></tr></thead>
+<tbody>${items}<tr class="end" data-fill><td></td><td></td><td></td><td></td><td></td></tr></tbody></table>
+<table class="per"><colgroup><col style="width:34%"><col style="width:33%"><col></colgroup><tbody><tr>
+  <td><div class="lbl">Warranty period</div><b>${esc(period || '—')}</b></td><td><div class="lbl">From</div><b>${dmy(c.startDate)}</b></td><td><div class="lbl">Valid up to</div><b>${dmy(c.endDate)}</b></td>
+</tr></tbody></table>
+<table><tbody>
+  ${c.coverage ? `<tr><td class="trm"><b>Warranty covers</b><div>${nl(c.coverage)}</div></td></tr>` : ''}
+  ${c.exclusions ? `<tr><td class="trm"><b>Not covered</b><div>${nl(c.exclusions)}</div></td></tr>` : ''}
+  ${c.remarks ? `<tr><td class="trm"><b>Remarks</b><div>${nl(c.remarks)}</div></td></tr>` : ''}
+</tbody></table>
+<table><colgroup><col style="width:50%"><col></colgroup><tbody><tr>
+  <td class="sg"><div class="pl">Place: <b>${esc(place || '—')}</b><br>Date: <b>${dmy(c.certDate)}</b></div></td>
+  <td class="sg"><b style="display:block; text-align:right">For ${coName}</b><div class="sp"></div><div class="tri"><span>Prepared By</span><span>Verified By</span><span>Authorised Signatory</span></div></td>
+</tr></tbody></table>
+<div class="foot">SUBJECT TO ${esc(String(co.jurisdiction || place || 'Ahmedabad').trim().toUpperCase())} JURISDICTION</div>
 </div>
-<div class="foot"><span>${brandLine(user)}</span><span>${esc(c.certNo || '')}</span></div>
-${legalNoteHtml()}`), 'wc-print-frame');
+<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`, false, c.clientName));
 }
 
 /* ───────── Warranty Certificate list ───────── */
@@ -336,16 +357,13 @@ ${legalNoteHtml()}`, true), 'wc-list-frame');
 /* ───────── Completion Certificate (one, A4 portrait) — bordered, like the Sales Order / Delivery Challan ───────── */
 export const PERFORMANCE = ['Excellent', 'Very Good', 'Good', 'Satisfactory'];
 export async function printCompletion({ cert: c, company, user }) {
-  const co = company || {}, logo = await logoOf(co);
+  const co = company || {}, logo = await logoOf(co), place = await placeOf(co);
   const coName = esc(co.companyName || co.name);
   const coAddr = esc([co.address, co.city, [co.state, co.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '));
   const kv = (k, v) => (v ? `<tr><td>${k}</td><td>:</td><td><b>${v}</b></td></tr>` : '');
   const po = c.clientPO ? `${esc(c.clientPO)}${c.clientPoDate ? ` dated ${dmy(c.clientPoDate)}` : ''}` : '';
   const items = (c.items || []).map((it, i) => `<tr class="it"><td class="c">${i + 1}</td><td><b>${esc(it.description)}</b></td><td class="c">${esc(it.qty)}</td><td class="c">${esc(it.unit)}</td></tr>`).join('');
-  const css = LETTER_CSS + `
-.doc > table > thead > tr > th { border:1px solid #000; background:#F5F5F5; font-weight:bold; font-size:7.8pt; text-align:center; padding:4px 3px; }
-.c { text-align:center !important; } tr.it td { border-top:0 !important; border-bottom:0 !important; } tr.end td { height:4mm; border-top:0 !important; }
-.cert { font-size:9.6pt; line-height:1.55; }`;
+  const css = LETTER_CSS + CERT_CSS;
   printPage(page(`Completion Certificate ${c.certNo || ''}`, css, `<div class="doc">
 <table><tbody><tr><td class="ttl">COMPLETION CERTIFICATE<small>${esc(c.certNo || '')}</small></td></tr></tbody></table>
 <table><colgroup><col style="width:56%"><col></colgroup><tbody><tr>
@@ -369,11 +387,11 @@ ${items ? `<table><colgroup><col style="width:30px"><col><col style="width:80px"
 ${c.remarks ? `<table><tbody><tr><td><b>Remarks:</b> ${nl(c.remarks)}</td></tr></tbody></table>` : ''}
 <table><colgroup><col style="width:50%"><col></colgroup><tbody><tr>
   <td class="sg"><b>Certified by, For ${esc(c.clientName)}</b><div class="sp"></div><div class="tri"><span>Name &amp; Designation</span><span>Signature &amp; Seal</span><span>Date</span></div></td>
-  <td class="sg"><b style="display:block; text-align:right">For ${coName}</b><div class="sp"></div><div class="tri"><span>Prepared By</span><span>Verified By</span><span>Authorised Signatory</span></div></td>
+  <td class="sg"><div style="display:flex; justify-content:space-between"><div class="pl">Place: <b>${esc(place || '—')}</b><br>Date: <b>${dmy(c.certDate)}</b></div><b>For ${coName}</b></div><div class="sp" style="height:9mm"></div><div class="tri"><span>Prepared By</span><span>Verified By</span><span>Authorised Signatory</span></div></td>
 </tr></tbody></table>
-<div class="foot">SUBJECT TO ${esc(String(co.jurisdiction || 'Ahmedabad').trim().toUpperCase())} JURISDICTION</div>
+<div class="foot">SUBJECT TO ${esc(String(co.jurisdiction || place || 'Ahmedabad').trim().toUpperCase())} JURISDICTION</div>
 </div>
-<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`), 'cc-print-frame');
+<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`, false, c.clientName));
 }
 
 /* ───────── Completion Certificate list ───────── */

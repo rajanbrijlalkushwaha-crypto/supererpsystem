@@ -4,7 +4,7 @@ import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
-import { previewFrame } from './printKit';
+import { previewFrame, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,7 +60,7 @@ export async function printPaymentAdvice({ p, allocs, poMap, soMap, vendor, comp
       + '</tr>').join('');
   }).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Advice ${esc(p.paymentId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(vName)}<title>Payment Advice ${esc(p.paymentId)}</title>
 <style>${CSS}</style></head><body>
 <div class="doc">
 <table>

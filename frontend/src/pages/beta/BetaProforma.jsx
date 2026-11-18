@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { brandLine } from '../../utils/printBranding';
 import { fillBody } from './BetaDCPrint';
 import { Svg } from '../../components/ui/Icon';
-import { previewFrame, prodText } from './printKit';
+import { previewFrame, prodText, partyMeta } from './printKit';
 
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -699,7 +699,7 @@ export async function printPI(pi, company, companyId, user) {
       <td class="c">${r ? d(r.date) : (i === 0 ? '<span class="mut">No payment yet</span>' : '')}</td><td>${r ? esc(r.mode || '') : ''}</td><td>${r ? esc(r.ref || '') : ''}</td><td class="r">${r ? amt(r.amount) : ''}</td></tr>`;
   }).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Proforma Invoice ${esc(pi.piNo || pi.piId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(o.customerName || pi.customerName)}<title>Proforma Invoice ${esc(pi.piNo || pi.piId)}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; background:#fff; line-height:1.3; }

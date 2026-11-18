@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
 import { printSalesBill } from './BetaSalesPrint';
 import { printDC, dcsOfBill, printMerged } from './BetaDCPrint';
+import { printChoose, printBusyStart, printBusyDone } from '../../printBusy';
 import SalesBillForm, { SB_FORM_CSS, billingOf, cnsByOrderOf, n, num, money, fdate, dash, attachUrl } from './BetaSalesBill';
 
 const TEAL = '#03444f';
@@ -180,7 +181,6 @@ export default function BetaSales() {
   const [editing, setEditing] = useState(null);     // bill open in the form
   const [createFor, setCreateFor] = useState(null); // { orderId, k } → form opens with this order
   const [note, setNote] = useState(null);
-  const [askPrint, setAskPrint] = useState(null);   // { b, ds } — bill to print and its delivery challans
   const [billQ, setBillQ] = useState('');
   const [viewPdf, setViewPdf] = useState(null);   // { url (blob), name }
   const [slot, setSlot] = useState(null);         // right part of the tab row — each list puts its tools there
@@ -213,19 +213,27 @@ export default function BetaSales() {
 
   const tab = editing ? 'create' : urlTab;
   const go = k => { setEditing(null); navigate(`/beta/sales?tab=${k}`); };
-  /* bill only, or the bill and its delivery challans together as one PDF */
-  const runPrint = async withDc => {
-    const { b, ds } = askPrint; setAskPrint(null);
+  /* Print → "what to print?" window (bill only · DC + invoice in one PDF · DC only), which then shows the progress bar */
+  const runPrint = async b => {
+    const ds = dcsOfBill(b, dcs), billNo = b.billNo || b.billId, dcNos = ds.map(d => d.dcNo || d.dcId).join(', ');
+    const args = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
+    const what = ds.length ? await printChoose({
+      title: `Print — ${billNo}`, text: `Bill ${billNo} has delivery challan ${dcNos}. What do you want to print?`,
+      options: [
+        { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` },
+        { value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' },
+        { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNos}` },
+      ],
+    }) : 'bill';
+    if (!what) return;
+    printBusyStart(what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'dc' ? `Preparing — DC ${dcNos}` : 'Preparing — DC + Invoice');
     try {
-      const args = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
-      if (!withDc) { await printSalesBill(args); return; }
-      // bill + its DC(s) in one PDF
-      setNote('Preparing one PDF — bill + delivery challan…');
-      const pages = [await printSalesBill({ ...args, collect: true })];
+      if (what === 'bill') { await printSalesBill(args); return; }
+      if (what === 'dc' && ds.length === 1) { await printDC({ dc: ds[0], company: selectedCompany, user }); return; }
+      const pages = what === 'both' ? [await printSalesBill({ ...args, collect: true })] : [];
       for (const dc of ds) pages.push(await printDC({ dc, company: selectedCompany, user, collect: true }));   // eslint-disable-line no-await-in-loop
       await printMerged(pages);
-      setNote(null);
-    } catch { setNote('Could not prepare the print (bill + DC). Restart the backend if this is the first time.'); }
+    } catch { printBusyDone(); setNote('Could not prepare the print. Restart the backend if this is the first time.'); }
   };
   const loading = orders === null || bills === null;
 
@@ -245,14 +253,6 @@ export default function BetaSales() {
         <div className="sb-slot" ref={setSlot} />
       </div>
       {note && <div className="sb-note" role="status">{note}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
-      {askPrint && (
-        <div className="sb-ask" role="alertdialog" aria-label="Print the delivery challan too?">
-          <span>Print the delivery challan <b>{askPrint.ds.map(d => d.dcNo || d.dcId).join(', ')}</b> of bill <b>{askPrint.b.billNo || askPrint.b.billId}</b> too?</span>
-          <button type="button" className="sb-abtn" onClick={() => setAskPrint(null)}>Cancel</button>
-          <button type="button" className="sb-abtn" onClick={() => runPrint(false)}>Bill only</button>
-          <button type="button" className="sb-abtn danger" style={{ background: '#03444F', borderColor: '#03444F' }} onClick={() => runPrint(true)} autoFocus>Bill + DC</button>
-        </div>
-      )}
 
       {tab === 'create' && (
         <div className="sb-body">
@@ -268,7 +268,7 @@ export default function BetaSales() {
       {tab === 'list' && <BillList bills={bills} soMap={soMap} companyId={companyId} q={billQ} setQ={setBillQ}
         slot={slot}
         onEdit={b => { setNote(null); setEditing(b); }} onPdf={setViewPdf} setNote={setNote}
-        onPrint={b => { const ds = dcsOfBill(b, dcs); if (ds.length) setAskPrint({ b, ds }); else printSalesBill({ b, order: soMap[String(b.orderId)], company: selectedCompany, user }); }}
+        onPrint={runPrint}
         onDeleted={b => { setReload(x => x + 1); setNote(`Deleted bill ${b.billNo || b.billId} of order ${b.orderNo || '—'} — its quantities are pending again.`); }} />}
       {tab === 'pending' && <PendingList rows={rows} loading={loading} slot={slot}
         onBill={r => { setNote(null); setCreateFor({ orderId: r.o.orderId, k: Date.now() }); navigate('/beta/sales?tab=create'); }}

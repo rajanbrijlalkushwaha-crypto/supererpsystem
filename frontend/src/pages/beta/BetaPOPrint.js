@@ -3,7 +3,7 @@
 import axios from 'axios';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
-import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf } from './printKit';
+import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
@@ -76,7 +76,7 @@ export async function printPO({ po, company, companyId, order, user }) {
       <tr><td>State</td><td>:</td><td><b>${esc(state || '—')}${stateCode(gstin) ? `, Code ${stateCode(gstin)}` : ''}</b></td></tr>
       ${contact ? `<tr><td>Contact</td><td>:</td><td>${esc(contact)}</td></tr>` : ''}</table>` : ''}`;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Purchase Order ${esc(po.poNo || po.orderId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(po.vendorName)}<title>Purchase Order ${esc(po.poNo || po.orderId)}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; background:#fff; line-height:1.3; }

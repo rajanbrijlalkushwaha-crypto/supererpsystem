@@ -4,7 +4,7 @@
 import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
-import { previewFrame } from './printKit';
+import { previewFrame, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const PLAIN = new Intl.NumberFormat('en-IN', { useGrouping: false, maximumFractionDigits: 3 });
@@ -49,7 +49,7 @@ export async function printGrn({ g, po, so, company, user }) {
     : g.deliveryType === 'to-vendor' ? `At vendor's factory — ${g.toVendorName || ''}${g.toPoNo ? ` (their PO ${g.toPoNo})` : ''}`
       : `Our factory / store${g.deliveryLocation || g.receiveAt ? ` — ${g.deliveryLocation || g.receiveAt}` : ''}`;
   const made = g.source === 'dc' ? `Made with DC ${g.dcNo || ''}` : g.source === 'bill' ? `Made with vendor invoice ${g.vendorDcNo || ''}` : '';
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>GRN ${esc(g.grnNo || '')}</title><style>${GRN_CSS}</style></head><body>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(g.vendorName || p.vendorName)}<title>GRN ${esc(g.grnNo || '')}</title><style>${GRN_CSS}</style></head><body>
 <div class="doc">
 <table>
   <colgroup><col style="width:60%"><col></colgroup>

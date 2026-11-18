@@ -7,7 +7,7 @@ import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillBody } from './BetaDCPrint';
 import { STATUS, orderNoOf, bankLabel } from './BetaReceipt';
-import { previewFrame } from './printKit';
+import { previewFrame, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -58,7 +58,7 @@ export async function printReceiptAdvice({ rs, company, user, banks, soMap, clie
     return `<tr><td class="c">${i + 1}</td><td><b>${esc(orderNoOf(p, soMap))}</b></td><td class="c">${d(o.orderDate)}</td><td>${esc(o.customerPO || '')}</td><td class="c">${d(o.poDate)}</td><td class="r">${amt(p.amount)}</td></tr>`;
   }).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt Advice ${esc(rs.map(p => p.paymentId).join('-'))}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(c.companyName || c.clientName || h.party || h.entityName)}<title>Receipt Advice ${esc(rs.map(p => p.paymentId).join('-'))}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:9pt; color:#000; background:#fff; line-height:1.35; }

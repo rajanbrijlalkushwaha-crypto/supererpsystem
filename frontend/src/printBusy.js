@@ -16,6 +16,12 @@ const CSS = `
 #pb-ov .fill:after{content:"";position:absolute;inset:0;width:80px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);animation:pb-glint 1.6s linear infinite}
 @keyframes pb-glint{from{transform:translateX(-80px)}to{transform:translateX(400px)}}
 #pb-ov small{display:block;margin-top:8px;color:#4a5566}
+#pb-ov .opts{display:flex;flex-direction:column;gap:7px;margin:4px 0 2px}
+#pb-ov .opts button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:8px 12px;border:1px solid #8e9bb0;border-radius:4px;background:linear-gradient(#fdfdfd,#e8ecf2);color:#1e2b3c;font:600 13px "Segoe UI",Inter,Tahoma,sans-serif;cursor:pointer}
+#pb-ov .opts button small{margin:2px 0 0;font-weight:400;font-size:11.5px}
+#pb-ov .opts button:hover,#pb-ov .opts button:focus-visible{border-color:#3c7fb1;background:linear-gradient(#eaf6fd,#cfe8f9);outline:none}
+#pb-ov .ft{display:flex;justify-content:flex-end;margin-top:10px}
+#pb-ov .ft button{min-width:80px;padding:4px 14px;border:1px solid #8e9bb0;border-radius:3px;background:linear-gradient(#fdfdfd,#e3e7ee);font:13px "Segoe UI",Inter,Tahoma,sans-serif;cursor:pointer}
 @media (prefers-reduced-motion:reduce){#pb-ov .fill:after{animation:none}}`;
 
 function paint(text) {
@@ -37,6 +43,26 @@ export function printBusyStart(title = 'Preparing to print') {
   // nothing to wait for (the click only opened a menu, or printing failed with a message) → go away by itself
   armQuiet();
   maxTimer = setTimeout(printBusyDone, 180000);
+}
+
+/* "What to print?" in the same window: options [{ value, label, hint }] → resolves the value picked (null = Cancel).
+   The caller then calls printBusyStart(title) and the window turns into the progress bar. */
+export function printChoose({ title = 'Print', text = 'What do you want to print?', options = [] }) {
+  if (!document.getElementById('pb-css')) { const s = document.createElement('style'); s.id = 'pb-css'; s.textContent = CSS; document.head.appendChild(s); }
+  printBusyDone();
+  const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return new Promise(resolve => {
+    const ov = document.createElement('div'); ov.id = 'pb-ov'; ov.dataset.choose = '1';
+    ov.innerHTML = `<div class="w" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="t">${esc(title)}</div><div class="b"><p>${esc(text)}</p>
+      <div class="opts">${options.map((o, i) => `<button type="button" data-i="${i}">${esc(o.label)}${o.hint ? `<small>${esc(o.hint)}</small>` : ''}</button>`).join('')}</div>
+      <div class="ft"><button type="button" data-i="-1">Cancel</button></div></div></div>`;
+    const end = v => { ov.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); end(null); } };
+    ov.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) end(+b.dataset.i < 0 ? null : options[+b.dataset.i].value); else if (e.target === ov) end(null); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(ov);
+    ov.querySelector('.opts button')?.focus();
+  });
 }
 
 function armQuiet() {
@@ -65,7 +91,7 @@ export function installPrintBusy() {
 
   document.addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('button, [role="menuitem"], a');
-    if (!b || b.disabled || b.closest('#cpv-root')) return;   // buttons inside the open preview have their own progress
+    if (!b || b.disabled || b.closest('#cpv-root, #pb-ov')) return;   // buttons inside the open preview have their own progress
     const t = (b.textContent || '').trim();
     if (!/print/i.test(t) || /▾|▼/.test(t) || b.getAttribute('aria-haspopup')) return;
     printBusyStart();

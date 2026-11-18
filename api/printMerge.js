@@ -24,8 +24,16 @@ router.post('/', async (req, res) => {
     const out = await PDFDocument.create();
     for (const html of htmls) {
       await page.setContent(html, { waitUntil: 'load' });
-      const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
-      const src = await PDFDocument.load(pdf);
+      let pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+      let src = await PDFDocument.load(pdf);
+      // a one-page document (no .pb page breaks) that spilled a little on to a 2nd page: shrink it a bit to fit one page
+      if (src.getPageCount() === 2 && !(await page.$('.pb'))) {
+        for (const scale of [0.96, 0.92, 0.88, 0.84]) {
+          const p2 = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, scale });
+          const s2 = await PDFDocument.load(p2);
+          if (s2.getPageCount() === 1) { pdf = p2; src = s2; break; }
+        }
+      }
       (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
     }
     for (const buf of pdfs) {

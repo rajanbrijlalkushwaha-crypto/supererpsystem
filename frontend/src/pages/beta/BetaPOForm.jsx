@@ -284,9 +284,10 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
         sp.push({ id: uid(), kind: 'so', lineKey, so: { ...f, orderId: o.orderId, orderNo: o.orderNo } });
       });
     });
-    // the order's attachments, and its spec files that belong to no product (general drawings / annexures)
+    // only the order's spec files that belong to no product (general drawings / annexures) — NOT the order's own
+    // attachments (client PO, our quotation…): those are for the client and are never sent to the vendor
     const general = (o.specFiles || []).filter(f => f && f.fileName && !f.itemId && !f.itemName).map(f => ({ ...f, name: f.name || f.fileName }));
-    [...(o.attachments || []), ...general].filter(a => a && a.fileName).forEach(a => {
+    general.forEach(a => {
       if (!at.some(x => x.orderId === o.orderId && x.fileName === a.fileName)) at.push({ ...a, id: uid(), orderId: o.orderId, orderNo: o.orderNo });
     });
     return { notes: nt, specs: sp, soAtts: at };

@@ -173,6 +173,26 @@ router.delete('/:companyId', ownOnly, async (req, res) => {
 });
 
 // GET /api/companies/logo/:fileName — serve the logo from the company's own folder (old shared folder as a fallback)
+/* district of an Indian pincode (India Post) — the "Place" printed on certificates. Only the pincode is sent.
+   Cached in memory and in Database/pincode-district.json, so each pincode is looked up once. */
+const PIN_CACHE = path.join(ROOT, 'Database', 'pincode-district.json');
+let pinCache = null;
+router.get('/district/:pincode', async (req, res) => {
+  const pin = String(req.params.pincode || '').replace(/\D/g, '');
+  if (!/^\d{6}$/.test(pin)) return res.json({ district: '' });
+  if (!pinCache) { try { pinCache = JSON.parse(fs.readFileSync(PIN_CACHE, 'utf8')); } catch { pinCache = {}; } }
+  if (pinCache[pin]) return res.json({ district: pinCache[pin] });
+  try {
+    const r = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: AbortSignal.timeout(6000) });
+    const offices = ((await r.json())[0] || {}).PostOffice || [];
+    const count = {};
+    offices.forEach(o => { const d = String(o.District || '').trim(); if (d) count[d] = (count[d] || 0) + 1; });
+    const district = Object.keys(count).sort((a, b) => count[b] - count[a])[0] || '';   // most of the pincode's post offices
+    if (district) { pinCache[pin] = district; try { fs.writeFileSync(PIN_CACHE, JSON.stringify(pinCache, null, 2)); } catch { /* memory only */ } }
+    res.json({ district });
+  } catch { res.json({ district: '' }); }
+});
+
 router.get('/logo/:fileName', (req, res) => {
   try {
     const fileName   = req.params.fileName;

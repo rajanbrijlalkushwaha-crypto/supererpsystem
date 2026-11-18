@@ -4,7 +4,7 @@
 import axios from 'axios';
 import QRCode from 'qrcode';
 import { ewayQrText } from './BetaEwayJson';
-import { previewPdf, prodText } from './printKit';
+import { previewPdf, prodText, partyMeta } from './printKit';
 import { logoOf, printHtml, printMerged, blobB64 } from './BetaDCPrint';
 
 const n = v => parseFloat(v) || 0;
@@ -45,7 +45,7 @@ export async function printReturn({ r, company, user, withValue = true, collect,
   const party = (lbl, p) => `<div class="lbl">${lbl}</div><div class="pn">${esc(p.name || '')}</div>${addrOf(p) ? `<div>${esc(addrOf(p))}</div>` : ''}
     <div>${[p.gstin && `GSTIN: <b>${esc(p.gstin)}</b>`, p.state && `State: ${esc(p.state)}`].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>`;
   const cols = withValue ? (intra ? 11 : 10) + (showDc ? 1 : 0) : 6 + (showDc ? 1 : 0);
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titleOf(r)} ${esc(r.returnNo || r.returnId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta((client ? from : to).name)}<title>${titleOf(r)} ${esc(r.returnNo || r.returnId)}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 body { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; background:#fff; line-height:1.35; }

@@ -7,7 +7,7 @@ import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { fillPage, fitPage, fillBody } from './BetaDCPrint';
 import { loadGrns, billItemsFor, billCounts, poStatusOf } from './BetaPurchaseLib';
-import { previewFrame } from './printKit';
+import { previewFrame, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -165,7 +165,7 @@ export async function printOrderAdvice({ r, receipts, company, user, banks }) {
   const rc = receipts.map((p, i) => `<tr><td class="c">${i + 1}</td><td class="c">${d(p.transactionDate || p.date)}</td><td>${esc(p.paymentId)}</td><td>${esc(p.paymentMode || '')}</td>
     <td>${esc(p.referenceNo || p.reference || '')}</td><td>${esc(bankName(p.bankId))}</td><td class="r">${amt(p.amount)}</td></tr>`).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Order Advice ${esc(o.orderNo || o.orderId)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(o.customerName || o.party)}<title>Order Advice ${esc(o.orderNo || o.orderId)}</title>
 <style>${ADV_CSS}</style></head><body>
 <div class="doc">
 <table>
@@ -325,7 +325,7 @@ export async function printPoAdvice({ r, so, payments, vendor, company, user, ba
     <td>${esc(x.referenceNo || x.reference || '')}</td><td>${esc(bankName(x.bankId))}</td><td class="r">${amt(x.forPo)}</td></tr>`).join('');
   const vName = p.vendorName || v.vendorName || '';
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>PO Advice ${esc(poNo)}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(p.vendorName)}<title>PO Advice ${esc(poNo)}</title>
 <style>${PO_ADV_CSS}</style></head><body>
 <div class="doc">
 <table>

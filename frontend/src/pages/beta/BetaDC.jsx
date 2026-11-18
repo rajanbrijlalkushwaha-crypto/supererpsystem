@@ -16,6 +16,7 @@ import { n, num, amt, fdate, dash, lineOwner, isIntra, cnsByOrderOf } from './Be
 import { dispatchOf, billMode, addonFill } from './BetaDispatch';
 import { printDC, billOfDc, printMerged, printPortalEwb, printDcWithPortal, uploadPortalPdf } from './BetaDCPrint';
 import { printSalesBill } from './BetaSalesPrint';
+import { printChoose, printBusyStart, printBusyDone } from '../../printBusy';
 import { DOC_TYPES, SUB_TYPES, STATE_NAMES, CANCEL_REASONS, ewayDocOf, ewayJsonOf, downloadJson, ewayActive, cancelHoursLeft } from './BetaEwayJson';
 import { SKIP_PO, poLines, poStatusOf, loadGrns, dropDcGrns, sameItem } from './BetaPurchaseLib';
 import { PX_CSS } from './BetaPurchaseParts';
@@ -144,7 +145,6 @@ export default function BetaDC() {
   const [editing, setEditing] = useState(null);
   const [createFor, setCreateFor] = useState(null);
   const [note, setNote] = useState(null);
-  const [askPrint, setAskPrint] = useState(null);   // { dc, withValue, b } — DC to print and its tax invoice
   const [slot, setSlot] = useState(null);
   const [listQ, setListQ] = useState('');
   const [job, setJob] = useState(null);           // e-way job running through the E-Way Helper
@@ -215,19 +215,25 @@ export default function BetaDC() {
   const tab = editing ? 'create' : urlTab;
   const go = k => { setEditing(null); navigate(`/beta/delivery-challan?tab=${k}`); };
   const printOnly = (dc, withValue) => printDC({ dc, company: selectedCompany, user, withValue });   // with / without value is chosen at print time
-  /* a DC tied to a tax invoice: ask whether to print the invoice too */
-  const doPrint = (dc, withValue = true) => { const b = billOfDc(dc, bills); if (b) setAskPrint({ dc, withValue, b }); else printOnly(dc, withValue); };
-  const runPrint = async withBill => {
-    const { dc, withValue, b } = askPrint; setAskPrint(null);
+  /* a DC tied to a tax invoice: "what to print?" window (DC only · DC + invoice · invoice only), which then shows the progress bar */
+  const doPrint = async (dc, withValue = true) => {
+    const b = billOfDc(dc, bills), dcNo = dc.dcNo || dc.dcId, billNo = b && (b.billNo || b.billId);
+    const what = b ? await printChoose({
+      title: `Print — ${dcNo}`, text: `DC ${dcNo} has tax invoice ${billNo}. What do you want to print?`,
+      options: [
+        { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNo}` },
+        { value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' },
+        { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` },
+      ],
+    }) : 'dc';
+    if (!what) return;
+    printBusyStart(what === 'dc' ? `Preparing — DC ${dcNo}` : what === 'bill' ? `Preparing — Bill ${billNo}` : 'Preparing — DC + Invoice');
     try {
-      if (!withBill) { await printOnly(dc, withValue); return; }
-      // DC + its tax invoice in one PDF
-      setNote({ text: 'Preparing one PDF — delivery challan + tax invoice…' });
-      const pages = [await printDC({ dc, company: selectedCompany, user, withValue, collect: true }),
-        await printSalesBill({ b, order: soMap[String(b.orderId)], company: selectedCompany, user, collect: true })];
-      await printMerged(pages);
-      setNote(null);
-    } catch { setNote({ err: true, text: 'Could not prepare the print (DC + invoice). Restart the backend if this is the first time.' }); }
+      if (what === 'dc') { await printOnly(dc, withValue); return; }
+      const billArgs = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
+      if (what === 'bill') { await printSalesBill(billArgs); return; }
+      await printMerged([await printDC({ dc, company: selectedCompany, user, withValue, collect: true }), await printSalesBill({ ...billArgs, collect: true })]);
+    } catch { printBusyDone(); setNote({ err: true, text: 'Could not prepare the print. Restart the backend if this is the first time.' }); }
   };
   /* the e-way bill PDF from the portal: print / share it alone or after the DC; upload or remove it */
   const doPortal = async (what, dc, arg) => {
@@ -315,14 +321,6 @@ export default function BetaDC() {
         {note.dc && !note.dc.ewayBillNo && <button type="button" className="sb-abtn" onClick={() => doGenerate([note.dc])}>Generate E-Way</button>}
         <button type="button" onClick={() => setNote(null)} aria-label="Dismiss" style={note.err ? { color: '#B42318' } : undefined}>×</button></div>}
 
-      {askPrint && (
-        <div className="sb-ask" role="alertdialog" aria-label="Print the tax invoice too?">
-          <span>Print the tax invoice <b>{askPrint.b.billNo || askPrint.b.billId}</b> of DC <b>{askPrint.dc.dcNo || askPrint.dc.dcId}</b> too?</span>
-          <button type="button" className="sb-abtn" onClick={() => setAskPrint(null)}>Cancel</button>
-          <button type="button" className="sb-abtn" onClick={() => runPrint(false)}>DC only</button>
-          <button type="button" className="sb-abtn danger" style={{ background: '#03444F', borderColor: '#03444F' }} onClick={() => runPrint(true)} autoFocus>DC + Invoice</button>
-        </div>
-      )}
       {job && !['done', 'failed'].includes(job.status) && (() => {
         const stop = () => axios.post(`/api/eway-helper/jobs/${job.id}/cancel`).finally(() => setJob(j => ({ ...j, status: 'failed', message: 'Cancelled.' })));
         return (

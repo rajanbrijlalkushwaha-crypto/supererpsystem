@@ -35,7 +35,16 @@ const PV_CSS = `
 .cpv iframe { flex:1; border:0; width:100%; background:#E4E7EC; }
 .cpv-main { flex:1; min-height:0; display:flex; position:relative; }
 .cpv { position:relative; }`;
-const fileName = t => String(t || 'document').replace(/[\\/:*?"<>|]+/g, '-').trim() + '.pdf';
+/* the client / vendor a printed document is for: <meta name="party" content="…"> in its page */
+export const partyMeta = name => (name ? `<meta name="party" content="${String(name).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">` : '');
+const partyOf = html => ((String(html || '').match(/<meta name="party" content="([^"]*)"/) || [])[1] || '')
+  .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&amp;/g, '&').trim();
+/* the saved / e-mailed PDF's name: "<client or vendor> - <document> <no.>", e.g. "Indian Navy - Tax Invoice EE-TI-26-27-0018" */
+const docBase = (opts, title) => {
+  if (opts.fileName) return String(opts.fileName).replace(/\.pdf$/i, '');
+  const party = opts.party || partyOf(opts.html || opts.mailHtml), t = String(title || 'document');
+  return (party && !t.toLowerCase().includes(party.toLowerCase()) ? `${party} - ${t}` : t).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 150);
+};
 const saveBlob = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 const titleOf = html => ((String(html).match(/<title>([\s\S]*?)<\/title>/) || [])[1] || 'Print').replace(/&amp;/g, '&');
 
@@ -55,11 +64,38 @@ export function fillPages(doc, pageMm = 279) {
       if (!fill) return;
       const last = seg[seg.length - 1];
       const used = last.getBoundingClientRect().bottom + (parseFloat(doc.defaultView.getComputedStyle(last).marginBottom) || 0) - seg[0].getBoundingClientRect().top;
-      const spare = Math.floor(pageH - used - 6);
+      const spare = Math.floor(pageH - used - 14);
       if (spare <= 0) return;
       const h = fill.getBoundingClientRect().height + spare;
       (fill.tagName === 'TR' ? [...fill.children] : [fill]).forEach(c => { c.style.height = `${h}px`; });
     });
+  } catch { /* print as is */ }
+}
+
+/* One page when it nearly fits: a one-page document (no .pb page breaks) a little taller than the A4 page first loses
+   its blank fill rows, then is shrunk (down to 72%) so it prints — and saves as PDF — on ONE page, without a near-empty
+   second page. Much longer documents run on to more pages as they are. The blank row then fills the page again. */
+export function fitOne(doc, html) {
+  try {
+    if (doc.querySelector('.pb') || /size:\s*A4\s+landscape/i.test(html)) return;
+    const mm = parseFloat((String(html).match(/@page\s*\{[^}]*margin:\s*([\d.]+)mm/) || [])[1]);
+    const probe = doc.createElement('div'); probe.style.cssText = `position:absolute;visibility:hidden;height:${297 - 2 * (mm >= 0 ? mm : 9)}mm;width:1px`;
+    doc.body.appendChild(probe); const page = probe.getBoundingClientRect().height - 14; probe.remove();
+    const kids = [...doc.body.children].filter(el => !['STYLE', 'SCRIPT'].includes(el.tagName) && el.id !== 'cpv-view');
+    if (!kids.length || page <= 0) return;
+    const used = () => kids[kids.length - 1].getBoundingClientRect().bottom - kids[0].getBoundingClientRect().top;
+    if (used() <= page) return;
+    const fill = doc.querySelector('[data-fill], #fillrow, tr.fill');
+    const cells = fill ? (fill.tagName === 'TR' ? [...fill.children] : [fill]) : [];
+    cells.forEach(c => { c.style.height = ''; });
+    let z = 1;
+    if (used() > page) {
+      z = Math.floor(page / used() * 1000) / 1000;
+      if (z < 0.72) return;
+      kids.forEach(k => { k.style.zoom = String(z); });
+    }
+    const spare = Math.floor(page - used());
+    if (spare > 0 && cells.length) { const h = (fill.getBoundingClientRect().height + spare) / z; cells.forEach(c => { c.style.height = `${h}px`; }); }
   } catch { /* print as is */ }
 }
 
@@ -129,7 +165,7 @@ function mailPanel(box, getDoc, title, opts) {
   box.querySelector('.cpv-main').appendChild(pn);
   const $ = s => pn.querySelector(s);
   const st = (t, k = '') => { const e = $('.st'); e.textContent = t; e.className = `st ${k}`; };
-  const docName = String(opts.fileName || title || 'document').replace(/[\\/:*?"<>|]+/g, '-').replace(/\.pdf$/i, '').trim();
+  const docName = docBase(opts, title);
   let extra = [];
   const drawAtts = () => {
     $('.atts').innerHTML = `<div class="att"><i>PDF</i><input type="text" value="${docName.replace(/"/g, '&quot;')}" aria-label="Attachment name"><span style="flex:0;color:#667085">.pdf</span></div>`
@@ -398,19 +434,36 @@ export function openPreview(title, opts) {
   if (opts.html) opts = { ...opts, html: withTeal(opts.html) };
   const ov = document.createElement('div'); ov.id = 'cpv-root'; ov.className = 'cpv-ov';
   ov.innerHTML = `<div class="cpv" role="dialog" aria-modal="true" aria-label="Print preview"><div class="cpv-bar"><b></b>
-    ${opts.sign ? '<button type="button" data-a="sign">✍ Sign</button>' : ''}<button type="button" data-a="mail">✉ Email</button><button type="button" data-a="save">Save PDF</button><button type="button" class="pri" data-a="print">Print</button><button type="button" class="x" data-a="close" aria-label="Close">×</button></div>
+    ${opts.html ? '<button type="button" data-a="zoom" title="See the whole page / read at full size">100%</button>' : ''}${opts.sign ? '<button type="button" data-a="sign">✍ Sign</button>' : ''}<button type="button" data-a="mail">✉ Email</button><button type="button" data-a="save">Save PDF</button><button type="button" class="pri" data-a="print">Print</button><button type="button" class="x" data-a="close" aria-label="Close">×</button></div>
     <div class="cpv-main"><iframe title="Preview"></iframe></div></div>`;
   const docTitle = title || titleOf(opts.html);
   let signsP = loadSigns(opts.sign);
   ov.querySelector('b').textContent = docTitle;
   document.body.appendChild(ov);
   const fr = ov.querySelector('iframe'), box = ov.querySelector('.cpv');
+  /* on screen the whole A4 page is shown at once (a ready PDF opens page-fit); "100%" reads it at full size.
+     Screen only — the print and the PDF are not changed. */
+  let fit = true;
+  const fitView = () => {
+    try {
+      const d = fr.contentDocument; if (!d || !d.body) return;
+      let st = d.getElementById('cpv-view'); if (!st) { st = d.createElement('style'); st.id = 'cpv-view'; d.head.appendChild(st); }
+      st.textContent = '';
+      const land = /size:\s*A4\s+landscape/i.test(opts.html || '');
+      const pr = d.createElement('div'); pr.style.cssText = `position:absolute;visibility:hidden;width:${land ? 297 : 210}mm;height:${land ? 210 : 297}mm`;
+      d.body.appendChild(pr); const r = pr.getBoundingClientRect(); pr.remove();
+      const z = Math.min(1, (fr.clientHeight - 30) / r.height, (fr.clientWidth - 40) / r.width);
+      if (fit && z < 1) st.textContent = `@media screen { html { zoom:${Math.floor(z * 1000) / 1000}; } }`;
+      const zb = ov.querySelector('[data-a="zoom"]'); if (zb) { zb.textContent = fit ? '100%' : 'Fit page'; zb.style.display = z < 1 ? '' : 'none'; }
+    } catch { /* shown as is */ }
+  };
   if (opts.html) {
     fr.onload = () => {
       try {
         const d = fr.contentDocument, land = /size:\s*A4\s+landscape/i.test(opts.html), st = d.createElement('style');
         st.textContent = sheetCss(land); d.head.appendChild(st);
-        if (!land) setTimeout(() => fillPages(d), 60);   // after the fonts / logo are laid out
+        if (!land) setTimeout(() => { fillPages(d); fitOne(d, opts.html); fitView(); }, 60);   // after the fonts / logo are laid out
+        else setTimeout(fitView, 60);
         // a page with signature boxes but no document id given: sign it under its title (each document has its own)
         if (!opts.sign && SIGN_ROLES.some(([, , rx]) => [...d.body.querySelectorAll('b, span, div, td, p, strong, th')].some(e => !e.children.length && rx.test(e.textContent || '')))) {
           opts.sign = { type: 'print', id: String(docTitle).replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) };
@@ -421,7 +474,7 @@ export function openPreview(title, opts) {
       } catch { /* shown as is */ }
     };
     fr.srcdoc = opts.html;
-  } else fr.src = opts.pdfUrl;
+  } else fr.src = opts.pdfUrl + '#view=Fit';
   const msg = t => { let m = ov.querySelector('.cpv-msg'); if (!m) { m = document.createElement('div'); m.className = 'cpv-msg'; box.insertBefore(m, box.querySelector('.cpv-main')); } m.textContent = t; };
   const close = () => { ov.remove(); document.removeEventListener('keydown', key); if (opts.pdfUrl) URL.revokeObjectURL(opts.pdfUrl); };
   const key = e => { if (e.key === 'Escape' && !ov.querySelector('.cpm')) close(); };
@@ -431,6 +484,7 @@ export function openPreview(title, opts) {
   ov.addEventListener('click', async e => {
     const a = e.target.closest('.cpv-bar button')?.dataset.a;
     if (a === 'close') close();
+    if (a === 'zoom') { fit = !fit; fitView(); }
     if (a === 'print') { if (isAppMode()) { ov.querySelector('.cpv-bar [data-a="save"]').click(); return; } fr.contentWindow.focus(); fr.contentWindow.print(); }   // the app: a PDF to share
     if (a === 'sign') {
       if (box.querySelector('.cps')) { box.querySelector('.cps').remove(); return; }
@@ -471,7 +525,7 @@ export function openPreview(title, opts) {
         if (!opts.rebuild) return;
         const blob = await opts.rebuild();
         const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-        await new Promise(res => { fr.onload = () => res(); fr.src = url; setTimeout(res, 8000); });
+        await new Promise(res => { fr.onload = () => res(); fr.src = url + '#view=Fit'; setTimeout(res, 8000); });
         if (opts.pdfUrl) URL.revokeObjectURL(opts.pdfUrl);
         opts.pdfUrl = url;
       };
@@ -516,7 +570,7 @@ export function openPreview(title, opts) {
       mailPanel(box, async () => (!opts.html ? { pdf: await toB64(await (await fetch(opts.pdfUrl)).blob()) } : { html: pageHtml() }), docTitle, opts);
     }
     if (a === 'save') {
-      const name = opts.fileName || fileName(ov.querySelector('b').textContent);
+      const name = `${docBase(opts, ov.querySelector('b').textContent)}.pdf`;
       if (!opts.html) { saveBlob(await (await fetch(opts.pdfUrl)).blob(), name); return; }
       const btn = e.target; btn.disabled = true; btn.textContent = 'Making PDF…';
       try {
@@ -540,7 +594,7 @@ export function previewFrame(fr, title, extra = {}) {
 export function previewHtml(html, title, extra = {}) { openPreview(title, { html, ...extra }); }
 export function previewPdf(blob, title, name, extra = {}) {
   const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-  openPreview(title, { pdfUrl: url, fileName: name || fileName(title), mailHtml: extra.html || '', to: extra.to, mail: extra.mail, sign: extra.sign, signs: extra.signs, rebuild: extra.rebuild });
+  openPreview(title, { pdfUrl: url, fileName: name || '', mailHtml: extra.html || '', to: extra.to, mail: extra.mail, sign: extra.sign, signs: extra.signs, rebuild: extra.rebuild });
 }
 /* a PDF with the page signatures saved for this document drawn on it */
 export async function finalPdf(blob, sign) {
