@@ -11,7 +11,7 @@ import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
 import { printSalesBill } from './BetaSalesPrint';
-import { printDC, dcsOfBill, printMerged } from './BetaDCPrint';
+import { printDC, dcsOfBill, printMerged, printPortalEwb } from './BetaDCPrint';
 import { printChoose, printBusyStart, printBusyDone } from '../../printBusy';
 import SalesBillForm, { SB_FORM_CSS, billingOf, cnsByOrderOf, n, num, money, fdate, dash, attachUrl } from './BetaSalesBill';
 
@@ -217,17 +217,21 @@ export default function BetaSales() {
   const runPrint = async b => {
     const ds = dcsOfBill(b, dcs), billNo = b.billNo || b.billId, dcNos = ds.map(d => d.dcNo || d.dcId).join(', ');
     const args = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
+    const ewbDc0 = ds.find(d => d.ewayPdf);   // the portal e-way bill PDF, kept on the DC
+    const ewbDc = ewbDc0 && { ...ewbDc0, ewayBillNo: ewbDc0.ewayBillNo || b.ewayBillNo || '' };
     const what = ds.length ? await printChoose({
       title: `Print — ${billNo}`, text: `Bill ${billNo} has delivery challan ${dcNos}. What do you want to print?`,
       options: [
         { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` },
         { value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' },
         { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNos}` },
+        ...(ewbDc ? [{ value: 'ewb', label: 'Only E-Way Bill', hint: `E-Way Bill ${ewbDc.ewayBillNo} — as the portal prints it` }] : []),
       ],
     }) : 'bill';
     if (!what) return;
-    printBusyStart(what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'dc' ? `Preparing — DC ${dcNos}` : 'Preparing — DC + Invoice');
+    printBusyStart(what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'dc' ? `Preparing — DC ${dcNos}` : what === 'ewb' ? `Preparing — E-Way Bill ${ewbDc.ewayBillNo}` : 'Preparing — DC + Invoice');
     try {
+      if (what === 'ewb') { await printPortalEwb({ dc: ewbDc, company: selectedCompany }); return; }
       if (what === 'bill') { await printSalesBill(args); return; }
       if (what === 'dc' && ds.length === 1) { await printDC({ dc: ds[0], company: selectedCompany, user }); return; }
       const pages = what === 'both' ? [await printSalesBill({ ...args, collect: true })] : [];

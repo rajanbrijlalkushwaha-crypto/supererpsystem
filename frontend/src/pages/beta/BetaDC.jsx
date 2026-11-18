@@ -218,18 +218,20 @@ export default function BetaDC() {
   /* a DC tied to a tax invoice: "what to print?" window (DC only · DC + invoice · invoice only), which then shows the progress bar */
   const doPrint = async (dc, withValue = true) => {
     const b = billOfDc(dc, bills), dcNo = dc.dcNo || dc.dcId, billNo = b && (b.billNo || b.billId);
-    const what = b ? await printChoose({
-      title: `Print — ${dcNo}`, text: `DC ${dcNo} has tax invoice ${billNo}. What do you want to print?`,
+    const ewb = dc.ewayPdf && dc.ewayBillNo;   // the portal e-way bill PDF is saved with this DC
+    const what = b || ewb ? await printChoose({
+      title: `Print — ${dcNo}`, text: b ? `DC ${dcNo} has tax invoice ${billNo}. What do you want to print?` : `What do you want to print for DC ${dcNo}?`,
       options: [
         { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNo}` },
-        { value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' },
-        { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` },
+        ...(b ? [{ value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' }, { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` }] : []),
+        ...(ewb ? [{ value: 'ewb', label: 'Only E-Way Bill', hint: `E-Way Bill ${dc.ewayBillNo} — as the portal prints it` }] : []),
       ],
     }) : 'dc';
     if (!what) return;
-    printBusyStart(what === 'dc' ? `Preparing — DC ${dcNo}` : what === 'bill' ? `Preparing — Bill ${billNo}` : 'Preparing — DC + Invoice');
+    printBusyStart(what === 'dc' ? `Preparing — DC ${dcNo}` : what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'ewb' ? `Preparing — E-Way Bill ${dc.ewayBillNo}` : 'Preparing — DC + Invoice');
     try {
       if (what === 'dc') { await printOnly(dc, withValue); return; }
+      if (what === 'ewb') { await printPortalEwb({ dc, company: selectedCompany }); return; }
       const billArgs = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
       if (what === 'bill') { await printSalesBill(billArgs); return; }
       await printMerged([await printDC({ dc, company: selectedCompany, user, withValue, collect: true }), await printSalesBill({ ...billArgs, collect: true })]);
