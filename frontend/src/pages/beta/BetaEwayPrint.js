@@ -34,6 +34,8 @@ export async function ewayOfDc(dc, co = {}) {
     toAddr: addr(dc.shippingAddress, dc.shippingCity, [dc.shippingState, dc.shippingPincode].filter(Boolean).join(' - ')),
     billTo: dc.customerName || '', value: n(dc.grandTotal) || items.reduce((s, x) => s + x.taxable + x.tax, 0), items,
     transporterId: dc.transporterId || '', transporterName: dc.transporterName || '', transDoc: [dc.transDocNo, dc.transDocDate].filter(Boolean).join(' / '),
+    transDocNo: dc.transDocNo || '', transDocDate: d(dc.transDocDate), irn: dc.irnNo || '', ackNo: dc.acknNo || '', ackDate: d(dc.acknDate),
+    fromState: dc.dispatchState || co.state || '', toState: dc.shippingState || '',
     vehicle: dc.vehicleNo || '', vehicleFrom: dc.dispatchPlace || co.city || '', cewb: dc.cewbNo || '', qr, cancelled,
     ref: `DC ${dc.dcNo || dc.dcId}${dc.invoiceNo ? ` · Invoice ${dc.invoiceNo}` : ''}`,
   };
@@ -56,67 +58,104 @@ export function ewayOfBill(b, co = {}) {
     toAddr: tidy(b.ewayShipTo || addr(b.shipToAddress, b.shipToCity, [b.shipToState, b.shipToPincode].filter(Boolean).join(' - '))),
     billTo: b.partyName || b.billToName || '', value: n(b.grandTotal), items,
     transporterId: b.transporterId || '', transporterName: b.transporterName || '', transDoc: [b.transDocNo, b.transDocDate].filter(Boolean).join(' / '),
+    transDocNo: b.transDocNo || '', transDocDate: d(b.transDocDate), irn: b.irnNo || '', ackNo: b.acknNo || '', ackDate: d(b.acknDate),
+    fromState: co.state || '', toState: b.shipToState || b.partyState || '',
     vehicle: b.vehicleNo || '', vehicleFrom: b.vehicleFromCity || '', cewb: b.cewbNo || '', qr: b.ewayQr || '', cancelled: false,
     ref: `Tax Invoice ${b.billNo || b.billId}`,
   };
 }
 
-/* ── the page ── */
+/* ── the page: laid out like the e-way bill printed from the portal / Tally —
+ *    header (document, IRN, QR) then 1. e-Way Bill Details · 2. Address · 3. Goods · 4. Transportation · 5. Vehicle,
+ *    each a bordered section with its heading ── */
 const CSS = `
-.ewp { font-family:Arial, Helvetica, sans-serif; font-size:8.8pt; color:#000; line-height:1.35; }
+.ewp { font-family:Arial, Helvetica, sans-serif; font-size:8.6pt; color:#000; line-height:1.35; border:1px solid #000; }
 .ewp table { width:100%; border-collapse:collapse; font-size:inherit; }
-.ewp .bx { margin-top:-1px; } .ewp .bx:first-child { margin-top:0; }
-.ewp .bx > tbody > tr > td, .ewp .bx > thead > tr > th { border:1px solid #000; padding:4px 7px; vertical-align:top; text-align:left; }
-.ewp .hd td { vertical-align:middle !important; }
-.ewp .ttl { font-size:15pt; font-weight:bold; letter-spacing:3px; text-align:center !important; }
-.ewp .ttl small { display:block; font-size:7.8pt; font-weight:normal; letter-spacing:.6px; margin-top:2px; }
-.ewp .qr { width:34mm; text-align:center !important; } .ewp .qr img { width:30mm; height:30mm; display:block; margin:0 auto; } .ewp .qr div { font-size:7pt; margin-top:2px; }
-.ewp .sec { font-weight:bold; font-size:8.6pt; text-transform:uppercase; letter-spacing:.5px; }
-.ewp .kv td { border:0 !important; padding:1.5px 4px 1.5px 0 !important; vertical-align:top; }
-.ewp .kv td:first-child { width:118px; color:#333; white-space:nowrap; } .ewp .kv td:nth-child(2) { width:8px; }
-.ewp .lbl { font-size:7.2pt; color:#333; text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
-.ewp .pn { font-size:9.6pt; font-weight:bold; }
-.ewp .gd th { font-size:7.8pt; text-align:center !important; font-weight:bold; }
-.ewp .c { text-align:center !important; } .ewp .r { text-align:right !important; white-space:nowrap; }
-.ewp .big { font-size:12pt; font-weight:bold; letter-spacing:1px; }
-.ewp .cx { font-weight:bold; letter-spacing:1px; }
-.ewp .nt { font-size:7.6pt; color:#333; padding-top:4px; display:flex; justify-content:space-between; }
+.ewp td, .ewp th { padding:1.5px 4px; vertical-align:top; text-align:left; }
+.ewp .top { display:flex; align-items:flex-start; gap:8px; padding:6px 8px 7px; }
+.ewp .top .l { flex:1; min-width:0; }
+.ewp .ttl { text-align:center; font-size:13pt; font-weight:bold; margin-bottom:6px; }
+.ewp .ttl span { border-bottom:1.5px solid #000; padding:0 6px 1px; }
+.ewp .qr { width:31mm; text-align:center; font-size:7.4pt; font-weight:bold; }
+.ewp .qr img { width:29mm; height:29mm; display:block; margin:2px auto 0; }
+.ewp .kv td:first-child { width:62px; white-space:nowrap; } .ewp .kv td:nth-child(2) { width:8px; padding:1.5px 2px; }
+.ewp .kv b { word-break:break-all; }
+.ewp .sec { border-top:1px solid #000; }
+.ewp .sh { font-weight:bold; font-size:8.8pt; padding:3px 8px; border-bottom:1px solid #000; }
+.ewp .sb { padding:4px 8px 5px; }
+.ewp .g3 .k { white-space:nowrap; padding-right:2px; } .ewp .g3 .s { padding:1.5px 2px; }
+.ewp .g3 .v { font-weight:bold; padding-right:10px; }
+.ewp .two { display:flex; } .ewp .two > div { flex:1; padding:4px 8px 5px; min-width:0; } .ewp .two > div + div { border-left:1px solid #000; }
+.ewp .two + .two { border-top:1px solid #000; }
+.ewp .lb { font-weight:bold; margin-bottom:2px; }
+.ewp .gd th { font-weight:bold; border-bottom:1px solid #000; padding:3px 6px; vertical-align:bottom; }
+.ewp .gd td { padding:3px 6px; border-bottom:1px solid #999; }
+.ewp .gd th + th, .ewp .gd td + td { border-left:1px solid #000; }
+.ewp .gd tr:last-child td { border-bottom:0; }
+.ewp .gd tr.fill td { border-bottom:0; padding:0; }
+.ewp .tt table, .ewp .g3 { table-layout:fixed; }
+.ewp .r { text-align:right !important; white-space:nowrap; } .ewp .c { text-align:center !important; }
+.ewp .tt { border-top:1px solid #000; padding:4px 8px; }
+.ewp .tt td { padding:1.5px 4px; } .ewp .tt .k { white-space:nowrap; } .ewp .tt .s { width:8px; } .ewp .tt .v { font-weight:bold; white-space:nowrap; }
+.ewp .cx { font-weight:bold; letter-spacing:1px; border:1.5px solid #000; padding:0 6px; margin-left:6px; font-size:9pt; }
+.ewp .nt { border-top:1px solid #000; font-size:7.2pt; padding:3px 8px; display:flex; justify-content:space-between; }
 .pb { break-before:page; page-break-before:always; }
 @media screen { .pb { margin:8mm -8mm 0; border-top:10px solid #E4E7EC; padding:8mm 8mm 0; } }`;
 
+const MODES = { road: '1 - Road', rail: '2 - Rail', air: '3 - Air', ship: '4 - Ship' };
+const modeOf = m => { const t = String(m || '').trim(); return MODES[t.toLowerCase()] || t; };
+
 export function ewayPage(e) {
-  const kv = (k, v) => `<tr><td>${k}</td><td>:</td><td><b>${v ? esc(v) : '—'}</b></td></tr>`;
+  const v = x => (x == null || x === '' ? '' : esc(x));
+  const kv = (k, x) => `<tr><td>${k}</td><td>:</td><td><b>${v(x)}</b></td></tr>`;
+  const cols = k => `<colgroup>${Array.from({ length: k }, () => '<col style="width:100px"><col style="width:12px"><col>').join('')}</colgroup>`;
+  const g3 = rows => `<table class="g3">${cols(rows[0].length)}<tbody>${rows.map(r => `<tr>${r.map(([k, x]) => `<td class="k">${k}</td><td class="s">:</td><td class="v">${v(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   const tot = e.items.reduce((s, x) => ({ taxable: s.taxable + x.taxable, tax: s.tax + x.tax }), { taxable: 0, tax: 0 });
+  const inter = e.fromGstin && e.toGstin && e.fromGstin.slice(0, 2) !== e.toGstin.slice(0, 2);
+  const rate = g => (inter ? `${QTY.format(g)}` : `${QTY.format(g / 2)}+${QTY.format(g / 2)}`);
+  const other = Math.round((n(e.value) - tot.taxable - tot.tax) * 100) / 100;
+  const half = Math.round(tot.tax * 50) / 100;
+  const t = (k, x) => `<td class="k">${k}</td><td class="s">:</td><td class="v">${x}</td>`;
   const body = `<div class="ewp">
-<table class="bx hd"><colgroup><col>${e.qr ? '<col style="width:36mm">' : ''}</colgroup><tbody><tr>
-  <td><div class="ttl">E-WAY BILL<small>${e.cancelled ? '<span class="cx">CANCELLED</span> · ' : ''}${esc(e.ref)}</small></div>
-    <table class="kv" style="margin-top:6px"><tbody>
-      <tr><td>E-Way Bill No.</td><td>:</td><td><span class="big">${esc(e.no)}</span></td></tr>
-      ${kv('Generated Date', e.genDate)}${kv('Generated By', e.genBy)}${kv('Valid Upto', e.validUpto)}
-      ${kv('Mode', e.mode)}${kv('Approx Distance', e.distance ? `${e.distance} KM` : '')}
-    </tbody></table></td>
-  ${e.qr ? `<td class="qr"><img src="${e.qr}" alt=""><div>E-Way Bill QR</div></td>` : ''}
-</tr></tbody></table>
-<table class="bx"><tbody><tr><td class="sec">Part - A</td></tr></tbody></table>
-<table class="bx"><colgroup><col style="width:50%"><col></colgroup><tbody>
-  <tr><td><div class="lbl">From (Supplier)</div><div class="pn">${esc(e.fromName)}</div><div>GSTIN: <b>${esc(e.fromGstin || '—')}</b></div>
-      <div class="lbl" style="margin-top:4px">Place of Dispatch</div><div>${esc(e.fromAddr || '—')}</div></td>
-    <td><div class="lbl">To (Recipient)</div><div class="pn">${esc(e.toName)}</div><div>GSTIN: <b>${esc(e.toGstin || 'URP')}</b></div>
-      <div class="lbl" style="margin-top:4px">Place of Delivery</div><div>${esc(e.toAddr || '—')}</div></td></tr>
-  <tr><td><table class="kv"><tbody>${kv('Document', e.docType)}${kv('Document No.', e.docNo)}${kv('Document Date', e.docDate)}</tbody></table></td>
-    <td><table class="kv"><tbody>${kv('Supply Type', e.supplyType)}${kv('Transaction Type', e.txnType)}${kv('Value of Goods', `₹ ${amt(e.value)}`)}</tbody></table></td></tr>
-</tbody></table>
-<table class="bx gd"><colgroup><col style="width:24px"><col><col style="width:62px"><col style="width:70px"><col style="width:84px"><col style="width:46px"><col style="width:76px"></colgroup>
-  <thead><tr><th>Sl</th><th>Product / Description</th><th>HSN</th><th>Qty</th><th>Taxable ₹</th><th>GST</th><th>Tax ₹</th></tr></thead>
-  <tbody>${e.items.map((x, i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(x.name)}</b></td><td class="c">${esc(String(x.hsn).trim())}</td><td class="c">${QTY.format(x.qty)} ${esc(x.unit)}</td><td class="r">${amt(x.taxable)}</td><td class="c">${QTY.format(x.gst)}%</td><td class="r">${amt(x.tax)}</td></tr>`).join('')}
-    <tr><td></td><td class="r"><b>Total</b></td><td></td><td></td><td class="r"><b>${amt(tot.taxable)}</b></td><td></td><td class="r"><b>${amt(tot.tax)}</b></td></tr></tbody>
-</table>
-<table class="bx"><tbody><tr><td class="sec">Part - B</td></tr></tbody></table>
-<table class="bx"><colgroup><col style="width:50%"><col></colgroup><tbody><tr>
-  <td><table class="kv"><tbody>${kv('Mode', e.mode)}${kv('Vehicle No.', e.vehicle)}${kv('From', e.vehicleFrom)}${kv('CEWB No.', e.cewb)}</tbody></table></td>
-  <td><table class="kv"><tbody>${kv('Transporter ID', e.transporterId)}${kv('Transporter', e.transporterName)}${kv('Trans. Doc No. / Date', e.transDoc)}</tbody></table></td>
-</tr></tbody></table>
-<div class="nt"><span>Printed from the e-way bill details saved in Super ERP System — the e-way bill itself is on the GST e-way bill portal.</span><span>${esc(e.no)}</span></div>
+<div class="top"><div class="l">
+  <div class="ttl"><span>e-Way Bill</span>${e.cancelled ? '<span class="cx">CANCELLED</span>' : ''}</div>
+  <table class="kv"><tbody>${kv('Doc No.', `${e.docType} - ${e.docNo || ''}`)}${kv('Date', e.docDate)}</tbody></table>
+  ${e.irn || e.ackNo ? `<table class="kv" style="margin-top:5px"><tbody>${kv('IRN', e.irn)}${kv('Ack No.', e.ackNo)}${kv('Ack Date', e.ackDate)}</tbody></table>` : ''}
+</div>${e.qr ? `<div class="qr">e-Way Bill<img src="${e.qr}" alt=""></div>` : ''}</div>
+
+<div class="sec"><div class="sh">1. e-Way Bill Details</div><div class="sb">${g3([
+    [['e-Way Bill No.', e.no], ['Mode', modeOf(e.mode)], ['Generated Date', e.genDate]],
+    [['Generated By', e.genBy], ['Approx Distance', e.distance ? `${e.distance} KM` : ''], ['Valid Upto', e.validUpto]],
+    [['Supply Type', e.supplyType], ['Transaction Type', e.txnType], ['', '']],
+  ]).replace(/<td class="k"><\/td><td class="s">:<\/td>/, '<td class="k"></td><td class="s"></td>')}</div></div>
+
+<div class="sec"><div class="sh">2. Address Details</div>
+  <div class="two"><div><div class="lb">From</div><div>${v(e.fromName)}</div><div>GSTIN : ${v(e.fromGstin)}</div><div>${v(e.fromState)}</div></div>
+    <div><div class="lb">To</div><div>${v(e.toName)}</div><div>GSTIN : ${v(e.toGstin || 'URP')}</div><div>${v(e.toState)}</div></div></div>
+  <div class="two"><div><div class="lb">Dispatch From</div><div>${v(e.fromAddr)}</div></div>
+    <div><div class="lb">Ship To</div><div>${v(e.toAddr)}</div></div></div>
+</div>
+
+<div class="sec"><div class="sh">3. Goods Details</div>
+  <table class="gd"><colgroup><col style="width:62px"><col><col style="width:84px"><col style="width:96px"><col style="width:70px"></colgroup>
+    <thead><tr><th>HSN Code</th><th>Product Name &amp; Desc</th><th class="r">Quantity</th><th class="r">Taxable Amt</th><th class="c">Tax Rate<br>(${inter ? 'I' : 'C+S'})</th></tr></thead>
+    <tbody>${e.items.map(x => `<tr><td><b>${v(String(x.hsn).trim())}</b></td><td>${v(x.name)}</td><td class="r">${QTY.format(x.qty)} ${v(String(x.unit).toUpperCase())}</td><td class="r"><b>${amt(x.taxable)}</b></td><td class="c">${rate(x.gst)}</td></tr>`).join('')}<tr class="fill" style="height:${Math.max(0, 78 - e.items.length * 7)}mm"><td></td><td></td><td></td><td></td><td></td></tr></tbody>
+  </table>
+  <div class="tt"><table>${cols(3)}<tbody>
+    <tr>${t('Tot. Taxable Amt', amt(tot.taxable))}${t('Other Amt', other ? amt(other) : '')}${t('Total Inv Amt', amt(e.value))}</tr>
+    <tr>${inter ? `${t('IGST Amt', amt(tot.tax))}<td></td><td></td><td></td>` : `${t('CGST Amt', amt(half))}${t('SGST Amt', amt(tot.tax - half))}`}<td></td><td></td><td></td></tr>
+  </tbody></table></div>
+</div>
+
+<div class="sec"><div class="sh">4. Transportation Details</div><div class="sb">${g3([
+    [['Transporter ID', e.transporterId], ['Doc No.', e.transDocNo]],
+    [['Name', e.transporterName], ['Date', e.transDocDate]],
+  ])}</div></div>
+
+<div class="sec"><div class="sh">5. Vehicle Details</div><div class="sb">${g3([
+    [['Vehicle No.', e.vehicle], ['From', e.vehicleFrom], ['CEWB No.', e.cewb]],
+  ])}</div></div>
+<div class="nt"><span>${v(e.ref)}</span><span>e-Way Bill No. ${v(e.no)}</span></div>
 </div>`;
   return { css: CSS, body };
 }

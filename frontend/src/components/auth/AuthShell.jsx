@@ -120,7 +120,7 @@ const CSS = `
 .as-sub { margin:6px 0 26px; text-align:center; font-size:15.5px; color:#3D555A; line-height:1.5; }
 .as-mode { display:flex; justify-content:center; margin:-14px 0 20px; }
 .as-mode span { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:600; color:#0B5F68; background:#E6F3F4; border:1px solid #CDE6E9; }
-.as-bottom { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:6px 20px; padding:0 30px 16px; font-size:11.5px; color:#5E7A80; }
+.as-bottom { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:6px 20px; padding:0 30px 16px; font-size:12px; font-weight:700; color:#000; }
 .as-bottom span { display:inline-flex; align-items:center; gap:6px; }
 
 .as-tabs { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; margin-bottom:24px; border-radius:12px; background:#EAF4F5; border:1px solid #D4EBEE; }
