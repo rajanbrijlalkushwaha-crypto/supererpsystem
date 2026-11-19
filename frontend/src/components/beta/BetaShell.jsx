@@ -19,7 +19,6 @@ import BetaOrders from '../../pages/beta/BetaOrders';
 import BetaProforma from '../../pages/beta/BetaProforma';
 import BetaReceipt from '../../pages/beta/BetaReceipt';
 import BetaDues from '../../pages/beta/BetaDues';
-import BetaEway from '../../pages/beta/BetaEway';
 import BetaSales from '../../pages/beta/BetaSales';
 import BetaDC from '../../pages/beta/BetaDC';
 import BetaPasswords from '../../pages/beta/BetaPasswords';
@@ -73,7 +72,7 @@ const NAV_COLOR = {
 const SHORTCUTS = {
   '/dashboard': 'DASH',
   '/beta/client': 'CLNT', '/beta/order': 'SO', '/beta/order?tab=create': 'SOC', '/beta/proforma': 'PI', '/beta/receipt': 'RCPT', '/beta/sales': 'SINV',
-  '/beta/delivery-challan': 'DC', '/beta/eway-bill': 'EWB', '/beta/return-note': 'RN', '/beta/warranty': 'WTY', '/beta/completion': 'CC', '/beta/bank-guarantee': 'BG', '/beta/dues': 'SDUE',
+  '/beta/delivery-challan': 'DC', '/beta/return-note': 'RN', '/beta/warranty': 'WTY', '/beta/completion': 'CC', '/beta/bank-guarantee': 'BG', '/beta/dues': 'SDUE',
   '/beta/vendor': 'VEND', '/beta/po': 'PO', '/beta/payment': 'PPAY', '/beta/purchase-bill': 'PBILL', '/beta/grn': 'GRN', '/beta/return-vendor': 'RTV', '/beta/purchase-dues': 'PDUE',
   '/beta/jobcode': 'JOB',
   '/beta/mfg/job-sheet': 'JS', '/beta/mfg/bom': 'BOM', '/beta/mfg/raw-material': 'RM', '/beta/mfg/issue': 'MI', '/beta/mfg/mrp': 'MRP', '/beta/mfg/qc': 'QC', '/beta/mfg/cost': 'PCOST',
@@ -100,7 +99,7 @@ const SIDE_NAV = [
   { key: 'so', label: 'Sales Order', icon: 'file', perm: 'salesOrder',
     sub: [
       { label: 'Client', path: '/beta/client' },
-      { label: 'Order', path: '/beta/order' }, { label: 'Proforma Invoice', path: '/beta/proforma' }, { label: 'Receipt', path: '/beta/receipt' }, { label: 'Sales', path: '/beta/sales' }, { label: 'Delivery Challan', path: '/beta/delivery-challan' }, { label: 'E-Way Bill', path: '/beta/eway-bill' }, { label: 'Return Note', path: '/beta/return-note' },
+      { label: 'Order', path: '/beta/order' }, { label: 'Proforma Invoice', path: '/beta/proforma' }, { label: 'Receipt', path: '/beta/receipt' }, { label: 'Sales', path: '/beta/sales' }, { label: 'Delivery Challan', path: '/beta/delivery-challan' }, { label: 'Return Note', path: '/beta/return-note' },
       { label: 'Warranty Certificate', path: '/beta/warranty' }, { label: 'Completion Certificate', path: '/beta/completion' }, { label: 'BG / FD / SD', path: '/beta/bank-guarantee', perm: 'accDeposit' }, { label: 'Dues', path: '/beta/dues' },
     ] },
   { key: 'po', label: 'Purchase Order', icon: 'cart', perm: 'purchaseOrder',
@@ -527,7 +526,6 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/proforma') && <BetaProforma key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/receipt') && <BetaReceipt key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/dues') && <BetaDues key={selectedCompany?.companyId || 'none'} />}
-          {pathname.startsWith('/beta/eway-bill') && <BetaEway key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/sales') && <BetaSales key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/delivery-challan') && <BetaDC key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/passwords') && <BetaPasswords key={selectedCompany?.companyId || 'none'} />}

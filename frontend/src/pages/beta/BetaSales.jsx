@@ -10,8 +10,9 @@ import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
-import { printSalesBill } from './BetaSalesPrint';
-import { printDC, dcsOfBill, printMerged, printPortalEwb } from './BetaDCPrint';
+import { printSalesBill, billFull } from './BetaSalesPrint';
+import { printDC, dcsOfBill, printMerged } from './BetaDCPrint';
+import { ewayOfBill, ewayOfDc, printEwayOnly } from './BetaEwayPrint';
 import { printChoose, printBusyStart, printBusyDone } from '../../printBusy';
 import SalesBillForm, { SB_FORM_CSS, billingOf, cnsByOrderOf, n, num, money, fdate, dash, attachUrl } from './BetaSalesBill';
 
@@ -213,29 +214,36 @@ export default function BetaSales() {
 
   const tab = editing ? 'create' : urlTab;
   const go = k => { setEditing(null); navigate(`/beta/sales?tab=${k}`); };
-  /* Print → "what to print?" window (bill only · DC + invoice in one PDF · DC only), which then shows the progress bar */
+  /* Print → "what to print?" window (bill only · DC + invoice in one PDF · DC only · e-way bill only), which then shows
+     the progress bar. The e-way bill prints as its own page after the invoice / DC — once in a PDF. */
   const runPrint = async b => {
     const ds = dcsOfBill(b, dcs), billNo = b.billNo || b.billId, dcNos = ds.map(d => d.dcNo || d.dcId).join(', ');
     const args = { b, order: soMap[String(b.orderId)], company: selectedCompany, user };
-    const ewbDc0 = ds.find(d => d.ewayPdf);   // the portal e-way bill PDF, kept on the DC
-    const ewbDc = ewbDc0 && { ...ewbDc0, ewayBillNo: ewbDc0.ewayBillNo || b.ewayBillNo || '' };
-    const what = ds.length ? await printChoose({
-      title: `Print — ${billNo}`, text: `Bill ${billNo} has delivery challan ${dcNos}. What do you want to print?`,
+    const co = selectedCompany || {};
+    const dcEwb = ds.find(d => String(d.ewayBillNo || '').trim());
+    const ewbNo = String(b.ewayBillNo || '').trim() || dcEwb?.ewayBillNo;
+    let billEwb = null;   // read after the choice: the bill's PDF adds the QR, places, GSTINs and transport
+    const what = ds.length || ewbNo ? await printChoose({
+      title: `Print — ${billNo}`, text: ds.length ? `Bill ${billNo} has delivery challan ${dcNos}. What do you want to print?` : `What do you want to print for bill ${billNo}?`,
       options: [
-        { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}` },
-        { value: 'both', label: 'DC + Invoice', hint: 'Both in one PDF' },
-        { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNos}` },
-        ...(ewbDc ? [{ value: 'ewb', label: 'Only E-Way Bill', hint: `E-Way Bill ${ewbDc.ewayBillNo} — as the portal prints it` }] : []),
+        { value: 'bill', label: 'Only Bill', hint: `Tax Invoice ${billNo}${ewbNo ? ' + e-way bill page' : ''}` },
+        ...(ds.length ? [{ value: 'both', label: 'DC + Invoice', hint: `Both in one PDF${ewbNo ? ' + e-way bill page' : ''}` }, { value: 'dc', label: 'Only DC', hint: `Delivery Challan ${dcNos}${ewbNo ? ' + e-way bill page' : ''}` }] : []),
+        ...(ewbNo ? [{ value: 'ewb', label: 'Only E-Way Bill', hint: `E-Way Bill ${ewbNo} — one page` }] : []),
       ],
     }) : 'bill';
     if (!what) return;
-    printBusyStart(what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'dc' ? `Preparing — DC ${dcNos}` : what === 'ewb' ? `Preparing — E-Way Bill ${ewbDc.ewayBillNo}` : 'Preparing — DC + Invoice');
+    printBusyStart(what === 'bill' ? `Preparing — Bill ${billNo}` : what === 'dc' ? `Preparing — DC ${dcNos}` : what === 'ewb' ? `Preparing — E-Way Bill ${ewbNo}` : 'Preparing — DC + Invoice');
     try {
-      if (what === 'ewb') { await printPortalEwb({ dc: ewbDc, company: selectedCompany }); return; }
+      if (String(b.ewayBillNo || '').trim()) billEwb = ewayOfBill(await billFull(b, co), co);
+      if (what === 'ewb') { printEwayOnly(billEwb || await ewayOfDc(dcEwb, co), b.partyName); return; }
       if (what === 'bill') { await printSalesBill(args); return; }
-      if (what === 'dc' && ds.length === 1) { await printDC({ dc: ds[0], company: selectedCompany, user }); return; }
+      if (what === 'dc' && ds.length === 1) { await printDC({ dc: ds[0], company: selectedCompany, user, ewayFrom: billEwb }); return; }
+      // in one PDF: the bill's e-way page once (after the invoice); a DC with another e-way number keeps its own
       const pages = what === 'both' ? [await printSalesBill({ ...args, collect: true })] : [];
-      for (const dc of ds) pages.push(await printDC({ dc, company: selectedCompany, user, collect: true }));   // eslint-disable-line no-await-in-loop
+      for (const dc of ds) {
+        const same = billEwb && (!String(dc.ewayBillNo || '').trim() || String(dc.ewayBillNo).trim() === billEwb.no);
+        pages.push(await printDC({ dc, company: selectedCompany, user, collect: true, ewayBlock: what === 'dc' || !same, ewayFrom: what === 'dc' && pages.length === 0 ? billEwb : null }));   // eslint-disable-line no-await-in-loop
+      }
       await printMerged(pages);
     } catch { printBusyDone(); setNote('Could not prepare the print. Restart the backend if this is the first time.'); }
   };
