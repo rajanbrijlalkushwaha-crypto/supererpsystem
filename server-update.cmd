@@ -5,7 +5,15 @@ color 0B
 cd /d "%~dp0"
 
 rem  needs administrator (PM2 restart + auto start) - ask once, then run again as administrator
-net session >nul 2>nul || (echo Asking for administrator permission... & powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" & exit /b)
+net session >nul 2>nul && goto admin
+echo Asking for administrator permission...
+set "SELF=%~f0"
+rem  /k keeps the administrator window open at the end, so any error stays on screen
+powershell -NoProfile -Command "Start-Process cmd.exe -ArgumentList ('/k ' + [char]34 + $env:SELF + [char]34) -Verb RunAs"
+echo The update continues in the new "Administrator" window - this one closes in 10 seconds.
+timeout /t 10 >nul
+exit /b
+:admin
 rem  git: trust this folder when run as administrator
 set GIT_CONFIG_COUNT=1
 set GIT_CONFIG_KEY_0=safe.directory
@@ -65,6 +73,7 @@ popd
 
 echo.
 echo [4/4] Restarting the ERP with PM2 (stop, then start - no extra window)...
+if not defined ERPDIR set "ERPDIR=%CD%"
 call "%ERPDIR%\pm2-start.cmd" quiet
 if errorlevel 1 goto failstart
 title Epsilon ERP - Update from GitHub
