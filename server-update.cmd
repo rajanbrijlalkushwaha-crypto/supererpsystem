@@ -76,6 +76,18 @@ echo [4/4] Restarting the ERP with PM2 (stop, then start - no extra window)...
 if not defined ERPDIR set "ERPDIR=%CD%"
 call "%ERPDIR%\pm2-start.cmd" quiet
 if errorlevel 1 goto failstart
+rem  safety net: if the ERP does not answer after the PM2 start, show why and start it the old way (own window)
+powershell -NoProfile -Command "for ($i=0; $i -lt 6; $i++) { try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://localhost:%PORT%/; exit 0 } catch { Start-Sleep -Seconds 5 } }; exit 1"
+if errorlevel 1 (
+  color 0E
+  echo.
+  echo The ERP did not start with PM2. Its last messages:
+  call pm2 logs epsilon-erp --lines 30 --nostream
+  call pm2 delete epsilon-erp >nul 2>nul
+  echo.
+  echo Starting the ERP in its own window instead - keep the "Epsilon ERP" window open.
+  start "Epsilon ERP" cmd /k "cd /d "%ERPDIR%" && node server.js"
+)
 title Epsilon ERP - Update from GitHub
 
 echo.
