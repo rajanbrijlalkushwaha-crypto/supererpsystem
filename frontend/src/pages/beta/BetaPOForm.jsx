@@ -80,6 +80,28 @@ export function poQtyOf(order, pos, skipId) {
   return soLines(order).map((it, idx) => mine.reduce((s, p) => s + (p.items || []).filter(pl => onSoLine(pl, it, idx)).reduce((a, pl) => a + n(pl.qty), 0), 0));
 }
 
+/* per order line: qty our own factory makes — the job sheets of this order (not cancelled / rejected), matched by
+   item code or name; order lines with the same product are filled one after the other.
+   → { qty: [per line], jobs: [per line: [{ jobNo, status, qty }]] }. Such qty is not bought — it is not due for a PO. */
+const MFG_OFF = ['cancelled', 'rejected'];
+const prodKey = it => String(it.itemCode || it.description || it.itemName || it.material || '').toLowerCase().trim();
+export function mfgOf(order, jobs) {
+  const lines = soLines(order);
+  const qty = lines.map(() => 0); const list = lines.map(() => []);
+  const pool = {};
+  (jobs || []).filter(j => String(j.soId) === String(order.orderId) && !MFG_OFF.includes(String(j.status || '').toLowerCase()))
+    .forEach(j => ((j.outputItems || []).length ? j.outputItems : [{ itemName: j.itemName, itemCode: j.itemCode, qty: j.qtyRequired }]).forEach(it => {
+      const k = prodKey(it); const q0 = n(it.mfgQty != null ? it.mfgQty : it.qty); if (!k || !(q0 > 0)) return;
+      (pool[k] = pool[k] || []).push({ jobNo: j.jobNo || `#${j.id}`, status: j.status || '', left: q0 });
+    }));
+  lines.forEach((it, i) => {
+    if (it.addon) return;
+    let need = n(it.qty);
+    (pool[prodKey(it)] || []).forEach(x => { if (need <= 0 || x.left <= 0) return; const t = Math.min(need, x.left); x.left -= t; need -= t; qty[i] += t; list[i].push({ jobNo: x.jobNo, status: x.status, qty: t }); });
+  });
+  return { qty, jobs: list };
+}
+
 const parseSpec = raw => { try { const p = typeof raw === 'string' ? JSON.parse(raw || '') : raw; return p && typeof p === 'object' ? p : {}; } catch { return {}; } };
 /* spec text + drawings written for one product on the sales order */
 const soSpecOf = (o, it) => {
@@ -198,7 +220,7 @@ const PO_CSS = `
 @media (max-width: 1100px) { .po-sum { grid-template-columns:1fr; } .po-sum > .cf-card + .cf-card { border-left:none; } }
 `;
 
-export default function POForm({ companyId, company, vendors, orders, pos, editPo, presetOrderId, presetItems, onSaved, onClose }) {
+export default function POForm({ companyId, company, vendors, orders, pos, jobs = [], editPo, presetOrderId, presetItems, onSaved, onClose }) {
   const isEdit = !!editPo;
   /* PO for: a sales order (as before) or Stock — raw material for the godown, items from the Raw Material master */
   const [forStock, setForStock] = useState(() => editPo?.poType === 'Stock');
@@ -270,6 +292,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
   const [files, setFiles] = useState([]);   // new uploads
   const [oldAtt, setOldAtt] = useState(() => (isEdit ? (editPo.attachments || editPo.documents || []).filter(Boolean) : []));
   const [errs, setErrs] = useState({});
+  const errsNow = useRef({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const fileRef = useRef(null);
@@ -330,8 +353,9 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
   /* only: item positions chosen in Order Pending — those are ticked, the rest shown unticked */
   const openImport = (o, only) => {
     const done = poQtyOf(o, pos, editPo?.orderId);
-    setImp({ order: o, done, rows: soLines(o).map((it, i) => {
-      const due = Math.max(0, n(it.qty) - done[i]);
+    const mf = mfgOf(o, jobs);
+    setImp({ order: o, done, mfg: mf.qty, rows: soLines(o).map((it, i) => {
+      const due = Math.max(0, n(it.qty) - done[i] - mf.qty[i]);
       return { on: only ? only.includes(i) : due > 0, qty: due > 0 ? String(due) : '0' };
     }) });
   };
@@ -349,6 +373,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
     setErrs(e => ({ ...e, order: undefined })); setMsg(null);
     if (soLines(o).length) openImport(o);
   };
+  const impOver = !!imp && soLines(imp.order).some((it, i) => imp.rows[i].on && n(imp.rows[i].qty) > Math.max(0, n(it.qty) - imp.done[i] - ((imp.mfg || [])[i] || 0)) + 0.0001);
   const doImport = () => {
     const { order: o, rows } = imp;
     const picked = soLines(o).map((it, i) => ({ it, i, r: rows[i] })).filter(x => x.r.on && n(x.r.qty) > 0);
@@ -433,12 +458,30 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
       if (!(n(l.qty) > 0)) e[`l${i}qty`] = 'Qty';
       if (String(l.rate).trim() === '' || n(l.rate) < 0) e[`l${i}rate`] = 'Rate';
     });
+    // an order line: no more on POs than the order qty less other POs and what our factory makes (job sheets)
+    const so = !forStock && v.orderId ? (orders || []).find(o => String(o.orderId) === String(v.orderId)) : null;
+    if (so) {
+      const done = poQtyOf(so, pos, editPo?.orderId); const mf = mfgOf(so, jobs).qty; const sl = soLines(so);
+      const mine = {};
+      lines.forEach((l, i) => { if (Number.isInteger(l.soLine) && l.itemName.trim()) (mine[l.soLine] = mine[l.soLine] || []).push([i, n(l.qty)]); });
+      Object.entries(mine).forEach(([si, arr]) => {
+        const it = sl[+si]; if (!it) return;
+        const left = Math.max(0, n(it.qty) - done[+si] - mf[+si]);
+        const tot = arr.reduce((a, [, q]) => a + q, 0);
+        if (tot > left + 0.0001) {
+          const why = mf[+si] ? `${mf[+si]} made in our factory (job sheet)` : '';
+          arr.forEach(([i]) => { e[`l${i}qty`] = `Max ${left}`; });
+          e.over = `${soItemName(it)}: only ${left} left for a PO (order ${n(it.qty)}${done[+si] ? `, ${done[+si]} on other POs` : ''}${why ? `, ${why}` : ''}).`;
+        }
+      });
+    }
+    errsNow.current = e;
     setErrs(e);
     return !Object.keys(e).length;
   };
 
   const save = async status => {
-    if (!check()) { setMsg({ ok: false, text: 'Please correct the fields marked in red.' }); return; }
+    if (!check()) { setMsg({ ok: false, text: errsNow.current.over || 'Please correct the fields marked in red.' }); return; }
     setBusy(true); setMsg(null);
     try {
       const fd = new FormData();
@@ -513,7 +556,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
   return (
     <div className="cf">
       <style>{CF_CSS + PO_CSS}</style>
-      {pickOpen && <OrderPicker orders={ordersOk} pos={pos} skipId={editPo?.orderId} onPick={pickOrder} onClose={() => setPickOpen(false)} />}
+      {pickOpen && <OrderPicker orders={ordersOk} pos={pos} jobs={jobs} skipId={editPo?.orderId} onPick={pickOrder} onClose={() => setPickOpen(false)} />}
       {vPick && <VendorPicker vendors={vendorsOk} pos={pos} onPick={pickVendor} onClose={() => setVPick(false)} />}
       {imp && (
         <div className="po-pkb" onMouseDown={e => { if (e.target === e.currentTarget) setImp(null); }}>
@@ -523,10 +566,10 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
             <div className="po-pkl">
               <table className="po-it">
                 <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="All items" checked={imp.rows.every(r => r.on)} onChange={e => { const on = e.target.checked; setImp(x => ({ ...x, rows: x.rows.map(r => ({ ...r, on })) })); }} /></th>
-                  <th>Item</th><th style={{ width: 80 }}>Unit</th><th style={{ width: 92 }}>Order Qty</th><th style={{ width: 100 }}>Already on PO</th><th style={{ width: 84 }}>Due</th><th style={{ width: 110 }}>This PO Qty</th></tr></thead>
+                  <th>Item</th><th style={{ width: 80 }}>Unit</th><th style={{ width: 92 }}>Order Qty</th><th style={{ width: 100 }}>Already on PO</th><th style={{ width: 110 }}>Our factory</th><th style={{ width: 84 }}>Due</th><th style={{ width: 110 }}>This PO Qty</th></tr></thead>
                 <tbody>
                   {soLines(imp.order).map((it, i) => {
-                    const r = imp.rows[i], due = Math.max(0, n(it.qty) - imp.done[i]), over = n(r.qty) > due;
+                    const r = imp.rows[i], mq = (imp.mfg || [])[i] || 0, due = Math.max(0, n(it.qty) - imp.done[i] - mq), over = r.on && n(r.qty) > due;
                     return (
                       <tr key={i} className={r.on ? 'on' : ''}>
                         <td className="c"><input type="checkbox" checked={r.on} aria-label={`Take ${soItemName(it)}`} onChange={e => { const on = e.target.checked; setImp(x => ({ ...x, rows: x.rows.map((y, j) => (j === i ? { ...y, on } : y)) })); }} /></td>
@@ -534,10 +577,11 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
                         <td className="c">{it.unit || 'NOS'}</td>
                         <td className="c">{n(it.qty)}</td>
                         <td className={`c${imp.done[i] ? ' warn' : ' mut'}`}>{imp.done[i] || 0}</td>
+                        <td className={`c${mq ? ' warn' : ' mut'}`} title={mq ? 'Made in our factory (job sheet) — not bought' : ''}>{mq ? `${mq} · Job sheet` : 0}</td>
                         <td className={`c${due > 0 ? ' due' : ' ok'}`}>{due > 0 ? due : '✓'}</td>
                         <td><input value={r.qty} inputMode="decimal" disabled={!r.on} className={over ? 'bad' : ''} aria-label={`This PO qty of ${soItemName(it)}`}
                           onChange={e => { const q = e.target.value; setImp(x => ({ ...x, rows: x.rows.map((y, j) => (j === i ? { ...y, qty: q } : y)) })); }} />
-                          {over && <small className="ovr">More than due</small>}</td>
+                          {over && <small className="ovr">{due > 0 ? `Only ${due} left` : mq ? 'Made in our factory' : 'Already on PO'}</small>}</td>
                       </tr>
                     );
                   })}
@@ -547,7 +591,8 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
             <div className="po-pkf">
               <span>{imp.rows.filter(r => r.on && n(r.qty) > 0).length} of {imp.rows.length} item(s) · rates are filled in the PO</span>
               <button type="button" className="cf-b ghost" onClick={() => setImp(null)}>Skip</button>
-              <button type="button" className="cf-b pri" autoFocus disabled={!imp.rows.some(r => r.on && n(r.qty) > 0)} onClick={doImport}>Import</button>
+              <button type="button" className="cf-b pri" autoFocus title={impOver ? 'A ticked item has more qty than is left for a PO' : undefined}
+                disabled={!imp.rows.some(r => r.on && n(r.qty) > 0) || impOver} onClick={doImport}>Import</button>
             </div>
           </div>
         </div>
@@ -828,14 +873,15 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
 }
 
 /* ── order search pop-up: Order / File No., date, client, client PO, products, qty, POs made ── */
-function OrderPicker({ orders, pos, skipId, onPick, onClose }) {
+function OrderPicker({ orders, pos, jobs, skipId, onPick, onClose }) {
   const [q, setQ] = useState('');
   const [onlyOpen, setOnlyOpen] = useState(true);   // orders that still have qty without a PO
   const [hi, setHi] = useState(0);
   const rows = useMemo(() => orders.map(o => {
     const done = poQtyOf(o, pos, skipId);
+    const mf = mfgOf(o, jobs).qty;
     const qty = soLines(o).reduce((s, it) => s + n(it.qty), 0);
-    const due = soLines(o).reduce((s, it, i) => s + Math.max(0, n(it.qty) - done[i]), 0);
+    const due = soLines(o).reduce((s, it, i) => s + Math.max(0, n(it.qty) - done[i] - mf[i]), 0);
     const poCount = (pos || []).filter(p => String(p.linkedSalesOrderId) === String(o.orderId) && p.status !== 'rejected' && String(p.orderId) !== String(skipId)).length;
     return { o, qty, due, poCount };
   }), [orders, pos, skipId]);

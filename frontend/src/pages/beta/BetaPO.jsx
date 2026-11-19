@@ -1,5 +1,6 @@
 /* Purchase Order → PO (beta): Create PO | PO List | Order Pending | Approval Pending | Reject.
- * Order Pending = sales orders that have no purchase order yet (a rejected PO does not count).
+ * Order Pending = sales orders that have no purchase order yet (a rejected PO does not count). Qty our factory
+ * makes (job sheets of the order) is not bought, so it is not pending for a PO — shown as "Our factory · job sheet".
  * Approval Pending = POs sent for approval — approve or reject them here. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { can } from '../../utils/permissions';
 import { CSS as SALES_CSS, BIG, fyOf, FyFilter, fyCounts, useClearSel } from './BetaSales';
 import { n, num, money, fdate, dash } from './BetaSalesBill';
-import POForm, { poQtyOf, onSoLine, soItemName, soLines } from './BetaPOForm';
+import POForm, { poQtyOf, mfgOf, onSoLine, soItemName, soLines } from './BetaPOForm';
 import { printPO } from './BetaPOPrint';
 
 const TABS = [
@@ -49,6 +50,7 @@ const PO_LIST_CSS = `
 .sb-t.op td.ck input { width:15px; height:15px; margin:2px 0 0; accent-color:#03444f; cursor:pointer; }
 .sb-t.op .blank { background:#FFFBF5 !important; }
 .sb-t.op .dueq { display:block; margin-top:2px; font-size:10.5px; font-weight:700; color:#B42318; }
+.sb-t.op td.mfv { background:#F4F3FF !important; color:#5925DC; } .sb-t.op td.mfv small { display:block; font-size:10.5px; font-weight:500; color:#6941C6; }
 .sb-t.op .okq { display:block; margin-top:2px; font-size:10.5px; font-weight:700; color:#067647; }
 .sb-t.op tbody.og.pick td { background:#E8F3F4; }
 .sb-t.op tr.chosen td.pr { font-weight:700; color:#03444f; }
@@ -68,6 +70,7 @@ export default function BetaPO() {
   const [pos, setPos] = useState(null);
   const [orders, setOrders] = useState(null);
   const [vendors, setVendors] = useState(null);
+  const [jobs, setJobs] = useState([]);   // job sheets: qty made in our factory is not bought
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
   const [createFor, setCreateFor] = useState(null);   // { orderId, k }
@@ -81,6 +84,7 @@ export default function BetaPO() {
     axios.get('/api/purchase-orders', p).then(r => setPos(Array.isArray(r.data) ? r.data : [])).catch(() => setPos([]));
     axios.get('/api/sales-orders', p).then(r => setOrders(Array.isArray(r.data) ? r.data : [])).catch(() => setOrders([]));
     axios.get('/api/vendors', p).then(r => setVendors(Array.isArray(r.data) ? r.data : [])).catch(() => setVendors([]));
+    axios.get('/api/manufacturing/job-sheets', p).then(r => setJobs(Array.isArray(r.data) ? r.data : [])).catch(() => setJobs([]));
   }, [companyId, reload]);
 
   const soMap = useMemo(() => { const m = {}; (orders || []).forEach(o => { m[String(o.orderId)] = o; }); return m; }, [orders]);
@@ -96,11 +100,12 @@ export default function BetaPO() {
   /* every order with its products: SO qty, what is on POs (vendor, PO no., qty, rate …) and what is still due */
   const orderRows = useMemo(() => (orders || []).filter(o => !SKIP_SO.includes(o.status)).map(o => {
     const done = poQtyOf(o, pos, null);
+    const mf = mfgOf(o, jobs);
     const mine = posByOrder[String(o.orderId)] || [];
-    const items = soLines(o).map((it, i) => ({ it, i, done: done[i], due: Math.max(0, n(it.qty) - done[i]),
+    const items = soLines(o).map((it, i) => ({ it, i, done: done[i], mfg: mf.qty[i], jobs: mf.jobs[i], due: Math.max(0, n(it.qty) - done[i] - mf.qty[i]),
       lines: mine.flatMap(p => (p.items || []).filter(pl => onSoLine(pl, it, i)).map(pl => ({ p, pl }))) })).filter(x => soItemName(x.it));
     return { o, items, due: items.reduce((a, x) => a + x.due, 0) };
-  }).sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, pos, posByOrder]);
+  }).sort((a, b) => String(b.o.orderDate || '').localeCompare(String(a.o.orderDate || ''))), [orders, pos, posByOrder, jobs]);
   const pendingOrders = useMemo(() => orderRows.filter(r => r.due > 0), [orderRows]);
 
   const loading = pos === null || orders === null || vendors === null;
@@ -135,10 +140,10 @@ export default function BetaPO() {
         <div className="sb-body" style={{ display: 'flex', flexDirection: 'column' }}>
           {loading ? <div className="sb-empty">Loading vendors, orders and POs…</div>
             : editing
-              ? <POForm key={`edit-${editing.orderId}`} companyId={companyId} company={selectedCompany} vendors={vendors} orders={orders} pos={pos} editPo={editing}
+              ? <POForm key={`edit-${editing.orderId}`} companyId={companyId} company={selectedCompany} vendors={vendors} orders={orders} pos={pos} jobs={jobs} editPo={editing}
                 onClose={() => { setEditing(null); navigate('/beta/po?tab=list'); }}
                 onSaved={(p, text) => { setEditing(null); setReload(x => x + 1); setNote(text); navigate('/beta/po?tab=list'); }} />
-              : <POForm key={createFor ? `for-${createFor.orderId}-${createFor.k}` : `new-${formKey}`} companyId={companyId} company={selectedCompany} vendors={vendors} orders={orders} pos={pos}
+              : <POForm key={createFor ? `for-${createFor.orderId}-${createFor.k}` : `new-${formKey}`} companyId={companyId} company={selectedCompany} vendors={vendors} orders={orders} pos={pos} jobs={jobs}
                 presetOrderId={createFor?.orderId} presetItems={createFor?.items}
                 onClose={() => { setCreateFor(null); setFormKey(k => k + 1); }}
                 onSaved={(p, text) => { setCreateFor(null); setFormKey(k => k + 1); setReload(x => x + 1); setNote(text); }} />}
@@ -341,17 +346,18 @@ function OrderPending({ rows, loading, slot, onPo }) {
               : shown.map(r => {
                 const id = String(r.o.orderId);
                 const mine = pick && String(pick.orderId) === id;
-                const span = r.items.reduce((s2, x) => s2 + Math.max(1, x.lines.length), 0) || 1;
+                const subOf = x => [...x.lines, ...(x.mfg > 0 ? [{ factory: true, jobs: x.jobs, qty: x.mfg }] : [])];
+                const span = r.items.reduce((s2, x) => s2 + Math.max(1, subOf(x).length), 0) || 1;
                 let first = true;
                 return (
                   <tbody key={id} className={`og${mine ? ' pick' : ''}`} onDoubleClick={() => onPo(r.o, mine ? pick.items : null)} title="Tick products and press Create PO · double-click to make the PO for this order">
                     {(r.items.length ? r.items : [null]).map((x, xi) => {
                       if (!x) return <tr key="none"><td /><td className="no">{r.o.orderNo}</td><td className="cl">{r.o.customerName || '—'}</td><td colSpan={10} className="mut">No products</td></tr>;
-                      const sub = x.lines.length ? x.lines : [null];
+                      const sub = subOf(x).length ? subOf(x) : [null];
                       const chosen = mine && pick.items.includes(x.i);
                       return sub.map((l, li) => {
                         const head = first; first = false;
-                        const v = l ? lineVal(l.pl) : null;
+                        const v = l && !l.factory ? lineVal(l.pl) : null;
                         return (
                           <tr key={`${xi}-${li}`} className={chosen ? 'chosen' : ''}>
                             {li === 0 && <td rowSpan={sub.length} className="ck" onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
@@ -363,9 +369,14 @@ function OrderPending({ rows, loading, slot, onPo }) {
                             {li === 0 && <>
                               <td rowSpan={sub.length} className="pr">{soItemName(x.it)}{x.it.addon ? <span className="po-ao">Add-on</span> : null}</td>
                               <td rowSpan={sub.length} className="c">{num(n(x.it.qty))} {x.it.unit || ''}
-                                {x.due > 0 ? <span className="dueq">Due {num(x.due)}</span> : <span className="okq">✓ on PO</span>}</td>
+                                {x.due > 0 ? <span className="dueq">Due {num(x.due)}</span> : <span className="okq">{x.mfg > 0 && x.mfg >= n(x.it.qty) ? '✓ made in factory' : x.mfg > 0 ? '✓ PO + factory' : '✓ on PO'}</span>}</td>
                             </>}
-                            {l ? <>
+                            {l && l.factory ? <>
+                              <td className="cl mfv">Our factory <small>made in-house</small></td>
+                              <td className="bno mfv" colSpan={2}>{l.jobs.map(j => j.jobNo).join(', ')}<small>Job sheet{l.jobs.length > 1 ? 's' : ''}{l.jobs.length === 1 && l.jobs[0].status ? ` · ${l.jobs[0].status}` : ''}</small></td>
+                              <td className="c">{num(l.qty)}</td>
+                              <td className="mfv" colSpan={4}><small>Not bought — no PO needed</small></td>
+                            </> : l ? <>
                               <td className="cl">{l.p.vendorName || '—'}</td>
                               <td className="bno">{l.p.poNo || l.p.poNumber || l.p.orderId}</td>
                               <td className="nw">{fdate(l.p.poDate)}</td>

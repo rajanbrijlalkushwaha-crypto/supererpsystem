@@ -21,7 +21,16 @@ const F = "'Inter', system-ui, sans-serif";
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dmy = v => { const x = v ? new Date(v) : null; return x && !isNaN(x) ? `${String(x.getDate()).padStart(2, '0')}-${MON[x.getMonth()]}-${x.getFullYear()}` : ''; };
 const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const errOf = (e, d) => e?.response?.data?.error || d;
+/* the server's own message; else why it failed (no answer / old server without this page / file too big…) */
+const errOf = (e, d) => {
+  const r = e?.response;
+  if (r?.data?.error) return r.data.error;
+  if (!r) return `${d} The server did not answer — check the connection.`;
+  if (r.status === 404) return `${d} The server does not have Office Suite yet — restart the ERP on the server (server-update.cmd / pm2-start.cmd).`;
+  if (r.status === 413) return `${d} The file is too big for the server.`;
+  if (r.status === 401) return `${d} Please sign in again.`;
+  return `${d} (server answered ${r.status})`;
+};
 const blobErr = async (e, d) => { try { const t = await e?.response?.data?.text?.(); return JSON.parse(t).error || d; } catch { return errOf(e, d); } };
 const AL = { l: [14, 10, 14, 10], c: [14, 10, 14, 10], r: [14, 10, 14, 10], j: [14, 14, 14, 14] };
 const AlignIco = ({ a }) => (

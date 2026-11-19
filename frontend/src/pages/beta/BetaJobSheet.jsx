@@ -17,6 +17,7 @@ import { printDepList, dmy } from './BetaCertPrint';
 import { ACC_CSS, today, words, hit, Picker } from './BetaAccKit';
 import { printJobSheet } from './BetaMfgPrint';
 import { useMfg, rawStock, bomFor, bomNeed } from './BetaMfgLib';
+import { poQtyOf } from './BetaPOForm';
 
 const ST = [['pending', 'Draft', '#F2F4F7', '#475467'], ['submitted', 'Submitted', '#EFF8FF', '#175CD3'], ['approved', 'Approved', '#F0F9FF', '#026AA2'],
   ['in-progress', 'In progress', '#FFFAEB', '#B54708'], ['completed', 'Completed', '#ECFDF3', '#067647'], ['rejected', 'Rejected', '#FEF3F2', '#B42318'], ['cancelled', 'Cancelled', '#F2F4F7', '#98A2B3']];
@@ -48,6 +49,7 @@ export default function BetaJobSheet() {
   const [rows, setRows] = useState(null);
   const [orders, setOrders] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [pos, setPos] = useState([]);
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
   const [note, setNote] = useState(null);
@@ -62,6 +64,8 @@ export default function BetaJobSheet() {
     if (!companyId) return;
     axios.get('/api/sales-orders', { params: { companyId } }).then(r => setOrders(Array.isArray(r.data) ? r.data : [])).catch(() => setOrders([]));
     axios.get('/api/manufacturing/locations', { params: { companyId } }).then(r => setLocations(Array.isArray(r.data) ? r.data : [])).catch(() => setLocations([]));
+    // purchase orders: qty bought from a vendor is not made in our factory
+    axios.get('/api/purchase-orders', { params: { companyId } }).then(r => setPos(Array.isArray(r.data) ? r.data : [])).catch(() => setPos([]));
   }, [companyId]);
   if (!can(user, 'jobSheets', 'view')) return <div className="sb"><style>{SALES_CSS}</style><div className="sb-empty" style={{ padding: 30 }}>You are not authorized to see Job Sheets.</div></div>;
   const cur = editing ? 'create' : (tab === 'create' && canAdd ? 'create' : 'list');
@@ -77,7 +81,7 @@ export default function BetaJobSheet() {
       </div>
       {note && <div className="sb-note" role="status">{note}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       {cur === 'create'
-        ? <div className="sb-body"><JobForm key={editing ? editing.id : 'new'} companyId={companyId} edit={editing} orders={orders} locations={locations} jobs={rows || []} mfg={mfg} onCancel={() => go('list')} onSaved={t => { setReload(x => x + 1); setNote(t); go('list'); }} /></div>
+        ? <div className="sb-body"><JobForm key={editing ? editing.id : 'new'} companyId={companyId} edit={editing} orders={orders} locations={locations} jobs={rows || []} pos={pos} mfg={mfg} onCancel={() => go('list')} onSaved={t => { setReload(x => x + 1); setNote(t); go('list'); }} /></div>
         : <JobList rows={rows} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={j => { setNote(null); setEditing(j); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
     </div>
   );
@@ -185,7 +189,7 @@ function JobList({ rows, company, user, slot, companyId, onEdit, onChanged }) {
 
 let bid = 1;
 const blankBom = () => ({ k: bid++, material: '', qty: '', uom: '', hsn: '', availableQty: '' });
-function JobForm({ companyId, edit, orders, locations, jobs, mfg, onSaved, onCancel }) {
+function JobForm({ companyId, edit, orders, locations, jobs, pos = [], mfg, onSaved, onCancel }) {
   const e0 = edit || {};
   const [soId, setSoId] = useState(e0.soId ? String(e0.soId) : '');
   const [v, setV] = useState(() => ({ locationId: e0.locationId ? String(e0.locationId) : '', startDate: e0.startDate || '', dueDate: e0.dueDate || '', notes: e0.notes || '',
@@ -200,11 +204,14 @@ function JobForm({ companyId, edit, orders, locations, jobs, mfg, onSaved, onCan
   // planned on other job sheets of this order (not cancelled / rejected), per product
   const planned = useMemo(() => { const m = {}; jobs.filter(j => String(j.soId) === soId && String(j.id) !== String(e0.id || '') && !['cancelled', 'rejected'].includes(j.status))
     .forEach(j => (j.outputItems || []).forEach(it => { m[keyOf(it)] = (m[keyOf(it)] || 0) + mfgQty(it); })); return m; }, [jobs, soId, e0.id]);
-  const items = useMemo(() => (so ? (so.items || []) : []).map(it => {
+  // per order line: qty already on purchase orders (bought from a vendor — not made here)
+  const onPo = useMemo(() => (so ? poQtyOf(so, pos, null) : []), [so, pos]);
+  const items = useMemo(() => (so ? (so.items || []) : []).map((it, i) => {
     const o = { itemName: it.description || it.itemName || it.material || '', itemCode: it.itemCode || it.item_code || '', soQty: Number(it.qty || it.quantity) || 0, uom: it.unit || it.uom || '', rate: Number(it.rate) || 0, type: it.type || '',
       bom: (it.bom || []).map(b => ({ material: b.itemName || b.material || b.name || '', qty: Number(b.qty) || 0, uom: b.unit || b.uom || '', hsn: b.hsnCode || b.hsn || '' })) };
-    const done = planned[keyOf(o)] || 0; return { ...o, alreadyMfg: done, pendingQty: Math.max(0, o.soQty - done) };
-  }).filter(it => it.itemName), [so, planned]);
+    const done = planned[keyOf(o)] || 0; const bought = onPo[i] || 0;
+    return { ...o, alreadyMfg: done, onPo: bought, pendingQty: Math.max(0, o.soQty - done - bought) };
+  }).filter(it => it.itemName), [so, planned, onPo]);
   const orderGroups = useMemo(() => [{ group: 'Sales orders', items: orders.filter(o => !['cancelled', 'rejected', 'draft'].includes(o.status) || String(o.orderId) === soId)
     .sort((a, b) => String(b.orderDate || '').localeCompare(String(a.orderDate || '')))
     .map(o => ({ key: String(o.orderId), label: `${String(o.orderNo || o.orderId).trim()} — ${o.customerName || o.party || ''}`, sub: o.customerPO ? `PO ${o.customerPO}` : '' })) }], [orders, soId]);
@@ -247,7 +254,7 @@ function JobForm({ companyId, edit, orders, locations, jobs, mfg, onSaved, onCan
     if (!soId && !bom.some(b => b.material.trim())) return setMsg({ k: 'err', t: 'Pick the sales order (or add the materials for a stock job).' });
     if (soId && !chosen.length) return setMsg({ k: 'err', t: 'Tick at least one product to make.' });
     const over = chosen.find(it => (Number(picked[keyOf(it)]) || 0) > it.pendingQty + 0.0001);
-    if (over) return setMsg({ k: 'err', t: `${over.itemName}: only ${q(over.pendingQty)} is pending on the order.` });
+    if (over) return setMsg({ k: 'err', t: `${over.itemName}: only ${q(over.pendingQty)} is left to make${over.onPo ? ` — ${q(over.onPo)} is on a purchase order (bought from a vendor)` : ''}${over.alreadyMfg ? `, ${q(over.alreadyMfg)} on other job sheets` : ''}.` });
     if (chosen.some(it => !(Number(picked[keyOf(it)]) > 0))) return setMsg({ k: 'err', t: 'Every ticked product needs a qty.' });
     if (v.startDate && v.dueDate && v.dueDate < v.startDate) return setMsg({ k: 'err', t: 'The due date is before the start date.' });
     setBusy(true);
@@ -289,10 +296,11 @@ function JobForm({ companyId, edit, orders, locations, jobs, mfg, onSaved, onCan
       </div>
       <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="box" size={13} /></span><b>Products to make</b><span className="grow" /><span style={{ fontSize: 12, color: '#fff' }}>{chosen.length} ticked</span></div>
         {!so ? <div className="sf-empty">{edit && e0.outputItems?.length ? `${e0.outputItems.map(i => `${i.itemName} × ${q(mfgQty(i))}`).join(', ')} — pick the order again to change the products.` : 'Pick the sales order to see its products.'}</div> : !items.length ? <div className="sf-empty">This order has no products.</div> : (
-          <table className="ac-lines"><thead><tr><th style={{ width: 34 }} /><th>Product</th><th className="r">SO qty</th><th className="r">On other job sheets</th><th className="r">Pending</th><th className="r" style={{ width: 130 }}>Make in this job</th><th>Unit</th></tr></thead>
+          <table className="ac-lines"><thead><tr><th style={{ width: 34 }} /><th>Product</th><th className="r">SO qty</th><th className="r">On PO (bought)</th><th className="r">On other job sheets</th><th className="r">Pending</th><th className="r" style={{ width: 130 }}>Make in this job</th><th>Unit</th></tr></thead>
             <tbody>{items.map(it => { const k = keyOf(it), on = picked[k] !== undefined; return (
               <tr key={k} style={!it.pendingQty && !on ? { color: '#98A2B3' } : undefined}><td style={{ textAlign: 'center' }}><input type="checkbox" checked={on} disabled={!it.pendingQty && !on} onChange={() => toggle(it)} style={{ width: 15, height: 15, accentColor: '#03444f' }} aria-label={`Make ${it.itemName}`} /></td>
-                <td><b>{it.itemName}</b>{it.bom.length > 0 && <span style={{ fontSize: 11, color: '#667085' }}> · BOM {it.bom.length}</span>}</td><td className="r">{q(it.soQty)}</td><td className="r">{q(it.alreadyMfg)}</td><td className="r"><b>{q(it.pendingQty)}</b>{!it.pendingQty && ' ✓'}</td>
+                <td><b>{it.itemName}</b>{it.bom.length > 0 && <span style={{ fontSize: 11, color: '#667085' }}> · BOM {it.bom.length}</span>}</td><td className="r">{q(it.soQty)}</td><td className="r" style={it.onPo ? { color: '#B54708', fontWeight: 600 } : undefined}>{q(it.onPo)}</td><td className="r">{q(it.alreadyMfg)}</td>
+                <td className="r"><b>{q(it.pendingQty)}</b>{!it.pendingQty && (it.onPo && !it.alreadyMfg ? <span style={{ fontSize: 11, color: '#B54708' }}> · on PO</span> : ' ✓')}</td>
                 <td>{on ? <input className="num" inputMode="decimal" value={picked[k]} onChange={e => setPicked(p => ({ ...p, [k]: num(e.target.value) }))} aria-label={`Qty ${it.itemName}`} /> : ''}</td><td>{it.uom}</td></tr>); })}</tbody>
           </table>)}
       </div>

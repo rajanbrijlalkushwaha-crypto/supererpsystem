@@ -133,20 +133,98 @@ app.use('/app/android', express.static(path.join(__dirname, 'mobile', 'release')
 /* the website is (re)built while the server runs (server update): until build/index.html is back, a short
    "being updated" page that checks again by itself — never a raw file error */
 const UPDATING_PAGE = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Super ERP System — updating</title><meta http-equiv="refresh" content="10">
+<title>Super ERP System — updating</title><noscript><meta http-equiv="refresh" content="15"></noscript>
 <style>
-:root{--bg:#EEF4F5;--card:#fff;--ink:#101828;--mut:#475467;--teal:#03444f;--line:#D5E2E4}
-@media (prefers-color-scheme:dark){:root{--bg:#0B1B1E;--card:#12272B;--ink:#E6F0F1;--mut:#9DB3B7;--teal:#5FB7C2;--line:#21414A}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,Segoe UI,Arial,sans-serif}
-.c{width:min(440px,100%);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:28px 26px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.08)}
-.m{width:52px;height:52px;margin:0 auto 14px;border-radius:12px;background:var(--teal);color:#fff;font:800 28px/52px Inter,Arial,sans-serif}
-h1{font-size:19px;margin:0 0 6px}p{margin:0 0 6px;color:var(--mut)}
-.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:18px 0 10px}.bar i{display:block;height:100%;width:35%;background:var(--teal);border-radius:3px;animation:g 1.4s ease-in-out infinite}
-@keyframes g{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}@media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%}}
-small{color:var(--mut)}button{margin-top:12px;padding:8px 18px;border:0;border-radius:6px;background:var(--teal);color:#fff;font:600 14px inherit;cursor:pointer}
-</style></head><body><div class="c" role="status"><div class="m">S</div><h1>Super ERP System is being updated</h1>
-<p>A new version is being installed on the server. It is back in a minute or two.</p><div class="bar"><i></i></div>
-<small>This page checks again by itself every 10 seconds.</small><br><button type="button" onclick="location.reload()">Try now</button></div></body></html>`;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;color:#fff;
+  font:15px/1.5 "Segoe UI",Tahoma,Inter,Arial,sans-serif;
+  background:radial-gradient(ellipse at 50% 38%,#2F7CC0 0%,#1A5A9C 32%,#0E3A6E 64%,#081F40 100%)}
+/* soft light streaks, like the Windows 7 update screen */
+body:before{content:"";position:fixed;inset:-20%;pointer-events:none;
+  background:radial-gradient(ellipse 60% 22% at 30% 20%,rgba(255,255,255,.10),transparent 70%),radial-gradient(ellipse 50% 18% at 75% 80%,rgba(120,200,255,.10),transparent 70%)}
+.w{position:relative;width:min(560px,100%);text-align:center}
+/* the ring of dots */
+.sp{position:relative;width:64px;height:64px;margin:0 auto 26px}
+.sp i{position:absolute;left:28px;top:0;width:8px;height:8px;border-radius:50%;background:#fff;transform-origin:4px 32px;opacity:0;animation:o 1.6s linear infinite}
+.sp i:nth-child(1){transform:rotate(0deg);animation-delay:0s}.sp i:nth-child(2){transform:rotate(45deg);animation-delay:.2s}
+.sp i:nth-child(3){transform:rotate(90deg);animation-delay:.4s}.sp i:nth-child(4){transform:rotate(135deg);animation-delay:.6s}
+.sp i:nth-child(5){transform:rotate(180deg);animation-delay:.8s}.sp i:nth-child(6){transform:rotate(225deg);animation-delay:1s}
+.sp i:nth-child(7){transform:rotate(270deg);animation-delay:1.2s}.sp i:nth-child(8){transform:rotate(315deg);animation-delay:1.4s}
+@keyframes o{0%{opacity:1}70%{opacity:.08}100%{opacity:.08}}
+h1{margin:0 0 4px;font-weight:300;font-size:clamp(22px,4.2vw,32px);letter-spacing:.3px;text-shadow:0 1px 3px rgba(0,0,0,.35)}
+.st{margin:0 0 22px;font-size:clamp(14px,2.4vw,17px);font-weight:300;color:#DCEBFA;min-height:1.5em}
+/* the Aero glass panel */
+.g{position:relative;margin:0 auto;padding:18px 20px 16px;border-radius:8px;text-align:left;
+  background:linear-gradient(180deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 46%,rgba(255,255,255,.05) 47%,rgba(255,255,255,.12) 100%);
+  border:1px solid rgba(255,255,255,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 0 0 1px rgba(0,0,0,.12),0 10px 34px rgba(0,0,0,.35);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.hd{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.lg{flex:none;width:42px;height:42px;border-radius:8px;display:grid;place-items:center;font:700 24px/1 "Segoe UI",Arial,sans-serif;color:#fff;
+  background:linear-gradient(180deg,#3E9BD8 0%,#1C6AAE 50%,#145893 51%,#1D73B8 100%);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 6px rgba(0,0,0,.35)}
+.hd b{display:block;font-size:15px;font-weight:600}.hd span{display:block;font-size:12.5px;color:#D6E8F8}
+/* the green Windows 7 progress bar, with its moving shine */
+.pb{position:relative;height:18px;border-radius:3px;overflow:hidden;border:1px solid #6E8FA8;
+  background:linear-gradient(180deg,#F3F3F3 0%,#DADADA 50%,#CFCFCF 51%,#E7E7E7 100%);box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.pb .f{position:absolute;inset:0 auto 0 0;width:8%;transition:width 1.2s ease;
+  background:linear-gradient(180deg,#B6F5A6 0%,#4FD43A 45%,#2DB51B 50%,#36C424 100%);box-shadow:inset 0 0 0 1px rgba(0,80,0,.18)}
+.pb .f:after{content:"";position:absolute;top:0;bottom:0;width:90px;left:-90px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:sh 2.2s ease-in-out infinite}
+@keyframes sh{0%{left:-90px}100%{left:100%}}
+.ln{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12.5px;color:#E3EFFA}
+.steps{list-style:none;margin:12px 0 0;padding:0;font-size:13px}
+.steps li{display:flex;align-items:center;gap:8px;padding:2px 0;color:rgba(255,255,255,.55)}
+.steps li:before{content:"";flex:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.45)}
+.steps li.on{color:#fff}.steps li.on:before{border-color:#fff;border-top-color:transparent;animation:r .9s linear infinite}
+.steps li.ok{color:#CFF5C6}.steps li.ok:before{border:0;background:#3CC92A;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+@keyframes r{to{transform:rotate(360deg)}}
+.ft{margin-top:22px;font-size:13px;color:#C9DDF1}
+button{margin-top:10px;padding:5px 22px;border-radius:3px;cursor:pointer;font:13px "Segoe UI",Tahoma,Arial,sans-serif;color:#111;
+  border:1px solid #707070;background:linear-gradient(180deg,#F2F2F2 0%,#EBEBEB 50%,#DDDDDD 51%,#CFCFCF 100%);box-shadow:inset 0 1px 0 #fff}
+button:hover{border-color:#3C7FB1;background:linear-gradient(180deg,#EAF6FD 0%,#D9F0FC 50%,#BEE6FD 51%,#A7D9F5 100%)}
+button:focus-visible{outline:1px dotted #fff;outline-offset:3px}
+@media (prefers-reduced-motion:reduce){.sp i,.pb .f:after,.steps li.on:before{animation:none}.sp i{opacity:.7}}
+</style></head><body>
+<main class="w" role="status" aria-live="polite">
+  <div class="sp" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <h1>Super ERP System is updating</h1>
+  <p class="st" id="st">Installing the new version — please wait</p>
+  <div class="g">
+    <div class="hd"><div class="lg" aria-hidden="true">S</div><div><b>Installing updates</b><span>Your data is safe — only the program is being replaced.</span></div></div>
+    <div class="pb" aria-hidden="true"><div class="f" id="f"></div></div>
+    <div class="ln"><span id="ph">Stage 1 of 3</span><span id="tm">0:00</span></div>
+    <ul class="steps">
+      <li id="s1" class="on">Getting the new version</li>
+      <li id="s2">Building the screens</li>
+      <li id="s3">Starting Super ERP System</li>
+    </ul>
+  </div>
+  <div class="ft">Do not close this page — it opens Super ERP System by itself when the update is done.<br>
+    <button type="button" onclick="location.reload()">Try now</button></div>
+</main>
+<script>
+(function(){
+  var t0=Date.now(),st=document.getElementById('st'),f=document.getElementById('f'),ph=document.getElementById('ph'),tm=document.getElementById('tm');
+  var steps=[document.getElementById('s1'),document.getElementById('s2'),document.getElementById('s3')];
+  var msgs=['Installing the new version — please wait','Building the new screens — this takes a minute or two','Almost there — starting Super ERP System'];
+  function stage(sec){return sec<20?0:sec<110?1:2}
+  function tick(){
+    var sec=Math.floor((Date.now()-t0)/1000),s=stage(sec);
+    tm.textContent=Math.floor(sec/60)+':'+('0'+sec%60).slice(-2);
+    // the bar only shows that it is working; it never reaches the end until the ERP is back
+    var p=s===0?8+sec*1.1:s===1?30+(sec-20)*0.5:Math.min(96,75+(sec-110)*0.12);
+    f.style.width=Math.min(96,p).toFixed(1)+'%';
+    ph.textContent='Stage '+(s+1)+' of 3';st.textContent=msgs[s];
+    steps.forEach(function(el,i){el.className=i<s?'ok':i===s?'on':''});
+  }
+  function check(){
+    fetch(location.href,{cache:'no-store',credentials:'same-origin'}).then(function(r){
+      if(r.status===200){f.style.width='100%';steps.forEach(function(el){el.className='ok'});st.textContent='Done — opening Super ERP System…';setTimeout(function(){location.reload()},700)}
+    }).catch(function(){});
+  }
+  tick();setInterval(tick,1000);setInterval(check,5000);
+})();
+</script></body></html>`;
 app.get('*', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'), err => {
