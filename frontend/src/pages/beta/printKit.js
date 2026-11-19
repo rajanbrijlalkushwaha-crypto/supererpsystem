@@ -243,44 +243,57 @@ export async function loadSigns(sign) {
   if (!sign?.type || !sign?.id) return {};
   try { return (await axios.get('/api/sign/doc', { params: { type: sign.type, id: sign.id } })).data || {}; } catch { return {}; }
 }
-/* A page stretched to exactly one A4 (its blank #fillrow under the goods) gets taller when signatures go in: the
-   signature, name and date add about 33 mm to the signature boxes — which pushed the signature and footer on to
-   a second page. So with signatures the blank row gives that space back (and gets it back when they are removed). */
-const SIGN_ADD_PX = 135;   // 22 mm signature + name + date lines (+ a little room)
-function refitFill(doc, signed) {
-  try {
-    if (doc.body && doc.body.dataset.signRoom) return;   // the page keeps a fixed space for signatures (Delivery Challan)
-    const fill = doc.getElementById('fillrow'); if (!fill) return;
-    const tds = [...fill.querySelectorAll('td')]; if (!tds.length) return;
-    if (!tds[0].dataset.fillH) {
-      const h = parseFloat(tds[0].style.height);
-      if (!h) return;   // not stretched to the page — nothing to give back
-      tds.forEach(td => { td.dataset.fillH = String(h); });
-    }
-    const orig = parseFloat(tds[0].dataset.fillH);
-    const h = signed ? Math.max(30, orig - SIGN_ADD_PX) : orig;
-    tds.forEach(td => { td.style.height = `${h}px`; });
-  } catch { /* the page as it is */ }
+/* A page stretched to exactly one A4 (its blank #fillrow under the goods) can get taller when signatures go in (the
+   signature, name and date in the signature boxes) — which would push the footer on to a second page. So the blank row
+   gives back exactly what the page grew by — measured, not guessed: a page whose signature boxes have a fixed height
+   (Sales Order, PO…) does not grow, and its blank row stays as it is (it used to shrink and leave the page short). */
+const SIGN_ADD_PX = 135;   // only when the page cannot be measured (not laid out): 22 mm signature + name + date lines
+function fillCells(doc) {
+  if (doc.body && doc.body.dataset.signRoom) return null;   // the page keeps a fixed space for signatures (Delivery Challan)
+  const fill = doc.getElementById('fillrow'); if (!fill) return null;
+  const tds = [...fill.querySelectorAll('td')]; if (!tds.length) return null;
+  if (!tds[0].dataset.fillH) {
+    const h = parseFloat(tds[0].style.height);
+    if (!h) return null;   // not stretched to the page — nothing to give back
+    tds.forEach(td => { td.dataset.fillH = String(h); });
+  }
+  return tds;
+}
+const usedH = doc => { const b = doc.body; if (!b) return 0; const r = b.getBoundingClientRect(); return r.height ? b.scrollHeight : 0; };
+function withRefit(doc, signed, put) {
+  let tds = null;
+  try { tds = fillCells(doc); } catch { tds = null; }
+  if (!tds) { put(); return; }
+  const orig = parseFloat(tds[0].dataset.fillH);
+  tds.forEach(td => { td.style.height = `${orig}px`; });
+  const before = usedH(doc);
+  put();
+  if (!signed) return;
+  const after = usedH(doc);
+  const z = parseFloat(tds[0].closest('body > *')?.style.zoom) || 1;   // a page shrunk to fit one page measures smaller
+  const grow = before && after ? Math.max(0, after - before) / z : SIGN_ADD_PX;
+  if (grow) tds.forEach(td => { td.style.height = `${Math.max(30, orig - grow)}px`; });
 }
 export function applySigns(doc, signs) {
   try {
-    doc.querySelectorAll('.esig, .esig-i, .esig-n, .esig-d').forEach(e => e.remove());
-    doc.querySelectorAll('[data-esig-wrap]').forEach(e => e.removeAttribute('data-esig-wrap'));
     const any = SIGN_ROLES.some(([role]) => signs?.[role]?.img);
-    refitFill(doc, any);
-    if (!any) return;
-    if (!doc.getElementById('esig-css')) { const st = doc.createElement('style'); st.id = 'esig-css'; st.textContent = SIG_CSS; doc.head.appendChild(st); }
-    const labels = [...doc.body.querySelectorAll('b, span, div, td, p, strong, th')].filter(e => !e.children.length);
-    SIGN_ROLES.forEach(([role, , rx]) => {
-      const s = signs?.[role] && signs[role].img ? signs[role] : null;
-      labels.filter(e => rx.test(e.textContent || '')).forEach(el => {
-        // signed or not, every column gets the same parts so the three boxes are the same size
-        const top = doc.createElement('span'); top.className = 'esig-i';
-        if (s) { const img = doc.createElement('img'); img.src = s.img; img.alt = ''; top.appendChild(img); }
-        const nm = doc.createElement('span'); nm.className = 'esig-n'; nm.textContent = s ? s.name : '\u00a0';
-        const dt = doc.createElement('span'); dt.className = 'esig-d'; dt.textContent = s && s.at ? sdmy(s.at) : '\u00a0';
-        el.insertBefore(top, el.firstChild); el.appendChild(nm); el.appendChild(dt);
-        el.setAttribute('data-esig-wrap', '1');
+    withRefit(doc, any, () => {
+      doc.querySelectorAll('.esig, .esig-i, .esig-n, .esig-d').forEach(e => e.remove());
+      doc.querySelectorAll('[data-esig-wrap]').forEach(e => e.removeAttribute('data-esig-wrap'));
+      if (!any) return;
+      if (!doc.getElementById('esig-css')) { const st = doc.createElement('style'); st.id = 'esig-css'; st.textContent = SIG_CSS; doc.head.appendChild(st); }
+      const labels = [...doc.body.querySelectorAll('b, span, div, td, p, strong, th')].filter(e => !e.children.length);
+      SIGN_ROLES.forEach(([role, , rx]) => {
+        const s = signs?.[role] && signs[role].img ? signs[role] : null;
+        labels.filter(e => rx.test(e.textContent || '')).forEach(el => {
+          // signed or not, every column gets the same parts so the three boxes are the same size
+          const top = doc.createElement('span'); top.className = 'esig-i';
+          if (s) { const img = doc.createElement('img'); img.src = s.img; img.alt = ''; top.appendChild(img); }
+          const nm = doc.createElement('span'); nm.className = 'esig-n'; nm.textContent = s ? s.name : '\u00a0';
+          const dt = doc.createElement('span'); dt.className = 'esig-d'; dt.textContent = s && s.at ? sdmy(s.at) : '\u00a0';
+          el.insertBefore(top, el.firstChild); el.appendChild(nm); el.appendChild(dt);
+          el.setAttribute('data-esig-wrap', '1');
+        });
       });
     });
   } catch { /* the page as it is */ }
@@ -289,9 +302,24 @@ export function applySigns(doc, signs) {
 export async function signHtml(html, sign) {
   const signs = await loadSigns(sign);
   if (!Object.keys(signs).length) return html;
-  const d = new DOMParser().parseFromString(String(html), 'text/html');
-  applySigns(d, signs);
-  return '<!DOCTYPE html>' + d.documentElement.outerHTML;
+  // laid out in a hidden A4-wide frame, so the blank row gives back exactly what the signatures add
+  const fr = document.createElement('iframe');
+  fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;visibility:hidden';
+  document.body.appendChild(fr);
+  try {
+    await new Promise(res => { fr.onload = res; fr.srcdoc = String(html); setTimeout(res, 4000); });
+    const d = fr.contentDocument;
+    await Promise.all([...d.images].filter(i => !i.complete).map(i => new Promise(r => { i.onload = r; i.onerror = r; setTimeout(r, 2000); })));
+    applySigns(d, signs);
+    await Promise.all([...d.images].filter(i => !i.complete).map(i => new Promise(r => { i.onload = r; i.onerror = r; setTimeout(r, 2000); })));
+    applySigns(d, signs);   // again, now that the signature pictures have their size
+    return '<!DOCTYPE html>' + d.documentElement.outerHTML;
+  } catch {
+    const d = new DOMParser().parseFromString(String(html), 'text/html');
+    applySigns(d, signs);
+    return '<!DOCTYPE html>' + d.documentElement.outerHTML;
+  } finally { fr.remove(); }
 }
 const SIGN_CSS = `
 .cps { position:absolute; right:12px; top:46px; z-index:6; width:330px; background:#fff; border:1px solid #DCE6E8; border-radius:10px; box-shadow:0 14px 34px rgba(16,24,40,.22); padding:10px; font:13px Inter, Arial, sans-serif; color:#101828; }

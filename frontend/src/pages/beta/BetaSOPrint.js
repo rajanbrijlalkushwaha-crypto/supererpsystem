@@ -4,6 +4,7 @@
 import axios from 'axios';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
+import { termsHtml } from './BetaTerms';
 import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
@@ -111,6 +112,7 @@ tr.st td { font-weight:bold; }
 tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !important; }
 .words { font-size:9pt; }
 .pre { white-space:normal; }
+.tod .tl { color:#333; white-space:nowrap; }
 .sig td { height:38mm; vertical-align:top !important; }
 .sig .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; }
 /* three equal columns, labels on one line at the bottom, each signature right above its own label */
@@ -149,7 +151,6 @@ tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !importan
     <td>${party('Consignee (Ship To)', o.shipToName || o.customerName, o.shipToAddress || o.address,
       [o.shipToCity || o.customerCity, o.shipToPincode || o.customerPincode].filter(Boolean).join(' - '), o.shipToGstin || o.customerGstin, o.shipToState || o.customerState, shipContact)}</td>
   </tr>
-  ${o.paymentTerms ? `<tr><td colspan="2"><b>Payment Terms:</b> ${esc(o.paymentTerms)}</td></tr>` : ''}
   </tbody>
 </table>
 
@@ -186,6 +187,8 @@ ${scope.length ? `<!-- scope -->
   <tr class="hd"><th style="width:24px">Sl</th><th>Scope Item</th><th style="width:70px">Client Scope</th><th style="width:70px">Our Scope</th><th>Remarks</th></tr>
   ${scope.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.item || s.name || s.description)}</td><td class="c">${s.clientScope ? '✓' : ''}</td><td class="c">${s.ourScope ? '✓' : ''}</td><td>${esc(s.remarks || '')}</td></tr>`).join('')}
 </tbody></table>` : ''}
+
+${termsHtml(o)}
 
 ${hasWty || bg.applicable ? `<!-- warranty / bank guarantee -->
 <table><tbody>

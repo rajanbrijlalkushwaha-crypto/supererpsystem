@@ -223,6 +223,10 @@ const soUploadFields = upload.fields([
   { name: 'specUploadFiles', maxCount: 20 },
 ]);
 
+/* terms of delivery: only known keys, short text */
+const TERM_KEYS = ['delivery', 'priceBasis', 'freight', 'packing', 'unloading', 'installation', 'insurance', 'inspection', 'taxes', 'warranty'];
+const terms = t => { const o = {}; TERM_KEYS.forEach(k => { const v = String((t && t[k]) || '').trim(); if (v) o[k] = v.slice(0, 300); }); return o; };
+
 router.post('/', soUploadFields, async (req, res) => {
   try {
     const b = req.body;
@@ -279,7 +283,7 @@ router.post('/', soUploadFields, async (req, res) => {
       billingTerms: str('billingTerms'), creditLimit: str('creditLimit'), dueDate: str('dueDate'),
       productSpecs: str('productSpecs'), technicalDetails: str('technicalDetails'),
       drawingNumber: str('drawingNumber'), version: str('version'),
-      customFields: jp('customFields'), termsConditions: str('termsConditions'),
+      customFields: jp('customFields'), termsConditions: str('termsConditions'), commercialTerms: terms(jp('commercialTerms', {})),
       internalNotes: str('internalNotes'), customerNotes: str('customerNotes'),
       // Legacy compat
       party: str('customerName'), partyGstin: str('customerGstin'),
@@ -400,13 +404,14 @@ router.put('/:orderId', soUploadFields, async (req, res) => {
       deliveryAddr: str('deliveryAddr') || ex.deliveryAddr || '', shippingAddr: str('shippingAddr') || ex.shippingAddr || '',
       dispatchMode: str('dispatchMode') || ex.dispatchMode || '', transporterName: str('transporterName') || ex.transporterName || '',
       vehicleNumber: str('vehicleNumber') || ex.vehicleNumber || '', deliveryInstructions: str('deliveryInstructions') || ex.deliveryInstructions || '',
-      paymentTerms: str('paymentTerms') || ex.paymentTerms || '', paymentMode: str('paymentMode') || ex.paymentMode || '',
+      paymentTerms: b.paymentTerms !== undefined ? str('paymentTerms') : (ex.paymentTerms || ''), paymentMode: str('paymentMode') || ex.paymentMode || '',
       billingTerms: str('billingTerms') || ex.billingTerms || '', creditLimit: str('creditLimit') || ex.creditLimit || '',
       dueDate: str('dueDate') || ex.dueDate || '',
       productSpecs: str('productSpecs') || ex.productSpecs || '', technicalDetails: str('technicalDetails') || ex.technicalDetails || '',
       drawingNumber: str('drawingNumber') || ex.drawingNumber || '', version: str('version') || ex.version || '',
       customFields: jp('customFields', ex.customFields || []),
-      termsConditions: str('termsConditions') || ex.termsConditions || '',
+      termsConditions: b.termsConditions !== undefined ? str('termsConditions') : (ex.termsConditions || ''),
+      commercialTerms: b.commercialTerms !== undefined ? terms(jp('commercialTerms', {})) : (ex.commercialTerms || {}),
       internalNotes: str('internalNotes') || ex.internalNotes || '',
       customerNotes: str('customerNotes') || ex.customerNotes || '',
       party: str('customerName') || ex.party || '', partyGstin: str('customerGstin') || ex.partyGstin || '',

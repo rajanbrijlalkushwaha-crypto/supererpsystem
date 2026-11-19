@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Svg } from '../../components/ui/Icon';
+import { TermsRows, PAY_SUGGEST, standardTerms, cleanTerms } from './BetaTerms';
 
 const TEAL = '#03444f';
 const F = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -47,6 +48,7 @@ const EMPTY = {
   clientId: '', customerName: '', contactPerson: '', mobile: '', email: '',
   billName: '', billAddress: '', billCity: '', billState: '', billPincode: '', billGstin: '', billContact: '', billMobile: '',
   shipName: '', shipAddress: '', shipCity: '', shipState: '', shipPincode: '', shipGstin: '', shipContact: '', shipMobile: '',
+  ct: {}, tnc: '',   // terms of delivery (commercialTerms) and other terms & conditions
 };
 
 const CSS = `
@@ -360,6 +362,7 @@ const fromOrder = o => {
     ...EMPTY,
     orderNo: o.orderNo || '', orderDate: o.orderDate || today(), quotationRef: o.quotationRef || '', quotationDate: o.quotationDate || '',
     customerPO: o.customerPO || '', poDate: o.poDate || '', paymentTerms: o.paymentTerms || '',
+    ct: o.commercialTerms && typeof o.commercialTerms === 'object' ? { ...o.commercialTerms } : {}, tnc: o.termsConditions || '',
     clientId: String(o.customerCode || ''), customerName: o.customerName || o.party || '', contactPerson: o.contactPerson || '', mobile: o.mobile || '', email: o.email || '',
     billName: o.customerName || o.party || '', billAddress: o.address || '', billCity: o.customerCity || '', billState: o.customerState || '',
     billPincode: String(o.customerPincode || ''), billGstin: o.customerGstin || '', billContact: o.billToContact || '', billMobile: o.billToMobile || '',
@@ -466,7 +469,7 @@ export default function BetaCreateSO({ companyId, company, orders = [], onSaved,
       }
     }
     if (w.charges) { setCharges(f.charges); setPlain(f.plain); if (f.charges.length || f.plain.length) done.push('charges'); }
-    if (w.terms && f.v.paymentTerms) { setV(o => ({ ...o, paymentTerms: f.v.paymentTerms })); done.push('payment terms'); }
+    if (w.terms && (f.v.paymentTerms || Object.keys(f.v.ct || {}).length || f.v.tnc)) { setV(o => ({ ...o, paymentTerms: f.v.paymentTerms, ct: { ...(f.v.ct || {}) }, tnc: f.v.tnc || '' })); done.push('payment & delivery terms'); }
     setCopyFrom(null); setErrs({});
     setMsg({ ok: !note, text: `Copied ${done.join(', ') || 'nothing'} from ${src.orderNo || src.orderId}. Check qty, rate and due dates before saving.${note}` });
     topRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -604,6 +607,8 @@ export default function BetaCreateSO({ companyId, company, orders = [], onSaved,
       put('orderNo', v.orderNo.trim()); put('orderDate', v.orderDate); put('quotationRef', v.quotationRef); put('quotationDate', v.quotationDate);
       put('customerPO', v.customerPO); put('poDate', v.poDate); put('dueDate', firstDue); put('deliveryDate', firstDue);
       put('paymentTerms', v.paymentTerms.trim());
+      put('commercialTerms', JSON.stringify(cleanTerms(v.ct)));
+      put('termsConditions', String(v.tnc || '').trim());
       put('customerName', v.customerName); put('customerCode', v.clientId); put('customerGstin', v.billGstin);
       put('contactPerson', v.contactPerson); put('mobile', v.mobile); put('email', v.email);
       put('address', v.billAddress); put('customerCity', v.billCity); put('customerState', v.billState); put('customerPincode', v.billPincode);
@@ -719,7 +724,6 @@ export default function BetaCreateSO({ companyId, company, orders = [], onSaved,
                 <th className="sm">Date <i>*</i></th><td>{inp('orderDate', { type: 'date' })}{err('orderDate')}</td></tr>
               <tr><th>Quote Ref. No.</th><td>{inp('quotationRef')}</td><th className="sm">Date</th><td>{inp('quotationDate', { type: 'date' })}</td></tr>
               <tr><th>Client PO No.</th><td>{inp('customerPO')}</td><th className="sm">Date</th><td>{inp('poDate', { type: 'date' })}</td></tr>
-              <tr><th>Payment Terms</th><td colSpan={3}>{inp('paymentTerms', { placeholder: 'e.g. 30% advance, balance within 30 days of delivery' })}</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -899,6 +903,20 @@ export default function BetaCreateSO({ companyId, company, orders = [], onSaved,
           </div>
         </div>
 
+        {/* terms of delivery */}
+        <div className="so-card">
+          {head('ledger', 'Terms of Delivery', 'Payment, delivery period, price basis, freight, installation, warranty… — printed on the order', <><span className="grow" />
+            <button type="button" className="so-add" disabled={busy} title="Fill the empty terms with the usual choice — change any of them after"
+              onClick={() => setV(o => ({ ...o, paymentTerms: o.paymentTerms || PAY_SUGGEST[3], ct: standardTerms(o.ct) }))}>Fill standard terms</button></>)}
+          <table className="so-kv"><tbody>
+            <tr><th><label htmlFor="so-paymentTerms">Payment Terms</label></th><td colSpan={3}>{inp('paymentTerms', { placeholder: 'e.g. 50% advance, 40% before dispatch, 10% after installation', list: 'so-pay-terms', autoComplete: 'off' })}
+              <datalist id="so-pay-terms">{PAY_SUGGEST.map(x => <option key={x} value={x} />)}</datalist></td></tr>
+            <TermsRows terms={v.ct} busy={busy} idp="so-tm" setTerm={(k, val) => setV(o => ({ ...o, ct: { ...(o.ct || {}), [k]: val } }))} />
+            <tr><th><label htmlFor="so-tnc">Other Terms</label></th><td colSpan={3}>
+              <textarea id="so-tnc" value={v.tnc} onChange={e => setV(o => ({ ...o, tnc: e.target.value }))} disabled={busy} rows={3} placeholder="Anything else — validity, penalty, site readiness, documents…" /></td></tr>
+          </tbody></table>
+        </div>
+
         {/* 6 — specs item-wise */}
         <div className="so-card">
           {head('ledger', 'Specifications — item wise', 'Notes and drawings for each product')}
@@ -975,7 +993,7 @@ export default function BetaCreateSO({ companyId, company, orders = [], onSaved,
                 ['items', 'Products — qty, rate, GST, HSN', `${(copyFrom.items || []).length} product${(copyFrom.items || []).length === 1 ? '' : 's'}`],
                 ['specs', 'Item-wise specifications', copyWhat.items ? '' : 'needs products'],
                 ['charges', 'Additional charges (with and without GST)', `${(copyFrom.charges || []).length} charge${(copyFrom.charges || []).length === 1 ? '' : 's'}`],
-                ['terms', 'Payment terms', copyFrom.paymentTerms || '—']].map(([k, label, hint]) => (
+                ['terms', 'Payment & delivery terms, T&C', [copyFrom.paymentTerms, ...Object.values(copyFrom.commercialTerms || {})].filter(Boolean).slice(0, 2).join(' · ') || '—']].map(([k, label, hint]) => (
                 <label key={k} className={`so-cpi${copyWhat[k] && (k !== 'specs' || copyWhat.items) ? ' on' : ''}`}>
                   <input type="checkbox" checked={!!copyWhat[k] && (k !== 'specs' || copyWhat.items)} disabled={k === 'specs' && !copyWhat.items}
                     onChange={e => setCopyWhat(w => ({ ...w, [k]: e.target.checked }))} autoFocus={k === 'client'} />

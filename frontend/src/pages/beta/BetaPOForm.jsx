@@ -9,6 +9,7 @@ import { Svg } from '../../components/ui/Icon';
 import { CF_CSS, TEAL } from './BetaClients';
 import { STATES } from './BetaGstFetch';
 import { fyOf } from './BetaSales';
+import { TermsRows, standardTerms, cleanTerms } from './BetaTerms';
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const CHARGE_TYPES = ['Freight', 'Packing & Forwarding', 'Loading / Unloading', 'Transport', 'Installation', 'Erection & Commissioning', 'Insurance', 'Other'];
@@ -55,7 +56,8 @@ const shipFromOf = v => {
   const d = v.dispatchSame === false && v.dispatchFrom ? v.dispatchFrom : v;
   return { address: d.address || '', city: d.city || '', state: d.state || '', pincode: String(d.pincode || '') };
 };
-const siteOf = o => (o ? [o.shipToName, o.shipToAddress || o.deliveryAddr || o.shippingAddr, o.shipToCity, o.shipToState, o.shipToPincode].filter(Boolean).join(', ') : '');
+/* the client's site address only — never the client's name (the vendor is not told who the client is) */
+const siteOf = o => (o ? [o.shipToAddress || o.deliveryAddr || o.shippingAddr, o.shipToCity, o.shipToState, o.shipToPincode].filter(Boolean).join(', ') : '');
 const officeOf = c => (c ? [c.companyName, c.address, c.city, c.state, c.pincode].filter(Boolean).join(', ') : '');
 const orderLabel = o => `${o.orderNo || o.orderId} · ${o.customerName || o.party || ''}`;
 
@@ -225,6 +227,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
         deliveryAddr: p.deliveryAddr || p.deliveryAddress || '',
         freightCharges: n(p.freightCharges) ? String(p.freightCharges) : '', packingCharges: n(p.packingCharges) ? String(p.packingCharges) : '',
         termsConditions: p.termsConditions || '', vendorNotes: p.vendorNotes || '', internalNotes: p.internalNotes || p.notes || '',
+        ct: p.commercialTerms && typeof p.commercialTerms === 'object' ? { ...p.commercialTerms } : {},
       };
     }
     const o = presetOrderId ? soMap[String(presetOrderId)] : null;
@@ -235,11 +238,13 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
       orderId: o ? String(o.orderId) : '', orderText: o ? orderLabel(o) : '',
       quotationRef: '', paymentTerms: '', paymentMode: 'NEFT', dispatchMode: 'Road', freightTerms: '',
       shipFromAddress: '', shipFromCity: '', shipFromState: '', shipFromPincode: '',
-      deliveryAddr: o ? siteOf(o) : '',
-      freightCharges: '', packingCharges: '', termsConditions: '', vendorNotes: '', internalNotes: '',
+      deliveryAddr: officeOf(company),   // our company address; "Order site" puts the site address instead
+      freightCharges: '', packingCharges: '', termsConditions: '', vendorNotes: '', internalNotes: '', ct: {},
     };
   };
   const [v, setV] = useState(init);
+  // a new PO: delivery at our company address (once the company details are there)
+  useEffect(() => { if (!isEdit && company && !String(v.deliveryAddr || '').trim()) setV(x => ({ ...x, deliveryAddr: officeOf(company) })); }, [company]); // eslint-disable-line react-hooks/exhaustive-deps
   /* first values of the items, their spec notes, spec files and the order's attachments */
   const [boot] = useState(() => {
     if (isEdit) {
@@ -284,12 +289,9 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
         sp.push({ id: uid(), kind: 'so', lineKey, so: { ...f, orderId: o.orderId, orderNo: o.orderNo } });
       });
     });
-    // only the order's spec files that belong to no product (general drawings / annexures) — NOT the order's own
-    // attachments (client PO, our quotation…): those are for the client and are never sent to the vendor
-    const general = (o.specFiles || []).filter(f => f && f.fileName && !f.itemId && !f.itemName).map(f => ({ ...f, name: f.name || f.fileName }));
-    general.forEach(a => {
-      if (!at.some(x => x.orderId === o.orderId && x.fileName === a.fileName)) at.push({ ...a, id: uid(), orderId: o.orderId, orderNo: o.orderNo });
-    });
+    // ONLY the spec text and spec files of the products taken into the PO. Nothing else of the order comes along:
+    // not its attachments (client PO, our quotation…) and not its general files (BOQ, order copy…) — the vendor
+    // must not see the client's name or our selling price.
     return { notes: nt, specs: sp, soAtts: at };
   }
 
@@ -343,7 +345,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
   });   // eslint-disable-line react-hooks/exhaustive-deps
   const pickOrder = o => {
     setPickOpen(false);
-    setV(x => ({ ...x, orderText: orderLabel(o), orderId: String(o.orderId), deliveryAddr: x.deliveryAddr || siteOf(o) }));
+    setV(x => ({ ...x, orderText: orderLabel(o), orderId: String(o.orderId), deliveryAddr: x.deliveryAddr || officeOf(company) }));
     setErrs(e => ({ ...e, order: undefined })); setMsg(null);
     if (soLines(o).length) openImport(o);
   };
@@ -452,6 +454,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
         'shipFromAddress', 'shipFromCity', 'shipFromState', 'shipFromPincode', 'deliveryAddr', 'termsConditions', 'vendorNotes', 'internalNotes']
         .forEach(k => add(k, typeof v[k] === 'string' ? v[k].trim() : v[k]));
       add('poNo', v.poNo.trim());
+      add('commercialTerms', JSON.stringify(cleanTerms(v.ct)));
       add('poType', forStock ? 'Stock' : (editPo?.poType && editPo.poType !== 'Stock' ? editPo.poType : 'Standard'));
       add('linkedSalesOrderId', forStock ? '' : v.orderId);
       add('items', JSON.stringify(items));
@@ -739,6 +742,16 @@ export default function POForm({ companyId, company, vendors, orders, pos, editP
               </div>
             );
           }) : <div className="po-spec-empty">Add an item above to write its specification.</div>}
+        </div>
+
+        {/* terms of delivery (payment terms and freight are above, with the PO details) */}
+        <div className="cf-card">
+          {head('ledger', 'Terms of Delivery', 'Delivery period, price basis, packing, unloading, inspection, warranty… — printed on the PO', <><span style={{ flex: 1 }} />
+            <button type="button" className="po-up" disabled={busy} title="Fill the empty terms with the usual choice — change any of them after"
+              onClick={() => setV(x => ({ ...x, ct: standardTerms(x.ct, ['freight']) }))}>Fill standard terms</button></>)}
+          <table className="cf-kv"><tbody>
+            <TermsRows terms={v.ct} busy={busy} idp="po-tm" skip={['freight']} setTerm={(k, val) => setV(x => ({ ...x, ct: { ...(x.ct || {}), [k]: val } }))} />
+          </tbody></table>
         </div>
 
         {/* terms | totals */}

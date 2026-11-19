@@ -22,6 +22,7 @@ import BetaDues from '../../pages/beta/BetaDues';
 import BetaSales from '../../pages/beta/BetaSales';
 import BetaDC from '../../pages/beta/BetaDC';
 import BetaPasswords from '../../pages/beta/BetaPasswords';
+import BetaOffice from '../../pages/beta/BetaOffice';
 import BetaVendors from '../../pages/beta/BetaVendors';
 import BetaPO from '../../pages/beta/BetaPO';
 import BetaPayment from '../../pages/beta/BetaPayment';
@@ -66,7 +67,7 @@ const typing = el => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$
 /* the colour of each module's icon in the side nav (white icon on a coloured tile) */
 const NAV_COLOR = {
   so: '#2E90FA', po: '#F79009', job: '#7A5AF8', mfg: '#E9A100', stock: '#12B76A', acc: '#06AED4', books: '#6172F3',
-  hr: '#EE46BC', ins: '#F04438', pm: '#66C61C', admin: '#9E77ED', crm: '#0BA5EC', gst: '#DD2590', dash: '#15B79E',
+  hr: '#EE46BC', ins: '#F04438', pm: '#66C61C', office: '#2B579A', admin: '#9E77ED', crm: '#0BA5EC', gst: '#DD2590', dash: '#15B79E',
 };
 /* Finacle-style menu shortcuts: type the code in the "Menu" box (top bar) and press Enter to open the page */
 const SHORTCUTS = {
@@ -83,6 +84,7 @@ const SHORTCUTS = {
   '/beta/books/gst': 'GST', '/beta/books/gst-portal': 'GSTP', '/beta/books/tds': 'TDS', '/beta/books/ageing': 'AGE', '/beta/books/assets': 'FA',
   '/beta/hr/employees': 'EMP', '/beta/hr/assets': 'HRA', '/beta/hr/attendance': 'ATT', '/beta/hr/payroll': 'PR', '/beta/hr/policy': 'HRP',
   '/beta/insurance/policies': 'INS', '/beta/insurance/claims': 'CLM', '/beta/passwords': 'PWD',
+  '/beta/office': 'OFC', '/beta/office/word': 'WORD', '/beta/office/excel': 'XLS', '/beta/office/letterheads': 'LHD',
   '/beta/admin/approvals': 'APR', '/beta/admin/company': 'CO', '/beta/admin/users': 'USR',
   '/beta/profile': 'PROF', '/beta/profile?tab=signature': 'SIGN',
 };
@@ -141,6 +143,10 @@ const SIDE_NAV = [
   { key: 'ins', label: 'Insurance', icon: 'shield', perm: 'insurance',
     sub: [
       { label: 'Policies', path: '/beta/insurance/policies' }, { label: 'Claims', path: '/beta/insurance/claims' },
+    ] },
+  { key: 'office', label: 'Office Suite', icon: 'file',
+    sub: [
+      { label: 'Documents', path: '/beta/office' }, { label: 'Word — Letter', path: '/beta/office/word' }, { label: 'Excel — Sheet', path: '/beta/office/excel' }, { label: 'Letterheads', path: '/beta/office/letterheads' },
     ] },
   { key: 'pm', label: 'Password Manager', icon: 'lock', perm: 'passwords', path: '/beta/passwords' },
   /* Admin: each page shows only to those allowed (perm 'admin' = admin role only) */
@@ -321,7 +327,7 @@ export default function BetaShell() {
   const isDash = pathname === '/dashboard' || pathname === '/beta' || pathname === '/beta/';
 
   const [menu, setMenu] = useState(null);   // 'co' | 'me'
-  const sideNav = useMemo(() => SIDE_NAV.filter(n => (n.perms ? n.perms.some(p => allowed(user, p)) : allowed(user, n.perm)))
+  const sideNav = useMemo(() => SIDE_NAV.filter(n => (n.perms ? n.perms.some(p => allowed(user, p)) : !n.perm || allowed(user, n.perm)))
     .map(n => (n.sub ? { ...n, sub: n.sub.filter(x => !x.perm || allowed(user, x.perm)) } : n)), [user]);
   const [openNav, setOpenNav] = useState({});   // the one side nav button whose sub menu is open (opening one closes the others)
   const inSub = (n, p) => (n.sub || []).some(x => x.path && (p === x.path || p.startsWith(x.path + '/')));
@@ -529,6 +535,7 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/sales') && <BetaSales key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/delivery-challan') && <BetaDC key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/passwords') && <BetaPasswords key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/office') && <BetaOffice key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/vendor') && <BetaVendors key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/po') && <BetaPO key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/payment') && <BetaPayment key={selectedCompany?.companyId || 'none'} />}

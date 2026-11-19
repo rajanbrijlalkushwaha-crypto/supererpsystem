@@ -3,6 +3,7 @@
 import axios from 'axios';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
+import { termsHtml } from './BetaTerms';
 import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
@@ -56,6 +57,7 @@ export async function printPO({ po, company, companyId, order, user }) {
   const roundOff = n(po.roundOff);
   const notes = parseSpec(po.specSheet).itemNotes || [];
   const noteOf = (it, i) => (notes.find(x => x && x.itemIdx === i && key(x.itemName) === key(it.itemName)) || notes.find(x => x && key(x.itemName) === key(it.itemName)) || {}).text || '';
+  // listed without their file names: a file name can carry the client's name (the vendor is not told who the client is)
   const encl = [...(po.specFiles || []), ...(po.attachments || [])].filter(f => f && (f.name || f.fileName));
   const createdBy = who(po.createdBy) || who((po.audit || [])[0]?.by) || who((po.audit || [])[0]?.user) || '—';
 
@@ -106,6 +108,7 @@ tr.st td { font-weight:bold; }
 tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !important; }
 .words { font-size:9pt; }
 .pre { white-space:normal; }
+.tod .tl { color:#333; white-space:nowrap; }
 .sig td { height:38mm; vertical-align:top !important; }
 .sig .box { height:100%; display:flex; flex-direction:column; justify-content:space-between; }
 /* three equal columns, labels on one line at the bottom, each signature right above its own label */
@@ -177,8 +180,10 @@ tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !importan
 ${encl.length ? `<!-- enclosures -->
 <table><tbody>
   <tr class="sec"><td>Enclosures (drawings / specifications sent with this PO)</td></tr>
-  <tr><td>${encl.map((f, i) => `${i + 1}. ${esc(f.name || f.fileName)}${f.itemName ? ` <span class="mut">(${esc(f.itemName)})</span>` : ''}`).join(' &nbsp;&nbsp; ')}</td></tr>
+  <tr><td>${encl.map((f, i) => `${i + 1}. ${(po.specFiles || []).includes(f) ? 'Drawing / specification' : 'Document'}${f.itemName ? ` — ${esc(f.itemName)}` : ''}`).join(' &nbsp;&nbsp; ')}</td></tr>
 </tbody></table>` : ''}
+
+${termsHtml(po, { pay: false, skip: ['freight'] })}
 
 <!-- terms -->
 <table><tbody>

@@ -67,6 +67,8 @@ const mergeIntoMeta = (meta, saved) => {
 function copySoFiles(companyId, docsPath, list) {
   const out = { spec: [], att: [] };
   (Array.isArray(list) ? list : []).forEach((f, i) => {
+    // only the spec files of the products — the order's own attachments (client PO, quotation…) never go to a vendor
+    if (!f || f.kind !== 'spec') return;
     try {
       const soDir = path.resolve(path.join(ROOT, 'Database', 'Companies', companyId, 'SalesOrder', String(f.orderId)));
       const rel = String(f.filePath || (f.fileName ? 'docs/' + f.fileName : ''));
@@ -126,6 +128,10 @@ router.get('/:orderId', async (req, res) => {
 });
 
 // POST - Create purchase order
+/* terms of delivery: only known keys, short text */
+const TERM_KEYS = ['delivery', 'priceBasis', 'freight', 'packing', 'unloading', 'installation', 'insurance', 'inspection', 'taxes', 'warranty'];
+const poTerms = t => { const o = {}; TERM_KEYS.forEach(k => { const v = String((t && t[k]) || '').trim(); if (v) o[k] = v.slice(0, 300); }); return o; };
+
 router.post('/', poUploadFields, async (req, res) => {
   try {
     const b = req.body;
@@ -183,7 +189,7 @@ router.post('/', poUploadFields, async (req, res) => {
       cgst: num('cgst'), sgst: num('sgst'), igst: num('igst'),
       overallDiscount: num('overallDiscount'), freightCharges: num('freightCharges'),
       packingCharges: num('packingCharges'), roundOff: num('roundOff'),
-      termsConditions: str('termsConditions'), internalNotes: str('internalNotes'),
+      termsConditions: str('termsConditions'), internalNotes: str('internalNotes'), commercialTerms: poTerms(jp('commercialTerms', {})),
       vendorNotes: str('vendorNotes'), notes: str('internalNotes'),
       clientScope: str('clientScope'), epsilonScope: str('epsilonScope'), vendorScope: str('vendorScope'),
       scopeItems: jp('scopeItems'),
@@ -292,7 +298,7 @@ router.put('/:orderId', poUploadFields, async (req, res) => {
       mobile: str('mobile') || ex.mobile || '', email: str('email') || ex.email || '',
       contactPerson2: str('contactPerson2') || ex.contactPerson2 || '',
       mobile2: str('mobile2') || ex.mobile2 || '', email2: str('email2') || ex.email2 || '',
-      paymentTerms: str('paymentTerms') || ex.paymentTerms,
+      paymentTerms: b.paymentTerms !== undefined ? str('paymentTerms') : ex.paymentTerms,
       paymentMode: str('paymentMode') || ex.paymentMode || '',
       billingTerms: str('billingTerms') || ex.billingTerms || '',
       creditLimit: str('creditLimit') || ex.creditLimit || '', dueDate: str('dueDate') || ex.dueDate || '',
@@ -310,7 +316,8 @@ router.put('/:orderId', poUploadFields, async (req, res) => {
       freightCharges: num('freightCharges') || ex.freightCharges || 0,
       packingCharges: num('packingCharges') || ex.packingCharges || 0,
       roundOff: num('roundOff') || ex.roundOff || 0,
-      termsConditions: str('termsConditions') || ex.termsConditions || '',
+      termsConditions: b.termsConditions !== undefined ? str('termsConditions') : (ex.termsConditions || ''),
+      commercialTerms: b.commercialTerms !== undefined ? poTerms(jp('commercialTerms', {})) : (ex.commercialTerms || {}),
       internalNotes: str('internalNotes') || ex.internalNotes || '',
       vendorNotes: str('vendorNotes') || ex.vendorNotes || '',
       notes: str('internalNotes') || ex.notes || '',
@@ -418,7 +425,8 @@ router.post('/:orderId/print-pack', async (req, res) => {
           const img = ext === '.png' ? await out.embedPng(buf) : await out.embedJpg(buf);
           const W = 595.28, H = 841.89, M = 28, top = 24;   // A4 in points
           const pg = out.addPage([W, H]);
-          const title = `${f.kind}: ${label}${f.itemName ? ` (${f.itemName})` : ''} — PO ${po.poNo || po.orderId}`.replace(/[^\x20-\x7E]/g, ' ');
+          // no file name on the page: it can carry the client's name (the vendor is not told who the client is)
+          const title = `${f.kind}${f.itemName ? `: ${f.itemName}` : ''} — PO ${po.poNo || po.orderId}`.replace(/[^\x20-\x7E]/g, ' ');
           pg.drawText(title.slice(0, 110), { x: M, y: H - M - 10, size: 9, font, color: rgb(0, 0, 0) });
           const k = Math.min((W - 2 * M) / img.width, (H - 2 * M - top) / img.height, 1.6);
           const w = img.width * k, h = img.height * k;

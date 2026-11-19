@@ -87,6 +87,7 @@ app.use('/api/delivery-challans', require('./api/deliveryChallans'));
 app.use('/api/grn',               require('./api/grn'));
 app.use('/api/returns',           require('./api/returns'));
 app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
+app.use('/api/office',            require('./api/office'));         // Office Suite: letters (Word) and sheets (Excel) kept with an order
 app.use('/api/mail',              require('./api/mail'));           // e-mail a printed document (PDF) with To / CC and files
 app.use('/api/sign',              require('./api/signing'));        // my signature + who signed a document (prepared / reviewed / approved)
 app.use('/api/warranty-certs',    require('./api/warrantyCerts'));   // Warranty Certificates
