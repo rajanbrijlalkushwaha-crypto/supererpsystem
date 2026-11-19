@@ -4,6 +4,17 @@ title Epsilon ERP - Update from GitHub
 color 0B
 cd /d "%~dp0"
 
+rem  needs administrator (PM2 restart + auto start) - ask once, then run again as administrator
+net session >nul 2>nul || (echo Asking for administrator permission... & powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" & exit /b)
+rem  git: trust this folder when run as administrator
+set GIT_CONFIG_COUNT=1
+set GIT_CONFIG_KEY_0=safe.directory
+set GIT_CONFIG_VALUE_0=*
+rem  run from a copy in TEMP: the update replaces this file, and Windows misreads a batch file changed while it runs
+if /i not "%~1"=="/run" (copy /y "%~f0" "%TEMP%\epsilon-erp-update.cmd" >nul & call "%TEMP%\epsilon-erp-update.cmd" /run "%~dp0." & exit /b)
+cd /d "%~2"
+set "ERPDIR=%~2"
+
 rem  Run this on the SERVER. It takes the latest code from GitHub, builds it and restarts the ERP.
 rem  Your data is safe: the Database folder, .env and .secrets are never in GitHub and are never touched.
 set REPO=https://github.com/rajanbrijlalkushwaha-crypto/supererpsystem.git
@@ -53,29 +64,29 @@ if errorlevel 1 (popd & goto fail)
 popd
 
 echo.
-echo [4/4] Restarting the ERP...
-rem  stop only the ERP server (the program on port %PORT%), not other Node programs
-rem  started with pm2-start.cmd? then PM2 restarts it (and keeps auto start); else the old way in its own window
-set PM2_HOME=C:\ProgramData\pm2
-set USEPM2=
-if exist "%PM2_HOME%\dump.pm2" findstr /C:"epsilon-erp" "%PM2_HOME%\dump.pm2" >nul 2>nul && set USEPM2=1
-if defined USEPM2 (
-  call pm2 restart epsilon-erp --update-env
-  goto started
-)
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%PORT% .*LISTENING"') do taskkill /F /PID %%p >nul 2>nul
-timeout /t 2 /nobreak >nul
-start "Epsilon ERP" cmd /k "cd /d %~dp0 && node server.js"
-:started
+echo [4/4] Restarting the ERP with PM2 (stop, then start - no extra window)...
+call "%ERPDIR%\pm2-start.cmd" quiet
+if errorlevel 1 goto failstart
+title Epsilon ERP - Update from GitHub
 
 echo.
 echo ============================================
 echo   UPDATE COMPLETE
 echo   Open: http://localhost   or   http://localhost:%PORT%
-if not defined USEPM2 echo   Keep the "Epsilon ERP" window open.
+echo   Runs in the background with PM2 - no window to keep open.
 echo ============================================
 pause
 exit /b 0
+
+:failstart
+color 0C
+echo.
+echo ============================================
+echo   UPDATE DONE BUT THE ERP DID NOT START.
+echo   Read the error above, then run pm2-start.cmd as administrator.
+echo ============================================
+pause
+exit /b 1
 
 :fail
 color 0C
