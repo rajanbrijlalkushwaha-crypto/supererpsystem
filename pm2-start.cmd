@@ -38,7 +38,10 @@ setx PM2_HOME "%PM2_HOME%" /M >nul
 
 rem  2. stop a copy started the old way (start.bat window) so the port is free
 %PM2% delete %APP% >nul 2>nul
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%PORT% .*LISTENING"') do taskkill /F /PID %%p >nul 2>nul
+rem  every old copy of the ERP: the Node program on port %PORT% and on port 80 (the web address without a port)
+for %%P in (%PORT% 80) do for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":%%P .*LISTENING"') do (
+  tasklist /FI "PID eq %%p" /NH | find /I "node.exe" >nul && (echo Stopping the old ERP program on port %%P ^(PID %%p^)... & taskkill /F /PID %%p >nul 2>nul)
+)
 rem  and the leftover window of that old way (its title is exactly "Epsilon ERP")
 taskkill /F /FI "WINDOWTITLE eq Epsilon ERP" >nul 2>nul
 timeout /t 2 /nobreak >nul
@@ -59,6 +62,11 @@ schtasks /Create /F /TN "Epsilon ERP" /SC ONSTART /DELAY 0000:30 /RU SYSTEM /RL 
 if errorlevel 1 (echo Could not set the auto start - the ERP is running now, but run this again after a restart.) else (echo Auto start when the PC is switched on: ON)
 
 echo.
+rem  check it really answers
+timeout /t 6 /nobreak >nul
+powershell -NoProfile -Command "try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 http://localhost:%PORT%/; Write-Host 'Check: the ERP answers on port %PORT%.' -ForegroundColor Green } catch { Write-Host 'CHECK FAILED: the ERP does not answer on port %PORT% - see: pm2 logs %APP%' -ForegroundColor Red }"
+echo Programs listening on port %PORT% and 80:
+netstat -ano | findstr /R /C:":%PORT% .*LISTENING" /C:":80 .*LISTENING"
 %PM2% list
 echo.
 echo ============================================
