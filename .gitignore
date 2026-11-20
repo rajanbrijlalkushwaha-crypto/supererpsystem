@@ -28,3 +28,6 @@ Database/**
 
 # encryption keys (Password Manager) — never commit; keep a backup copy
 .secrets/
+build-new/
+build-old/
+.updating

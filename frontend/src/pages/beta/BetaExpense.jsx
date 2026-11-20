@@ -32,6 +32,10 @@ const KINDS = {
 };
 const kindOf = e => KINDS[e.expenseType] ? e.expenseType : 'office';
 const partyOf = e => (e.expenseType === 'order' ? e.ledgerName : e.expenseType === 'manufacturing' ? e.vendorName : e.vendor) || '';
+/* party / client details from the vendor or client master */
+const addrOf = x => [x.address || x.billingAddr, x.city, [x.state, x.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', ').replace(/\s+/g, ' ').replace(/(\s*,)+/g, ',').replace(/,(?=\S)/g, ', ').replace(/^,\s*|,\s*$/g, '').trim();
+const infoOf = x => (x ? { gstin: x.gstin || x.gst || '', address: addrOf(x),
+  phone: x.mobile || x.phone || (x.contactPersons || []).map(c => c && (c.mobileNumber || c.mobile)).find(Boolean) || '' } : { gstin: '', address: '', phone: '' });
 const isPending = e => e.status === 'pending' || e.status === 'pending_approval';
 
 export default function BetaExpense() {
@@ -70,22 +74,49 @@ export default function BetaExpense() {
       {note && <div className="sb-note" role="status">{note}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       {cur === 'create'
         ? <div className="sb-body"><ExpenseForm key={editing ? editing.expenseId : 'new'} companyId={companyId} edit={editing} orders={orders} onCancel={() => go('list')} onSaved={t => { setReload(x => x + 1); setNote(t); go('list'); }} /></div>
-        : <ExpenseList rows={rows} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={e => { setNote(null); setEditing(e); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
+        : <ExpenseList rows={rows} orders={orders} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={e => { setNote(null); setEditing(e); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
     </div>
   );
 }
 
-const printExp = (e, company, user) => printVoucher({
-  title: 'EXPENSE VOUCHER', sub: `${KINDS[kindOf(e)].label} expense — ${e.expenseCategory || e.category || ''}`, company, user,
-  kv: [['Expense No.', `EXP-${e.expenseId}`], ['Date', dmy(e.date)], ['Bill / Invoice No.', e.invoiceNo], ['Sales Order', e.orderNo], ['Status', String(e.status || '').replace('_', ' ').toUpperCase()]],
-  party: partyOf(e) ? { label: e.expenseType === 'order' ? 'Expense by' : 'Paid to', name: partyOf(e), lines: [e.clientName && `Client: ${e.clientName}`] } : null,
+/* the voucher with the party's and the order's details, and every attached bill / document after it.
+   An expense saved before these details were kept gets them from the order and the vendor / client master. */
+const printExp = async (e0, company, user, companyId, orders = []) => {
+  let e = e0;
+  try {
+    const so = orders.find(o => (e.soId && String(o.orderId) === String(e.soId)) || (e.orderNo && String(o.orderNo || '').trim() === String(e.orderNo).trim()));
+    if (so && !e.clientAddress) {
+      const c = infoOf({ address: so.address, city: so.customerCity, state: so.customerState, pincode: so.customerPincode, gstin: so.customerGstin });
+      e = { ...e, clientName: e.clientName || so.customerName || so.party || '', clientAddress: c.address, clientGstin: c.gstin, customerPO: e.customerPO || so.customerPO || '', poDate: e.poDate || so.poDate || '', orderDate: e.orderDate || so.orderDate || '' };
+    }
+    const nm = partyOf(e).trim().toLowerCase();
+    if (nm && !e.partyAddress && !e.partyGstin) {
+      const get = u => axios.get(u, { params: { companyId } }).then(r => (Array.isArray(r.data) ? r.data : [])).catch(() => []);
+      const [vs, cs] = await Promise.all([get('/api/vendors'), get('/api/clients')]);
+      const hitV = vs.find(x => (e.vendorId && String(x.vendorId) === String(e.vendorId)) || String(x.vendorName || x.companyName || '').trim().toLowerCase() === nm);
+      const hitC = !hitV && cs.find(x => String(x.clientName || x.companyName || '').trim().toLowerCase() === nm);
+      const i = infoOf(hitV || hitC || null);
+      e = { ...e, partyGstin: i.gstin, partyAddress: i.address, partyPhone: i.phone };
+    }
+  } catch { /* print with what the expense has */ }
+  return printVoucher({
+  title: 'EXPENSE VOUCHER', sub: `${KINDS[kindOf(e)].label} expense — ${e.expenseCategory || e.category || ''}`, company, user, partyName: partyOf(e) || e.clientName,
+  kv: [['Expense No.', `EXP-${e.expenseId}`], ['Date', dmy(e.date)], ['Bill / Invoice No.', e.invoiceNo], ['Sales Order', e.orderNo], ['Order Date', dmy(e.orderDate)],
+    ['Client PO', [e.customerPO, e.poDate && `dt. ${dmy(e.poDate)}`].filter(Boolean).join(' ')], ['Status', String(e.status || '').replace('_', ' ').toUpperCase()]],
+  party: partyOf(e) ? { label: e.expenseType === 'order' ? 'Expense by' : e.expenseType === 'manufacturing' ? 'Vendor / paid to' : 'Paid to', name: partyOf(e),
+    lines: [e.partyAddress, e.partyGstin && `GSTIN: ${e.partyGstin}`, e.partyPhone && `Phone: ${e.partyPhone}`] } : null,
+  party2: e.clientName ? { label: `Client${e.orderNo ? ` — order ${e.orderNo}` : ''}`, name: e.clientName,
+    lines: [e.clientAddress, e.clientGstin && `GSTIN: ${e.clientGstin}`] } : null,
+  files: e.attachments || [],
+  getFile: a => axios.get(`/api/accounts/expenses/${e.expenseId}/download/${encodeURIComponent(a.fileName)}`, { params: { companyId, inline: 1 }, responseType: 'blob' }).then(r => r.data),
   heads: [['Sl', '30px', 'c'], ['Particulars'], ['Category', '160px'], ['Amount ₹', '110px', 'r'], ['GST %', '60px', 'c'], ['Total ₹', '110px', 'r']],
   rows: [['1', e.description || e.expenseCategory || '', e.expenseCategory || e.category || '', amt(e.amount), `${e.taxRate || 0}%`, amt(e.grandTotal || e.amount)]],
   totals: [['Total', amt(e.grandTotal || e.amount)]], words: inWords(Number(e.grandTotal || e.amount) || 0), narration: e.notes,
   signs: ['Received by', `For ${company?.companyName || ''}`],
-});
+  });
+};
 
-function ExpenseList({ rows, company, user, slot, companyId, onEdit, onChanged }) {
+function ExpenseList({ rows, orders = [], company, user, slot, companyId, onEdit, onChanged }) {
   const [q, setQ] = useState('');
   const [st, setSt] = useState('');
   const [kind, setKind] = useState('');
@@ -119,7 +150,7 @@ function ExpenseList({ rows, company, user, slot, companyId, onEdit, onChanged }
           rows: list.map(e => [`EXP-${e.expenseId}`, dmy(e.date), KINDS[kindOf(e)].label, e.expenseCategory || e.category, e.description, partyOf(e), e.orderNo, e.invoiceNo, amt(e.amount), `${e.taxRate || 0}%`, amt(e.grandTotal || e.amount), String(e.status || '').replace('_', ' ')]) })}><Svg name="file" size={13} />Print list</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>EXP-{sel.expenseId}</b> : 'Select an expense'}</span>
-          <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printExp(sel, company, user)}><Svg name="file" size={13} />Print</button>
+          <button type="button" className="sb-tbtn" disabled={!sel} onClick={async () => { const left = await printExp(sel, company, user, companyId, orders); if (left && left.length) onChanged(`Printed with the attached files. Not printable here (open them separately): ${left.join(', ')}.`); }}><Svg name="file" size={13} />Print{(sel?.attachments || []).length ? ` + ${sel.attachments.length} file${sel.attachments.length === 1 ? '' : 's'}` : ''}</button>
           {canAppr && <button type="button" className="sb-tbtn" disabled={!sel || !isPending(sel)} onClick={() => act(sel, 'approve')}><Svg name="check" size={13} />Approve</button>}
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => onEdit(sel)}><Svg name="settings" size={13} />Edit</button>}
           {canDel && <button type="button" className="sb-tbtn del" disabled={!sel} onClick={() => setAsk(sel)}><Svg name="x" size={13} />Delete</button>}
@@ -149,7 +180,7 @@ function ExpenseList({ rows, company, user, slot, companyId, onEdit, onChanged }
                     <td><b className="mono">EXP-{e.expenseId}</b>{(e.attachments || []).length > 0 && <span className="sm">{e.attachments.length} file{e.attachments.length === 1 ? '' : 's'}</span>}</td>
                     <td className="d">{dmy(e.date)}</td><td>{KINDS[kindOf(e)].label}</td><td>{e.expenseCategory || e.category}</td>
                     <td>{e.description || '—'}{e.notes && <span className="sm">{e.notes}</span>}</td>
-                    <td>{partyOf(e) || '—'}</td>
+                    <td>{partyOf(e) || '—'}{e.partyGstin && <span className="sm mono">{e.partyGstin}</span>}</td>
                     <td className="mono">{e.orderNo || '—'}{e.clientName && <span className="sm">{e.clientName}</span>}</td>
                     <td className="mono">{e.invoiceNo || '—'}</td>
                     <td className="r b d">{amt(e.grandTotal || e.amount)}{Number(e.taxRate) > 0 && <span className="sm">incl. {e.taxRate}% GST</span>}{e.rcm && <span className="sm" style={{ color: '#B54708' }}>RCM {e.rcmRate}% · ₹ {amt(rcmTaxOf(e))}</span>}</td>
@@ -169,7 +200,8 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
     amount: e0.amount ? String(e0.amount) : '', gst: String(e0.taxRate ?? '0'), invoiceNo: e0.invoiceNo || '', notes: e0.notes || '',
     paidTo: e0.vendor || '', vendorId: e0.vendorId ? String(e0.vendorId) : '', vendorName: e0.vendorName || '', soId: e0.soId ? String(e0.soId) : '',
     ledgerId: e0.ledgerId ? String(e0.ledgerId) : '', ledgerName: e0.ledgerName || '',
-    rcm: !!e0.rcm, rcmRate: String(e0.rcmRate || '18'), rcmInter: !!e0.rcmInter }));
+    rcm: !!e0.rcm, rcmRate: String(e0.rcmRate || '18'), rcmInter: !!e0.rcmInter,
+    pGstin: e0.partyGstin || '', pAddress: e0.partyAddress || '', pPhone: e0.partyPhone || '', pKind: e0.partyKind || '' }));
   const [lg, setLg] = useState({ groups: [], vendors: [] });
   const [files, setFiles] = useState([]);
   const [atts, setAtts] = useState(e0.attachments || []);
@@ -186,7 +218,9 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
     .map(o => ({ key: String(o.orderId), label: `${String(o.orderNo || o.orderId).trim()} — ${o.customerName || o.clientName || ''}`, sub: o.customerPO ? `PO ${o.customerPO}` : '' })) }], [orders]);
   const vendorGroups = useMemo(() => [{ group: 'Vendors', items: lg.vendors.map(x => ({ key: String(x.vendorId), label: x.vendorName || x.companyName || '', sub: x.city || '' })).filter(x => x.label) }], [lg.vendors]);
   const soLabel = so ? `${String(so.orderNo || so.orderId).trim()} — ${so.customerName || so.clientName || ''}` : (v.soId && e0.orderNo ? `${e0.orderNo} — ${e0.clientName || ''}` : '');
-  const switchKind = k => { setV(o => ({ ...o, kind: k, category: '' })); setMsg(null); };
+  const switchKind = k => { setV(o => ({ ...o, kind: k, category: '', pGstin: '', pAddress: '', pPhone: '', pKind: '' })); setMsg(null); };
+  const fillParty = (raw, kind) => { const i = infoOf(raw); setV(x => ({ ...x, pGstin: i.gstin, pAddress: i.address, pPhone: i.phone, pKind: kind })); };
+  const cl = so ? infoOf({ address: so.address, city: so.customerCity, state: so.customerState, pincode: so.customerPincode, gstin: so.customerGstin }) : null;
 
   const save = async () => {
     if (!v.date) return setMsg({ k: 'err', t: 'Enter the date.' });
@@ -195,6 +229,8 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
     if (v.kind === 'manufacturing' && !v.vendorName.trim()) return setMsg({ k: 'err', t: 'Pick the vendor / party for a manufacturing expense.' });
     if (v.kind === 'order' && !v.soId) return setMsg({ k: 'err', t: 'Pick the sales order.' });
     if (v.kind === 'order' && !v.ledgerName) return setMsg({ k: 'err', t: 'Pick “Expense by” (who spent it — ledger, vendor or client).' });
+    // the bill copy and supporting documents go with the expense (and print with its voucher)
+    if (!files.length && !atts.length && !window.confirm('No bill copy or supporting document is attached.\n\nAttach them with “+ Attach file” — they print with the expense voucher.\n\nSave without documents?')) return setMsg({ k: 'err', t: 'Attach the bill copy / supporting documents below, then save.' });
     setBusy(true);
     const status = v.kind === 'order' ? 'pending_approval' : 'approved';   // as on the classic page (an edited order expense goes for approval again)
     const payload = {
@@ -202,10 +238,18 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
       taxRate: v.rcm ? '0' : v.gst, grandTotal: total,
       rcm: v.rcm, rcmRate: v.rcm ? v.rcmRate : '', rcmInter: v.rcm ? v.rcmInter : false, rcmTax, invoiceNo: v.invoiceNo.trim(), notes: v.notes.trim(), status,
       vendor: v.kind === 'office' ? v.paidTo.trim() : '',
-      vendorId: v.kind === 'manufacturing' ? v.vendorId : '', vendorName: v.kind === 'manufacturing' ? v.vendorName.trim() : '',
+      // a vendor's bill — on any kind of expense — is owed to that vendor (books: the vendor's account)
+      vendorId: v.kind === 'manufacturing' ? v.vendorId : v.kind === 'office' && v.pKind === 'vendor' ? v.vendorId : '',
+      vendorName: v.kind === 'manufacturing' ? v.vendorName.trim() : v.kind === 'office' && v.pKind === 'vendor' ? v.paidTo.trim() : '',
       soId: v.kind === 'office' ? '' : v.soId, orderNo: v.kind === 'office' ? '' : (so ? String(so.orderNo || '').trim() : (v.soId ? e0.orderNo || '' : '')),
       clientName: v.kind === 'office' ? '' : (so ? so.customerName || so.clientName || '' : (v.soId ? e0.clientName || '' : '')),
-      ledgerId: v.kind === 'order' ? v.ledgerId : '', ledgerName: v.kind === 'order' ? v.ledgerName : '',
+      ledgerId: v.kind === 'order' ? v.ledgerId : v.kind === 'office' && v.pKind === 'ledger' ? v.ledgerId : '',
+      ledgerName: v.kind === 'order' ? v.ledgerName : v.kind === 'office' && v.pKind === 'ledger' ? v.paidTo.trim() : '',
+      // full details kept on the expense (printed on the voucher)
+      partyKind: v.kind === 'manufacturing' ? 'vendor' : v.kind === 'office' ? 'other' : v.pKind || 'ledger',
+      partyGstin: v.pGstin.trim().toUpperCase(), partyAddress: v.pAddress.trim(), partyPhone: v.pPhone.trim(),
+      ...(v.kind === 'office' ? { clientAddress: '', clientGstin: '', customerPO: '', poDate: '', orderDate: '' }
+        : so ? { clientAddress: cl.address, clientGstin: cl.gstin, customerPO: so.customerPO || '', poDate: so.poDate || '', orderDate: so.orderDate || '' } : {}),
     };
     try {
       const r = edit ? await axios.put(`/api/accounts/expenses/${edit.expenseId}`, payload, { params: { companyId } }) : await axios.post('/api/accounts/expenses', payload, { params: { companyId } });
@@ -244,12 +288,34 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
                 <div style={{ fontSize: 11, color: '#B54708', width: '100%' }}>RCM tax ₹ {amt(rcmTax)} (we pay in cash, then claim as ITC) · <b style={{ color: '#101828' }}>Bill total ₹ {amt(total)}</b></div></td></tr>
             </> : <tr><th>GST %</th><td><select value={v.gst} onChange={set('gst')}>{[...new Set([...GST_RATES, v.gst])].map(g => <option key={g} value={g}>{g}%</option>)}</select>
               <div style={{ fontSize: 11, color: '#667085', marginTop: 3 }}>GST ₹ {amt(gstAmt)} · <b>Total ₹ {amt(total)}</b></div></td></tr>}
-            {v.kind === 'office' && <tr><th>Paid to</th><td><input value={v.paidTo} onChange={set('paidTo')} placeholder="Shop / person (optional)" /></td></tr>}
-            {v.kind === 'manufacturing' && <tr><th>Vendor <i>*</i></th><td><Picker value={v.vendorName} groups={vendorGroups} placeholder="Type vendor name…" ariaLabel="Vendor" onPick={o => setV(x => ({ ...x, vendorId: o.key, vendorName: o.label }))} /></td></tr>}
+            {v.kind === 'office' && <tr><th>Paid to</th><td>
+              <Picker value={v.paidTo} groups={lg.groups} placeholder="Vendor, ledger or client — type to search…" ariaLabel="Paid to"
+                onPick={o => { setV(x => ({ ...x, paidTo: o.label, vendorId: o.kind === 'vendor' ? String(o.raw?.vendorId || '') : '', ledgerId: o.kind === 'ledger' ? String(o.raw?.id || '') : '' })); if (o.kind === 'vendor' || o.kind === 'client') fillParty(o.raw, o.kind); else setV(x => ({ ...x, pKind: 'ledger' })); }} />
+              <input value={v.paidTo} onChange={e => setV(o => ({ ...o, paidTo: e.target.value, vendorId: '', ledgerId: '', pKind: 'other' }))} placeholder="Not in the list? Type the shop / person" style={{ marginTop: 4 }} aria-label="Paid to — not in the list" /></td></tr>}
+            {v.kind === 'manufacturing' && <tr><th>Vendor <i>*</i></th><td><Picker value={v.vendorName} groups={[...vendorGroups, ...lg.groups.filter(g => g.group !== 'Vendors')]} placeholder="Type vendor name…" ariaLabel="Vendor" onPick={o => { const isV = !o.kind || o.kind === 'vendor'; setV(x => ({ ...x, vendorId: isV ? String(o.raw?.vendorId || o.key).replace(/^V/, '') : '', vendorName: o.label, ledgerId: o.kind === 'ledger' ? String(o.raw?.id || '') : x.ledgerId })); fillParty(isV ? lg.vendors.find(y => String(y.vendorId) === String(o.raw?.vendorId || o.key).replace(/^V/, '')) : o.raw, isV ? 'vendor' : o.kind); }} /></td></tr>}
             {v.kind !== 'office' && <tr><th>Sales order{v.kind === 'order' && <i> *</i>}</th><td><Picker value={soLabel} groups={soGroups} placeholder={v.kind === 'order' ? 'Type order no. or client…' : 'Optional'} ariaLabel="Sales order" onPick={o => setV(x => ({ ...x, soId: o.key }))} />
               {v.kind === 'manufacturing' && v.soId && <button type="button" className="sf-lnk" style={{ marginTop: 4 }} onClick={() => setV(x => ({ ...x, soId: '' }))}>Remove order</button>}</td></tr>}
-            {v.kind === 'order' && <tr><th>Expense by <i>*</i></th><td><Picker value={v.ledgerName} groups={lg.groups} placeholder="Ledger, vendor or client who spent it…" ariaLabel="Expense by" onPick={o => setV(x => ({ ...x, ledgerId: String(o.raw?.id || o.raw?.vendorId || o.raw?.clientId || ''), ledgerName: o.label }))} /></td></tr>}
+            {v.kind === 'order' && <tr><th>Expense by <i>*</i></th><td><Picker value={v.ledgerName} groups={lg.groups} placeholder="Ledger, vendor or client who spent it…" ariaLabel="Expense by" onPick={o => { setV(x => ({ ...x, ledgerId: String(o.raw?.id || o.raw?.vendorId || o.raw?.clientId || ''), ledgerName: o.label })); if (o.kind === 'vendor' || o.kind === 'client') fillParty(o.raw, o.kind); else setV(x => ({ ...x, pKind: 'ledger' })); }} /></td></tr>}
           </tbody></table></div>
+      </div>
+      <div className="sf-2" style={{ marginTop: 10 }}>
+        <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="user" size={13} /></span><b>{v.kind === 'order' ? 'Expense by — details' : v.kind === 'manufacturing' ? 'Vendor details' : 'Paid to — details'}</b></div>
+          <table className="sf-kv"><tbody>
+            <tr><th>Name</th><td><b>{(v.kind === 'order' ? v.ledgerName : v.kind === 'manufacturing' ? v.vendorName : v.paidTo) || <span style={{ color: '#98A2B3' }}>— pick / type above —</span>}</b></td></tr>
+            <tr><th>GSTIN</th><td><input value={v.pGstin} onChange={e => setV(o => ({ ...o, pGstin: e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15) }))} className="mono" placeholder="Optional" /></td></tr>
+            <tr><th>Address</th><td><input value={v.pAddress} onChange={set('pAddress')} placeholder="Filled from the vendor / client master — or type" /></td></tr>
+            <tr><th>Phone</th><td><input value={v.pPhone} onChange={set('pPhone')} placeholder="Optional" /></td></tr>
+          </tbody></table></div>
+        <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="file" size={13} /></span><b>Order &amp; client</b></div>
+          {v.kind === 'office' ? <div className="sf-empty">Office expense — not tied to an order.</div> : !so ? <div className="sf-empty">{v.kind === 'order' ? 'Pick the sales order above.' : 'No order — optional for a manufacturing expense.'}</div> : (
+            <table className="sf-kv"><tbody>
+              <tr><th>Order</th><td><b>{String(so.orderNo || so.orderId).trim()}</b>{so.orderDate ? ` · ${dmy(so.orderDate)}` : ''}</td></tr>
+              <tr><th>Client</th><td><b>{so.customerName || so.clientName}</b></td></tr>
+              <tr><th>Address</th><td>{cl.address || '—'}</td></tr>
+              <tr><th>GSTIN</th><td className="mono">{cl.gstin || '—'}</td></tr>
+              <tr><th>Client PO</th><td>{so.customerPO || '—'}{so.poDate ? ` · ${dmy(so.poDate)}` : ''}</td></tr>
+            </tbody></table>)}
+        </div>
       </div>
       <AttachBox entity="expense" rec={edit ? { ...edit, attachments: atts } : null} idKey="expenseId" companyId={companyId} files={files} setFiles={setFiles} onRemoved={setAtts} />
       {msg && <div className={`sf-msg ${msg.k}`} role="status">{msg.t}</div>}

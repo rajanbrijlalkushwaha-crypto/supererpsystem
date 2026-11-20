@@ -112,7 +112,7 @@ export function AttachBox({ entity, rec, idKey, companyId, files, setFiles, onRe
   const kb = n => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
   return (
     <div className="sf-card">
-      <div className="sf-ch"><span className="ico"><Svg name="file" size={13} /></span><b style={{ whiteSpace: 'nowrap' }}>Documents (PDF / bill copy)</b><span className="grow" />
+      <div className="sf-ch"><span className="ico"><Svg name="file" size={13} /></span><b style={{ whiteSpace: 'nowrap' }}>Bill copy &amp; supporting documents</b><span className="grow" />
         <button type="button" className="sf-lnk" style={{ whiteSpace: 'nowrap' }} onClick={() => inp.current?.click()}>+ Attach file</button>
         <input ref={inp} type="file" multiple hidden accept=".pdf,image/*,.xlsx,.xls,.doc,.docx" onChange={add} /></div>
       {!saved.length && !files.length ? <div className="sf-empty">No document — “+ Attach file” (bill copy, PDF, photo). Files upload when you save.</div> : (

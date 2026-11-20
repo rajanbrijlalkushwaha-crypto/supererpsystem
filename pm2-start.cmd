@@ -64,7 +64,7 @@ if errorlevel 1 (echo Could not set the auto start - the ERP is running now, but
 echo.
 rem  check it really answers
 timeout /t 6 /nobreak >nul
-powershell -NoProfile -Command "try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 http://localhost:%PORT%/; Write-Host 'Check: the ERP answers on port %PORT%.' -ForegroundColor Green } catch { Write-Host 'CHECK FAILED: the ERP does not answer on port %PORT% - see: pm2 logs %APP%' -ForegroundColor Red }"
+powershell -NoProfile -Command "try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 http://localhost:%PORT%/__alive; Write-Host 'Check: the ERP answers on port %PORT%.' -ForegroundColor Green } catch { Write-Host 'CHECK FAILED: the ERP does not answer on port %PORT% - see: pm2 logs %APP%' -ForegroundColor Red }"
 echo Programs listening on port %PORT% and 80:
 netstat -ano | findstr /R /C:":%PORT% .*LISTENING" /C:":80 .*LISTENING"
 %PM2% list

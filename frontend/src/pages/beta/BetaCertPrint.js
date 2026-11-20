@@ -1,7 +1,7 @@
 /* Prints for Bank Guarantees and Warranty Certificates — same look as the other Beta documents
  * (Arial, thin black lines, grey heads, company letterhead). Each prints from a hidden frame. */
 import axios from 'axios';
-import { openPreview, logoData, partyMeta } from './printKit';
+import { openPreview, previewPdf, logoData, partyMeta } from './printKit';
 import { legalNoteHtml } from '../../utils/printFont';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
@@ -414,7 +414,32 @@ ${legalNoteHtml()}`, true), 'cc-list-frame');
 /* ───────── Account voucher (Journal / Debit Note / Credit Note / Expense / Payment) — bordered, like the Delivery Challan ─────────
    title: 'JOURNAL VOUCHER' … · kv: [[label, value]] (right of the company) · party: { label, name, lines[] } · heads: [[text, width?, align?]]
    rows: [[cell, …]] (strings, escaped) · totals: [[label, value]] · words: amount in words · narration · signs: [left, right] */
-export async function printVoucher({ title, sub, kv = [], party, heads = [], rows = [], totals = [], words, narration, company, user, signs }) {
+/* the voucher + its attached files (bill copies, PDFs, photos) as ONE PDF: the voucher first, then each picture, then each PDF.
+   files: [{ name, fileName }], getFile(file) → Blob. Other kinds (Word, Excel…) cannot be printed — their names come back. */
+const blobTo = (b, how) => new Promise((ok, bad) => { const rd = new FileReader(); rd.onload = () => ok(how === 'b64' ? String(rd.result).split(',')[1] : rd.result); rd.onerror = bad; rd.readAsDataURL(b); });
+async function printWithFiles(html, title, files, getFile) {
+  const pdfs = [], pics = [], skipped = [];
+  for (const a of files) {
+    const nm = a.name || a.fileName || 'file';
+    try {
+      const b = await getFile(a);   // eslint-disable-line no-await-in-loop
+      const fn = String(a.fileName || nm);
+      if (b.type === 'application/pdf' || /\.pdf$/i.test(fn)) pdfs.push(await blobTo(b, 'b64'));   // eslint-disable-line no-await-in-loop
+      else if (/^image\//.test(b.type) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(fn)) {
+        pics.push(page(nm, '.att { font:9pt Arial, sans-serif; margin:0 0 4mm; } .att + img { display:block; max-width:100%; max-height:268mm; margin:0 auto; object-fit:contain; }',
+          `<div class="att"><b>Attachment:</b> ${esc(nm)}</div><img src="${await blobTo(b)}" alt="">`));   // eslint-disable-line no-await-in-loop
+      } else skipped.push(nm);
+    } catch { skipped.push(nm); }
+  }
+  if (!pdfs.length && !pics.length) { printPage(html); return skipped; }
+  try {
+    const r = await axios.post('/api/print-merge', { htmls: [html, ...pics], pdfs }, { responseType: 'blob' });
+    previewPdf(r.data, title, `${title}.pdf`, { html });
+  } catch { printPage(html); return files.map(f => f.name || f.fileName); }
+  return skipped;
+}
+
+export async function printVoucher({ title, sub, kv = [], party, party2, heads = [], rows = [], totals = [], words, narration, company, user, signs, files, getFile, partyName }) {
   const co = company || {}, logo = await logoOf(co);
   const coName = esc(co.companyName || co.name);
   const coAddr = esc([co.address, co.city, [co.state, co.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '));
@@ -425,7 +450,9 @@ export async function printVoucher({ title, sub, kv = [], party, heads = [], row
 .c { text-align:center !important; } .r { text-align:right !important; white-space:nowrap; } tr.it td { border-top:0 !important; border-bottom:0 !important; }
 tr.end td { height:5mm; border-top:0 !important; } tr.tot td { font-weight:bold; background:#F2F2F2; }`;
   const [sl, sr] = signs || ['Received / Accepted by', `For ${co.companyName || co.name || ''}`];
-  printPage(page(`${title} ${kv[0] ? kv[0][1] : ''}`, css, `<div class="doc">
+  const pBox = x => `<div class="lbl">${esc(x.label || 'Party')}</div><div class="pn">${esc(x.name)}</div>${(x.lines || []).filter(Boolean).map(l => `<div>${esc(l)}</div>`).join('')}`;
+  const docTitle = `${title} ${kv[0] ? kv[0][1] : ''}`;
+  const html = page(docTitle, css, `<div class="doc">
 <table><tbody><tr><td class="ttl">${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</td></tr></tbody></table>
 <table><colgroup><col style="width:56%"><col></colgroup><tbody><tr>
   <td><div class="co">${logo ? `<img src="${logo}" alt="">` : ''}<div>
@@ -434,7 +461,8 @@ tr.end td { height:5mm; border-top:0 !important; } tr.tot td { font-weight:bold;
     <div>${[co.phone && `Ph: ${esc(co.phone)}`, co.email && `Email: ${esc(co.email)}`].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div></div></div></td>
   <td><table class="kv">${kvh}</table></td>
 </tr></tbody></table>
-${party && party.name ? `<table><tbody><tr><td><div class="lbl">${esc(party.label || 'Party')}</div><div class="pn">${esc(party.name)}</div>${(party.lines || []).filter(Boolean).map(l => `<div>${esc(l)}</div>`).join('')}</td></tr></tbody></table>` : ''}
+${party && party.name && party2 && party2.name ? `<table><colgroup><col style="width:50%"><col></colgroup><tbody><tr><td>${pBox(party)}</td><td>${pBox(party2)}</td></tr></tbody></table>`
+  : (party && party.name) || (party2 && party2.name) ? `<table><tbody><tr><td>${pBox(party && party.name ? party : party2)}</td></tr></tbody></table>` : ''}
 ${heads.length ? `<table><colgroup>${heads.map(h => `<col${h[1] ? ` style="width:${h[1]}"` : ''}>`).join('')}</colgroup>
 <thead><tr>${heads.map(h => `<th>${esc(h[0])}</th>`).join('')}</tr></thead>
 <tbody>${rows.map(r => `<tr class="it">${r.map((v, i) => `<td class="${al(heads[i] && heads[i][2])}">${esc(v)}</td>`).join('')}</tr>`).join('')}
@@ -448,7 +476,10 @@ ${narration ? `<table><tbody><tr><td><b>Narration:</b> ${nl(narration)}</td></tr
 </tr></tbody></table>
 <div class="foot">SUBJECT TO ${esc(String(co.jurisdiction || 'Ahmedabad').trim().toUpperCase())} JURISDICTION</div>
 </div>
-<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`));
+<div class="pby"><span>${brandLine(user)}</span><span>${esc(nowText())}</span></div>`, false, partyName);
+  if (files && files.length && getFile) return printWithFiles(html, docTitle, files, getFile);
+  printPage(html);
+  return [];
 }
 export { inWords };
 

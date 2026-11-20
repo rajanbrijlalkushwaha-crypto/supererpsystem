@@ -43,6 +43,18 @@ app.use(compression({ level: 4, threshold: 1024 }));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+/* server update in progress (server-update.cmd makes the file .updating and removes it when the new ERP is up):
+   everyone sees the "updating" page and the screens get a short answer, instead of a broken or closed site.
+   /__alive always answers — the update script uses it to check the ERP has started. */
+const UPDATING_FLAG = path.join(__dirname, '.updating');
+app.get('/__alive', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.type('text').send('ok'); });
+app.use((req, res, next) => {
+  if (!require('fs').existsSync(UPDATING_FLAG)) return next();
+  if (req.path.startsWith('/app/android')) return next();
+  res.setHeader('Cache-Control', 'no-store'); res.setHeader('Retry-After', '10');
+  if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Super ERP System is being updated — it is back in a minute or two.' });
+  return res.status(503).type('html').send(UPDATING_PAGE);
+});
 app.use(express.static(path.join(__dirname, 'frontend', 'build'), {
   maxAge: '1y',              // hashed bundle filenames — safe to cache hard
   setHeaders: (res, fp) => {
@@ -87,7 +99,8 @@ app.use('/api/delivery-challans', require('./api/deliveryChallans'));
 app.use('/api/grn',               require('./api/grn'));
 app.use('/api/returns',           require('./api/returns'));
 app.use('/api/print-merge',       require('./api/printMerge'));     // bill + DC (or any documents) as one PDF
-app.use('/api/office',            require('./api/office'));         // Office Suite: letters (Word) and sheets (Excel) kept with an order
+app.use('/api/office',            require('./api/office'));
+app.use('/api/whatsapp',          require('./api/whatsapp'));       // each user's own WhatsApp (linked once, kept on the server)         // Office Suite: letters (Word) and sheets (Excel) kept with an order
 app.use('/api/mail',              require('./api/mail'));           // e-mail a printed document (PDF) with To / CC and files
 app.use('/api/sign',              require('./api/signing'));        // my signature + who signed a document (prepared / reviewed / approved)
 app.use('/api/warranty-certs',    require('./api/warrantyCerts'));   // Warranty Certificates
@@ -137,91 +150,132 @@ const UPDATING_PAGE = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8
 <style>
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;display:flex;align-items:center;justify-content:center;padding:16px;overflow:hidden;color:#fff;
-  font:15px/1.5 "Segoe UI",Tahoma,Inter,Arial,sans-serif;
-  background:radial-gradient(ellipse at 50% 38%,#2F7CC0 0%,#1A5A9C 32%,#0E3A6E 64%,#081F40 100%)}
-/* soft light streaks, like the Windows 7 update screen */
-body:before{content:"";position:fixed;inset:-20%;pointer-events:none;
-  background:radial-gradient(ellipse 60% 22% at 30% 20%,rgba(255,255,255,.10),transparent 70%),radial-gradient(ellipse 50% 18% at 75% 80%,rgba(120,200,255,.10),transparent 70%)}
-.w{position:relative;width:min(560px,100%);text-align:center}
-/* the ring of dots */
-.sp{position:relative;width:64px;height:64px;margin:0 auto 26px}
-.sp i{position:absolute;left:28px;top:0;width:8px;height:8px;border-radius:50%;background:#fff;transform-origin:4px 32px;opacity:0;animation:o 1.6s linear infinite}
-.sp i:nth-child(1){transform:rotate(0deg);animation-delay:0s}.sp i:nth-child(2){transform:rotate(45deg);animation-delay:.2s}
-.sp i:nth-child(3){transform:rotate(90deg);animation-delay:.4s}.sp i:nth-child(4){transform:rotate(135deg);animation-delay:.6s}
-.sp i:nth-child(5){transform:rotate(180deg);animation-delay:.8s}.sp i:nth-child(6){transform:rotate(225deg);animation-delay:1s}
-.sp i:nth-child(7){transform:rotate(270deg);animation-delay:1.2s}.sp i:nth-child(8){transform:rotate(315deg);animation-delay:1.4s}
-@keyframes o{0%{opacity:1}70%{opacity:.08}100%{opacity:.08}}
-h1{margin:0 0 4px;font-weight:300;font-size:clamp(22px,4.2vw,32px);letter-spacing:.3px;text-shadow:0 1px 3px rgba(0,0,0,.35)}
-.st{margin:0 0 22px;font-size:clamp(14px,2.4vw,17px);font-weight:300;color:#DCEBFA;min-height:1.5em}
-/* the Aero glass panel */
-.g{position:relative;margin:0 auto;padding:18px 20px 16px;border-radius:8px;text-align:left;
-  background:linear-gradient(180deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.10) 46%,rgba(255,255,255,.05) 47%,rgba(255,255,255,.12) 100%);
-  border:1px solid rgba(255,255,255,.45);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 0 0 1px rgba(0,0,0,.12),0 10px 34px rgba(0,0,0,.35);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.hd{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.lg{flex:none;width:42px;height:42px;border-radius:8px;display:grid;place-items:center;font:700 24px/1 "Segoe UI",Arial,sans-serif;color:#fff;
-  background:linear-gradient(180deg,#3E9BD8 0%,#1C6AAE 50%,#145893 51%,#1D73B8 100%);border:1px solid rgba(255,255,255,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 6px rgba(0,0,0,.35)}
-.hd b{display:block;font-size:15px;font-weight:600}.hd span{display:block;font-size:12.5px;color:#D6E8F8}
-/* the green Windows 7 progress bar, with its moving shine */
-.pb{position:relative;height:18px;border-radius:3px;overflow:hidden;border:1px solid #6E8FA8;
-  background:linear-gradient(180deg,#F3F3F3 0%,#DADADA 50%,#CFCFCF 51%,#E7E7E7 100%);box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
-.pb .f{position:absolute;inset:0 auto 0 0;width:8%;transition:width 1.2s ease;
-  background:linear-gradient(180deg,#B6F5A6 0%,#4FD43A 45%,#2DB51B 50%,#36C424 100%);box-shadow:inset 0 0 0 1px rgba(0,80,0,.18)}
-.pb .f:after{content:"";position:absolute;top:0;bottom:0;width:90px;left:-90px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:sh 2.2s ease-in-out infinite}
-@keyframes sh{0%{left:-90px}100%{left:100%}}
-.ln{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12.5px;color:#E3EFFA}
-.steps{list-style:none;margin:12px 0 0;padding:0;font-size:13px}
-.steps li{display:flex;align-items:center;gap:8px;padding:2px 0;color:rgba(255,255,255,.55)}
-.steps li:before{content:"";flex:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.45)}
-.steps li.on{color:#fff}.steps li.on:before{border-color:#fff;border-top-color:transparent;animation:r .9s linear infinite}
-.steps li.ok{color:#CFF5C6}.steps li.ok:before{border:0;background:#3CC92A;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+body{margin:0;overflow:hidden;color:#1E1E1E;font:14px/1.45 "Segoe UI",Tahoma,Inter,Arial,sans-serif;
+  background:radial-gradient(ellipse 120% 90% at 50% 30%,#3C8FD6 0%,#1D64B0 30%,#0F427F 62%,#07234A 100%)}
+/* moving light ribbons, like the Windows 7 wallpaper */
+.sky{position:fixed;inset:0;overflow:hidden;pointer-events:none}
+.sky i{position:absolute;left:-30%;width:160%;height:46%;border-radius:50%;filter:blur(28px);opacity:.55;mix-blend-mode:screen;animation:drift 18s ease-in-out infinite alternate}
+.sky i:nth-child(1){top:8%;background:radial-gradient(ellipse at 40% 50%,rgba(140,215,255,.55),transparent 62%);transform:rotate(-8deg)}
+.sky i:nth-child(2){top:46%;background:radial-gradient(ellipse at 60% 50%,rgba(90,190,255,.40),transparent 60%);transform:rotate(6deg);animation-duration:24s}
+.sky i:nth-child(3){top:62%;background:radial-gradient(ellipse at 30% 50%,rgba(170,240,255,.28),transparent 58%);transform:rotate(-4deg);animation-duration:30s}
+@keyframes drift{0%{translate:-6% 0}100%{translate:6% -3%}}
+.sky b{position:absolute;inset:0;background:radial-gradient(ellipse 80% 70% at 50% 45%,transparent 55%,rgba(0,10,30,.55) 100%)}
+.wrap{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 16px 64px}
+/* ring of glowing dots */
+.sp{position:relative;width:58px;height:58px;margin:0 0 18px}
+.sp i{position:absolute;left:25px;top:0;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.9);transform-origin:4px 29px;opacity:.1;animation:dot 1.6s linear infinite}
+.sp i:nth-child(1){rotate:0deg;animation-delay:-1.4s}.sp i:nth-child(2){rotate:45deg;animation-delay:-1.2s}.sp i:nth-child(3){rotate:90deg;animation-delay:-1s}.sp i:nth-child(4){rotate:135deg;animation-delay:-.8s}
+.sp i:nth-child(5){rotate:180deg;animation-delay:-.6s}.sp i:nth-child(6){rotate:225deg;animation-delay:-.4s}.sp i:nth-child(7){rotate:270deg;animation-delay:-.2s}.sp i:nth-child(8){rotate:315deg;animation-delay:0s}
+@keyframes dot{0%{opacity:1}75%,100%{opacity:.1}}
+h1{margin:0;color:#fff;font-weight:300;font-size:clamp(24px,4.4vw,36px);letter-spacing:.2px;text-align:center;text-shadow:0 0 18px rgba(140,210,255,.6),0 2px 4px rgba(0,0,0,.35)}
+.lead{margin:6px 0 24px;color:#D7EAFB;font-weight:300;font-size:clamp(14px,2.3vw,17px);text-align:center;min-height:1.45em}
+/* the Aero window */
+.win{width:min(560px,100%);border-radius:8px;padding:0 7px 7px;
+  background:linear-gradient(180deg,rgba(185,220,250,.62) 0%,rgba(120,175,230,.42) 30px,rgba(95,150,210,.38) 100%);
+  border:1px solid rgba(20,40,70,.65);box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),0 18px 50px rgba(0,0,0,.5);
+  -webkit-backdrop-filter:blur(10px) saturate(1.3);backdrop-filter:blur(10px) saturate(1.3)}
+.tb{display:flex;align-items:center;gap:8px;height:31px;padding:0 2px 0 3px;color:#0B1A2E;font-size:12.5px;text-shadow:0 0 8px rgba(255,255,255,.9),0 0 2px #fff}
+.tb .ti{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;color:#fff;font:700 10px/1 "Segoe UI",Arial;background:linear-gradient(180deg,#58B0EA,#1662AA);box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+.tb .gr{flex:1}
+.tb .x{width:43px;height:19px;margin-top:-8px;border-radius:0 0 5px 5px;border:1px solid rgba(60,20,20,.7);border-top:0;
+  background:linear-gradient(180deg,#E8A493 0%,#D2614A 45%,#B7301A 50%,#D0603F 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.5);opacity:.55;position:relative}
+.tb .x:before,.tb .x:after{content:"";position:absolute;left:50%;top:50%;width:11px;height:2px;background:#fff;border-radius:1px}
+.tb .x:before{transform:translate(-50%,-50%) rotate(45deg)}.tb .x:after{transform:translate(-50%,-50%) rotate(-45deg)}
+.body{background:#fff;border:1px solid rgba(40,70,110,.55);border-radius:2px;box-shadow:inset 0 1px 0 #fff}
+.hd{display:flex;gap:14px;align-items:center;padding:16px 18px 14px;border-bottom:1px solid #E5ECF3;background:linear-gradient(180deg,#FFFFFF,#F4F8FC)}
+.orb{flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;color:#fff;font:700 24px/1 "Segoe UI",Arial;position:relative;
+  background:radial-gradient(circle at 50% 30%,#8BD1FF 0%,#2E8BDA 42%,#0E4F96 78%,#0A3A70 100%);box-shadow:0 2px 6px rgba(0,40,90,.45),inset 0 -3px 6px rgba(0,0,0,.25);text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.orb:after{content:"";position:absolute;left:9px;right:9px;top:4px;height:18px;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(255,255,255,0))}
+.hd h2{margin:0;font-weight:400;font-size:17px;color:#1E3287}
+.hd p{margin:1px 0 0;color:#5A6B7D;font-size:12.5px}
+.ct{padding:14px 18px 16px}
+.now{display:flex;justify-content:space-between;gap:10px;margin:0 0 7px;font-size:13px;color:#1E1E1E}
+.now span:last-child{color:#5A6B7D;font-variant-numeric:tabular-nums}
+/* green Windows 7 progress bar */
+.pb{position:relative;height:16px;border:1px solid #9AA8B6;border-radius:3px;overflow:hidden;background:linear-gradient(180deg,#F4F4F4 0%,#E2E2E2 50%,#D6D6D6 51%,#EBEBEB 100%);box-shadow:inset 0 1px 2px rgba(0,0,0,.15)}
+.pb .f{position:absolute;inset:0 auto 0 0;width:6%;transition:width 1.4s ease;overflow:hidden;
+  background:linear-gradient(180deg,#C8F7BB 0%,#6EDB57 40%,#2FB51E 50%,#3BC528 80%,#5BD447 100%);box-shadow:inset 0 0 0 1px rgba(0,90,0,.22)}
+.pb .f:after{content:"";position:absolute;top:0;bottom:0;width:110px;left:-110px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:sh 2.4s ease-in-out infinite}
+@keyframes sh{0%{left:-110px}100%{left:110%}}
+.list{list-style:none;margin:14px 0 0;padding:10px 12px;border:1px solid #E1E8EF;border-radius:4px;background:#FAFCFE}
+.list li{display:flex;align-items:center;gap:10px;padding:4px 0;color:#8A97A5;font-size:13px}
+.list li .ic{flex:none;width:16px;height:16px;border-radius:50%;border:1.5px solid #C3CED9;position:relative}
+.list li.on{color:#1E1E1E;font-weight:600}
+.list li.on .ic{border-color:#2E8BDA;border-right-color:transparent;animation:r .8s linear infinite}
+.list li.ok{color:#2B6A1F}
+.list li.ok .ic{border:0;background:linear-gradient(180deg,#7EDC63,#2FA51C);box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+.list li.ok .ic:after{content:"";position:absolute;left:5px;top:3px;width:4px;height:7px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
 @keyframes r{to{transform:rotate(360deg)}}
-.ft{margin-top:22px;font-size:13px;color:#C9DDF1}
-button{margin-top:10px;padding:5px 22px;border-radius:3px;cursor:pointer;font:13px "Segoe UI",Tahoma,Arial,sans-serif;color:#111;
-  border:1px solid #707070;background:linear-gradient(180deg,#F2F2F2 0%,#EBEBEB 50%,#DDDDDD 51%,#CFCFCF 100%);box-shadow:inset 0 1px 0 #fff}
+.ft{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:10px 18px;border-top:1px solid #E5ECF3;background:#F1F5F9;font-size:12px;color:#5A6B7D}
+.safe{display:flex;align-items:center;gap:7px}
+.safe:before{content:"";width:14px;height:16px;flex:none;background:linear-gradient(180deg,#7EDC63,#2FA51C);clip-path:polygon(50% 0,100% 18%,100% 55%,50% 100%,0 55%,0 18%)}
+button{padding:4px 20px;border-radius:3px;cursor:pointer;font:12.5px "Segoe UI",Tahoma,Arial,sans-serif;color:#111;border:1px solid #707070;
+  background:linear-gradient(180deg,#F2F2F2 0%,#EBEBEB 50%,#DDDDDD 51%,#CFCFCF 100%);box-shadow:inset 0 1px 0 #fff}
 button:hover{border-color:#3C7FB1;background:linear-gradient(180deg,#EAF6FD 0%,#D9F0FC 50%,#BEE6FD 51%,#A7D9F5 100%)}
-button:focus-visible{outline:1px dotted #fff;outline-offset:3px}
-@media (prefers-reduced-motion:reduce){.sp i,.pb .f:after,.steps li.on:before{animation:none}.sp i{opacity:.7}}
+button:focus-visible{outline:1px dotted #000;outline-offset:2px}
+.note{margin-top:16px;color:#CFE3F7;font-size:12.5px;text-align:center;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+/* taskbar with the clock */
+.bar{position:fixed;left:0;right:0;bottom:0;height:40px;z-index:2;display:flex;align-items:center;gap:10px;padding:0 10px 0 6px;
+  background:linear-gradient(180deg,rgba(40,70,105,.78) 0%,rgba(20,40,65,.86) 50%,rgba(12,28,48,.92) 100%);border-top:1px solid rgba(255,255,255,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#fff}
+.bar .st{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 16px/1 "Segoe UI",Arial;position:relative;
+  background:radial-gradient(circle at 50% 30%,#8BD1FF 0%,#2E8BDA 45%,#0E4F96 80%);box-shadow:0 0 10px rgba(110,190,255,.55),inset 0 -2px 4px rgba(0,0,0,.3)}
+.bar .st:after{content:"";position:absolute;left:7px;right:7px;top:3px;height:12px;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0))}
+.bar .tk{height:32px;padding:0 12px;display:flex;align-items:center;gap:8px;border-radius:3px;font-size:12.5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,.08) 50%,rgba(255,255,255,.02) 51%,rgba(255,255,255,.12));border:1px solid rgba(255,255,255,.35);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.bar .tk i{width:16px;height:16px;border-radius:4px;background:linear-gradient(180deg,#58B0EA,#1662AA)}
+.bar .gr{flex:1}
+.bar .ck{text-align:center;font-size:12px;line-height:1.25}
+@media (max-width:520px){.bar .tk span{display:none}.hd{padding:14px}.ct{padding:12px 14px 14px}.ft{flex-direction:column;align-items:stretch;text-align:center}.safe{justify-content:center}}
+@media (prefers-reduced-motion:reduce){.sky i,.sp i,.pb .f:after,.list li.on .ic{animation:none}.sp i{opacity:.7}}
 </style></head><body>
-<main class="w" role="status" aria-live="polite">
+<div class="sky" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
+<main class="wrap" role="status" aria-live="polite">
   <div class="sp" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <h1>Super ERP System is updating</h1>
-  <p class="st" id="st">Installing the new version — please wait</p>
-  <div class="g">
-    <div class="hd"><div class="lg" aria-hidden="true">S</div><div><b>Installing updates</b><span>Your data is safe — only the program is being replaced.</span></div></div>
-    <div class="pb" aria-hidden="true"><div class="f" id="f"></div></div>
-    <div class="ln"><span id="ph">Stage 1 of 3</span><span id="tm">0:00</span></div>
-    <ul class="steps">
-      <li id="s1" class="on">Getting the new version</li>
-      <li id="s2">Building the screens</li>
-      <li id="s3">Starting Super ERP System</li>
-    </ul>
+  <p class="lead" id="lead">Getting the new version ready — please wait</p>
+  <div class="win">
+    <div class="tb"><span class="ti">S</span><span>Super ERP System Update</span><span class="gr"></span><span class="x" aria-hidden="true"></span></div>
+    <div class="body">
+      <div class="hd"><div class="orb" aria-hidden="true">S</div><div><h2>Installing updates</h2><p>A new version of Super ERP System is being installed on the server.</p></div></div>
+      <div class="ct">
+        <div class="now"><span id="ph">Installing update 1 of 3…</span><span id="tm">0:00</span></div>
+        <div class="pb" aria-hidden="true"><div class="f" id="f"></div></div>
+        <ul class="list">
+          <li id="s1" class="on"><span class="ic"></span>Getting the new version</li>
+          <li id="s2"><span class="ic"></span>Building the screens</li>
+          <li id="s3"><span class="ic"></span>Starting Super ERP System</li>
+        </ul>
+      </div>
+      <div class="ft"><span class="safe">Your data is safe — only the program is being replaced.</span><button type="button" onclick="location.reload()">Try now</button></div>
+    </div>
   </div>
-  <div class="ft">Do not close this page — it opens Super ERP System by itself when the update is done.<br>
-    <button type="button" onclick="location.reload()">Try now</button></div>
+  <p class="note">Keep this page open — Super ERP System opens here by itself when the update is done.</p>
 </main>
+<div class="bar" aria-hidden="true"><span class="st">S</span><span class="tk"><i></i><span>Super ERP System Update</span></span><span class="gr"></span><span class="ck" id="ck"></span></div>
 <script>
 (function(){
-  var t0=Date.now(),st=document.getElementById('st'),f=document.getElementById('f'),ph=document.getElementById('ph'),tm=document.getElementById('tm');
-  var steps=[document.getElementById('s1'),document.getElementById('s2'),document.getElementById('s3')];
-  var msgs=['Installing the new version — please wait','Building the new screens — this takes a minute or two','Almost there — starting Super ERP System'];
+  var t0=Date.now(),$=function(id){return document.getElementById(id)};
+  var steps=[$('s1'),$('s2'),$('s3')];
+  var lead=['Getting the new version ready — please wait','Building the new screens — this takes a minute or two','Almost done — starting Super ERP System'];
+  var ph=['Installing update 1 of 3…','Installing update 2 of 3…','Installing update 3 of 3…'];
   function stage(sec){return sec<20?0:sec<110?1:2}
   function tick(){
-    var sec=Math.floor((Date.now()-t0)/1000),s=stage(sec);
-    tm.textContent=Math.floor(sec/60)+':'+('0'+sec%60).slice(-2);
-    // the bar only shows that it is working; it never reaches the end until the ERP is back
-    var p=s===0?8+sec*1.1:s===1?30+(sec-20)*0.5:Math.min(96,75+(sec-110)*0.12);
-    f.style.width=Math.min(96,p).toFixed(1)+'%';
-    ph.textContent='Stage '+(s+1)+' of 3';st.textContent=msgs[s];
+    var sec=Math.floor((Date.now()-t0)/1000),s=stage(sec),d=new Date();
+    $('tm').textContent=Math.floor(sec/60)+':'+('0'+sec%60).slice(-2);
+    // the bar shows that work goes on; it reaches the end only when the ERP is back
+    var p=s===0?6+sec*1.2:s===1?30+(sec-20)*0.5:Math.min(96,75+(sec-110)*0.12);
+    $('f').style.width=Math.min(96,p).toFixed(1)+'%';
+    $('ph').textContent=ph[s];$('lead').textContent=lead[s];
     steps.forEach(function(el,i){el.className=i<s?'ok':i===s?'on':''});
+    $('ck').innerHTML=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'<br>'+d.toLocaleDateString('en-GB');
   }
-  function check(){
-    fetch(location.href,{cache:'no-store',credentials:'same-origin'}).then(function(r){
-      if(r.status===200){f.style.width='100%';steps.forEach(function(el){el.className='ok'});st.textContent='Done — opening Super ERP System…';setTimeout(function(){location.reload()},700)}
-    }).catch(function(){});
+  function done(){
+    $('f').style.width='100%';steps.forEach(function(el){el.className='ok'});
+    $('ph').textContent='Update complete';$('lead').textContent='Done — opening Super ERP System…';
+    setTimeout(function(){location.reload()},900);
   }
+  function check(){fetch(location.href,{cache:'no-store',credentials:'same-origin'}).then(function(r){if(r.status===200)done()}).catch(function(){})}
   tick();setInterval(tick,1000);setInterval(check,5000);
 })();
 </script></body></html>`;

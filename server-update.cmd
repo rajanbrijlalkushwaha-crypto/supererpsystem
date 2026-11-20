@@ -22,6 +22,8 @@ rem  run from a copy in TEMP: the update replaces this file, and Windows misread
 if /i not "%~1"=="/run" (copy /y "%~f0" "%TEMP%\epsilon-erp-update.cmd" >nul & call "%TEMP%\epsilon-erp-update.cmd" /run "%~dp0." & exit /b)
 cd /d "%~2"
 set "ERPDIR=%~2"
+rem  while this runs, the ERP shows everyone the "updating" page (removed again at the end, also when it fails)
+> "%ERPDIR%\.updating" echo updating
 
 rem  Run this on the SERVER. It takes the latest code from GitHub, builds it and restarts the ERP.
 rem  Your data is safe: the Database folder, .env and .secrets are never in GitHub and are never touched.
@@ -63,12 +65,32 @@ call npm install --no-audit --no-fund
 if errorlevel 1 (popd & goto fail)
 
 echo.
-echo [3/4] Building the screens (takes a few minutes)...
+echo [3/4] Building the screens (takes a few minutes - everyone sees the "updating" page meanwhile)...
 set DISABLE_ESLINT_PLUGIN=true
 set CI=false
 set GENERATE_SOURCEMAP=false
+rem  more memory for the build, so it does not stall on a small PC
+set NODE_OPTIONS=--max-old-space-size=4096
+rem  built into build-new: the working screens (build) stay until the new ones are ready
+if exist build-new rmdir /s /q build-new
+set BUILD_PATH=build-new
 call npm run build
-if errorlevel 1 (popd & goto fail)
+if errorlevel 1 (set BUILD_PATH=& set NODE_OPTIONS=& popd & goto fail)
+set BUILD_PATH=
+set NODE_OPTIONS=
+if not exist build-new\index.html (echo The build did not make the screens. & popd & goto fail)
+rem  swap in the new screens
+if exist build-old rmdir /s /q build-old
+if exist build move build build-old >nul
+if exist build (
+  rem  the folder is in use - copy over it instead
+  robocopy build-new build /MIR /NFL /NDL /NJH /NJS /NP >nul
+  rmdir /s /q build-new
+) else (
+  move build-new build >nul
+)
+if exist build-old rmdir /s /q build-old
+if not exist build\index.html (echo The new screens could not be put in place. & popd & goto fail)
 popd
 
 echo.
@@ -77,7 +99,7 @@ if not defined ERPDIR set "ERPDIR=%CD%"
 call "%ERPDIR%\pm2-start.cmd" quiet
 if errorlevel 1 goto failstart
 rem  safety net: if the ERP does not answer after the PM2 start, show why and start it the old way (own window)
-powershell -NoProfile -Command "for ($i=0; $i -lt 6; $i++) { try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://localhost:%PORT%/; exit 0 } catch { Start-Sleep -Seconds 5 } }; exit 1"
+powershell -NoProfile -Command "for ($i=0; $i -lt 6; $i++) { try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 http://localhost:%PORT%/__alive; exit 0 } catch { Start-Sleep -Seconds 5 } }; exit 1"
 if errorlevel 1 (
   color 0E
   echo.
@@ -89,6 +111,8 @@ if errorlevel 1 (
   start "Epsilon ERP" cmd /k "cd /d "%ERPDIR%" && node server.js"
 )
 title Epsilon ERP - Update from GitHub
+rem  the new ERP is up: everyone gets the ERP again (the open "updating" pages open it by themselves)
+del /f /q "%ERPDIR%\.updating" >nul 2>nul
 
 echo.
 echo ============================================
@@ -100,6 +124,7 @@ pause
 exit /b 0
 
 :failstart
+del /f /q "%ERPDIR%\.updating" >nul 2>nul
 color 0C
 echo.
 echo ============================================
@@ -110,6 +135,7 @@ pause
 exit /b 1
 
 :fail
+del /f /q "%ERPDIR%\.updating" >nul 2>nul
 color 0C
 echo.
 echo ============================================

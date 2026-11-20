@@ -179,6 +179,15 @@ function loadBooks(cid) {
       [{ led: PURCH, dr: b.subTotal }, ...gstSplit(b, false).map(([l, a]) => ({ led: l, dr: a })), { led: party, cr: b.grandTotal }]);
   });
 
+  /* the party an expense is owed to — a payment against that expense goes to the same ledger */
+  const expById = {};
+  flat(cid, 'Expenses').forEach(e => { if (e && e.expenseId != null) expById[String(e.expenseId)] = e; });
+  const expPartyLed = e => {
+    const mId = String(e.ledgerId || '').replace(/^L:/, '');
+    return (masterById[mId] && ledgers[keyOf(masterById[mId].name)].name)
+      || (e.vendorName ? led(e.vendorName, 'sundry-cred', { kind: 'vendor' }) : null)
+      || (e.ledgerName ? guess(e.ledgerName) : null) || led('Expenses Payable', 'other-liab');
+  };
   flat(cid, 'Payments').forEach(p => {
     if (!p) return;
     const rec = p.type === 'receipt';
@@ -188,7 +197,10 @@ function loadBooks(cid) {
     const party = p.entityType === 'client' ? led(pn, 'sundry-debt', { kind: 'client' })
       : p.entityType === 'vendor' ? led(pn, 'sundry-cred', { kind: 'vendor' })
         : p.entityType === 'ledger' && masterById[p.entityId] ? ledgers[keyOf(masterById[p.entityId].name)].name
-          : (guess(pn) || led(rec ? 'Receipts — party not given' : 'Payments — party not given', 'suspense'));
+          // paid against expense bills: the ledger those expenses are owed to (vendor, "expense by" or Expenses Payable)
+          : p.entityType === 'ledger' && (p.linkedExpenses || []).some(x => expById[String(x.expenseId)]) ? expPartyLed(expById[String((p.linkedExpenses || []).find(x => expById[String(x.expenseId)]).expenseId)])
+            : p.entityType === 'ledger' && p.partyKind === 'vendor' ? led(pn, 'sundry-cred', { kind: 'vendor' })
+              : (guess(pn) || led(rec ? 'Receipts — party not given' : 'Payments — party not given', 'suspense'));
     const bank = bankOf(p);
     const v = { vt: rec ? 'Receipt' : 'Payment', no: `${rec ? 'R' : 'P'}-${p.paymentId}`, ref: p.referenceNo || p.reference || '', date: p.date || p.transactionDate, fb: p.createdAt,
       narr: `${rec ? 'Received from' : 'Paid to'} ${pn}${p.paymentMode ? ` · ${p.paymentMode}` : ''}${p.orderNo ? ` · ${p.orderNo}` : ''}${p.notes ? ` · ${clean(p.notes)}` : ''}`,
@@ -203,10 +215,7 @@ function loadBooks(cid) {
     const base = n(e.amount) || total, gst = r2(total - base);
     const rcm = e.rcm ? r2(base * n(e.rcmRate) / 100) : 0;
     const head = led(e.expenseCategory || e.category || 'General Expenses', e.expenseType === 'order' ? 'direct-exp' : (/salary|wage/i.test(e.expenseCategory || '') ? 'salary-exp' : 'indirect-exp'));
-    const mId = String(e.ledgerId || '').replace(/^L:/, '');
-    const party = (masterById[mId] && ledgers[keyOf(masterById[mId].name)].name)
-      || (e.vendorName ? led(e.vendorName, 'sundry-cred', { kind: 'vendor' }) : null)
-      || (e.ledgerName ? guess(e.ledgerName) : null) || led('Expenses Payable', 'other-liab');
+    const party = expPartyLed(e);
     voucher({ vt: 'Expense', no: `EXP-${e.expenseId}`, ref: e.invoiceNo || e.orderNo || '', date: e.date || e.expenseDate, fb: e.createdAt, narr: `${e.expenseCategory || 'Expense'}${e.description ? ` — ${clean(e.description)}` : ''}${e.orderNo ? ` · ${e.orderNo}` : ''}`, src: `exp:${e.expenseId}`, party, gstIn: gst },
       [{ led: head, dr: base }, gst > 0 ? { led: led('Input GST (expenses)', 'duties-taxes'), dr: gst } : null, { led: party, cr: total },
         // reverse charge: we owe the GST to the government and take the same as input credit

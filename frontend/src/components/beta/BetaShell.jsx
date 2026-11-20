@@ -23,6 +23,7 @@ import BetaSales from '../../pages/beta/BetaSales';
 import BetaDC from '../../pages/beta/BetaDC';
 import BetaPasswords from '../../pages/beta/BetaPasswords';
 import BetaOffice from '../../pages/beta/BetaOffice';
+import BetaWhatsApp from '../../pages/beta/BetaWhatsApp';
 import BetaVendors from '../../pages/beta/BetaVendors';
 import BetaPO from '../../pages/beta/BetaPO';
 import BetaPayment from '../../pages/beta/BetaPayment';
@@ -67,7 +68,7 @@ const typing = el => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$
 /* the colour of each module's icon in the side nav (white icon on a coloured tile) */
 const NAV_COLOR = {
   so: '#2E90FA', po: '#F79009', job: '#7A5AF8', mfg: '#E9A100', stock: '#12B76A', acc: '#06AED4', books: '#6172F3',
-  hr: '#EE46BC', ins: '#F04438', pm: '#66C61C', office: '#2B579A', admin: '#9E77ED', crm: '#0BA5EC', gst: '#DD2590', dash: '#15B79E',
+  hr: '#EE46BC', ins: '#F04438', pm: '#66C61C', office: '#2B579A', wa: '#25D366', admin: '#9E77ED', crm: '#0BA5EC', gst: '#DD2590', dash: '#15B79E',
 };
 /* Finacle-style menu shortcuts: type the code in the "Menu" box (top bar) and press Enter to open the page */
 const SHORTCUTS = {
@@ -84,7 +85,7 @@ const SHORTCUTS = {
   '/beta/books/gst': 'GST', '/beta/books/gst-portal': 'GSTP', '/beta/books/tds': 'TDS', '/beta/books/ageing': 'AGE', '/beta/books/assets': 'FA',
   '/beta/hr/employees': 'EMP', '/beta/hr/assets': 'HRA', '/beta/hr/attendance': 'ATT', '/beta/hr/payroll': 'PR', '/beta/hr/policy': 'HRP',
   '/beta/insurance/policies': 'INS', '/beta/insurance/claims': 'CLM', '/beta/passwords': 'PWD',
-  '/beta/office': 'OFC', '/beta/office/word': 'WORD', '/beta/office/excel': 'XLS', '/beta/office/letterheads': 'LHD',
+  '/beta/whatsapp': 'WA', '/beta/office': 'OFC', '/beta/office/word': 'WORD', '/beta/office/excel': 'XLS', '/beta/office/letterheads': 'LHD',
   '/beta/admin/approvals': 'APR', '/beta/admin/company': 'CO', '/beta/admin/users': 'USR',
   '/beta/profile': 'PROF', '/beta/profile?tab=signature': 'SIGN',
 };
@@ -144,6 +145,7 @@ const SIDE_NAV = [
     sub: [
       { label: 'Policies', path: '/beta/insurance/policies' }, { label: 'Claims', path: '/beta/insurance/claims' },
     ] },
+  { key: 'wa', label: 'WhatsApp', icon: 'mail', path: '/beta/whatsapp' },
   { key: 'office', label: 'Office Suite', icon: 'file',
     sub: [
       { label: 'Documents', path: '/beta/office' }, { label: 'Word — Letter', path: '/beta/office/word' }, { label: 'Excel — Sheet', path: '/beta/office/excel' }, { label: 'Letterheads', path: '/beta/office/letterheads' },
@@ -536,6 +538,7 @@ export default function BetaShell() {
           {pathname.startsWith('/beta/delivery-challan') && <BetaDC key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/passwords') && <BetaPasswords key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/office') && <BetaOffice key={selectedCompany?.companyId || 'none'} />}
+          {pathname.startsWith('/beta/whatsapp') && <BetaWhatsApp key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/vendor') && <BetaVendors key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/po') && <BetaPO key={selectedCompany?.companyId || 'none'} />}
           {pathname.startsWith('/beta/payment') && <BetaPayment key={selectedCompany?.companyId || 'none'} />}

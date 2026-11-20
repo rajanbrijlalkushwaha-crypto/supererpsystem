@@ -2,7 +2,9 @@
  *  • Vendor payments (against POs) — the Beta Payment page itself (/api/accounts/payments, entityType 'vendor').
  *  • Ledger / expense payments — money paid to a ledger account (rent, salary, electricity…), optionally settling its
  *    open expense bills. Same record as the classic payment voucher: type 'payment', entityType 'ledger',
- *    linkedExpenses [{ expenseId, expNo, amount }], status 'pending' (goes for approval). */
+ *    linkedExpenses [{ expenseId, expNo, amount }], status 'pending' (goes for approval).
+ *    "Paid to" lists the ledger accounts, the vendors, and every party an expense was booked on (manufacturing vendor,
+ *    order "expense by", office "paid to") — so the party of an expense is always found, with its open bills. */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -21,6 +23,8 @@ const BASE = '/beta/account/payment';
 const MODES = ['Bank Transfer', 'NEFT', 'RTGS', 'Cheque', 'UPI', 'Cash'];
 const BANK_MODES = ['Bank Transfer', 'NEFT', 'RTGS', 'Cheque'];
 const norm = v => String(v || '').toLowerCase().trim();
+/* who an expense is owed to: order → "expense by", manufacturing → the vendor, office → "paid to" */
+const expParty = e => (e.expenseType === 'order' ? e.ledgerName : e.expenseType === 'manufacturing' ? e.vendorName : e.vendor || e.vendorName || e.ledgerName) || '';
 const bankName = (banks, id) => { const b = banks.find(x => String(x.bankId) === String(id)); return b ? `${b.bankName}${b.accountNumber ? ` · ${String(b.accountNumber).slice(-4)}` : ''}` : ''; };
 
 export default function BetaAccPayment() {
@@ -52,6 +56,7 @@ function LedgerPay() {
   const [expenses, setExpenses] = useState([]);
   const [ledgers, setLedgers] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
   const [note, setNote] = useState(null);
@@ -60,8 +65,9 @@ function LedgerPay() {
   useEffect(() => {
     if (!companyId) return;
     const get = u => axios.get(u, { params: { companyId } }).then(r => (Array.isArray(r.data) ? r.data : [])).catch(() => []);
-    Promise.all([get('/api/accounts/payments'), get('/api/accounts/expenses'), get('/api/ledger/accounts'), get('/api/accounts/banks')]).then(([p, e, l, b]) => {
+    Promise.all([get('/api/accounts/payments'), get('/api/accounts/expenses'), get('/api/ledger/accounts'), get('/api/accounts/banks'), get('/api/vendors')]).then(([p, e, l, b, v]) => {
       setPays(p); setExpenses(e.filter(x => x.status !== 'deleted')); setLedgers(l); setBanks(b.filter(x => x.status !== 'inactive'));
+      setVendors(v.filter(x => x.status !== 'deleted'));
     });
   }, [companyId, reload]);
   const rows = pays && pays.filter(p => p.type === 'payment' && p.entityType === 'ledger');
@@ -78,7 +84,7 @@ function LedgerPay() {
       </div>
       {note && <div className="sb-note" role="status">{note}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       {cur === 'create'
-        ? <div className="sb-body"><PayForm key={editing ? editing.paymentId : 'new'} companyId={companyId} edit={editing} pays={pays || []} expenses={expenses} ledgers={ledgers} banks={banks}
+        ? <div className="sb-body"><PayForm key={editing ? editing.paymentId : 'new'} companyId={companyId} edit={editing} pays={pays || []} expenses={expenses} ledgers={ledgers} vendors={vendors} banks={banks}
             onCancel={() => go('list')} onSaved={t => { setReload(x => x + 1); setNote(t); go('list'); }} /></div>
         : <PayList rows={rows} banks={banks} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={p => { setNote(null); setEditing(p); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
     </div>
@@ -163,7 +169,7 @@ function PayList({ rows, banks, company, user, slot, companyId, onEdit, onChange
   );
 }
 
-function PayForm({ companyId, edit, pays, expenses, ledgers, banks, onSaved, onCancel }) {
+function PayForm({ companyId, edit, pays, expenses, ledgers, vendors = [], banks, onSaved, onCancel }) {
   const e0 = edit || {};
   const [v, setV] = useState(() => ({ date: (e0.date || '').slice(0, 10) || today(), mode: e0.paymentMode || 'Bank Transfer', bankId: e0.bankId ? String(e0.bankId) : '', ref: e0.referenceNo || '', notes: e0.notes || e0.purpose || '', onAcct: (e0.linkedExpenses || []).length ? '' : (e0.amount ? String(e0.amount) : '') }));
   const [led, setLed] = useState(() => (edit ? { id: e0.entityId, name: e0.entityName || e0.party } : null));
@@ -172,22 +178,38 @@ function PayForm({ companyId, edit, pays, expenses, ledgers, banks, onSaved, onC
   const [msg, setMsg] = useState(null);
   const set = k => e => { const x = e.target.value; setV(o => ({ ...o, [k]: x })); setMsg(null); };
   useEffect(() => { if (!v.bankId && banks.length === 1) setV(o => ({ ...o, bankId: String(banks[0].bankId) })); }, [banks, v.bankId]);
+  const paidOn = e => pays.filter(p => p.type === 'payment' && p.status !== 'rejected' && String(p.paymentId) !== String(e0.paymentId || '')
+    && (String(p.expenseId) === String(e.expenseId) || (p.linkedExpenses || []).some(x => String(x.expenseId) === String(e.expenseId))))
+    .reduce((s, p) => { const l = (p.linkedExpenses || []).find(x => String(x.expenseId) === String(e.expenseId)); return s + (l ? Number(l.amount) || 0 : Number(p.amount) || 0); }, 0);
+  const live = expenses.filter(e => !['rejected', 'draft'].includes(e.status));
   const ledGroups = useMemo(() => {
+    // parties with open expense bills first — that is who is usually paid here
+    const open = {};
+    live.forEach(e => { const nm = expParty(e).trim(); if (!nm) return; const bal = (Number(e.grandTotal || e.amount) || 0) - paidOn(e); if (bal <= 0.005) return;
+      const k = norm(nm); const o = open[k] || (open[k] = { name: nm, bal: 0, n: 0, vendorId: e.expenseType === 'manufacturing' ? e.vendorId : '' }); o.bal += bal; o.n += 1; });
+    const groups = [];
+    const due = Object.values(open).sort((a, b) => a.name.localeCompare(b.name));
+    if (due.length) groups.push({ group: 'Expense parties — open bills', items: due.map(x => ({ key: `X:${norm(x.name)}`, label: x.name, sub: `${x.n} bill${x.n === 1 ? '' : 's'} · ₹ ${amt(x.bal)} due`, raw: { id: x.vendorId ? `V${x.vendorId}` : '', name: x.name, vendorId: x.vendorId } })) });
     const by = {};
     ledgers.forEach(l => { if (!l.name) return; const g = l.groupName || 'Ledger Accounts'; (by[g] = by[g] || []).push({ key: String(l.id || l.name), label: l.name, sub: l.code || '', raw: l }); });
-    return Object.keys(by).sort().map(g => ({ group: g, items: by[g].sort((a, b) => a.label.localeCompare(b.label)) }));
-  }, [ledgers]);
+    Object.keys(by).sort().forEach(g => groups.push({ group: g, items: by[g].sort((a, b) => a.label.localeCompare(b.label)) }));
+    const vs = vendors.map(x => ({ key: `V${x.vendorId}`, label: x.vendorName || x.companyName || '', sub: [x.city, x.gstin].filter(Boolean).join(' · '), raw: { id: `V${x.vendorId}`, name: x.vendorName || x.companyName || '', vendorId: x.vendorId } }))
+      .filter(x => x.label).sort((a, b) => a.label.localeCompare(b.label));
+    if (vs.length) groups.push({ group: 'Vendors', items: vs });
+    return groups;
+  }, [ledgers, vendors, expenses, pays]);   // eslint-disable-line react-hooks/exhaustive-deps
   const bills = useMemo(() => {
     if (!led) return [];
-    return expenses.filter(e => !['rejected', 'draft'].includes(e.status) && (norm(e.ledgerName) === norm(led.name) || (led.id && String(e.ledgerId || '') === String(led.id))))
+    const mine = e => norm(expParty(e)) === norm(led.name) || norm(e.ledgerName) === norm(led.name)
+      || (led.id && String(e.ledgerId || '') === String(led.id))
+      || (led.vendorId && String(e.vendorId || '') === String(led.vendorId));
+    return live.filter(mine)
       .map(e => {
         const value = Number(e.grandTotal || e.amount) || 0;
-        const done = pays.filter(p => p.type === 'payment' && p.status !== 'rejected' && String(p.paymentId) !== String(e0.paymentId || '')
-          && (String(p.expenseId) === String(e.expenseId) || (p.linkedExpenses || []).some(x => String(x.expenseId) === String(e.expenseId))))
-          .reduce((s, p) => { const l = (p.linkedExpenses || []).find(x => String(x.expenseId) === String(e.expenseId)); return s + (l ? Number(l.amount) || 0 : Number(p.amount) || 0); }, 0);
+        const done = paidOn(e);
         return { id: String(e.expenseId), no: `EXP-${e.expenseId}`, date: e.date, desc: e.description || e.expenseCategory || '', order: e.orderNo || '', value, done, bal: Math.max(0, r2(value - done)) };
       }).filter(b => b.bal > 0.005 || picked[b.id] !== undefined).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  }, [led, expenses, pays, picked, e0.paymentId]);
+  }, [led, expenses, pays, picked, e0.paymentId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const ticked = bills.filter(b => picked[b.id] !== undefined);
   const total = ticked.length ? r2(ticked.reduce((s, b) => s + (Number(picked[b.id]) || 0), 0)) : (Number(v.onAcct) || 0);
   const needsBank = BANK_MODES.includes(v.mode);
@@ -202,6 +224,7 @@ function PayForm({ companyId, edit, pays, expenses, ledgers, banks, onSaved, onC
     setBusy(true);
     const body = { companyId, date: v.date, paymentMode: v.mode, bankId: v.mode === 'Cash' ? '' : v.bankId, referenceNo: v.ref.trim(), notes: v.notes.trim(),
       amount: total.toFixed(2), type: 'payment', status: 'pending', entityType: 'ledger', entityId: led.id, entityName: led.name, party: led.name,
+      ...(led.vendorId ? { partyKind: 'vendor', vendorId: led.vendorId } : {}),
       orderId: ticked.length === 1 ? ticked[0].id : '', orderType: '', linkedExpenses: ticked.map(b => ({ expenseId: b.id, expNo: b.no, amount: Number(picked[b.id]) || 0 })),
       purpose: v.notes.trim() || ticked.map(b => b.desc || b.no).join(', ') };
     try {
@@ -217,8 +240,8 @@ function PayForm({ companyId, edit, pays, expenses, ledgers, banks, onSaved, onC
         <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="user" size={13} /></span><b>Paid to</b></div>
           <table className="sf-kv"><tbody>
             <tr><th>Date <i>*</i></th><td><input type="date" value={v.date} onChange={set('date')} /></td></tr>
-            <tr><th>Ledger <i>*</i></th><td><Picker value={led ? led.name : ''} groups={ledGroups} placeholder="Type ledger — rent, salary, electricity…" ariaLabel="Ledger" autoFocus={!edit}
-              onPick={o => { setLed({ id: o.raw?.id || o.key, name: o.label }); setPicked({}); setMsg(null); }} /></td></tr>
+            <tr><th>Paid to <i>*</i></th><td><Picker value={led ? led.name : ''} groups={ledGroups} placeholder="Type ledger, vendor or expense party — rent, salary, transporter…" ariaLabel="Ledger" autoFocus={!edit}
+              onPick={o => { setLed({ id: o.raw?.id || o.key, name: o.label, vendorId: o.raw?.vendorId || '' }); setPicked({}); setMsg(null); }} /></td></tr>
             <tr><th>Notes / purpose</th><td><input value={v.notes} onChange={set('notes')} placeholder={ticked.length ? 'Optional' : 'Needed when no bill is ticked'} /></td></tr>
           </tbody></table></div>
         <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="wallet" size={13} /></span><b>Paid from</b></div>
