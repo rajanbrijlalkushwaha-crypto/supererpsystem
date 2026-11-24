@@ -8,6 +8,7 @@ import { inWords } from './BetaProforma';
 import { fillPage, fitPage, fillBody } from './BetaDCPrint';
 import { loadGrns, billItemsFor, billCounts, poStatusOf } from './BetaPurchaseLib';
 import { previewFrame, partyMeta } from './printKit';
+import { vendorCode } from './vendorCode';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -351,6 +352,7 @@ export async function printPoAdvice({ r, so, payments, vendor, company, user, ba
   <tbody><tr>
     <td><div class="lbl">To (Vendor)</div>
       <div class="pn">${esc(p.vendorName || v.vendorName || '')}</div>
+      ${vendorCode(p, v) ? `<div>Vendor Code: <b>${esc(vendorCode(p, v))}</b></div>` : ''}
       ${vAddr ? `<div>${esc(vAddr)}</div>` : ''}
       ${p.vendorGstin || v.gstin ? `<div>GSTIN: <b>${esc(p.vendorGstin || v.gstin)}</b></div>` : ''}
       ${contact.map((c, i) => `<div>${i ? 'Alt. Contact' : 'Contact'}: <b>${esc(c)}</b></div>`).join('')}

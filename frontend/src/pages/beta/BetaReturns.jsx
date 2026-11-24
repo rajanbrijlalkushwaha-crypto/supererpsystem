@@ -18,6 +18,7 @@ import { VENDOR_PREFIX } from './BetaStock';
 import { DC_CSS, EwayProgress, EwayCaptcha, HelperBox, startHelperOnThisPC, waitHelperOnline } from './BetaDC';
 import { ewayJsonOfReturns, downloadJson, RETURN_SUB_TYPES, returnSubOf, ewayActive } from './BetaEwayJson';
 import { printReturn, printReturnPortal, printReturnWithPortal, uploadReturnPdf } from './ReturnPrint';
+import { vendorCode, VCode } from './vendorCode';
 
 const CFG = {
   client: { path: '/beta/return-note', title: 'Return Note', create: 'Create Return Note', list: 'Return Notes', party: 'Client', doc: 'Sales Order',
@@ -91,6 +92,7 @@ export default function BetaReturns({ kind }) {
   const doPrint = async (r, how) => {
     try {
       const full = fillReturn(r, ctx);
+      if (r.kind !== 'client') full.vendorCode = vendorCode(r, pos.find(p => String(p.orderId) === String(r.poId)));
       if (how === 'with' || how === 'without') await printReturn({ r: full, company: selectedCompany, user: me, withValue: how === 'with' });
       else if (how === 'portal') await printReturnPortal({ r, companyId });
       else { say('Preparing one PDF — note + portal e-way bill…'); await printReturnWithPortal({ r: full, company: selectedCompany, user: me, withValue: how === 'p-with', companyId }); say(null); }
@@ -190,7 +192,7 @@ export default function BetaReturns({ kind }) {
               onSaved={(text, savedKind, rn) => { setReload(x => x + 1); say(text, rn); setEditing(null); navigate(`${CFG[savedKind || kind].path}?tab=list`); }} />}
         </div>
       )}
-      {tab === 'list' && <ReturnList kind={kind} C={C} rets={rets} companyId={companyId} slot={slot} setNote={t => say(t)} ew={ew}
+      {tab === 'list' && <ReturnList kind={kind} C={C} rets={rets} pos={pos} companyId={companyId} slot={slot} setNote={t => say(t)} ew={ew}
         onEdit={r => { say(null); setEditing(r); }} onChanged={() => setReload(x => x + 1)} />}
     </div>
   );
@@ -463,7 +465,7 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
         ? { orderId: String(doc.orderId), orderNo: doc.orderNo || '', customerName: doc.customerName || doc.party || '',
             creditNoteId: cnMode === 'against' ? cnId : (edit?.creditNoteId && cnMode !== 'later' ? String(edit.creditNoteId) : ''),
             ...(direct ? { direct: { orderId: String(toOrder.orderId), orderNo: toOrder.orderNo || '', customerName: toOrder.customerName || toOrder.party || '' } } : {}) }
-        : { poId: String(doc.orderId), poNo: doc.poNo || doc.poNumber || '', vendorId: String(doc.vendorId || ''), vendorName: doc.vendorName || '',
+        : { poId: String(doc.orderId), poNo: doc.poNo || doc.poNumber || '', vendorId: String(doc.vendorId || doc.vendorCode || ''), vendorName: doc.vendorName || '',
             orderId: String(doc.linkedSalesOrderId || ''), orderNo: orders.find(o => String(o.orderId) === String(doc.linkedSalesOrderId))?.orderNo || '' }),
     };
     // the addresses as on today (client site → our godown, our godown → vendor) and the products' rate / GST / HSN
@@ -683,7 +685,7 @@ function ReturnForm({ pageKind, companyId, company, me, orders, pos, dcs, grns, 
 const RCOLS = kind => [['Date', '7%'], ['No.', '9%'], [kind === 'client' ? 'Order No.' : 'PO No.', '9%'], [kind === 'client' ? 'Client' : 'Vendor', '12%'],
   [kind === 'client' ? 'DC No.' : 'Order No.', '9%'], ['Products', '16%'], ['Qty', '5%', 'r'], ['Reason', '9%'], [kind === 'client' ? 'Received at' : 'Sent from', '8%'], ['E-Way Bill', '9%'], ['By', '7%']];
 
-function ReturnList({ kind, C, rets, companyId, slot, setNote, ew, onEdit, onChanged }) {
+function ReturnList({ kind, C, rets, pos = [], companyId, slot, setNote, ew, onEdit, onChanged }) {
   const [printMenu, setPrintMenu] = useState(false);
   const [ewMenu, setEwMenu] = useState(false);
   const pdfIn = useRef(null);
@@ -792,7 +794,7 @@ function ReturnList({ kind, C, rets, companyId, slot, setNote, ew, onEdit, onCha
               title={gone(r) ? `Deleted by ${r.deletedBy || '—'} on ${fdate(r.deletedAt)}${r.deleteReason ? ` — ${r.deleteReason}` : ''}` : 'Click to select · double-click to edit'}>
               <tr>
                 <td className="nw">{fdate(r.date)}</td><td className="bno">{r.returnNo}{kind === 'client' && !gone(r) ? <div className="rt-who">{r.creditNoteNo ? `CN ${r.creditNoteNo}` : 'Credit Note pending'}</div> : null}</td>
-                <td className="no">{kind === 'client' ? dash(r.orderNo) : dash(r.poNo)}</td><td className="cl">{kind === 'client' ? dash(r.customerName) : dash(r.vendorName)}</td>
+                <td className="no">{kind === 'client' ? dash(r.orderNo) : dash(r.poNo)}</td><td className="cl">{kind === 'client' ? dash(r.customerName) : <>{dash(r.vendorName)}<VCode c={vendorCode(r, pos.find(p => String(p.orderId) === String(r.poId)))} /></>}</td>
                 <td className="no">{kind === 'client' ? <>{dash(r.dcNo)}{r.direct?.orderNo ? <div className="rt-who">→ {r.direct.dcNo ? `DC ${r.direct.dcNo}` : 'DC'} to {r.direct.customerName} ({r.direct.orderNo})</div> : null}</> : dash(r.orderNo)}</td>
                 <td>{(r.items || []).map((i, k) => <div key={k} className="gl">{i.itemName}</div>)}</td>
                 <td className="r">{(r.items || []).map((i, k) => <div key={k} className="gl">{num(i.qty)}{i.unit ? <span className="mut"> {i.unit}</span> : null}</div>)}</td>

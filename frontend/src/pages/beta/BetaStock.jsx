@@ -20,6 +20,7 @@ import { CSS as SALES_CSS } from './BetaSales';
 import { num, fdate } from './BetaSalesBill';
 import { n, r3, key, loadGrns, grnQtyOf, billCounts } from './BetaPurchaseLib';
 import { PX_CSS } from './BetaPurchaseParts';
+import { vendorCode, withCode } from './vendorCode';
 
 const EXTRA_CSS = `.stk td { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .stk .b { font-weight:700; }
 .stk tbody tr.rw { cursor:pointer; } .stk tbody tr.nil td { color:#98A2B3; }
@@ -92,6 +93,7 @@ export default function BetaStock() {
       const toVendor = g.deliveryType === 'to-vendor';
       const place = toVendor ? (g.toVendorName || 'Other vendor') : (g.deliveryLocation || g.receiveAt || myPlaces[0] || STORE);
       (g.items || []).filter(i => i && grnQtyOf(i) > 0).forEach(i => ev.push({ date: g.receiptDate, in: true, place, type: toVendor ? 'vendor' : 'store', orderId, name: i.itemName, unit: i.unit, qty: grnQtyOf(i),
+        place2: toVendor ? vendorCode({ vendorId: g.toVendorId, vendorName: g.toVendorName }) : '', code: vendorCode(g, poMap[String(g.poId)]),
         from: g.vendorName || poMap[String(g.poId)]?.vendorName || '', po: g.poNo || poMap[String(g.poId)]?.poNo || '', bills: billsFor(String(g.poId), i.itemName, grnQtyOf(i)), grnDate: g.receiptDate, doc: `GRN ${g.grnNo || ''}` }));
     });
     /* a job sheet: what was made is ready at its factory / workshop (qty produced; a completed job — all of it) */
@@ -122,7 +124,7 @@ export default function BetaStock() {
         const at = [r.createdAt, ...mine.map(x => x.at)].filter(Boolean).sort().pop();
         (r.items || []).forEach(i => ev.push({ date, at, ret: true, in: true, place, type: isVendor ? 'vendor' : 'store', orderId, name: i.itemName, unit: i.unit, qty: n(i.qty),
           from: `${r.customerName || 'Client'} (returned)`, po: '', bills: [], doc: `Return Note ${r.returnNo}` }));
-      } else (r.items || []).forEach(i => ev.push({ date: r.date, at: r.createdAt, in: false, from: r.location, to: r.vendorName, orderId, name: i.itemName, qty: n(i.qty), doc: `Return to Vendor ${r.returnNo}` }));
+      } else (r.items || []).forEach(i => ev.push({ date: r.date, at: r.createdAt, in: false, from: r.location, to: withCode(r.vendorName, vendorCode(r, poMap[String(r.poId)])), orderId, name: i.itemName, qty: n(i.qty), doc: `Return to Vendor ${r.returnNo}` }));
     });
     /* a DC takes out its products and its add-ons (e.g. the AC sent with a cabin) — from the vendor / place it went from */
     data.dcs.filter(d => d.status !== 'deleted').forEach(d => [...(d.items || []), ...(d.addons || [])].filter(i => i && n(i.qty) > 0).forEach(i => ev.push({ date: d.dcDate, in: false,
@@ -135,9 +137,12 @@ export default function BetaStock() {
         if (e.in) {
           const s = slotOf(e.place, e.type, e.orderId, e.name, e.unit); s.qty = r3(s.qty + e.qty);
           const add = (k, v) => [].concat(v).filter(Boolean).forEach(x => { if (!s[k].includes(x)) s[k].push(x); });
+          // the codes of the vendors it came from / of the vendor it is lying at (shown; the names stay as they are for matching)
+          if (e.code) s.codes = { ...(s.codes || {}), [e.from]: e.code };
+          if (e.place2) s.placeCode = e.place2;
           add('from', e.from); add('po', e.po); add('docs', e.doc); add('grnDates', e.grnDate);
           (e.bills || []).forEach(b => { if (!s.bills.some(x => x.no === b.no)) s.bills.push(b); });
-          s.log.push({ date: e.date, doc: e.doc, party: [].concat(e.from).filter(Boolean).join(', '), in: e.qty, bal: s.qty });
+          s.log.push({ date: e.date, doc: e.doc, party: withCode([].concat(e.from).filter(Boolean).join(', '), e.code), in: e.qty, bal: s.qty });
         }
         else take(e.orderId, e.name, e.qty, e.from, e.doc, e.date, e.to);
       });
@@ -163,9 +168,9 @@ export default function BetaStock() {
     title: 'Stock Statement', company: selectedCompany, user,
     filter: [`As on ${fdate(new Date())}`, q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '),
     cols: [['Order No.', '', '9%'], ['Client', '', '12%'], ['Vendor', '', '11%'], ['PO No.', '', '10%'], ['Bill Date', 'c', '8%'], ['Product', '', '14%'], ['Qty', 'r', '4%'], ['GRN Date', 'c', '8%'], ['Lying at', '', '10%'], ['Place', '', '14%']],
-    rows: shown.map(r => [esc(r.so?.orderNo || '—'), esc(r.so?.customerName || '—'), esc(r.from.join(', ') || '—'), esc(r.po.join(', ') || '—'),
+    rows: shown.map(r => [esc(r.so?.orderNo || '—'), esc(r.so?.customerName || '—'), esc(r.from.map(x => withCode(x, r.codes?.[x])).join(', ') || '—'), esc(r.po.join(', ') || '—'),
       r.bills.length ? esc([...new Set(r.bills.map(b => fdate(b.date)))].join(', ')) : 'Bill pending', `${esc(r.product)} ${esc(r.unit)}`, `<b>${num(r.qty)}</b>`,
-      esc([...new Set(r.grnDates.map(d => fdate(d)))].join(', ') || '—'), `<b>${esc(r.place)}</b>`, esc(r.address || '—')]),
+      esc([...new Set(r.grnDates.map(d => fdate(d)))].join(', ') || '—'), `<b>${esc(withCode(r.place, r.placeCode))}</b>`, esc(r.address || '—')]),
     total: ['', '', '', '', '', 'Total', `<b>${num(tot)}</b>`, '', '', ''],
   });
 
@@ -193,7 +198,7 @@ export default function BetaStock() {
                 <tr key={i} className={`rw${r.qty > 1e-9 ? '' : ' nil'}`} onClick={() => setStmt(r)} title="Click for the statement — where it came from and where it went">
                   <td className="b">{r.so?.orderNo || '—'}</td>
                   <td title={r.so?.customerName}>{r.so?.customerName || '—'}</td>
-                  <td title={r.from.join(', ')}>{r.from.join(', ') || '—'}</td>
+                  <td title={r.from.map(x => withCode(x, r.codes?.[x])).join(', ')}>{r.from.map(x => withCode(x, r.codes?.[x])).join(', ') || '—'}</td>
                   <td title={r.po.join(', ')}>{r.po.join(', ') || '—'}</td>
                   <td title={r.bills.map(b => `${b.no} · ${fdate(b.date)}`).join(', ')}>{r.bills.length ? [...new Set(r.bills.map(b => fdate(b.date)))].join(', ') : <span className="mut">Bill pending</span>}</td>
                   <td title={r.product}>{r.product} <span className="mut">{r.unit}</span></td>

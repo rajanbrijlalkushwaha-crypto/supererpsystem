@@ -5,6 +5,7 @@ import { logoOf, ADV_CSS } from './BetaDuesPrint';
 import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
 import { previewFrame, partyMeta } from './printKit';
+import { vendorCode, withCode } from './vendorCode';
 
 const n = v => parseFloat(v) || 0;
 const PLAIN = new Intl.NumberFormat('en-IN', { useGrouping: false, maximumFractionDigits: 3 });
@@ -46,7 +47,7 @@ export async function printGrn({ g, po, so, company, user }) {
   const vAddr = tidy([p.vendorAddress, p.vendorCity, [p.vendorState, p.vendorPincode].filter(Boolean).join(' - ')].filter(Boolean).join(', '));
   const its = (g.items || []).filter(it => it && n(it.receivedQty ?? it.qty) > 0);
   const where = g.deliveryType === 'direct-client' ? `Direct to client — ${g.clientName || so?.customerName || ''}${g.deliveryLocation ? `, ${g.deliveryLocation}` : ''}`
-    : g.deliveryType === 'to-vendor' ? `At vendor's factory — ${g.toVendorName || ''}${g.toPoNo ? ` (their PO ${g.toPoNo})` : ''}`
+    : g.deliveryType === 'to-vendor' ? `At vendor's factory — ${withCode(g.toVendorName || '', vendorCode({ vendorId: g.toVendorId, vendorName: g.toVendorName }))}${g.toPoNo ? ` (their PO ${g.toPoNo})` : ''}`
       : `Our factory / store${g.deliveryLocation || g.receiveAt ? ` — ${g.deliveryLocation || g.receiveAt}` : ''}`;
   const made = g.source === 'dc' ? `Made with DC ${g.dcNo || ''}` : g.source === 'bill' ? `Made with vendor invoice ${g.vendorDcNo || ''}` : '';
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${partyMeta(g.vendorName || p.vendorName)}<title>GRN ${esc(g.grnNo || '')}</title><style>${GRN_CSS}</style></head><body>
@@ -71,7 +72,7 @@ export async function printGrn({ g, po, so, company, user }) {
 <table>
   <colgroup><col style="width:55%"><col></colgroup>
   <tbody><tr>
-    <td><div class="lbl">Vendor</div><div class="pn">${esc(g.vendorName || p.vendorName || '')}</div>${vAddr ? `<div>${esc(vAddr)}</div>` : ''}${p.vendorGstin ? `<div>GSTIN: <b>${esc(p.vendorGstin)}</b></div>` : ''}</td>
+    <td><div class="lbl">Vendor</div><div class="pn">${esc(g.vendorName || p.vendorName || '')}</div>${vendorCode(g, p) ? `<div>Vendor Code: <b>${esc(vendorCode(g, p))}</b></div>` : ''}${vAddr ? `<div>${esc(vAddr)}</div>` : ''}${p.vendorGstin ? `<div>GSTIN: <b>${esc(p.vendorGstin)}</b></div>` : ''}</td>
     <td><div class="lbl">Receipt</div><table class="kv">
       <tr><td>Received at</td><td>:</td><td><b>${esc(where)}</b></td></tr>
       ${g.vendorDcNo || g.vendorInvoiceNo ? `<tr><td>Vendor DC / Inv.</td><td>:</td><td>${esc(g.vendorDcNo || g.vendorInvoiceNo)}</td></tr>` : ''}
@@ -144,4 +145,4 @@ tr.tot td { font-weight:bold; } tr.gone td { color:#B42318; text-decoration:line
   printFrame(html, 'pl-print-frame', true);
 }
 
-export const whereText = g => (g.deliveryType === 'direct-client' ? `Direct to client${g.clientName ? `: ${g.clientName}` : ''}` : g.deliveryType === 'to-vendor' ? `At vendor${g.toVendorName ? `: ${g.toVendorName}` : ''}` : (g.deliveryLocation || g.receiveAt || WHERE['our-yard']));
+export const whereText = g => (g.deliveryType === 'direct-client' ? `Direct to client${g.clientName ? `: ${g.clientName}` : ''}` : g.deliveryType === 'to-vendor' ? `At vendor${g.toVendorName ? `: ${withCode(g.toVendorName, vendorCode({ vendorId: g.toVendorId, vendorName: g.toVendorName }))}` : ''}` : (g.deliveryLocation || g.receiveAt || WHERE['our-yard']));

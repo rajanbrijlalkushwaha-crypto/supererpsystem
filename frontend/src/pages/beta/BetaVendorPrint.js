@@ -60,7 +60,7 @@ export async function printVendor({ v, company, user }) {
       </div></div></td>
       <td class="ttl">VENDOR REGISTRATION<small>Vendor master details as registered with us</small></td></tr>
     <tr><td><table class="kv">
-      <tr><td>Vendor ID</td><td>:</td><td><b>${esc(v.vendorId)}</b></td></tr>
+      <tr><td>Vendor Code</td><td>:</td><td><b>${esc(v.vendorId)}</b></td></tr>
       <tr><td>Registered On</td><td>:</td><td><b>${d(v.createdAt) || '—'}</b></td></tr>
       <tr><td>Status</td><td>:</td><td><b>${esc(STATUS[v.status] || v.status || 'Draft')}</b></td></tr>
       <tr><td>Print Date</td><td>:</td><td><b>${d(new Date())}</b></td></tr>

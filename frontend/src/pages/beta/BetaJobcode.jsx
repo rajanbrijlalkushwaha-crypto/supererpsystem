@@ -15,6 +15,7 @@ import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, words, hit } from './BetaAccKit';
 import { printJobCost } from './BetaJobcodePrint';
+import { vendorCode, withCode, VCode, useVendorCodes } from './vendorCode';
 
 const n = v => Number(v) || 0;
 const r = v => Math.round((Number(v) || 0) * 100) / 100;
@@ -70,7 +71,8 @@ export default function BetaJobcode() {
       get('/api/accounts/payments', []), get('/api/bills', [], { type: 'purchase' }), get('/api/bills', [], { type: 'sales' })])
       .then(([so, po, dues, ex, pay, pb, sb]) => setData({ so: arr(so), po: arr(po), cd: arr(dues?.clientDues), vd: arr(dues?.vendorDues), ex: arr(ex), pay: arr(pay), pb: arr(pb), sb: arr(sb) }));
   }, [companyId, reload]);
-  const jobs = useMemo(() => (data ? buildJobs(data) : null), [data]);
+  const vcVer = useVendorCodes(companyId);
+  const jobs = useMemo(() => (data ? buildJobs(data) : null), [data, vcVer]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!can(user, 'project', 'view')) return <div className="sb"><style>{SALES_CSS}</style><div className="sb-empty" style={{ padding: 30 }}>You are not authorized to see Jobcodes.</div></div>;
   return (
     <div className="sb">
@@ -99,13 +101,13 @@ function buildJobs({ so, po, cd, vd, ex, pay, pb, sb }) {
       const d = vd.find(x => k0(x.orderId) === k0(p.orderId) || (p.poNo && x.orderNo === p.poNo));
       const bill = pb.find(b => k0(b.orderId) === k0(p.orderId) || (b.orderNo && (b.orderNo === p.poNo || b.orderNo === p.poNumber)));
       const total = n(p.grandTotal || p.amount), paid = d ? n(d.paid || d.totalPaid) : 0;
-      return { po: p, vendor: p.vendorName || '—', no: p.poNo || p.poNumber || `PO-${p.orderId}`, date: p.poDate || p.date, taxable: n(p.subTotal) || total - n(p.totalGST), total, paid,
+      return { po: p, vendor: p.vendorName || '—', code: vendorCode(p), no: p.poNo || p.poNumber || `PO-${p.orderId}`, date: p.poDate || p.date, taxable: n(p.subTotal) || total - n(p.totalGST), total, paid,
         due: d ? Math.max(0, n(d.due ?? d.balance)) : Math.max(0, total - paid), billNo: bill?.billNo || '', billAmt: n(bill?.grandTotal),
         items: (p.items || []).map(i => `${i.itemName || i.description || i.name || ''} × ${n(i.qty || i.quantity)}`).join(', ') };
     });
     const expList = ex.filter(e => [e.soId, e.orderId, e.salesOrderId].some(x => k0(x) === id) && e.status !== 'rejected').map(e => {
       const base = n(e.amount), total = n(e.grandTotal) || base + base * n(e.taxRate) / 100;
-      return { e, date: e.date, category: e.expenseCategory || e.category, desc: e.description || e.notes || '', party: e.vendorName || e.vendor || e.ledgerName || e.paidBy || '', base, total, paid: Math.min(total, expPaid(e)) };
+      return { e, date: e.date, category: e.expenseCategory || e.category, desc: e.description || e.notes || '', party: withCode(e.vendorName || e.vendor || e.ledgerName || e.paidBy || '', vendorCode({ vendorId: e.vendorId || (e.partyKind === 'vendor' ? e.ledgerId : ''), vendorName: e.vendorName || e.vendor || e.ledgerName || e.paidBy })), base, total, paid: Math.min(total, expPaid(e)) };
     });
     const soValue = n(o.grandTotal || o.amount), soTaxable = n(o.subTotal) || soValue - n(o.totalGST);
     const received = due ? n(due.received ?? due.paymentsReceived ?? due.totalPaid) : 0;
@@ -216,7 +218,7 @@ export function jobcodeExcel(list, fy) {
     rows.push([f ? j.no : '', f ? j.client : '', f ? dmy(j.date) : '', f ? j.so.customerPO || '' : '',
       ln.so ? nm(ln.so) : '', ln.so ? n(ln.so.qty || ln.so.quantity) : '', ln.so ? n(ln.so.rate) : '', ln.so ? r(soAmt(ln.so)) : '', ln.so ? n(ln.so.gst || ln.so.gstPercent) : '',
       f ? r(j.soValue) : '', f ? r(j.received) : '', f ? r(j.clientDue) : '',
-      p?.first ? p.p.vendor : '', p?.first ? p.p.no : '', p?.first ? dmy(p.p.date) : '', p?.it ? nm(p.it) : '', p?.it ? n(p.it.qty || p.it.quantity) : '', p?.it ? n(p.it.rate) : '', p?.it ? r(poAmt(p.it)) : '',
+      p?.first ? withCode(p.p.vendor, p.p.code) : '', p?.first ? p.p.no : '', p?.first ? dmy(p.p.date) : '', p?.it ? nm(p.it) : '', p?.it ? n(p.it.qty || p.it.quantity) : '', p?.it ? n(p.it.rate) : '', p?.it ? r(poAmt(p.it)) : '',
       p?.first ? r(p.p.total) : '', p?.first ? r(p.p.paid) : '', p?.first ? r(p.p.due) : '',
       ln.ex ? dmy(ln.ex.date) : '', ln.ex ? [ln.ex.category, ln.ex.desc].filter(Boolean).join(' — ') : '', ln.ex ? ln.ex.party : '', ln.ex ? r(ln.ex.total) : '', ln.ex ? r(ln.ex.paid) : '',
       f ? stOf(j.so.status)[0] : '']);
@@ -264,7 +266,7 @@ function WideTable({ list, loading, selId, setSelId, T, show, empty }) {
                     {show.po && (ln.poTail
                       ? (k === 0 || lines[k - 1].poTail === false ? blanks(10, N - k, j.poList.length ? '' : 'No PO linked') : null)
                       : <>
-                        {ln.po.first && <><td rowSpan={ln.po.span} className="s1 tx b top" style={{ maxWidth: 200 }} title={ln.po.p.vendor}>{ln.po.p.vendor}</td><td rowSpan={ln.po.span} className="top">{ln.po.p.no}</td><td rowSpan={ln.po.span} className="top">{dmy(ln.po.p.date)}</td></>}
+                        {ln.po.first && <><td rowSpan={ln.po.span} className="s1 tx b top" style={{ maxWidth: 200 }} title={withCode(ln.po.p.vendor, ln.po.p.code)}>{ln.po.p.vendor}<VCode c={ln.po.p.code} /></td><td rowSpan={ln.po.span} className="top">{ln.po.p.no}</td><td rowSpan={ln.po.span} className="top">{dmy(ln.po.p.date)}</td></>}
                         {ln.po.it ? <><td className="tx" title={nm(ln.po.it)}>{nm(ln.po.it)}</td><td className="r">{n(ln.po.it.qty || ln.po.it.quantity)} {ln.po.it.unit || ''}</td><td className="r">{amt(ln.po.it.rate)}</td><td className="r">{amt(poAmt(ln.po.it))}</td></> : <><td /><td /><td /><td /></>}
                         {ln.po.first && <><td rowSpan={ln.po.span} className="r top"><b>{amt(ln.po.p.total)}</b></td>{money(ln.po.p.paid, '#067647', { rowSpan: ln.po.span })}{money(ln.po.p.due, '#B54708', { rowSpan: ln.po.span })}</>}
                       </>)}

@@ -18,6 +18,7 @@ import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, printVoucher, inWords, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, r2, today, words, hit, Pill, Picker } from './BetaAccKit';
 import BetaPayment from './BetaPayment';
+import { vendorCode, withCode, VCode } from './vendorCode';
 
 const BASE = '/beta/account/payment';
 const MODES = ['Bank Transfer', 'NEFT', 'RTGS', 'Cheque', 'UPI', 'Cash'];
@@ -95,7 +96,7 @@ const expList = p => (p.linkedExpenses || []).map(x => x.expNo || `EXP-${x.expen
 const printPay = (p, banks, company, user) => printVoucher({
   title: 'PAYMENT VOUCHER', sub: 'Ledger / expense payment', company, user,
   kv: [['Payment No.', String(p.paymentId)], ['Date', dmy(p.date)], ['Mode', p.paymentMode], ['Bank', bankName(banks, p.bankId)], ['Ref / UTR', p.referenceNo], ['Status', String(p.status || '').toUpperCase()]],
-  party: { label: 'Paid to', name: p.entityName || p.party },
+  party: { label: 'Paid to', name: p.entityName || p.party, lines: [vendorCode(p) && `Vendor Code: ${vendorCode(p)}`] },
   heads: [['Sl', '30px', 'c'], ['Particulars'], ['Amount ₹', '130px', 'r']],
   rows: (p.linkedExpenses || []).length ? p.linkedExpenses.map((x, i) => [String(i + 1), `Against ${x.expNo || `EXP-${x.expenseId}`}`, amt(x.amount)]) : [['1', p.purpose || p.notes || 'On account', amt(p.amount)]],
   totals: [['Total paid', amt(p.amount)]], words: inWords(Number(p.amount) || 0), narration: p.notes || p.purpose,
@@ -130,7 +131,7 @@ function PayList({ rows, banks, company, user, slot, companyId, onEdit, onChange
         <select className="sb-search" style={{ width: 150 }} value={st} onChange={e => setSt(e.target.value)} aria-label="Status"><option value="">All</option><option value="pending">Pending approval</option><option value="confirmed">Approved</option><option value="rejected">Rejected</option></select>
         <button type="button" className="sb-tbtn" onClick={() => printDepList({ title: 'LEDGER PAYMENT LIST', company, user, filter: st || 'All', total: list.reduce((t, p) => t + (Number(p.amount) || 0), 0),
           heads: ['Payment No.', 'Date', 'Paid to', 'Against expenses', 'Purpose', 'Mode', 'Bank', 'Ref / UTR', 'Amount ₹', 'Status'],
-          rows: list.map(p => [String(p.paymentId), dmy(p.date), p.entityName || p.party, expList(p), p.purpose || p.notes, p.paymentMode, bankName(banks, p.bankId), p.referenceNo, amt(p.amount), p.status]) })}><Svg name="file" size={13} />Print list</button>
+          rows: list.map(p => [String(p.paymentId), dmy(p.date), withCode(p.entityName || p.party, vendorCode(p)), expList(p), p.purpose || p.notes, p.paymentMode, bankName(banks, p.bankId), p.referenceNo, amt(p.amount), p.status]) })}><Svg name="file" size={13} />Print list</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>{sel.paymentId}</b> : 'Select a payment'}</span>
           <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printPay(sel, banks, company, user)}><Svg name="file" size={13} />Print</button>
@@ -156,7 +157,7 @@ function PayList({ rows, banks, company, user, slot, companyId, onEdit, onChange
                 : list.map((p, i) => (
                   <tr key={p.paymentId} className={selId === p.paymentId ? 'sel' : ''} onClick={() => setSelId(p.paymentId)} onDoubleClick={() => canEdit && onEdit(p)} style={{ cursor: 'pointer' }}>
                     <td className="r">{i + 1}</td><td><b className="mono">{p.paymentId}</b></td><td className="d">{dmy(p.date)}</td>
-                    <td className="b">{p.entityName || p.party}</td><td className="mono">{expList(p) || <span style={{ color: '#98A2B3' }}>On account</span>}</td>
+                    <td className="b">{p.entityName || p.party}<VCode c={vendorCode(p)} /></td><td className="mono">{expList(p) || <span style={{ color: '#98A2B3' }}>On account</span>}</td>
                     <td>{p.purpose || p.notes || '—'}</td>
                     <td>{p.paymentMode}<span className="sm">{[bankName(banks, p.bankId), p.referenceNo].filter(Boolean).join(' · ')}</span></td>
                     <td className="r b d">{amt(p.amount)}</td><td><Pill s={p.status} /></td>
@@ -193,7 +194,7 @@ function PayForm({ companyId, edit, pays, expenses, ledgers, vendors = [], banks
     const by = {};
     ledgers.forEach(l => { if (!l.name) return; const g = l.groupName || 'Ledger Accounts'; (by[g] = by[g] || []).push({ key: String(l.id || l.name), label: l.name, sub: l.code || '', raw: l }); });
     Object.keys(by).sort().forEach(g => groups.push({ group: g, items: by[g].sort((a, b) => a.label.localeCompare(b.label)) }));
-    const vs = vendors.map(x => ({ key: `V${x.vendorId}`, label: x.vendorName || x.companyName || '', sub: [x.city, x.gstin].filter(Boolean).join(' · '), raw: { id: `V${x.vendorId}`, name: x.vendorName || x.companyName || '', vendorId: x.vendorId } }))
+    const vs = vendors.map(x => ({ key: `V${x.vendorId}`, label: x.vendorName || x.companyName || '', sub: [`Code ${x.vendorId}`, x.city, x.gstin].filter(Boolean).join(' · '), raw: { id: `V${x.vendorId}`, name: x.vendorName || x.companyName || '', vendorId: x.vendorId } }))
       .filter(x => x.label).sort((a, b) => a.label.localeCompare(b.label));
     if (vs.length) groups.push({ group: 'Vendors', items: vs });
     return groups;

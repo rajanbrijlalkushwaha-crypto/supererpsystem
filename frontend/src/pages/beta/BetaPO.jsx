@@ -14,6 +14,8 @@ import { CSS as SALES_CSS, BIG, fyOf, FyFilter, fyCounts, useClearSel } from './
 import { n, num, money, fdate, dash } from './BetaSalesBill';
 import POForm, { poQtyOf, mfgOf, onSoLine, soItemName, soLines } from './BetaPOForm';
 import { printPO } from './BetaPOPrint';
+import { printOrderPending } from './BetaCertPrint';
+import { vendorCode, VCode } from './vendorCode';
 
 const TABS = [
   { key: 'create',   label: 'Create PO' },
@@ -164,7 +166,7 @@ export default function BetaPO() {
           onDeleted={p => { setReload(x => x + 1); setNote(`Deleted PO ${p.poNo || p.orderId} (${p.vendorName || '—'}).`); }} />
       )}
       {tab === 'orders' && (
-        <OrderPending rows={orderRows} loading={loading} slot={slot}
+        <OrderPending rows={orderRows} loading={loading} slot={slot} company={selectedCompany} user={user}
           onPo={(o, items) => { setNote(null); setCreateFor({ orderId: o.orderId, items, k: Date.now() }); navigate('/beta/po?tab=create'); }} />
       )}
     </div>
@@ -193,7 +195,7 @@ function POList({ kind, list, loading, soMap, slot, companyId, canApprove, onEdi
   const shown = useMemo(() => {
     const w = q.toLowerCase().split(/\s+/).filter(Boolean);
     return all.filter(p => (!fySel.length || fySel.includes(fyOf(p.poDate)))
-      && (!w.length || w.every(x => `${p.poNo || ''} ${p.orderId} ${p.vendorName || ''} ${p.vendorGstin || ''} ${soMap[String(p.linkedSalesOrderId)]?.orderNo || ''} ${soMap[String(p.linkedSalesOrderId)]?.customerName || ''} ${(p.items || []).map(i => i.itemName).join(' ')}`.toLowerCase().includes(x))));
+      && (!w.length || w.every(x => `${p.poNo || ''} ${p.orderId} ${p.vendorName || ''} ${vendorCode(p)} ${p.vendorGstin || ''} ${soMap[String(p.linkedSalesOrderId)]?.orderNo || ''} ${soMap[String(p.linkedSalesOrderId)]?.customerName || ''} ${(p.items || []).map(i => i.itemName).join(' ')}`.toLowerCase().includes(x))));
   }, [all, fySel, q, soMap]);
   const sel = shown.find(p => String(p.orderId) === String(selId)) || null;
   const sum = k => shown.reduce((s, p) => s + n(p[k]), 0);
@@ -264,7 +266,7 @@ function POList({ kind, list, loading, soMap, slot, companyId, canApprove, onEdi
                           {i === 0 && <>
                             <td rowSpan={span} className="no">{so ? so.orderNo : p.linkedSalesOrderId ? <span className="mut">{p.linkedSalesOrderId}</span> : <span className="mut">—</span>}</td>
                             <td rowSpan={span}>{dash(so?.customerName)}</td>
-                            <td rowSpan={span} className="cl">{dash(p.vendorName)}</td>
+                            <td rowSpan={span} className="cl">{dash(p.vendorName)}<VCode c={vendorCode(p)} /></td>
                             <td rowSpan={span} className="nw">{fdate(p.poDate)}</td>
                             <td rowSpan={span} className="bno">{p.poNo || p.poNumber || p.orderId}</td>
                           </>}
@@ -301,7 +303,7 @@ function POList({ kind, list, loading, soMap, slot, companyId, canApprove, onEdi
 const OCOLS = [['', '2.6%'], ['Order ID', '8.4%'], ['Client', '11.5%'], ['Product', '15.5%'], ['SO Qty', '5%', 'c'], ['Vendor', '11%'], ['PO No.', '9.4%'], ['PO Date', '6.6%'],
   ['Qty', '4.4%', 'c'], ['Rate', '6%', 'r'], ['Taxable', '6.8%', 'r'], ['GST', '5.8%', 'r'], ['PO Value', '7%', 'r']];
 
-function OrderPending({ rows, loading, slot, onPo }) {
+function OrderPending({ rows, loading, slot, onPo, company, user }) {
   const [fySel, setFySel] = useState(() => [fyOf(new Date())]);
   const [q, setQ] = useState('');
   const [onlyDue, setOnlyDue] = useState(false);   // only orders that still have qty without a PO (all are shown by default)
@@ -321,6 +323,26 @@ function OrderPending({ rows, loading, slot, onPo }) {
     return items.length ? { ...p, items } : null;
   });
   const products = shown.reduce((s2, r) => s2 + r.items.filter(i => i.due > 0).length, 0);
+  /* the printed Order Pending: company header, summary, each order with its products and how each is covered */
+  const doPrint = () => {
+    const orders = shown.map(r => ({
+      no: String(r.o.orderNo || r.o.orderId), date: fdate(r.o.orderDate), client: r.o.customerName || r.o.party || '—',
+      items: r.items.map(x => ({
+        name: soItemName(x.it), addon: !!x.it.addon, qty: num(n(x.it.qty)), unit: x.it.unit || '', due: x.due,
+        status: x.due > 0 ? `Due ${num(x.due)}` : x.mfg > 0 && x.mfg >= n(x.it.qty) ? '✓ Factory' : x.mfg > 0 ? '✓ PO + factory' : '✓ On PO',
+        lines: [
+          ...x.lines.map(l => { const v = lineVal(l.pl); return { vendor: l.p.vendorName || '—', code: vendorCode(l.p), poNo: l.p.poNo || l.p.poNumber || String(l.p.orderId), poDate: fdate(l.p.poDate), qty: num(n(l.pl.qty)), rate: n(l.pl.rate), taxable: v.taxable, gst: v.gst, total: v.total }; }),
+          ...(x.mfg > 0 ? [{ factory: true, jobs: x.jobs.map(j => j.jobNo).join(', '), note: `Job sheet${x.jobs.length === 1 && x.jobs[0].status ? ` · ${x.jobs[0].status}` : ''}`, qty: num(x.mfg) }] : []),
+        ],
+      })),
+    }));
+    const fy = fySel.length ? fySel.map(k => `FY ${String(k).slice(2)}-${String(+k + 1).slice(2)}`).join(', ') : 'All years';
+    printOrderPending({ orders, company, user, filter: [fy, onlyDue ? 'Only pending' : 'All orders', q && `“${q}”`].filter(Boolean).join(' · '),
+      stats: [['Orders shown', shown.length], ['Orders with qty left for PO', shown.filter(r => r.due > 0).length], ['Products left for PO', products],
+        ['Made in our factory', shown.reduce((t, r) => t + r.items.filter(i => i.mfg > 0).length, 0)]] });
+  };
+  // the top bar's "Print list" prints this format on this page
+  useEffect(() => { window.__erpPagePrint = doPrint; return () => { if (window.__erpPagePrint === doPrint) delete window.__erpPagePrint; }; });
 
   return (
     <>
@@ -330,6 +352,7 @@ function OrderPending({ rows, loading, slot, onPo }) {
         <label className={`sb-chk${onlyDue ? ' on' : ''}`}><input type="checkbox" checked={onlyDue} onChange={e => setOnlyDue(e.target.checked)} />Only pending</label>
         <div className="sb-tools">
           <span className="sb-picked">{picked ? <>Selected: <b>{picked.o.orderNo}</b> · {pick.items.length} product(s)</> : 'Tick products, or double-click an order'}</span>
+          <button type="button" className="sb-tbtn" disabled={loading || !shown.length} onClick={doPrint}><Svg name="file" size={13} />Print</button>
           <button type="button" className="sb-tbtn" disabled={!picked} onClick={() => onPo(picked.o, pick.items)}><Svg name="cart" size={13} />Create PO</button>
         </div>
       </>, slot)}
@@ -377,7 +400,7 @@ function OrderPending({ rows, loading, slot, onPo }) {
                               <td className="c">{num(l.qty)}</td>
                               <td className="mfv" colSpan={4}><small>Not bought — no PO needed</small></td>
                             </> : l ? <>
-                              <td className="cl">{l.p.vendorName || '—'}</td>
+                              <td className="cl">{l.p.vendorName || '—'}<VCode c={vendorCode(l.p)} /></td>
                               <td className="bno">{l.p.poNo || l.p.poNumber || l.p.orderId}</td>
                               <td className="nw">{fdate(l.p.poDate)}</td>
                               <td className="c">{num(n(l.pl.qty))}</td>

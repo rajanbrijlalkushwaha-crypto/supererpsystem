@@ -5,6 +5,7 @@ import axios from 'axios';
 import QRCode from 'qrcode';
 import { ewayQrText } from './BetaEwayJson';
 import { previewPdf, prodText, partyMeta } from './printKit';
+import { vendorCode } from './vendorCode';
 import { logoOf, printHtml, printMerged, blobB64 } from './BetaDCPrint';
 
 const n = v => parseFloat(v) || 0;
@@ -102,7 +103,7 @@ tr.tot td { font-weight:bold; }
   <colgroup><col style="width:50%"><col></colgroup>
   <tbody><tr>
     <td>${party(client ? 'Returned by (From)' : 'Sent from', from)}</td>
-    <td>${party(client ? 'Received at (To)' : 'Sent to (Vendor)', to)}</td>
+    <td>${party(client ? 'Received at (To)' : `Sent to (Vendor)${vendorCode(r) ? ` &nbsp;·&nbsp; Vendor Code ${esc(vendorCode(r))}` : ''}`, to)}</td>
   </tr></tbody>
 </table>
 ${!r.ewayBillNo && transportLine ? `<table><tbody><tr><td><span class="lbl">Transport Details:</span> ${transportLine}</td></tr></tbody></table>` : ''}

@@ -12,6 +12,7 @@ import { can } from '../../utils/permissions';
 import { PRODUCT_NAME } from '../../utils/brand';
 import { Svg } from '../ui/Icon';
 import { printList } from '../../pages/beta/printList';
+import { useVendorCodes } from '../../pages/beta/vendorCode';
 import { VOUCHERS, isTransactionPath } from '../VoucherBar';
 import BetaDashboard from '../../pages/beta/BetaDashboard';
 import BetaClients from '../../pages/beta/BetaClients';
@@ -317,15 +318,17 @@ function useOutside(open, close, ref) {
 export default function BetaShell() {
   const { user, logout } = useAuth();
   const [plMsg, setPlMsg] = useState('');
-  const doPrintList = () => { if (!printList({ company: selectedCompanyRef.current, user })) { setPlMsg('No list on this page to print.'); setTimeout(() => setPlMsg(''), 3000); } };
+  // a page with its own list print (e.g. PO → Order Pending) gives it as window.__erpPagePrint
+  const doPrintList = () => { if (typeof window.__erpPagePrint === 'function') { window.__erpPagePrint(); return; } if (!printList({ company: selectedCompanyRef.current, user })) { setPlMsg('No list on this page to print.'); setTimeout(() => setPlMsg(''), 3000); } };
   const selectedCompanyRef = useRef(null);
   const { companies = [], selectedCompany, selectCompany } = useCompany() || {};
   selectedCompanyRef.current = selectedCompany;
   // the Android app's print button calls this (appBridge)
-  useEffect(() => { window.__erpPrintList = () => printList({ company: selectedCompanyRef.current, user }); return () => { delete window.__erpPrintList; }; }, [user]);
+  useEffect(() => { window.__erpPrintList = () => (typeof window.__erpPagePrint === 'function' ? (window.__erpPagePrint(), true) : printList({ company: selectedCompanyRef.current, user })); return () => { delete window.__erpPrintList; }; }, [user]);
   const chat = useChat();
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
+  useVendorCodes(selectedCompany?.companyId, pathname);   // vendor codes for every list, print and report
   const isDash = pathname === '/dashboard' || pathname === '/beta' || pathname === '/beta/';
 
   const [menu, setMenu] = useState(null);   // 'co' | 'me'

@@ -14,6 +14,7 @@ import { can } from '../../utils/permissions';
 import { printPaymentAdvice } from './BetaPaymentPrint';
 import { Svg } from '../../components/ui/Icon';
 import { RC_CSS, STATUS, bankLabel } from './BetaReceipt';
+import { vendorCode, VCode } from './vendorCode';
 
 const MODES = ['Bank Transfer', 'NEFT', 'RTGS', 'IMPS', 'Cheque', 'UPI', 'DD'];
 const TABS = [{ key: 'create', label: 'Create Payment' }, { key: 'list', label: 'Payment List' }];
@@ -192,7 +193,7 @@ export default function BetaPayment({ preset = null, onClose, onSaved, base = '/
   const [askDel, setAskDel] = useState(null);
   const list = useMemo(() => {
     const w = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return vendorPays.filter(p => !w.length || w.every(x => `${p.paymentId} ${p.party || p.entityName} ${allocsOf(p).map(a => `${a.poNo || poMap[String(a.orderId)]?.poNo || ''} ${soMap[String(poMap[String(a.orderId)]?.linkedSalesOrderId)]?.orderNo || ''}`).join(' ')} ${p.notes || ''} ${p.referenceNo || ''} ${p.paymentMode} ${(STATUS[p.status] || [p.status])[0]} ${bankLabel(banks, p.bankId)}`.toLowerCase().includes(x)))
+    return vendorPays.filter(p => !w.length || w.every(x => `${p.paymentId} ${p.party || p.entityName} ${vendorCode(p)} ${allocsOf(p).map(a => `${a.poNo || poMap[String(a.orderId)]?.poNo || ''} ${soMap[String(poMap[String(a.orderId)]?.linkedSalesOrderId)]?.orderNo || ''}`).join(' ')} ${p.notes || ''} ${p.referenceNo || ''} ${p.paymentMode} ${(STATUS[p.status] || [p.status])[0]} ${bankLabel(banks, p.bankId)}`.toLowerCase().includes(x)))
       .sort((a, b) => String(b.transactionDate || b.date || '').localeCompare(String(a.transactionDate || a.date || '')) || n(b.paymentId) - n(a.paymentId));
   }, [vendorPays, q, banks, poMap, soMap]);
   const sel = list.find(p => String(p.paymentId) === String(selId)) || null;
@@ -392,7 +393,7 @@ function PaymentList({ list, all, banks, poMap, soMap, q, selId, onSelect, onEdi
                 const po = poMap[String(a.orderId)], so = po && soMap[String(po.linkedSalesOrderId)];
                 return (
                   <tr key={`${id}-${i}`} className={`${i === 0 ? 'gs' : ''}${sel ? ' sel' : ''}`} {...ev} aria-selected={sel}>
-                    {i === 0 && <><td rowSpan={span} className="lead">{fdate(p.transactionDate || p.date)}</td><td rowSpan={span}><b>{dash(p.party || p.entityName)}</b></td></>}
+                    {i === 0 && <><td rowSpan={span} className="lead">{fdate(p.transactionDate || p.date)}</td><td rowSpan={span}><b>{dash(p.party || p.entityName)}</b><VCode c={vendorCode(p)} /></td></>}
                     <td className="no">{dash(a.poNo || po?.poNo || a.orderId)}</td>
                     <td>{so ? so.orderNo : <span className="rc-mut">—</span>}</td>
                     <td>{dash(so?.customerName)}</td>
@@ -449,7 +450,7 @@ function VendorPicker({ vendors, pos, payments, onPick, onClose }) {
         <div className="rc-pks"><input ref={inRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Search by vendor name, ID, GSTIN or city…" aria-label="Search vendors" /></div>
         <div className="rc-pkl" ref={listRef}>
           <table className="rc-t">
-            <thead><tr><th>Vendor ID</th><th>Vendor</th><th>GSTIN</th><th>City</th><th className="r">POs</th><th className="r">Balance to pay</th></tr></thead>
+            <thead><tr><th>Vendor Code</th><th>Vendor</th><th>GSTIN</th><th>City</th><th className="r">POs</th><th className="r">Balance to pay</th></tr></thead>
             <tbody>{list.length ? list.map((x, i) => (
               <tr key={x.v.vendorId} className={i === sel ? 'sel' : ''} onMouseEnter={() => setSel(i)} onClick={() => onPick(x.v)}>
                 <td className="no">{x.v.vendorId}</td><td><b>{x.v.vendorName}</b></td><td>{dash(x.v.gstin)}</td><td>{dash(x.v.city)}</td>

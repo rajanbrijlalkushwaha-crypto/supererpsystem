@@ -19,6 +19,7 @@ import { POPicker, PX_CSS } from './BetaPurchaseParts';
 import { lineTag } from './BetaPurchaseBill';
 import { printGrn, printList, esc } from './BetaPurchasePrint';
 import { fyLabel } from './BetaSales';
+import { vendorCode, withCode, VCode } from './vendorCode';
 
 const TABS = [{ key: 'create', label: 'Create GRN' }, { key: 'list', label: 'GRN List' }, { key: 'pending', label: 'Receipt Pending' }];
 const whereOf = g => (g.deliveryType === 'direct-client' ? `Direct to client${g.clientName ? `: ${g.clientName}` : ''}`
@@ -148,7 +149,7 @@ function GrnForm({ companyId, company, pos, poMap, soMap, vendors, bills, grns, 
     try {
       const toPo = toVendorPos.find(p => String(p.orderId) === head.toPoId);
       const payload = {
-        companyId, poId: String(po.orderId), poNo: po.poNo || po.poNumber || '', vendorId: po.vendorId || '', vendorName: po.vendorName || '',
+        companyId, poId: String(po.orderId), poNo: po.poNo || po.poNumber || '', vendorId: po.vendorId || po.vendorCode || '', vendorName: po.vendorName || '',
         receiptDate: head.receiptDate, vendorDcNo: head.vendorDcNo.trim(), vehicleNo: head.vehicleNo.trim(), receivedBy: head.receivedBy.trim(), remarks: head.remarks.trim(),
         soId: po.linkedSalesOrderId || '', orderNo: so?.orderNo || '', clientId: so?.clientId || so?.customerCode || '', clientName: so?.customerName || '',
         deliveryType: head.deliveryType,
@@ -193,7 +194,7 @@ function GrnForm({ companyId, company, pos, poMap, soMap, vendors, bills, grns, 
                 <button type="button" className="sf-sbtn" onClick={() => setPicker(true)} disabled={!!editGrn} aria-label="Pick purchase order"><Svg name="search" size={14} /></button>
               </div>
             </td></tr>
-            <tr><th>Vendor</th><td>{po ? <b>{po.vendorName}</b> : '—'}</td></tr>
+            <tr><th>Vendor</th><td>{po ? <><b>{po.vendorName}</b>{vendorCode(po) && <span style={{ color: '#667085' }}> · Code {vendorCode(po)}</span>}</> : '—'}</td></tr>
             <tr><th>PO Date</th><td>{po ? fdate(po.poDate) : '—'}</td></tr>
             <tr><th>Order / Client</th><td>{so ? `${so.orderNo} · ${so.customerName || ''}` : '—'}</td></tr>
           </tbody></table>
@@ -303,7 +304,7 @@ function GrnList({ grns, poMap, soMap, companyId, company, user, slot, setNote, 
     title: 'GRN List', filter: [fyText, q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '), company, user,
     cols: [['Date', 'c', '7%'], ['GRN No.', '', '9%'], ['Vendor', '', '12%'], ['PO No.', '', '10%'], ['Order No.', '', '8.5%'], ['Client', '', '12%'], ['Products', '', '20%'], ['Qty', 'r', '4.5%'], ['Received at', '', '11%'], ['Status', 'c', '6%']],
     rows: list.map(g => { const so = soOf(g), its = (g.items || []).filter(i => i && grnQtyOf(i) > 0);
-      const cells = [fdate(g.receiptDate), esc(g.grnNo || g._id), esc(g.vendorName || ''), esc(g.poNo || ''), esc(so?.orderNo || g.orderNo || ''), esc(g.clientName || so?.customerName || ''),
+      const cells = [fdate(g.receiptDate), esc(g.grnNo || g._id), esc(withCode(g.vendorName, vendorCode(g, poMap[String(g.poId)]))), esc(g.poNo || ''), esc(so?.orderNo || g.orderNo || ''), esc(g.clientName || so?.customerName || ''),
         its.map(i => esc(i.itemName)).join('<br>'), its.map(i => num(grnQtyOf(i))).join('<br>'), esc(whereOf(g)), gone(g) ? 'Deleted' : g.source === 'dc' ? `DC ${esc(g.dcNo || '')}` : g._src === 'stock' ? 'Stock In' : 'GRN'];
       return gone(g) ? { html: `<tr class="gone">${cells.map(c => `<td>${c}</td>`).join('')}</tr>` } : cells; }),
   });
@@ -354,7 +355,7 @@ function GrnList({ grns, poMap, soMap, companyId, company, user, slot, setNote, 
             return (
               <tbody key={g._id} className={`og${selId === g._id ? ' sel' : ''}${gone(g) ? ' gone' : ''}`} onClick={() => setSelId(g._id)} onDoubleClick={() => { setSelId(g._id); if (canChange(g)) onEdit(g); }} title={why(g) || 'Click to select · double-click to edit'}>
                 <tr>
-                  <td className="nw">{fdate(g.receiptDate)}</td><td className="bno">{g.grnNo || g._id}</td><td className="cl">{dash(g.vendorName)}</td>
+                  <td className="nw">{fdate(g.receiptDate)}</td><td className="bno">{g.grnNo || g._id}</td><td className="cl">{dash(g.vendorName)}<VCode c={vendorCode(g, poMap[String(g.poId)])} /></td>
                   <td className="no">{dash(g.poNo)}</td><td className="no">{dash(so?.orderNo || g.orderNo)}</td><td>{dash(g.clientName || so?.customerName)}</td>
                   <td>{its.length ? its.map((i, k) => <div key={k} className="gl">{i.itemName}</div>) : <span className="mut">—</span>}</td>
                   <td className="r">{its.map((i, k) => <div key={k} className="gl">{num(grnQtyOf(i))}{i.unit ? <span className="mut"> {i.unit}</span> : null}</div>)}</td>
@@ -394,7 +395,7 @@ function ReceiptPending({ pos, soMap, bills, grns, loading, slot, company, user,
     title: 'Receipt Pending', company, user,
     filter: [fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All years', all ? 'incl. fully received' : 'left to receive', q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '),
     cols: [['Order No.', '', '8.5%'], ['Client', '', '12%'], ['Vendor', '', '12%'], ['PO No.', '', '10%'], ['PO Date', 'c', '6.5%'], ['Due Date', 'c', '6.5%'], ['Product', '', '19%'], ['PO Qty', 'r', '5.5%'], ['Received', 'r', '6%'], ['Left', 'r', '5.5%'], ['Billed', 'r', '5.5%']],
-    rows: rows.flatMap(r => r.lines.filter(l => all || l.toReceive > 0).map((l, i) => [i ? '' : esc(r.so?.orderNo || ''), i ? '' : esc(r.so?.customerName || ''), i ? '' : esc(r.po.vendorName || ''), i ? '' : esc(r.po.poNo || ''), i ? '' : fdate(r.po.poDate),
+    rows: rows.flatMap(r => r.lines.filter(l => all || l.toReceive > 0).map((l, i) => [i ? '' : esc(r.so?.orderNo || ''), i ? '' : esc(r.so?.customerName || ''), i ? '' : esc(withCode(r.po.vendorName, vendorCode(r.po))), i ? '' : esc(r.po.poNo || ''), i ? '' : fdate(r.po.poDate),
       fdate(l.it?.dueDate || r.po.deliveryDate), esc(l.name), `${num(l.qty)} ${esc(l.unit)}`, num(l.received), `<b>${num(l.toReceive)}</b>`, num(l.billed)])),
   });
 
@@ -431,7 +432,7 @@ function ReceiptPending({ pos, soMap, bills, grns, loading, slot, company, user,
                   <tr key={i}>
                     {i === 0 && <>
                       <td rowSpan={span} className="no">{dash(r.so?.orderNo)}</td><td rowSpan={span}>{dash(r.so?.customerName)}</td>
-                      <td rowSpan={span} className="cl">{dash(r.po.vendorName)}</td><td rowSpan={span} className="no">{r.po.poNo || r.po.orderId}</td>
+                      <td rowSpan={span} className="cl">{dash(r.po.vendorName)}<VCode c={vendorCode(r.po)} /></td><td rowSpan={span} className="no">{r.po.poNo || r.po.orderId}</td>
                       <td rowSpan={span} className="nw">{fdate(r.po.poDate)}</td>
                     </>}
                     {l ? <>

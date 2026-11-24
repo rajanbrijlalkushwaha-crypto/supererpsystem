@@ -12,6 +12,7 @@ import { PX_CSS } from './BetaPurchaseParts';
 import { ACC_CSS } from './BetaAccKit';
 import { BK_CSS, fyName, fyRange, fyStartYear, today, dmy, amt, amtZ, r2, printReport, excel } from './BetaBooksLib';
 import Gst3BCompare from './Gst3BCompare';
+import { vendorCode, withCode } from './vendorCode';
 
 const STATES = { '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh',
   10: 'Bihar', 11: 'Sikkim', 12: 'Arunachal Pradesh', 13: 'Nagaland', 14: 'Manipur', 15: 'Mizoram', 16: 'Tripura', 17: 'Meghalaya', 18: 'Assam', 19: 'West Bengal', 20: 'Jharkhand',
@@ -153,7 +154,7 @@ function build(d, from, to) {
     const x = rateLines(b).reduce((t, l) => ({ taxable: t.taxable + l.taxable, igst: t.igst + l.igst, cgst: t.cgst + l.cgst, sgst: t.sgst + l.sgst }), { taxable: 0, igst: 0, cgst: 0, sgst: 0 });
     const tot = { igst: Number(b.totalIGST) || 0, cgst: Number(b.totalCGST) || 0, sgst: Number(b.totalSGST) || 0 };
     const useTot = tot.igst || tot.cgst || tot.sgst;
-    return { src: 'Purchase bill', gstin: String(b.partyGstin || '').toUpperCase(), party: b.partyName, no: b.vendorBillNo || b.billNo || b.billId, ourNo: b.billNo, date: b.billDate, taxable: r2(b.subTotal || x.taxable), igst: r2(useTot ? tot.igst : x.igst), cgst: r2(useTot ? tot.cgst : x.cgst), sgst: r2(useTot ? tot.sgst : x.sgst), value: r2(b.grandTotal), po: b.orderNo || '' };
+    return { src: 'Purchase bill', gstin: String(b.partyGstin || '').toUpperCase(), party: b.partyName, code: vendorCode(b), no: b.vendorBillNo || b.billNo || b.billId, ourNo: b.billNo, date: b.billDate, taxable: r2(b.subTotal || x.taxable), igst: r2(useTot ? tot.igst : x.igst), cgst: r2(useTot ? tot.cgst : x.cgst), sgst: r2(useTot ? tot.sgst : x.sgst), value: r2(b.grandTotal), po: b.orderNo || '' };
   });
   const exps = d.ex.filter(e => /approv|posted|confirm|paid/i.test(String(e.status || '')) && inP(e.date)).map(e => {
     const gst = r2((Number(e.grandTotal) || 0) - (Number(e.amount) || 0));
@@ -166,7 +167,7 @@ function build(d, from, to) {
   });
   const dns = d.dn.filter(x => /approv|posted|confirm/i.test(String(x.status || '')) && inP(x.date)).map(x => {
     const b = d.pb.find(p => p.billId === x.linkedBillId) || {}, g = Number(x.totalGST) || 0, intra = b.gstType === 'intrastate';
-    return { src: 'Debit note', gstin: String(b.partyGstin || '').toUpperCase(), party: x.vendorName, no: x.dnNo || x.dnId, date: x.date, taxable: -r2(x.subTotal), igst: intra ? 0 : -r2(g), cgst: intra ? -r2(g / 2) : 0, sgst: intra ? -r2(g / 2) : 0, value: -r2(x.grandTotal), po: x.billRef || '' };
+    return { src: 'Debit note', gstin: String(b.partyGstin || '').toUpperCase(), party: x.vendorName, code: vendorCode(x, b), no: x.dnNo || x.dnId, date: x.date, taxable: -r2(x.subTotal), igst: intra ? 0 : -r2(g), cgst: intra ? -r2(g / 2) : 0, sgst: intra ? -r2(g / 2) : 0, value: -r2(x.grandTotal), po: x.billRef || '' };
   });
   const sum = (rows, f) => r2(rows.reduce((t, x) => t + (Number(x[f]) || 0), 0));
   const itcAll = ['igst', 'cgst', 'sgst'].reduce((o, f) => ({ ...o, [f]: r2(sum(purch, f) + sum(exps, f)) }), {});
@@ -294,7 +295,7 @@ function PurchaseReg({ R, slot, period, company, user }) {
   const [q, setQ] = useState('');
   const w = q.toLowerCase();
   const rows = R.inward.filter(r => !w || `${r.party} ${r.gstin} ${r.no} ${r.po}`.toLowerCase().includes(w));
-  const cols = [['Source', 110, r => r.src], ['Vendor GSTIN', 160, r => r.gstin || (r.guess ? '—' : '')], ['Vendor', 0, r => r.party], ['Bill No.', 140, r => r.no], ['Date', 92, r => dmy(r.date)], ['PO / Ref', 140, r => r.po], ['Taxable', 120, r => amt(r.taxable), 'r'], ['IGST', 100, r => amtZ(r.igst), 'r'], ['CGST', 100, r => amtZ(r.cgst), 'r'], ['SGST', 100, r => amtZ(r.sgst), 'r'], ['Bill value', 120, r => amt(r.value), 'r']];
+  const cols = [['Source', 110, r => r.src], ['Vendor GSTIN', 160, r => r.gstin || (r.guess ? '—' : '')], ['Vendor', 0, r => withCode(r.party, r.code || vendorCode(r.party))], ['Bill No.', 140, r => r.no], ['Date', 92, r => dmy(r.date)], ['PO / Ref', 140, r => r.po], ['Taxable', 120, r => amt(r.taxable), 'r'], ['IGST', 100, r => amtZ(r.igst), 'r'], ['CGST', 100, r => amtZ(r.cgst), 'r'], ['SGST', 100, r => amtZ(r.sgst), 'r'], ['Bill value', 120, r => amt(r.value), 'r']];
   const foot = [`${rows.length} bills`, '', '', '', '', '', amt(T(rows, 'taxable')), amt(T(rows, 'igst')), amt(T(rows, 'cgst')), amt(T(rows, 'sgst')), amt(T(rows, 'value'))];
   return (
     <>
@@ -302,7 +303,7 @@ function PurchaseReg({ R, slot, period, company, user }) {
         <input className="sb-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search vendor, GSTIN, bill…" aria-label="Search purchase register" />
         <div className="sb-tools">
           <button type="button" className="sb-tbtn" onClick={() => printReport({ title: 'PURCHASE REGISTER (ITC)', kv: [['Period', period]], company, user, landscape: true, heads: cols.map(c => [c[0], c[1] ? `${Math.round(c[1] * 0.6)}px` : '', c[3] || '']), rows: [...rows.map(r => ({ c: cols.map(c => String(c[2](r) ?? '')) })), { cls: 'tot', c: foot }] })}><Svg name="file" size={13} />Print</button>
-          <button type="button" className="sb-tbtn" onClick={() => excel(`Purchase_Register_${period.replace(/\s+/g, '_')}`, [{ name: 'Purchase register', widths: [14, 18, 36, 18, 12, 18, 14, 12, 12, 12, 14], rows: [cols.map(c => c[0]), ...rows.map(r => [r.src, r.gstin, r.party, r.no, dmy(r.date), r.po, r.taxable, r.igst, r.cgst, r.sgst, r.value])] }])}><Svg name="chart" size={13} />Excel</button>
+          <button type="button" className="sb-tbtn" onClick={() => excel(`Purchase_Register_${period.replace(/\s+/g, '_')}`, [{ name: 'Purchase register', widths: [14, 18, 36, 18, 12, 18, 14, 12, 12, 12, 14], rows: [cols.map(c => c[0]), ...rows.map(r => [r.src, r.gstin, withCode(r.party, r.code || vendorCode(r.party)), r.no, dmy(r.date), r.po, r.taxable, r.igst, r.cgst, r.sgst, r.value])] }])}><Svg name="chart" size={13} />Excel</button>
         </div>
       </>, slot)}
       <div className="bk-bar"><div className="ac-sum"><div>Bills<b>{rows.length}</b></div><div>Taxable ₹<b>{amt(T(rows, 'taxable'))}</b></div><div>ITC ₹<b>{amt(T(rows, 'igst') + T(rows, 'cgst') + T(rows, 'sgst'))}</b></div>

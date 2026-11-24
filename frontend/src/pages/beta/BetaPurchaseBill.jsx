@@ -19,6 +19,7 @@ import { n, r2, today, SKIP_PO, poLines, poStatusOf, loadGrns, nextBillNo, sameS
 import { ListPicker, PX_CSS } from './BetaPurchaseParts';
 import { printList, esc } from './BetaPurchasePrint';
 import { fyLabel } from './BetaSales';
+import { vendorCode, withCode, VCode } from './vendorCode';
 
 const TABS = [{ key: 'create', label: 'Create Purchase Bill' }, { key: 'list', label: 'Purchase Bill' }, { key: 'pending', label: 'Purchase Pending' }];
 const STATUS = { draft: ['D', '#667085', 'Draft'], pending: ['P', '#F79009', 'Pending approval'], posted: ['A', '#16A34A', 'Approved'], approved: ['A', '#16A34A', 'Approved'], rejected: ['R', '#D92D20', 'Rejected'] };
@@ -257,7 +258,7 @@ function BillForm({ companyId, company, pos, poMap, soMap, bills, grns, vendors 
         .map(x => ({ itemIdx: x.l.idx, itemCode: x.l.code, itemName: x.l.name, hsnCode: x.l.hsn, unit: x.l.unit, orderedQty: x.l.qty, rate: x.rt, receivedQty: x.q, remarks: '' }));
       if (!items.length) continue;
       await axios.post('/api/grn', {
-        companyId, poId: pid, poNo: g.po.poNo || '', vendorId: g.po.vendorId || '', vendorName: g.po.vendorName || '',
+        companyId, poId: pid, poNo: g.po.poNo || '', vendorId: g.po.vendorId || g.po.vendorCode || '', vendorName: g.po.vendorName || '',
         receiptDate: head.billDate, vendorDcNo: head.vendorBillNo.trim(), soId: g.po.linkedSalesOrderId || '', orderNo: g.so?.orderNo || '',
         clientId: g.so?.clientId || g.so?.customerCode || '', clientName: g.so?.customerName || '',
         deliveryType: head.grnType, deliveryLocation: head.grnType === 'direct-client' ? [g.so?.shipToName, g.so?.shipToCity || g.so?.customerCity].filter(Boolean).join(', ') : '',
@@ -302,7 +303,7 @@ function BillForm({ companyId, company, pos, poMap, soMap, bills, grns, vendors 
         grnRefs: mode === 'after-grn' ? vendorGrns.filter(g => grnSel.has(g._id)).map(g => ({ id: g._id, grnNo: g.grnNo || '', poId: String(g.poId) })) : [],
         orderId: usedPos[0], orderNo: main.poNo || main.poNumber || `PO-${main.orderId}`,
         poRefs: usedPos.map(id => ({ orderId: id, poNo: poMap[id]?.poNo || '' })),
-        vendorId: main.vendorId || '', vendorName: main.vendorName || '', partyName: main.vendorName || '—', partyGstin: main.vendorGstin || '',
+        vendorId: main.vendorId || main.vendorCode || '', vendorName: main.vendorName || '', partyName: main.vendorName || '—', partyGstin: main.vendorGstin || '',
         partyState: main.vendorState || main.shipFromState || '', companyState: company?.state || '', gstType: intra ? 'intrastate' : 'interstate',
         linkedSalesOrderId: main.linkedSalesOrderId || '', soNo: mainSo?.orderNo || '',
         items, subTotal: calc.sub, totalCGST: sp(gstT), totalSGST: sp(gstT), totalIGST: ip(gstT), totalGST: gstT, grandTotal: calc.total,
@@ -567,7 +568,7 @@ function BillList({ bills, poMap, soMap, companyId, company, user, slot, setNote
     filter: [fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All years', q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '),
     cols: [['Bill Date', 'c', '6.5%'], ['Vendor Inv. No.', '', '9%'], ['Vendor', '', '12%'], ['PO No.', '', '10%'], ['Order No.', '', '8.5%'], ['Client', '', '11%'], ['Products', '', '15%'], ['Qty', 'r', '4%'], ['Taxable', 'r', '7%'], ['GST', 'r', '6%'], ['Amount', 'r', '7%'], ['Status', 'c', '6%']],
     rows: list.map(b => { const sos = sosOf(b);
-      return [fdate(b.billDate), esc(b.vendorBillNo || ''), esc(b.partyName || ''), esc(posOf(b).join(', ')), esc(sos.map(o => o.orderNo).join(', ')), esc(sos.map(o => o.customerName).filter(Boolean).join(', ')),
+      return [fdate(b.billDate), esc(b.vendorBillNo || ''), esc(withCode(b.partyName, vendorCode(b, poMap[String(b.orderId)]))), esc(posOf(b).join(', ')), esc(sos.map(o => o.orderNo).join(', ')), esc(sos.map(o => o.customerName).filter(Boolean).join(', ')),
         ...(ls => [ls.map(li => esc(li.description || '')).join('<br>'), ls.map(li => num(li.qty)).join('<br>')])((b.items || []).filter(li => n(li.qty) > 0 && !(li.unit === 'LOT' && li.itemIdx == null))),
         money(b.subTotal), money(b.totalGST), `<b>${money(b.grandTotal)}</b>`, esc((STATUS[b.status] || STATUS.draft)[2])]; }),
     total: ['', '', '', '', '', '', `Total (${list.length} bills)`, '', money(sum('subTotal')), money(sum('totalGST')), money(sum('grandTotal')), ''],
@@ -613,7 +614,7 @@ function BillList({ bills, poMap, soMap, companyId, company, user, slot, setNote
             return (
               <tbody key={b.billId} className={`og${selId === b.billId ? ' sel' : ''}`} onClick={() => setSelId(b.billId)} onDoubleClick={() => { setSelId(b.billId); onEdit(b); }} title="Click to select · double-click to edit">
                 <tr>
-                  <td className="nw">{fdate(b.billDate)}</td><td className="bno">{dash(b.vendorBillNo)}</td><td className="cl">{dash(b.partyName)}</td>
+                  <td className="nw">{fdate(b.billDate)}</td><td className="bno">{dash(b.vendorBillNo)}</td><td className="cl">{dash(b.partyName)}<VCode c={vendorCode(b, poMap[String(b.orderId)])} /></td>
                   <td className="no">{posOf(b).map(x => <div key={x}>{x}</div>)}</td><td className="no">{sos.length ? sos.map(o => <div key={o.orderId}>{o.orderNo}</div>) : '—'}</td><td>{dash(sos.map(o => o.customerName).filter(Boolean).join(', '))}</td><td>{lines.length ? lines.map((li, k) => <div key={k} className="gl">{li.description}</div>) : <span className="mut">—</span>}</td>
                   <td className="r">{lines.map((li, k) => <div key={k} className="gl">{num(li.qty)}{li.unit ? <span className="mut"> {li.unit}</span> : null}</div>)}</td>
                   <td className="r">{money(b.subTotal)}</td><td className="r">{money(b.totalGST)}</td><td className="r"><b>{money(b.grandTotal)}</b></td>
@@ -663,7 +664,7 @@ function PendingList({ pos, soMap, bills, grns, loading, slot, company, user, on
     title: 'Purchase Pending', company, user,
     filter: [fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All years', VIEWS.find(v => v[0] === view)?.[1], q.trim() && `Search: ${q.trim()}`].filter(Boolean).join('  |  '),
     cols: [['Order No.', '', '8.5%'], ['Client', '', '11%'], ['Vendor', '', '11%'], ['PO No.', '', '10%'], ['PO Date', 'c', '6.5%'], ['Product', '', '18%'], ['PO Qty', 'r', '5.5%'], ['Received', 'r', '6%'], ['Billed', 'r', '5.5%'], ['Left to receive', 'r', '6%'], ['Left to bill', 'r', '5.5%'], ['Status', '', '10%']],
-    rows: rows.flatMap(r => r.lines.map((l, i) => [i ? '' : esc(r.so?.orderNo || ''), i ? '' : esc(r.so?.customerName || ''), i ? '' : esc(r.po.vendorName || ''), i ? '' : esc(r.po.poNo || ''), i ? '' : fdate(r.po.poDate),
+    rows: rows.flatMap(r => r.lines.map((l, i) => [i ? '' : esc(r.so?.orderNo || ''), i ? '' : esc(r.so?.customerName || ''), i ? '' : esc(withCode(r.po.vendorName, vendorCode(r.po))), i ? '' : esc(r.po.poNo || ''), i ? '' : fdate(r.po.poDate),
       esc(l.name), `${num(l.qty)} ${esc(l.unit)}`, num(l.received), num(l.billed), num(l.toReceive), `<b>${num(l.toBill)}</b>`, esc(tagText(l))])),
   });
 
@@ -700,7 +701,7 @@ function PendingList({ pos, soMap, bills, grns, loading, slot, company, user, on
                   <tr key={i}>
                     {i === 0 && <>
                       <td rowSpan={span} className="no">{dash(r.so?.orderNo)}</td><td rowSpan={span}>{dash(r.so?.customerName)}</td>
-                      <td rowSpan={span} className="cl">{dash(r.po.vendorName)}</td><td rowSpan={span} className="no">{r.po.poNo || r.po.orderId}</td>
+                      <td rowSpan={span} className="cl">{dash(r.po.vendorName)}<VCode c={vendorCode(r.po)} /></td><td rowSpan={span} className="no">{r.po.poNo || r.po.orderId}</td>
                       <td rowSpan={span} className="nw">{fdate(r.po.poDate)}</td>
                     </>}
                     {l ? <>

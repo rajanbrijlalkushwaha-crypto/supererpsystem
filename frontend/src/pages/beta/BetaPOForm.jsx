@@ -10,6 +10,7 @@ import { CF_CSS, TEAL } from './BetaClients';
 import { STATES } from './BetaGstFetch';
 import { fyOf } from './BetaSales';
 import { TermsRows, standardTerms, cleanTerms } from './BetaTerms';
+import { vendorCode } from './vendorCode';
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const CHARGE_TYPES = ['Freight', 'Packing & Forwarding', 'Loading / Unloading', 'Transport', 'Installation', 'Erection & Commissioning', 'Insurance', 'Other'];
@@ -621,6 +622,7 @@ export default function POForm({ companyId, company, vendors, orders, pos, jobs 
                 </div>
                 {err('vendor')}
               </td></tr>
+              <tr><th>Vendor Code</th><td colSpan={3} className="po-ro mono"><b>{v.vendorName ? vendorCode(v) || '—' : <span className="mut">—</span>}</b></td></tr>
               <tr><th>Contact</th><td>{inp('contactPerson')}</td><th>Mobile</th><td>{inp('mobile', { inputMode: 'tel' })}</td></tr>
               <tr><th>Email</th><td>{inp('email', { type: 'email' })}</td><th>GSTIN</th><td className="po-ro mono">{v.vendorGstin || <span className="mut">—</span>}</td></tr>
               <tr><th>Bill From</th><td colSpan={3} className="po-ro">{[v.vendorAddress, v.vendorCity, v.vendorPincode].filter(Boolean).join(', ') || <span className="mut">Choose a vendor — its address, GSTIN, contact and dispatch address fill in.</span>}
@@ -979,7 +981,7 @@ function VendorPicker({ vendors, pos, onPick, onClose }) {
           {!shown.length ? <div className="po-pke">{q ? `No vendor matches “${q}”.` : 'No vendor.'}</div> : (
             <table className="po-ot">
               <colgroup><col style={{ width: 74 }} /><col /><col style={{ width: 150 }} /><col style={{ width: 110 }} /><col style={{ width: 110 }} /><col style={{ width: 130 }} /><col style={{ width: 100 }} /><col style={{ width: 58 }} /><col style={{ width: 74 }} /></colgroup>
-              <thead><tr><th>Vendor ID</th><th>Vendor Name</th><th>GSTIN</th><th>City</th><th>State</th><th>Contact</th><th>Mobile</th><th>POs made</th><th>Status</th></tr></thead>
+              <thead><tr><th>Vendor Code</th><th>Vendor Name</th><th>GSTIN</th><th>City</th><th>State</th><th>Contact</th><th>Mobile</th><th>POs made</th><th>Status</th></tr></thead>
               <tbody>
                 {shown.map((v, i) => {
                   const ct = (v.contactPersons || [])[0] || {};

@@ -14,6 +14,7 @@ import { CSS as SALES_CSS, useClearSel } from './BetaSales';
 import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, printVoucher, inWords, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, r2, today, words, hit, Pill, Picker } from './BetaAccKit';
+import { vendorCode, withCode, VCode } from './vendorCode';
 
 const GST_RATES = ['0', '5', '12', '18', '28'];
 const KIND = {
@@ -70,22 +71,24 @@ export default function BetaNotes({ kind }) {
       {note && <div className="sb-note" role="status">{note}<button type="button" onClick={() => setNote(null)} aria-label="Dismiss">×</button></div>}
       {cur === 'create'
         ? <div className="sb-body"><NoteForm key={editing ? editing[K.id] : 'new'} K={K} companyId={companyId} edit={editing} bills={bills} onCancel={() => go('list')} onSaved={t => { setReload(x => x + 1); setNote(t); go('list'); }} /></div>
-        : <NoteList K={K} rows={rows} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={n => { setNote(null); setEditing(n); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
+        : <NoteList K={K} rows={rows} bills={bills} company={selectedCompany} user={user} slot={slot} companyId={companyId} onEdit={n => { setNote(null); setEditing(n); }} onChanged={t => { setReload(x => x + 1); setNote(t); }} />}
     </div>
   );
 }
 
-const printNote = (K, n, company, user) => printVoucher({
+/* debit note: the vendor's code — from its purchase bill, else the vendor master */
+const noteCode = (K, n, bills) => (K.party === 'vendorName' ? vendorCode(n, (bills || []).find(b => String(b.billId) === String(n.linkedBillId || '')), n.vendorName) : '');
+const printNote = (K, n, company, user, bills) => printVoucher({
   title: K.title.toUpperCase(), sub: `${typeLabel(n.noteType)} — ${n.reason || ''}`, company, user,
   kv: [[`${K.title} No.`, n[K.no]], ['Date', dmy(n.date)], ['Against Bill', n.billRef], ...(n.orderNo ? [['Order No.', n.orderNo]] : []), ...(n.returnNo ? [['Return Note', n.returnNo]] : []), ['Status', String(n.status || 'draft').toUpperCase()]],
-  party: { label: K.partyLabel, name: n[K.party] },
+  party: { label: K.partyLabel, name: n[K.party], lines: [noteCode(K, n, bills) && `Vendor Code: ${noteCode(K, n, bills)}`] },
   heads: [['Sl', '30px', 'c'], ['Description'], ['Qty', '60px', 'c'], ['Unit', '50px', 'c'], ['Rate ₹', '90px', 'r'], ['GST %', '55px', 'c'], ['Taxable ₹', '95px', 'r'], ['Amount ₹', '100px', 'r']],
   rows: (n.items || []).map((it, i) => [String(i + 1), it.productName, String(it.qty), it.unit, amt(it.rate), `${it.gstPercent || 0}%`, amt(it.taxableAmt), amt(it.totalAmt)]),
   totals: [['Taxable', amt(n.subTotal)], ['GST', amt(n.totalGST)], ['Total', amt(n.grandTotal)]],
   words: inWords(Number(n.grandTotal) || 0), narration: n.narration, signs: [`Accepted by, ${n[K.party] || ''}`, `For ${company?.companyName || ''}`],
 });
 
-function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }) {
+function NoteList({ K, rows, bills, company, user, slot, companyId, onEdit, onChanged }) {
   const [q, setQ] = useState('');
   const [st, setSt] = useState('');
   const [selId, setSelId] = useState(null);
@@ -113,10 +116,10 @@ function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }
         <select className="sb-search" style={{ width: 130 }} value={st} onChange={e => setSt(e.target.value)} aria-label="Status"><option value="">All</option><option value="draft">Draft</option><option value="approved">Approved</option><option value="pending">Pending</option></select>
         <button type="button" className="sb-tbtn" onClick={() => printDepList({ title: `${K.title.toUpperCase()} LIST`, company, user, filter: st || 'All', total: list.reduce((t, n) => t + (Number(n.grandTotal) || 0), 0),
           heads: [`${K.title} No.`, 'Date', K.partyLabel, 'Against Bill', 'Type', 'Reason', 'Taxable ₹', 'GST ₹', 'Total ₹', 'Status'],
-          rows: list.map(n => [n[K.no], dmy(n.date), n[K.party], n.billRef, typeLabel(n.noteType), n.reason, amt(n.subTotal), amt(n.totalGST), amt(n.grandTotal), n.status || 'draft']) })}><Svg name="file" size={13} />Print list</button>
+          rows: list.map(n => [n[K.no], dmy(n.date), withCode(n[K.party], noteCode(K, n, bills)), n.billRef, typeLabel(n.noteType), n.reason, amt(n.subTotal), amt(n.totalGST), amt(n.grandTotal), n.status || 'draft']) })}><Svg name="file" size={13} />Print list</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>{sel[K.no]}</b> : `Select a ${K.title.toLowerCase()}`}</span>
-          <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printNote(K, sel, company, user)}><Svg name="file" size={13} />Print</button>
+          <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => printNote(K, sel, company, user, bills)}><Svg name="file" size={13} />Print</button>
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel || sel.status === 'approved'} onClick={() => act(sel, 'approve')}><Svg name="check" size={13} />Approve</button>}
           {canEdit && <button type="button" className="sb-tbtn" disabled={!sel || sel.status === 'approved'} onClick={() => onEdit(sel)} title="Only a draft can be edited"><Svg name="settings" size={13} />Edit</button>}
           {canDel && <button type="button" className="sb-tbtn del" disabled={!sel} onClick={() => setAsk(sel)}><Svg name="x" size={13} />Delete</button>}
@@ -140,7 +143,7 @@ function NoteList({ K, rows, company, user, slot, companyId, onEdit, onChanged }
                 : list.map((n, i) => (
                   <tr key={n[K.id]} className={selId === n[K.id] ? 'sel' : ''} onClick={() => setSelId(n[K.id])} onDoubleClick={() => canEdit && n.status !== 'approved' && onEdit(n)} style={{ cursor: 'pointer' }}>
                     <td className="r">{i + 1}</td><td><b className="mono">{n[K.no]}</b></td><td className="d">{dmy(n.date)}</td>
-                    <td className="b">{n[K.party]}</td><td className="mono">{n.billRef || '—'}{K.bills === 'sales' && n.noteType !== 'discount' ? <span className="sm">{n.returnNo ? `Return Note ${n.returnNo}` : 'Material: Return Note pending'}</span> : null}</td><td>{typeLabel(n.noteType)}</td>
+                    <td className="b">{n[K.party]}<VCode c={noteCode(K, n, bills)} /></td><td className="mono">{n.billRef || '—'}{K.bills === 'sales' && n.noteType !== 'discount' ? <span className="sm">{n.returnNo ? `Return Note ${n.returnNo}` : 'Material: Return Note pending'}</span> : null}</td><td>{typeLabel(n.noteType)}</td>
                     <td>{n.reason}{n.narration && <span className="sm">{n.narration}</span>}</td>
                     <td className="r d">{amt(n.totalGST)}</td><td className="r b d">{amt(n.grandTotal)}</td><td><Pill s={n.status || 'draft'} /></td>
                   </tr>

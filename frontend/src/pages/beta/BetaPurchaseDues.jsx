@@ -9,6 +9,8 @@ import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { printPoAdvice } from './BetaDuesPrint';
+import { printDuesReport } from './BetaCertPrint';
+import { vendorCode, VCode } from './vendorCode';
 import { Svg } from '../../components/ui/Icon';
 import { DU_CSS } from './BetaDues';
 import { FyFilter, fyOf, fyCounts } from './BetaSales';
@@ -101,7 +103,7 @@ export default function BetaPurchaseDues() {
   const rows = useMemo(() => {
     const w = q.toLowerCase().split(/\s+/).filter(Boolean);
     return inFy.filter(r => (showCleared || r.dues > 0.5)
-      && (!w.length || w.every(x => `${r.p.poNo || ''} ${r.p.vendorName || ''} ${soMap[String(r.p.linkedSalesOrderId)]?.orderNo || ''} ${soMap[String(r.p.linkedSalesOrderId)]?.customerName || ''} ${r.items.map(it => it.name).join(' ')} ${DOT[r.pay][2]}`.toLowerCase().includes(x))));
+      && (!w.length || w.every(x => `${r.p.poNo || ''} ${r.p.vendorName || ''} ${vendorCode(r.p)} ${soMap[String(r.p.linkedSalesOrderId)]?.orderNo || ''} ${soMap[String(r.p.linkedSalesOrderId)]?.customerName || ''} ${r.items.map(it => it.name).join(' ')} ${DOT[r.pay][2]}`.toLowerCase().includes(x))));
   }, [inFy, q, showCleared, soMap]);
   const sum = k => rows.reduce((s, r) => s + r[k], 0);
   const sel = rows.find(r => String(r.p.orderId) === selId) || null;
@@ -115,6 +117,18 @@ export default function BetaPurchaseDues() {
   }, [selId, payFor]);
 
   const openPay = id => { setNote(null); setPayFor(id); };
+  /* the printed list: company header, totals, each PO with its items — the top bar's "Print list" prints it too */
+  const printDues = () => printDuesReport({
+    kind: 'vendor', company: selectedCompany, user,
+    filter: [fySel.length ? [...fySel].sort().reverse().map(k => `FY ${String(k).slice(2)}-${String(+k + 1).slice(2)}`).join(', ') : 'All FY', showCleared ? 'incl. cleared' : 'with dues only', q.trim() && `“${q.trim()}”`].filter(Boolean).join(' · '),
+    rows: rows.map(r => { const so = soMap[String(r.p.linkedSalesOrderId)]; return {
+      no: String(r.p.poNo || r.p.poNumber || r.p.orderId), date: fdate(r.p.poDate), party: r.p.vendorName || '—', code: vendorCode(r.p),
+      ref: so ? String(so.orderNo || '').trim() : (r.p.poType === 'Stock' ? 'Stock' : ''), refSub: so ? so.customerName || '' : '',
+      items: r.items.map(it => ({ name: it.name, qty: `${num(it.qty)}${it.unit ? ` ${it.unit}` : ''}`, rate: it.rate, taxable: it.taxable })),
+      other: r.other, gst: r.gst, value: r.value, paid: r.paid, dues: r.dues, status: DOT[r.pay][2] }; }),
+    stats: [['POs', rows.length], ['PO value', `₹ ${BIG.format(sum('value'))}`], ['Paid', `₹ ${BIG.format(sum('paid'))}`], ['Dues', `₹ ${BIG.format(sum('dues'))}`]],
+  });
+  useEffect(() => { window.__erpPagePrint = printDues; return () => { if (window.__erpPagePrint === printDues) delete window.__erpPagePrint; }; });
   // PO Advice: the PO, every payment counted against it (amount for this PO only), balance payable
   const advice = r => printPoAdvice({
     r, so: soMap[String(r.p.linkedSalesOrderId)],
@@ -138,6 +152,7 @@ export default function BetaPurchaseDues() {
           <span className="du-picked">{sel ? <>Selected: <b>{sel.p.poNo || sel.p.orderId}</b></> : 'Click a PO to select'}</span>
           <button type="button" className="du-tbtn" disabled={!sel} onClick={() => openPay(sel.p.orderId)}><Svg name="wallet" size={13} />Make Payment</button>
           <button type="button" className="du-tbtn" disabled={!sel} onClick={() => advice(sel)}><Svg name="file" size={13} />PO Advice</button>
+          <button type="button" className="du-tbtn" disabled={!rows.length} onClick={printDues}><Svg name="file" size={13} />Print List</button>
         </div>
       </div>
 
@@ -165,7 +180,7 @@ export default function BetaPurchaseDues() {
                         {i === 0 && <>
                           <td rowSpan={span} className="top no">{so ? so.orderNo : <span className="mut">—</span>}</td>
                           <td rowSpan={span} className="top">{dash(so?.customerName)}</td>
-                          <td rowSpan={span} className="top cl">{dash(r.p.vendorName)}</td>
+                          <td rowSpan={span} className="top cl">{dash(r.p.vendorName)}<VCode c={vendorCode(r.p)} /></td>
                           <td rowSpan={span} className="top nw">{fdate(r.p.poDate)}</td>
                           <td rowSpan={span} className="top" style={{ fontWeight: 700, color: '#03444f' }}>{r.p.poNo || r.p.poNumber || r.p.orderId}</td>
                         </>}

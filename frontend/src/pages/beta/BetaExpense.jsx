@@ -16,6 +16,7 @@ import { CSS as SALES_CSS, useClearSel } from './BetaSales';
 import { PX_CSS } from './BetaPurchaseParts';
 import { printDepList, printVoucher, inWords, dmy } from './BetaCertPrint';
 import { ACC_CSS, amt, r2, today, words, hit, Pill, Picker, AttachBox, uploadAttach, loadLedgerGroups } from './BetaAccKit';
+import { vendorCode, withCode, VCode } from './vendorCode';
 
 const GST_RATES = ['0', '5', '12', '18', '28'];
 const RCM_RATES = ['5', '12', '18', '28'];
@@ -36,6 +37,8 @@ const partyOf = e => (e.expenseType === 'order' ? e.ledgerName : e.expenseType =
 const addrOf = x => [x.address || x.billingAddr, x.city, [x.state, x.pincode].filter(Boolean).join(' - ')].filter(Boolean).join(', ').replace(/\s+/g, ' ').replace(/(\s*,)+/g, ',').replace(/,(?=\S)/g, ', ').replace(/^,\s*|,\s*$/g, '').trim();
 const infoOf = x => (x ? { gstin: x.gstin || x.gst || '', address: addrOf(x),
   phone: x.mobile || x.phone || (x.contactPersons || []).map(c => c && (c.mobileNumber || c.mobile)).find(Boolean) || '' } : { gstin: '', address: '', phone: '' });
+/* the vendor's code when the party is a vendor (an order expense keeps its vendor in ledgerId) */
+const codeOf = e => vendorCode({ vendorId: e.vendorId || (e.partyKind === 'vendor' ? e.ledgerId : ''), vendorName: partyOf(e) });
 const isPending = e => e.status === 'pending' || e.status === 'pending_approval';
 
 export default function BetaExpense() {
@@ -93,7 +96,9 @@ const printExp = async (e0, company, user, companyId, orders = []) => {
     if (nm && !e.partyAddress && !e.partyGstin) {
       const get = u => axios.get(u, { params: { companyId } }).then(r => (Array.isArray(r.data) ? r.data : [])).catch(() => []);
       const [vs, cs] = await Promise.all([get('/api/vendors'), get('/api/clients')]);
-      const hitV = vs.find(x => (e.vendorId && String(x.vendorId) === String(e.vendorId)) || String(x.vendorName || x.companyName || '').trim().toLowerCase() === nm);
+      // by its code; by name only when one vendor has that name (two can share it)
+      const same = vs.filter(x => String(x.vendorName || x.companyName || '').trim().toLowerCase() === nm);
+      const hitV = vs.find(x => codeOf(e) && String(x.vendorId) === codeOf(e)) || (same.length === 1 ? same[0] : null);
       const hitC = !hitV && cs.find(x => String(x.clientName || x.companyName || '').trim().toLowerCase() === nm);
       const i = infoOf(hitV || hitC || null);
       e = { ...e, partyGstin: i.gstin, partyAddress: i.address, partyPhone: i.phone };
@@ -104,7 +109,7 @@ const printExp = async (e0, company, user, companyId, orders = []) => {
   kv: [['Expense No.', `EXP-${e.expenseId}`], ['Date', dmy(e.date)], ['Bill / Invoice No.', e.invoiceNo], ['Sales Order', e.orderNo], ['Order Date', dmy(e.orderDate)],
     ['Client PO', [e.customerPO, e.poDate && `dt. ${dmy(e.poDate)}`].filter(Boolean).join(' ')], ['Status', String(e.status || '').replace('_', ' ').toUpperCase()]],
   party: partyOf(e) ? { label: e.expenseType === 'order' ? 'Expense by' : e.expenseType === 'manufacturing' ? 'Vendor / paid to' : 'Paid to', name: partyOf(e),
-    lines: [e.partyAddress, e.partyGstin && `GSTIN: ${e.partyGstin}`, e.partyPhone && `Phone: ${e.partyPhone}`] } : null,
+    lines: [codeOf(e) && `Vendor Code: ${codeOf(e)}`, e.partyAddress, e.partyGstin && `GSTIN: ${e.partyGstin}`, e.partyPhone && `Phone: ${e.partyPhone}`] } : null,
   party2: e.clientName ? { label: `Client${e.orderNo ? ` — order ${e.orderNo}` : ''}`, name: e.clientName,
     lines: [e.clientAddress, e.clientGstin && `GSTIN: ${e.clientGstin}`] } : null,
   files: e.attachments || [],
@@ -147,7 +152,7 @@ function ExpenseList({ rows, orders = [], company, user, slot, companyId, onEdit
         <select className="sb-search" style={{ width: 150 }} value={st} onChange={e => setSt(e.target.value)} aria-label="Status"><option value="">All</option><option value="approved">Approved</option><option value="pending">Pending approval</option><option value="rejected">Rejected</option><option value="draft">Draft</option></select>
         <button type="button" className="sb-tbtn" onClick={() => printDepList({ title: 'EXPENSE LIST', company, user, filter: [kind && KINDS[kind].label, st].filter(Boolean).join(' · ') || 'All', total: tot(list),
           heads: ['Exp No.', 'Date', 'Kind', 'Category', 'Description', 'Paid to / By', 'Order', 'Bill No.', 'Amount ₹', 'GST %', 'Total ₹', 'Status'],
-          rows: list.map(e => [`EXP-${e.expenseId}`, dmy(e.date), KINDS[kindOf(e)].label, e.expenseCategory || e.category, e.description, partyOf(e), e.orderNo, e.invoiceNo, amt(e.amount), `${e.taxRate || 0}%`, amt(e.grandTotal || e.amount), String(e.status || '').replace('_', ' ')]) })}><Svg name="file" size={13} />Print list</button>
+          rows: list.map(e => [`EXP-${e.expenseId}`, dmy(e.date), KINDS[kindOf(e)].label, e.expenseCategory || e.category, e.description, withCode(partyOf(e), codeOf(e)), e.orderNo, e.invoiceNo, amt(e.amount), `${e.taxRate || 0}%`, amt(e.grandTotal || e.amount), String(e.status || '').replace('_', ' ')]) })}><Svg name="file" size={13} />Print list</button>
         <div className="sb-tools">
           <span className="sb-picked">{sel ? <b>EXP-{sel.expenseId}</b> : 'Select an expense'}</span>
           <button type="button" className="sb-tbtn" disabled={!sel} onClick={async () => { const left = await printExp(sel, company, user, companyId, orders); if (left && left.length) onChanged(`Printed with the attached files. Not printable here (open them separately): ${left.join(', ')}.`); }}><Svg name="file" size={13} />Print{(sel?.attachments || []).length ? ` + ${sel.attachments.length} file${sel.attachments.length === 1 ? '' : 's'}` : ''}</button>
@@ -180,7 +185,7 @@ function ExpenseList({ rows, orders = [], company, user, slot, companyId, onEdit
                     <td><b className="mono">EXP-{e.expenseId}</b>{(e.attachments || []).length > 0 && <span className="sm">{e.attachments.length} file{e.attachments.length === 1 ? '' : 's'}</span>}</td>
                     <td className="d">{dmy(e.date)}</td><td>{KINDS[kindOf(e)].label}</td><td>{e.expenseCategory || e.category}</td>
                     <td>{e.description || '—'}{e.notes && <span className="sm">{e.notes}</span>}</td>
-                    <td>{partyOf(e) || '—'}{e.partyGstin && <span className="sm mono">{e.partyGstin}</span>}</td>
+                    <td>{partyOf(e) || '—'}<VCode c={codeOf(e)} />{e.partyGstin && <span className="sm mono">{e.partyGstin}</span>}</td>
                     <td className="mono">{e.orderNo || '—'}{e.clientName && <span className="sm">{e.clientName}</span>}</td>
                     <td className="mono">{e.invoiceNo || '—'}</td>
                     <td className="r b d">{amt(e.grandTotal || e.amount)}{Number(e.taxRate) > 0 && <span className="sm">incl. {e.taxRate}% GST</span>}{e.rcm && <span className="sm" style={{ color: '#B54708' }}>RCM {e.rcmRate}% · ₹ {amt(rcmTaxOf(e))}</span>}</td>
@@ -302,6 +307,7 @@ function ExpenseForm({ companyId, edit, orders, onSaved, onCancel }) {
         <div className="sf-card"><div className="sf-ch"><span className="ico"><Svg name="user" size={13} /></span><b>{v.kind === 'order' ? 'Expense by — details' : v.kind === 'manufacturing' ? 'Vendor details' : 'Paid to — details'}</b></div>
           <table className="sf-kv"><tbody>
             <tr><th>Name</th><td><b>{(v.kind === 'order' ? v.ledgerName : v.kind === 'manufacturing' ? v.vendorName : v.paidTo) || <span style={{ color: '#98A2B3' }}>— pick / type above —</span>}</b></td></tr>
+            {codeOf({ ...v, expenseType: v.kind, vendor: v.paidTo, partyKind: v.pKind }) && <tr><th>Vendor Code</th><td className="mono"><b>{codeOf({ ...v, expenseType: v.kind, vendor: v.paidTo, partyKind: v.pKind })}</b></td></tr>}
             <tr><th>GSTIN</th><td><input value={v.pGstin} onChange={e => setV(o => ({ ...o, pGstin: e.target.value.toUpperCase().replace(/\s/g, '').slice(0, 15) }))} className="mono" placeholder="Optional" /></td></tr>
             <tr><th>Address</th><td><input value={v.pAddress} onChange={set('pAddress')} placeholder="Filled from the vendor / client master — or type" /></td></tr>
             <tr><th>Phone</th><td><input value={v.pPhone} onChange={set('pPhone')} placeholder="Optional" /></td></tr>

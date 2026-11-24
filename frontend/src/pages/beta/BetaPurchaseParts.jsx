@@ -1,6 +1,7 @@
 /* Purchase side shared UI: the PO picker pop-up (search · keyboard) and a little extra CSS. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { num, fdate, dash } from './BetaSalesBill';
+import { vendorCode, VCode } from './vendorCode';
 
 export const PX_CSS = `
 .px-tag { display:inline-block; padding:1px 7px; border-radius:99px; font-size:10.5px; font-weight:700; white-space:nowrap; }
@@ -70,7 +71,7 @@ export function POPicker({ rows, title, leftLabel, onPick, onClose }) {
             <thead><tr><th>PO No.</th><th>PO Date</th><th>Vendor</th><th>Order No.</th><th>Client</th><th>Products</th><th className="r">PO Qty</th><th className="r">{leftLabel}</th></tr></thead>
             <tbody>{list.length ? list.map((r, i) => (
               <tr key={r.po.orderId} className={i === sel ? 'sel' : ''} onMouseEnter={() => setSel(i)} onClick={() => onPick(r)}>
-                <td className="sf-no">{r.po.poNo || r.po.orderId}</td><td>{fdate(r.po.poDate)}</td><td>{dash(r.po.vendorName)}</td>
+                <td className="sf-no">{r.po.poNo || r.po.orderId}</td><td>{fdate(r.po.poDate)}</td><td>{dash(r.po.vendorName)}<VCode c={vendorCode(r.po)} /></td>
                 <td>{dash(r.so?.orderNo)}</td><td>{dash(r.so?.customerName)}</td>
                 <td>{(r.po.items || []).filter(it => it && (it.itemName || it.description)).map(it => it.itemName || it.description).join('; ')}</td>
                 <td className="r">{num(r.qty)}</td>

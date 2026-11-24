@@ -9,7 +9,8 @@ import axios from 'axios';
 import { useCompany } from '../../context/CompanyContext';
 import { useAuth } from '../../context/AuthContext';
 import { Svg } from '../../components/ui/Icon';
-import { printDuesList, printOrderAdvice } from './BetaDuesPrint';
+import { printOrderAdvice } from './BetaDuesPrint';
+import { printDuesReport } from './BetaCertPrint';
 import BetaReceipt from './BetaReceipt';
 
 const TEAL = '#03444f';
@@ -204,6 +205,16 @@ export default function BetaDues() {
   }, [selId]);
 
   const filterText = [fySel.length ? [...fySel].sort().reverse().map(fyLabel).join(', ') : 'All FY', showCleared ? 'incl. cleared' : 'with dues only', q.trim() && `Search: “${q.trim()}”`].filter(Boolean).join('   |   ');
+  /* the printed list: company header, totals, each order with its products — the top bar's "Print list" prints it too */
+  const printDues = () => printDuesReport({
+    kind: 'client', company: selectedCompany, user, filter: filterText.replace(/\s+\|\s+/g, ' · '),
+    rows: rows.map(r => ({ no: String(r.o.orderNo || r.o.orderId), date: fdate(r.o.orderDate), party: r.o.customerName || r.o.party || '—',
+      ref: r.o.customerPO || '', refSub: r.o.poDate ? `dt. ${fdate(r.o.poDate)}` : '',
+      items: r.items.map(it => ({ name: it.name, qty: `${num(it.qty)}${it.unit ? ` ${it.unit}` : ''}`, rate: it.rate, taxable: it.taxable })),
+      other: r.other, gst: r.gst, value: r.value, paid: r.received, dues: r.dues, status: PAY[r.pay][0] })),
+    stats: [['Orders', rows.length], ['Order value', `₹ ${BIG.format(sum('value'))}`], ['Received', `₹ ${BIG.format(sum('received'))}`], ['Dues', `₹ ${BIG.format(sum('dues'))}`]],
+  });
+  useEffect(() => { window.__erpPagePrint = printDues; return () => { if (window.__erpPagePrint === printDues) delete window.__erpPagePrint; }; });
   const advice = r => printOrderAdvice({ r, receipts: (recByOrder[String(r.o.orderId)] || []).slice().sort((a, b) => String(a.transactionDate || a.date || '').localeCompare(String(b.transactionDate || b.date || ''))), company: selectedCompany, user, banks });
 
   return (
@@ -233,7 +244,7 @@ export default function BetaDues() {
         <div className="du-tools">
           <span className="du-picked">{sel ? <>Selected: <b>{sel.o.orderNo || sel.o.orderId}</b></> : 'Click an order to select'}</span>
           <button type="button" className="du-tbtn" disabled={!sel} onClick={() => advice(sel)}><Svg name="file" size={13} />Order Advice</button>
-          <button type="button" className="du-tbtn" disabled={!rows.length} onClick={() => printDuesList({ rows, company: selectedCompany, user, filter: filterText })}><Svg name="file" size={13} />Print List</button>
+          <button type="button" className="du-tbtn" disabled={!rows.length} onClick={printDues}><Svg name="file" size={13} />Print List</button>
         </div>
       </div>
 

@@ -34,7 +34,7 @@ const businessOf = c => {
 
 /* [header, width] */
 const COLS = [
-  ['Vendor ID', '5.5%'], ['Vendor Name', '19%'], ['GSTIN', '10%'], ['Bill From', '21%'], ['City', '7%'], ['State', '7%'],
+  ['Vendor Code', '5.5%'], ['Vendor Name', '19%'], ['GSTIN', '10%'], ['Bill From', '21%'], ['City', '7%'], ['State', '7%'],
   ['Contact Name', '8%'], ['Number', '7%'], ['Email', '13%'], ['Status', '2.5%'],
 ];
 /* thin black vertical lines between columns (like the Order list) */
@@ -481,7 +481,7 @@ function CreateVendor({ companyId, onSaved, editVendor, onClose }) {
           {!noGst && <GstFetch companyId={companyId} gstin={v.gstin} disabled={busy} onImport={gstImport} title="Fill the vendor from the GST portal"
             fills="Import fills Vendor Name, Alias (trade name), Business Type, Registration Type, PAN and the Bill From address. Nothing is saved until you save the vendor." />}
           <span className="cf-pill">{isEdit ? (STATUS[editVendor.status] || STATUS.draft).label : 'New'}</span>
-          <div className="cf-chip"><small>Vendor ID</small><b>{isEdit ? editVendor.vendorId : (nextId || 'Auto')}</b></div>
+          <div className="cf-chip"><small>Vendor Code</small><b>{isEdit ? editVendor.vendorId : (nextId || 'Auto')}</b></div>
         </div>
 
         {msg && <div className={`cf-msg ${msg.ok ? 'ok' : 'err'}`} role="status">{msg.text}</div>}

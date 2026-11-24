@@ -12,6 +12,7 @@ import { Svg } from '../../components/ui/Icon';
 import { CSS as SALES_CSS } from './BetaSales';
 import { PX_CSS } from './BetaPurchaseParts';
 import { ACC_CSS, words, hit } from './BetaAccKit';
+import { codesOfName } from './vendorCode';
 import {
   BK_CSS, useBooks, fyList, fyName, fyRange, fyStartYear, today, dmy, amt, amtZ, dc, r2,
   balances, groupRows, profitLoss, balanceSheet, statement, voucherLines, ageing, BUCKETS, tdsLines, printReport, excel, inGroup,
@@ -19,6 +20,10 @@ import {
 
 const TITLES = { ledger: 'Ledger', chart: 'Chart of Accounts', trial: 'Trial Balance', pl: 'Profit & Loss', bs: 'Balance Sheet', cash: 'Cash / Bank Book', ageing: 'Ageing', tds: 'TDS' };
 const KIND = { client: 'Client', vendor: 'Vendor', bank: 'Bank', cash: 'Cash', tds: 'TDS', asset: 'Fixed asset', employee: 'Employee', virtual: 'System', pl: 'System' };
+
+/* a vendor's ledger with its vendor code — a ledger is kept by name, so two vendors of one name show both codes */
+const vCodes = (books, name) => { const L = books.L[name]; return L && (L.kind === 'vendor' || L.group === 'sundry-cred') ? codesOfName(name).join(', ') : ''; };
+const ln = (books, name) => { const c = vCodes(books, name); return c ? `${name} (${c})` : name; };
 
 export default function BetaBooks({ view = 'ledger' }) {
   const { selectedCompany } = useCompany() || {};
@@ -87,7 +92,7 @@ function LedgerIndex({ books, from, to, slot, company, user, period, open }) {
     .sort((a, b) => a.name.localeCompare(b.name));
   const tot = list.reduce((t, b) => ({ dr: t.dr + b.dr, cr: t.cr + b.cr }), { dr: 0, cr: 0 });
   const groupOpts = Object.values(books.g).sort((a, b) => a.name.localeCompare(b.name));
-  const rows = list.map(b => [b.name, books.g[b.group]?.name || '', dc(b.opening), amtZ(b.dr), amtZ(b.cr), dc(b.closing)]);
+  const rows = list.map(b => [ln(books, b.name), books.g[b.group]?.name || '', dc(b.opening), amtZ(b.dr), amtZ(b.cr), dc(b.closing)]);
   const heads = [['Ledger', ''], ['Group', '150px'], ['Opening', '100px', 'r'], ['Debit', '95px', 'r'], ['Credit', '95px', 'r'], ['Closing', '100px', 'r']];
   return (
     <>
@@ -99,7 +104,7 @@ function LedgerIndex({ books, from, to, slot, company, user, period, open }) {
         <span className="sb-picked">{sel ? <b>{sel}</b> : 'Select a ledger'}</span>
         <button type="button" className="sb-tbtn" disabled={!sel} onClick={() => open(sel)}><Svg name="eye" size={13} />Open</button>
         <PrintBtn label="Print list" onClick={() => printReport({ title: 'LEDGER BALANCES', kv: [['Period', period], ['Ledgers', String(list.length)]], company, user, heads, rows: [...rows.map(c => ({ c })), { cls: 'tot', c: ['TOTAL', '', '', amt(tot.dr), amt(tot.cr), ''] }] })} />
-        <XlBtn onClick={() => excel('Ledgers', [{ name: 'Ledgers', rows: [heads.map(h => h[0]), ...list.map(b => [b.name, books.g[b.group]?.name || '', r2(b.opening), b.dr, b.cr, r2(b.closing)])], widths: [44, 26, 14, 14, 14, 14] }])} />
+        <XlBtn onClick={() => excel('Ledgers', [{ name: 'Ledgers', rows: [heads.map(h => h[0]), ...list.map(b => [ln(books, b.name), books.g[b.group]?.name || '', r2(b.opening), b.dr, b.cr, r2(b.closing)])], widths: [44, 26, 14, 14, 14, 14] }])} />
       </Tools>
       <div className="bk-bar">
         <div className="ac-sum"><div>Ledgers<b>{list.length}</b></div><div>Debit ₹<b>{amt(tot.dr)}</b></div><div>Credit ₹<b>{amt(tot.cr)}</b></div></div>
@@ -112,7 +117,7 @@ function LedgerIndex({ books, from, to, slot, company, user, period, open }) {
           <tbody>
             {!list.length ? <tr><td colSpan={6} className="sb-empty">Nothing matches.</td></tr> : list.map(b => (
               <tr key={b.name} className={`l${sel === b.name ? ' sel' : ''}`} onClick={() => setSel(b.name)} onDoubleClick={() => open(b.name)} title="Double-click to open the ledger">
-                <td><b>{b.name}</b>{books.L[b.name]?.kind && KIND[books.L[b.name].kind] && <span className="mut"> · {KIND[books.L[b.name].kind]}</span>}</td>
+                <td><b>{b.name}</b>{vCodes(books, b.name) && <span className="mut"> · Code {vCodes(books, b.name)}</span>}{books.L[b.name]?.kind && KIND[books.L[b.name].kind] && <span className="mut"> · {KIND[books.L[b.name].kind]}</span>}</td>
                 <td>{books.g[b.group]?.name}</td><td className="r">{dc(b.opening)}</td><td className="r">{amtZ(b.dr)}</td><td className="r">{amtZ(b.cr)}</td><td className="r"><b>{dc(b.closing)}</b></td>
               </tr>))}
           </tbody>
@@ -129,13 +134,13 @@ function Statement({ books, name, from, to, slot, company, user, period, back })
   const L = books.L[name] || {};
   const heads = [['Date', '62px'], ['Type', '62px'], ['Vch No.', '90px'], ['Particulars', ''], ['Debit', '82px', 'r'], ['Credit', '82px', 'r'], ['Balance', '96px', 'r']];
   const printRows = [{ cls: 'g', c: ['', '', '', 'Opening balance', '', '', dc(st.opening)] },
-    ...st.lines.map(p => ({ c: [dmy(p.date), p.vt, p.no, `${p.other || ''}${p.narr ? ` — ${p.narr}` : ''}`, amtZ(p.dr), amtZ(p.cr), dc(p.run)] })),
+    ...st.lines.map(p => ({ c: [dmy(p.date), p.vt, p.no, `${ln(books, p.other || '')}${p.narr ? ` — ${p.narr}` : ''}`, amtZ(p.dr), amtZ(p.cr), dc(p.run)] })),
     { cls: 'tot', c: ['', '', '', 'Total / Closing balance', amt(st.dr), amt(st.cr), dc(st.closing)] }];
   return (
     <>
       <Tools slot={slot}>
         <button type="button" className="sb-tbtn" onClick={back}><Svg name="arrow" size={13} />All ledgers</button>
-        <PrintBtn onClick={() => printReport({ title: 'LEDGER ACCOUNT', kv: [['Ledger', name], ['Group', books.g[L.group]?.name || ''], ['Period', period]], company, user, heads, rows: printRows, note: L.gstin ? `GSTIN: ${L.gstin}` : '' })} />
+        <PrintBtn onClick={() => printReport({ title: 'LEDGER ACCOUNT', kv: [['Ledger', name], ...(vCodes(books, name) ? [['Vendor Code', vCodes(books, name)]] : []), ['Group', books.g[L.group]?.name || ''], ['Period', period]], company, user, heads, rows: printRows, note: L.gstin ? `GSTIN: ${L.gstin}` : '' })} />
         <XlBtn onClick={() => excel(`Ledger_${name.slice(0, 30)}`, [{ name: 'Ledger', widths: [12, 12, 16, 40, 50, 14, 14, 16], rows: [[name], [period], [], ['Date', 'Type', 'Vch No.', 'Particulars', 'Narration', 'Debit', 'Credit', 'Balance'],
           ['', '', '', 'Opening balance', '', '', '', dc(st.opening)], ...st.lines.map(p => [dmy(p.date), p.vt, p.no, p.other, p.narr, p.dr || '', p.cr || '', dc(p.run)]), ['', '', '', 'Total', '', st.dr, st.cr, dc(st.closing)]] }])} />
       </Tools>
@@ -285,9 +290,9 @@ function TrialView({ books, from, to, slot, company, user, period }) {
     <>
       <Tools slot={slot}>
         <PrintBtn onClick={() => printReport({ title: 'TRIAL BALANCE', kv: [['Period', period], ['Detail', det ? 'Group + ledgers' : 'Groups']], company, user, heads,
-          rows: [...rows.map(r => ({ cls: r.type === 'g' ? (r.depth ? 'g' : 'g1') : '', pad: r.depth, c: [r.name, ...cells(r)] })), { cls: 'tot', c: ['GRAND TOTAL', '', amt(T.dr), amt(T.cr), amt(T.cd), amt(T.cc)] }] })} />
+          rows: [...rows.map(r => ({ cls: r.type === 'g' ? (r.depth ? 'g' : 'g1') : '', pad: r.depth, c: [r.type === 'g' ? r.name : ln(books, r.name), ...cells(r)] })), { cls: 'tot', c: ['GRAND TOTAL', '', amt(T.dr), amt(T.cr), amt(T.cd), amt(T.cc)] }] })} />
         <XlBtn onClick={() => excel('Trial_Balance', [{ name: 'Trial balance', widths: [50, 16, 16, 16, 16, 16], rows: [['Trial balance', period], [], heads.map(h => h[0]),
-          ...rows.map(r => [`${'   '.repeat(r.depth)}${r.name}`, dc(r.opening), r.dr || '', r.cr || '', r.closing > 0 ? r2(r.closing) : '', r.closing < 0 ? r2(-r.closing) : '']), ['Grand total', '', r2(T.dr), r2(T.cr), r2(T.cd), r2(T.cc)]] }])} />
+          ...rows.map(r => [`${'   '.repeat(r.depth)}${r.type === 'g' ? r.name : ln(books, r.name)}`, dc(r.opening), r.dr || '', r.cr || '', r.closing > 0 ? r2(r.closing) : '', r.closing < 0 ? r2(-r.closing) : '']), ['Grand total', '', r2(T.dr), r2(T.cr), r2(T.cd), r2(T.cc)]] }])} />
       </Tools>
       <div className="bk-bar">
         <div className="ac-sum"><div>Debit ₹<b>{amt(T.dr)}</b></div><div>Credit ₹<b>{amt(T.cr)}</b></div><div>Closing Dr ₹<b>{amt(T.cd)}</b></div><div>Closing Cr ₹<b>{amt(T.cc)}</b></div>
@@ -432,8 +437,8 @@ function CashView({ books, from, to, slot, company, user, period, companyId, ref
   const printIt = () => printReport({ title: mode === 'brs' ? 'BANK RECONCILIATION' : (isBank ? 'BANK BOOK' : 'CASH BOOK'), kv: [['Account', acc], ['Period', mode === 'brs' ? `As on ${dmy(to)}` : period]], company, user, heads,
     rows: mode === 'brs'
       ? [{ cls: 'g', c: ['', 'Balance as per books', '', '', '', '', dc(upto.closing), ''] }, { c: ['', 'Less: deposits not yet cleared by the bank', '', '', amt(unDep), '', '', ''] }, { c: ['', 'Add: payments / cheques not yet cleared', '', '', '', amt(unChq), '', ''] }, { cls: 'tot', c: ['', 'Balance as per bank', '', '', '', '', dc(asBank), ''] },
-        ...notCleared.map(p => ({ c: [dmy(p.date), `${p.other}${p.ref ? ` · ${p.ref}` : ''}`, p.vt, p.no, amtZ(p.dr), amtZ(p.cr), '', 'Not cleared'] }))]
-      : [{ cls: 'g', c: ['', 'Opening balance', '', '', '', '', dc(st.opening), ...(isBank ? [''] : [])] }, ...st.lines.map(p => ({ c: [dmy(p.date), `${p.other}${p.ref ? ` · ${p.ref}` : ''}`, p.vt, p.no, amtZ(p.dr), amtZ(p.cr), dc(p.run), ...(isBank ? [dmy(brs[keyOf(p)])] : [])] })),
+        ...notCleared.map(p => ({ c: [dmy(p.date), `${ln(books, p.other)}${p.ref ? ` · ${p.ref}` : ''}`, p.vt, p.no, amtZ(p.dr), amtZ(p.cr), '', 'Not cleared'] }))]
+      : [{ cls: 'g', c: ['', 'Opening balance', '', '', '', '', dc(st.opening), ...(isBank ? [''] : [])] }, ...st.lines.map(p => ({ c: [dmy(p.date), `${ln(books, p.other)}${p.ref ? ` · ${p.ref}` : ''}`, p.vt, p.no, amtZ(p.dr), amtZ(p.cr), dc(p.run), ...(isBank ? [dmy(brs[keyOf(p)])] : [])] })),
         { cls: 'tot', c: ['', 'Total / Closing balance', '', '', amt(st.dr), amt(st.cr), dc(st.closing), ...(isBank ? [''] : [])] }] });
   return (
     <>
@@ -491,9 +496,9 @@ function AgeingView({ books, to, slot, company, user }) {
       {slot && createPortal(<input className="sb-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search party, city, GSTIN…" aria-label="Search parties" />, slot)}
       <Tools slot={slot}>
         <PrintBtn onClick={() => printReport({ title, kv: [['As on', dmy(to)], ['Parties', String(list.length)]], company, user, landscape: true, heads,
-          rows: [...list.map(a => ({ c: [a.name, amt(a.due), ...a.bk.map(amtZ), amtZ(a.advance), amt(a.net)] })), { cls: 'tot', c: ['TOTAL', amt(T.due), ...T.bk.map(amt), amt(T.adv), amt(T.net)] }], note: 'Bills are settled oldest first by the receipts / payments, TDS and notes against the party. Age = days from the bill date.' })} />
+          rows: [...list.map(a => ({ c: [kind === 'vendor' ? ln(books, a.name) : a.name, amt(a.due), ...a.bk.map(amtZ), amtZ(a.advance), amt(a.net)] })), { cls: 'tot', c: ['TOTAL', amt(T.due), ...T.bk.map(amt), amt(T.adv), amt(T.net)] }], note: 'Bills are settled oldest first by the receipts / payments, TDS and notes against the party. Age = days from the bill date.' })} />
         <XlBtn onClick={() => excel(kind === 'client' ? 'Receivables_Ageing' : 'Payables_Ageing', [
-          { name: 'Party-wise', widths: [44, 16, 22, 16, ...BUCKETS.map(() => 14), 14, 16], rows: [[title, `As on ${dmy(to)}`], [], ['Party', 'City', 'GSTIN', 'Outstanding', ...BUCKETS.map(b => b[2]), 'Advance', 'Net'], ...list.map(a => [a.name, a.city, a.gstin, a.due, ...a.bk, a.advance, a.net])] },
+          { name: 'Party-wise', widths: [44, 16, 22, 16, ...BUCKETS.map(() => 14), 14, 16], rows: [[title, `As on ${dmy(to)}`], [], ['Party', 'City', 'GSTIN', 'Outstanding', ...BUCKETS.map(b => b[2]), 'Advance', 'Net'], ...list.map(a => [kind === 'vendor' ? ln(books, a.name) : a.name, a.city, a.gstin, a.due, ...a.bk, a.advance, a.net])] },
           { name: 'Bill-wise', widths: [44, 18, 12, 14, 10], rows: [['Party', 'Bill / Vch No.', 'Date', 'Pending', 'Days'], ...list.flatMap(a => a.bills.map(b => [a.name, b.no, dmy(b.date), b.left, b.date ? b.days : '']))] }])} />
       </Tools>
       <div className="bk-bar">
@@ -508,7 +513,7 @@ function AgeingView({ books, to, slot, company, user }) {
             {list.map(a => (
               <React.Fragment key={a.name}>
                 <tr className={`l${openP === a.name ? ' sel' : ''}`} onClick={() => setOpenP(openP === a.name ? '' : a.name)} onDoubleClick={() => navigate(`/beta/books/ledger?l=${encodeURIComponent(a.name)}`)} title="Click for bill-wise · double-click for the ledger">
-                  <td><b>{a.name}</b>{a.city && <span className="mut"> · {a.city}</span>}</td><td className="r"><b>{amtZ(a.due)}</b></td>
+                  <td><b>{a.name}</b>{kind === 'vendor' && vCodes(books, a.name) && <span className="mut"> · Code {vCodes(books, a.name)}</span>}{a.city && <span className="mut"> · {a.city}</span>}</td><td className="r"><b>{amtZ(a.due)}</b></td>
                   {a.bk.map((v, i) => <td key={i} className={`r${i >= 3 && v ? ' neg' : ''}`}>{amtZ(v)}</td>)}<td className="r">{amtZ(a.advance)}</td><td className="r"><b>{amt(a.net)}</b></td><td className="r">{a.bills.length ? (a.oldest >= 9999 ? 'Opening' : `${a.oldest} d`) : ''}</td>
                 </tr>
                 {openP === a.name && a.bills.map((b, j) => {
@@ -540,7 +545,7 @@ function TdsView({ books, from, to, slot, company, user, period }) {
   const title = side === 'rec' ? 'TDS DEDUCTED BY CLIENTS (RECEIVABLE)' : 'TDS DEDUCTED BY US (PAYABLE)';
   const heads = byParty ? [['Party', ''], ['PAN', '90px'], ['Sections', '80px'], ['Entries', '50px', 'r'], ['TDS ₹', '90px', 'r']]
     : [['Date', '62px'], ['Party', ''], ['PAN', '84px'], ['Section', '50px'], ['Voucher', '80px'], ['Qtr', '34px'], ['TDS ₹', '84px', 'r']];
-  const pRows = byParty ? parties.map(p => [p.party, p.pan, [...p.sections].join(', '), String(p.n), amt(p.amount)]) : list.map(t => [dmy(t.date), t.party, t.pan, t.section, t.no, t.q, amt(t.amount)]);
+  const pRows = byParty ? parties.map(p => [ln(books, p.party), p.pan, [...p.sections].join(', '), String(p.n), amt(p.amount)]) : list.map(t => [dmy(t.date), ln(books, t.party), t.pan, t.section, t.no, t.q, amt(t.amount)]);
   return (
     <>
       <Tools slot={slot}>

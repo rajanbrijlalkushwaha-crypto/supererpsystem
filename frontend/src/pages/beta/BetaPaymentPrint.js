@@ -5,6 +5,7 @@ import { fillPage } from './BetaDCPrint';
 import { brandLine } from '../../utils/printBranding';
 import { inWords } from './BetaProforma';
 import { previewFrame, partyMeta } from './printKit';
+import { vendorCode } from './vendorCode';
 
 const n = v => parseFloat(v) || 0;
 const AMT = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -88,7 +89,7 @@ export async function printPaymentAdvice({ p, allocs, poMap, soMap, vendor, comp
       ${vAddr ? `<div>${esc(vAddr)}</div>` : ''}
       ${v.gstin ? `<div>GSTIN: <b>${esc(v.gstin)}</b></div>` : ''}
       ${contact ? `<div>Contact: <b>${esc(contact)}</b></div>` : ''}
-      ${p.entityId ? `<div>Vendor ID: ${esc(p.entityId)}</div>` : ''}</td>
+      ${vendorCode(p, v) ? `<div>Vendor Code: <b>${esc(vendorCode(p, v))}</b></div>` : ''}</td>
     <td><div class="lbl">Payment details</div>
       <table class="kv">
         <tr><td>Mode</td><td>:</td><td><b>${esc(mode)}</b></td></tr>

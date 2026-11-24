@@ -596,7 +596,7 @@ function DCForm({ companyId, company, rows, dcsByOrder, billsByOrder, retsByOrde
       const items = list.map(e => { const pl = pls.find(x => sameItem({ itemName: x.name, itemCode: x.code }, e.it)); return pl ? { itemIdx: pl.idx, itemCode: pl.code, itemName: pl.name, hsnCode: pl.hsn, unit: pl.unit, orderedQty: pl.qty, rate: pl.rate, receivedQty: e.q, remarks: '' } : null; }).filter(Boolean);
       if (!items.length) continue;
       await axios.post('/api/grn', {
-        companyId, poId: pid, poNo: p.poNo || '', vendorId: p.vendorId || '', vendorName: p.vendorName || '',
+        companyId, poId: pid, poNo: p.poNo || '', vendorId: p.vendorId || p.vendorCode || '', vendorName: p.vendorName || '',
         receiptDate: dc.dcDate || head.dcDate, vehicleNo: dc.vehicleNo || '', soId: order.orderId, orderNo: order.orderNo || '',
         clientId: order.clientId || order.customerCode || '', clientName: order.customerName || order.party || '',
         deliveryType: 'direct-client', deliveryLocation: [order.shipToName, order.shipToCity || order.customerCity].filter(Boolean).join(', '),

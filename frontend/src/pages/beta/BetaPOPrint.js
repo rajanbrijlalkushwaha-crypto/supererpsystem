@@ -4,6 +4,7 @@ import axios from 'axios';
 import { inWords } from './BetaProforma';
 import { fillPage } from './BetaDCPrint';
 import { termsHtml } from './BetaTerms';
+import { vendorCode } from './vendorCode';
 import { previewFrame, previewPdf, withTeal, signHtml, prodText, finalPdf, partyMeta } from './printKit';
 
 const n = v => parseFloat(v) || 0;
@@ -142,7 +143,7 @@ tr.gt td { font-weight:bold; font-size:10pt; border-top:1px solid #000 !importan
 <table>
   <colgroup><col style="width:36%"><col style="width:30%"><col style="width:34%"></colgroup>
   <tbody><tr>
-    <td>${party('Supplier (Vendor)', po.vendorName, po.vendorAddress, [po.vendorCity, po.vendorPincode].filter(Boolean).join(' - '), po.vendorGstin, po.vendorState, [po.contactPerson, po.mobile, po.email].filter(Boolean).join(', '))}</td>
+    <td>${party(`Supplier (Vendor)${vendorCode(po) ? ` &nbsp;·&nbsp; Vendor Code ${esc(vendorCode(po))}` : ''}`, po.vendorName, po.vendorAddress, [po.vendorCity, po.vendorPincode].filter(Boolean).join(' - '), po.vendorGstin, po.vendorState, [po.contactPerson, po.mobile, po.email].filter(Boolean).join(', '))}</td>
     <td><div class="lbl">Dispatch From (Vendor)</div>
       <div>${esc(tidy(po.shipFromAddress || po.vendorAddress || '—'))}</div>
       <div>${esc([po.shipFromCity || po.vendorCity, po.shipFromState || po.vendorState, po.shipFromPincode || po.vendorPincode].filter(Boolean).join(', '))}</div>
@@ -227,7 +228,7 @@ ${termsHtml(po, { pay: false, skip: ['freight'] })}
     mail: {
       subject: `Purchase Order ${poNo}${po.quotationRef ? ` against your quotation ${po.quotationRef}` : ''} – ${prodText(names)}`,
       message: `Dear ${po.contactPerson || 'Sir / Madam'},\n\nPlease find attached our Purchase Order ${poNo}${po.poDate ? ` dated ${d(po.poDate)}` : ''}${po.quotationRef ? `, placed against your quotation ${po.quotationRef}` : ''}.\n\nKindly confirm acceptance of the order and the delivery date by reply e-mail, and quote our PO number on your invoice and delivery challan.`,
-      summary: [['Purchase order', `${poNo}${po.poDate ? `  ·  ${d(po.poDate)}` : ''}`], ['Your quotation', po.quotationRef || ''], ['Products', items.map(it => `${it.itemName || it.description} — ${n(it.qty)} ${it.unit || ''}`.trim()).join('\n')],
+      summary: [['Purchase order', `${poNo}${po.poDate ? `  ·  ${d(po.poDate)}` : ''}`], ['Your vendor code', vendorCode(po)], ['Your quotation', po.quotationRef || ''], ['Products', items.map(it => `${it.itemName || it.description} — ${n(it.qty)} ${it.unit || ''}`.trim()).join('\n')],
         ['PO value', `₹ ${amt(total)} (incl. GST)`], ['Delivery by', d(po.deliveryDate)], ['Deliver to', po.deliveryAddress || po.deliverTo || ''], ['Payment terms', po.paymentTerms || '']],
     },
   };

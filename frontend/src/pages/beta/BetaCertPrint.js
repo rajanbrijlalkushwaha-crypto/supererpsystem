@@ -116,6 +116,81 @@ ${header(co, logo, esc(title), [['Showing', esc(filter || 'All')], ['Records', r
 ${legalNoteHtml()}`, true), 'dep-list-frame');
 }
 
+/* ───────── PO → Order Pending: each order, its products, and how each is covered (vendor POs / our factory) ─────────
+   orders: [{ no, date, client, items: [{ name, addon, qty, unit, due, status, lines: [{ vendor, poNo, poDate, qty, rate, taxable, gst, total } | { factory, jobs, note, qty }] }] }] */
+export async function printOrderPending({ orders, company, user, filter, stats = [] }) {
+  const co = company || {}, logo = await logoOf(co);
+  const NC = 14;
+  let grand = 0;
+  const body = orders.map((o, oi) => {
+    const span = o.items.reduce((t, x) => t + Math.max(1, x.lines.length), 0) || 1;
+    let first = true;
+    return (o.items.length ? o.items : [null]).map(x => {
+      if (!x) { first = false; return `<tr class="og"><td class="c">${oi + 1}</td><td><b>${esc(o.no)}</b><div class="sm">${esc(o.date)}</div></td><td>${esc(o.client)}</td><td colspan="${NC - 3}" class="sm">No products</td></tr>`; }
+      const sub = x.lines.length ? x.lines : [null];
+      return sub.map((l, li) => {
+        const head = first; first = false;
+        if (l && !l.factory) grand += Number(l.total) || 0;
+        const cells = !l ? '<td class="bl"></td>'.repeat(8)
+          : l.factory ? `<td class="fac"><b>Our factory</b><div class="sm">made in-house</div></td><td class="fac" colspan="2"><b>${esc(l.jobs)}</b><div class="sm">${esc(l.note)}</div></td><td class="c fac">${esc(l.qty)}</td><td class="fac sm" colspan="4">Not bought — no PO needed</td>`
+            : `<td>${esc(l.vendor)}${l.code ? `<div class="sm">Code ${esc(l.code)}</div>` : ''}</td><td class="nw"><b>${esc(l.poNo)}</b></td><td class="nw">${esc(l.poDate)}</td><td class="c">${esc(l.qty)}</td><td class="r">${inr(l.rate)}</td><td class="r">${inr(l.taxable)}</td><td class="r">${inr(l.gst)}</td><td class="r"><b>${inr(l.total)}</b></td>`;
+        return `<tr${head ? ' class="og"' : ''}>${head ? `<td rowspan="${span}" class="c">${oi + 1}</td><td rowspan="${span}" class="nw"><b>${esc(o.no)}</b><div class="sm">${esc(o.date)}</div></td><td rowspan="${span}">${esc(o.client)}</td>` : ''}${li === 0
+          ? `<td rowspan="${sub.length}">${esc(x.name)}${x.addon ? ' <span class="ao">ADD-ON</span>' : ''}</td><td rowspan="${sub.length}" class="c nw">${esc(x.qty)} ${esc(x.unit)}</td><td rowspan="${sub.length}" class="c nw st${x.due > 0 ? ' due' : ''}">${esc(x.status)}</td>` : ''}${cells}</tr>`;
+      }).join('');
+    }).join('');
+  }).join('');
+  const css = `
+.lst { width:calc(100% - 1px); } .lst td { font-size:7.6pt; } .lst th { font-size:7.2pt; white-space:normal; }
+.lst tr.og > td { border-top:1.3pt solid #000; }
+.lst td.st { font-weight:bold; } .lst td.st.due { text-decoration:underline; }
+.lst td.bl { background:none; } .lst td.fac { font-style:italic; }
+.ao { font-size:6.4pt; font-weight:bold; border:0.6pt solid #000; padding:0 2px; vertical-align:1px; }
+.sum { display:flex; margin-top:6px; border:0.6pt solid #000; } .sum div { flex:1; padding:4px 8px; border-left:0.6pt solid #000; font-size:8pt; }
+.sum div:first-child { border-left:0; } .sum b { display:block; font-size:11pt; }`;
+  printPage(page('Order Pending', css, `
+${header(co, logo, 'ORDER PENDING', [['Showing', esc(filter || 'All orders')], ['Orders', orders.length], ['Printed', esc(nowText())]])}
+${stats.length ? `<div class="sum">${stats.map(([k, v]) => `<div>${esc(k)}<b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+<table class="lst"><colgroup><col style="width:22px"><col style="width:8.5%"><col style="width:10%"><col><col style="width:5%"><col style="width:6%"><col style="width:9%"><col style="width:8%"><col style="width:5.6%"><col style="width:3.4%"><col style="width:6%"><col style="width:6.6%"><col style="width:5.6%"><col style="width:6.6%"></colgroup>
+<thead><tr><th>Sr</th><th>Order No. / Date</th><th>Client</th><th>Product</th><th>SO Qty</th><th>Status</th><th>Vendor</th><th>PO No.</th><th>PO Date</th><th>Qty</th><th>Rate ₹</th><th>Taxable ₹</th><th>GST ₹</th><th>PO Value ₹</th></tr></thead>
+<tbody>${body || `<tr><td colspan="${NC}" class="c">Nothing to show.</td></tr>`}
+<tr class="tot"><td colspan="${NC - 1}" class="r">TOTAL PO VALUE (orders shown)</td><td class="r">${inr(grand)}</td></tr></tbody></table>
+<div class="foot"><span>${brandLine(user)}</span><span></span></div>`, true), 'order-pending');
+}
+
+/* ───────── Dues — clients (Sales → Dues) and vendors (Purchase → Dues): the same layout as the other lists ─────────
+   kind: 'client' | 'vendor'; rows: [{ no, date, party, ref, refSub, extra, items: [{ name, qty, rate, taxable }], other, gst, value, paid, dues, status }] */
+export async function printDuesReport({ kind, rows, company, user, filter, stats = [] }) {
+  const co = company || {}, logo = await logoOf(co);
+  const V = kind === 'vendor';
+  const H = V ? ['Sr', 'PO No. / Date', 'Vendor', 'Against Order', 'Product', 'Qty', 'Rate ₹', 'Taxable ₹', 'Other ₹', 'GST ₹', 'PO Value ₹', 'Paid ₹', 'Dues ₹', 'Status']
+    : ['Sr', 'Order No. / Date', 'Client', 'Client PO', 'Product', 'Qty', 'Rate ₹', 'Taxable ₹', 'Other ₹', 'GST ₹', 'Order Value ₹', 'Received ₹', 'Dues ₹', 'Status'];
+  const t = { taxable: 0, other: 0, gst: 0, value: 0, paid: 0, dues: 0 };
+  const body = rows.map((r, i) => {
+    const lines = r.items.length ? r.items : [null]; const span = lines.length;
+    lines.forEach(it => { if (it) t.taxable += Number(it.taxable) || 0; });
+    ['other', 'gst', 'value', 'paid', 'dues'].forEach(k => { t[k] += Number(r[k]) || 0; });
+    return lines.map((it, j) => `<tr${j === 0 ? ' class="og"' : ''}>${j === 0 ? `<td rowspan="${span}" class="c">${i + 1}</td><td rowspan="${span}" class="nw"><b>${esc(r.no)}</b><div class="sm">${esc(r.date)}</div></td>
+<td rowspan="${span}"><b>${esc(r.party)}</b>${r.code ? `<div class="sm">Code ${esc(r.code)}</div>` : ''}</td><td rowspan="${span}">${esc(r.ref || '—')}${r.refSub ? `<div class="sm">${esc(r.refSub)}</div>` : ''}</td>` : ''}${it
+      ? `<td>${esc(it.name)}</td><td class="c nw">${esc(it.qty)}</td><td class="r">${inr(it.rate)}</td><td class="r">${inr(it.taxable)}</td>` : '<td colspan="4" class="c sm">—</td>'}${j === 0
+      ? `<td rowspan="${span}" class="r">${r.other ? inr(r.other) : '—'}</td><td rowspan="${span}" class="r">${inr(r.gst)}</td><td rowspan="${span}" class="r"><b>${inr(r.value)}</b></td>
+<td rowspan="${span}" class="r">${inr(r.paid)}</td><td rowspan="${span}" class="r${r.dues > 0.5 ? ' due' : ''}"><b>${inr(r.dues)}</b></td><td rowspan="${span}" class="c st">${esc(r.status)}</td>` : ''}</tr>`).join('');
+  }).join('');
+  const css = `
+.lst { width:calc(100% - 1px); } .lst td { font-size:7.6pt; } .lst th { font-size:7.2pt; white-space:normal; }
+.lst tr.og > td { border-top:1.3pt solid #000; } .lst td.due { text-decoration:underline; } .lst td.st { font-weight:bold; font-size:7.2pt; }
+.sum { display:flex; margin-top:6px; border:0.6pt solid #000; } .sum div { flex:1; padding:4px 8px; border-left:0.6pt solid #000; font-size:8pt; }
+.sum div:first-child { border-left:0; } .sum b { display:block; font-size:11pt; }`;
+  const title = V ? 'VENDOR DUES' : 'CLIENT DUES';
+  printPage(page(V ? 'Vendor Dues' : 'Client Dues', css, `
+${header(co, logo, title, [['Showing', esc(filter || 'All')], [V ? 'POs' : 'Orders', rows.length], ['Printed', esc(nowText())]])}
+${stats.length ? `<div class="sum">${stats.map(([k, v]) => `<div>${esc(k)}<b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+<table class="lst"><colgroup><col style="width:22px"><col style="width:9%"><col style="width:12%"><col style="width:9%"><col><col style="width:4.4%"><col style="width:6%"><col style="width:6.6%"><col style="width:5.4%"><col style="width:6%"><col style="width:7%"><col style="width:6.6%"><col style="width:6.6%"><col style="width:5.4%"></colgroup>
+<thead><tr>${H.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+<tbody>${body || `<tr><td colspan="${H.length}" class="c">Nothing to show.</td></tr>`}
+<tr class="tot"><td colspan="7" class="r">TOTAL (${rows.length} ${V ? 'POs' : 'orders'})</td><td class="r">${inr(t.taxable)}</td><td class="r">${inr(t.other)}</td><td class="r">${inr(t.gst)}</td><td class="r">${inr(t.value)}</td><td class="r">${inr(t.paid)}</td><td class="r">${inr(t.dues)}</td><td></td></tr></tbody></table>
+<div class="foot"><span>${brandLine(user)}</span><span></span></div>`, true));
+}
+
 /* BG types — the name used in the letters, and what the BG is "towards" */
 export const BG_TYPES = [
   ['performance', 'Performance Bank Guarantee', 'towards the due performance of the contract'],
